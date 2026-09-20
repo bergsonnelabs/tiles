@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@4232e99",
+  "source": "tiles@624d703",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -73,7 +73,7 @@
             {
               "name": "SENSE_MIC_REF_VDD",
               "value": 0,
-              "label": "Supply voltage (3.3 V)"
+              "label": "Supply voltage (3.3V)"
             },
             {
               "name": "SENSE_MIC_REF_EXTERNAL",
@@ -83,12 +83,12 @@
             {
               "name": "SENSE_MIC_REF_INTERNAL",
               "value": 5,
-              "label": "Internal 2.048 V"
+              "label": "Internal 2.048V"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL_BUF",
               "value": 7,
-              "label": "Internal 2.048 V, also on the REF pin"
+              "label": "Internal 2.048V, also on the REF pin"
             }
           ]
         }
@@ -105,12 +105,12 @@
             {
               "name": "SENSE_MIC_REF_VDD",
               "value": 0,
-              "label": "Supply voltage (3.3 V)"
+              "label": "Supply voltage (3.3V)"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL",
               "value": 5,
-              "label": "Internal 2.048 V"
+              "label": "Internal 2.048V"
             }
           ]
         }
@@ -470,10 +470,24 @@
         {
           "name": "threshold_db",
           "type": "int",
-          "description": "SPL threshold in 0.1 dB units (e.g. 700 = 70 dB)."
+          "range": [
+            300,
+            1300
+          ],
+          "description": "SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the"
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "threshold_db",
+          "label": "Loudness threshold",
+          "tier": "basic",
+          "scope": "usage",
+          "scale": 0.1,
+          "display_unit": "dB"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     },
@@ -504,6 +518,10 @@
         {
           "name": "threshold_db",
           "type": "int",
+          "range": [
+            300,
+            1300
+          ],
           "description": "SPL threshold in 0.1 dB units."
         },
         {
@@ -519,6 +537,14 @@
       ],
       "returns": "uint8_t",
       "controls": [
+        {
+          "param": "threshold_db",
+          "label": "Sound wait threshold",
+          "tier": "basic",
+          "scope": "usage",
+          "scale": 0.1,
+          "display_unit": "dB"
+        },
         {
           "param": "timeout_ms",
           "label": "Sound wait timeout",

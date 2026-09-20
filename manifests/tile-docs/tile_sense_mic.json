@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@4232e99",
+  "source": "tiles@624d703",
   "file": "tile_sense_mic.h",
   "brief": "Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC). I2C-only, command-based protocol via tiles_pal_t raw I2C.",
   "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.3.0\n\nAnalog signal chain: an analog MEMS microphone is AC-coupled into an\nAD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is\nalso tapped out to a pad). Components:\n  - Same Sky / CUI CMM-2718AT-42316-TR: omnidirectional ANALOG MEMS mic,\n    −42 dBV/Pa sensitivity, 57 dBA SNR, 130 dB SPL AOP, 300 Ω output.\n  - Analog Devices AD8605: precision RRIO op-amp, non-inverting gain\n    ~48× (R4 47k / R3 1k → 1 + 47). The ADC therefore sees ~48× the\n    bare mic voltage — the mV→SPL conversion divides this back out.\n  - Maxim MAX11645: 12-bit 2-channel ADC, up to 94.4 ksps,\n    I2C up to 1.7 MHz, internal 2.048V reference.\n\nThe amplified analog output is also brought out to a tile pad (the\nschematic routes it to pad 8). NOTE: as of this writing the canonical\ntile JSON is mid-reconciliation — it lists the older PUI AMM-2742 mic\nand labels pad 6 (not 8) as the analog out, and omits the AD8605. The\ndriver here reflects the real schematic; the product DB still needs the\nmic part, the AD8605, and the analog-out pad (8) updated to match.\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  The MAX11645 supports an external reference on its REF/AIN1\n  pin, but the Sense.MIC tile does not route REF/AIN1 to any\n  pad (pad 6 carries the chip's analog audio output, not the\n  ADC reference). Closing this gap requires a tile hardware\n  revision that breaks REF out to a connector pad. Until then,\n  the SENSE_MIC_REF_EXTERNAL* enum values configure the chip\n  but have no usable external pin.",
@@ -68,7 +68,7 @@
         {
           "name": "SENSE_MIC_REF_VDD",
           "value": "0x00",
-          "description": "Supply voltage (3.3 V)"
+          "description": "Supply voltage (3.3V)"
         },
         {
           "name": "SENSE_MIC_REF_EXTERNAL",
@@ -78,12 +78,12 @@
         {
           "name": "SENSE_MIC_REF_INTERNAL",
           "value": "0x05",
-          "description": "Internal 2.048 V"
+          "description": "Internal 2.048V"
         },
         {
           "name": "SENSE_MIC_REF_INTERNAL_BUF",
           "value": "0x07",
-          "description": "Internal 2.048 V, also on the REF pin"
+          "description": "Internal 2.048V, also on the REF pin"
         }
       ]
     },
@@ -511,7 +511,7 @@
         },
         {
           "name": "threshold_db",
-          "description": "SPL threshold in 0.1 dB units (e.g. 700 = 70 dB)."
+          "description": "[300..1300] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the"
         }
       ],
       "notes": [
@@ -521,7 +521,7 @@
       "studio_section": "runtime",
       "return": "1 if measured SPL > threshold, 0 otherwise.",
       "brief": "Quick \"is the room loud right now?\" check.",
-      "description": "Captures a short sample buffer (~64 samples / ~5 ms at 12.5 ksps)\nvia @ref tile_sense_mic_get_samples, computes the RMS amplitude\nrelative to the calibrated DC offset, converts it to dB SPL via\nthe CMM-2718AT sensitivity model (with the AD8605 gain divided\nout), and compares against `threshold_db` (0.1 dB units, e.g. 700 = 70.0 dB).",
+      "description": "Captures a short sample buffer (~64 samples / ~5 ms at 12.5 ksps)\nvia @ref tile_sense_mic_get_samples, computes the RMS amplitude\nrelative to the calibrated DC offset, converts it to dB SPL via\nthe CMM-2718AT sensitivity model (with the AD8605 gain divided\nout), and compares against `threshold_db` (0.1 dB units, e.g. 700 = 70.0 dB).\n\n                      driver's noise floor; 1300 is the microphone's 130 dB acoustic overload point.",
       "name": "tile_sense_mic_is_loud"
     },
     {
@@ -552,7 +552,7 @@
         },
         {
           "name": "threshold_db",
-          "description": "SPL threshold in 0.1 dB units."
+          "description": "[300..1300] SPL threshold in 0.1 dB units."
         },
         {
           "name": "timeout_ms",
@@ -599,6 +599,32 @@
   "display_name": "Sense.MIC",
   "vibe_settings": [
     {
+      "label": "Loudness threshold",
+      "tier": "basic",
+      "scope": "usage",
+      "function": "is_loud",
+      "param": "threshold_db",
+      "kind": "number",
+      "range": [
+        30,
+        130
+      ],
+      "unit": "dB"
+    },
+    {
+      "label": "Sound wait threshold",
+      "tier": "basic",
+      "scope": "usage",
+      "function": "wait_for_sound",
+      "param": "threshold_db",
+      "kind": "number",
+      "range": [
+        30,
+        130
+      ],
+      "unit": "dB"
+    },
+    {
       "label": "Voltage reference",
       "tier": "advanced",
       "scope": "config",
@@ -606,10 +632,10 @@
       "param": "ref",
       "kind": "choice",
       "choices": [
-        "Supply voltage (3.3 V)",
-        "Internal 2.048 V"
+        "Supply voltage (3.3V)",
+        "Internal 2.048V"
       ],
-      "default": "Supply voltage (3.3 V)"
+      "default": "Supply voltage (3.3V)"
     },
     {
       "label": "Sound wait timeout",

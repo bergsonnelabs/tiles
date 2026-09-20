@@ -132,6 +132,14 @@ def vibe_settings(path):
                 row["range"] = param["range"]
             if param.get("unit"):
                 row["unit"] = param["unit"]
+            # A scaled setting is documented the way people read it (30 to 130 dB),
+            # not in the argument's sub-units (300..1300).
+            if "scale" in control and row.get("range"):
+                k = control["scale"]
+                row["range"] = [round(v * k, 6) for v in row["range"]]
+                row["range"] = [int(v) if v == int(v) else v for v in row["range"]]
+                if control.get("display_unit"):
+                    row["unit"] = control["display_unit"]
             if "default" in control:
                 named = next((c["label"] for c in choices if c["value"] == control["default"]), None)
                 row["default"] = named if named is not None else control["default"]

@@ -436,6 +436,7 @@ that is already `@studio expose`d. Reference driver: `drivers/tile_sense_i_6p6.h
 | `allow=A,B,…` | The enum members THIS argument may take, when an enum type is shared between arguments or gives one register value two names. |
 | `role=sample_rate` | This setting is the rate at which the part produces data. Studio never lets a program read or stream faster than it. The rate is the selected enum member's `@studio value=` (in Hz), so every offered member needs one, unless `rate=` is given. |
 | `rate="<expr>"` | With `role=sample_rate`: the rate in Hz as an expression, for arguments that are not a rate enum. A period: `rate="1000 / period_ms"`. A divider: `rate="1125 / (1 + divider)"`. Required when the argument is numeric. |
+| `scale=<n> unit=<u>` | The argument is stored in sub-units: people read and type `value × scale`, in `unit` (`scale=0.1 unit=dB` for a threshold in tenths of a dB). Invertible, so it drives the input as well as the display; numeric arguments only, and not together with `show=`. The `[min..max]` stays in raw units. |
 | `when="<expr>"` | The setting only applies while this holds (a filter on a sensor that is switched off, a range on a powered-down axis). Studio greys it out in the inspector, and leaves it and the part that gates it out of the plain-language story. |
 | `show="<expr>" unit=Hz` | What the value *means*, computed for the reader (a filter setting shown as its bandwidth in Hz rather than "ODR/16"). |
 

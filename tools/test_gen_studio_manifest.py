@@ -346,6 +346,13 @@ typedef enum {
             {"op": "==", "args": [{"ref": "set_mode.mode"}, {"member": "SENSE_Y_MODE_LN", "num": 3}]},
         )
 
+    def test_scale_is_for_numeric_arguments_only(self):
+        # on an enum argument it is an authoring error
+        _, errors = self._hosts([self.ODR + " scale=0.1 unit=dB"])
+        self.assertTrue(any("scale= only applies to a numeric argument" in e for e in errors))
+        _, errors = self._hosts([self.ODR + " scale=zero"])
+        self.assertTrue(any("must be a positive number" in e for e in errors))
+
     def test_control_when_is_compiled_and_must_resolve(self):
         hosts, errors = self._hosts(
             [self.ODR + ' when="set_mode.mode != SENSE_Y_MODE_LP"']
