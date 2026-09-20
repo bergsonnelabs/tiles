@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@9897b3e",
+  "source": "tiles@f5a0d22",
   "file": "tile_drive_p.h",
   "brief": "Piezoelectric haptic driver for the Drive.P tile (rev a).",
   "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential, up to 820 nF capacitive load\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE FIFO IS FILLED, NOT DRAINED — the waveform\n    keeps playing after it returns. Account for that in teardown / discharge\n    timing (don't switch to SENSE or read status assuming playback is done).\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
@@ -157,34 +157,34 @@
     {
       "name": "drive_p_output_range_t",
       "brief": "Output voltage range (CONFIG.GAIND).",
-      "description": "set during init (those are computed against the configured\n        FBratio, which is determined by GAIND). After changing the\n        range, recompute and rewrite PARCAP and TI_RISE for the\n        new FBratio if precise output behaviour matters.",
+      "description": "High range is FBratio 31 (the chip default); low range is FBratio 4.33.\n        set during init (those are computed against the configured\n        FBratio, which is determined by GAIND). After changing the\n        range, recompute and rewrite PARCAP and TI_RISE for the\n        new FBratio if precise output behaviour matters.",
       "members": [
         {
           "name": "DRIVE_P_OUTPUT_HIGH_V",
           "value": "0",
-          "description": "±95 V range, FBratio 31 (default)"
+          "description": "±95V"
         },
         {
           "name": "DRIVE_P_OUTPUT_LOW_V",
           "value": "1",
-          "description": "±13.28 V range, FBratio 4.33"
+          "description": "±13.28V"
         }
       ]
     },
     {
       "name": "drive_p_sense_gain_t",
       "brief": "Sense-channel resolution (CONFIG.GAINS).",
-      "description": "",
+      "description": "Coarse is FBratio 31; fine is FBratio 4.33 (the chip default).",
       "members": [
         {
           "name": "DRIVE_P_SENSE_COARSE_GAIN",
           "value": "0",
-          "description": "54.5 mV LSB, FBratio 31"
+          "description": "Coarse (54.5 mV per step)"
         },
         {
           "name": "DRIVE_P_SENSE_FINE_GAIN",
           "value": "1",
-          "description": "7.6 mV LSB, FBratio 4.33 (default)"
+          "description": "Fine (7.6 mV per step)"
         }
       ]
     }
@@ -768,5 +768,60 @@
   "version": "3.3.0",
   "tile_family": "Drive",
   "tile_name": "P",
-  "display_name": "Drive.P"
+  "display_name": "Drive.P",
+  "vibe_settings": [
+    {
+      "label": "Output voltage range",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_output_range",
+      "param": "range",
+      "kind": "choice",
+      "choices": [
+        "±95V",
+        "±13.28V"
+      ],
+      "default": "±95V"
+    },
+    {
+      "label": "Touch sensing resolution",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_sense_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "Coarse (54.5 mV per step)",
+        "Fine (7.6 mV per step)"
+      ],
+      "default": "Fine (7.6 mV per step)"
+    },
+    {
+      "label": "Keep settings while asleep",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_sleep_retention",
+      "param": "retain",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "Sleep after 4 ms idle",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_auto_sleep",
+      "param": "enabled",
+      "kind": "bool",
+      "default": 0
+    },
+    {
+      "label": "Never return energy to the supply",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_upi",
+      "param": "enabled",
+      "kind": "bool",
+      "default": 0
+    }
+  ]
 }

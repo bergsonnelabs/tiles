@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@f5a0d22",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -235,17 +235,26 @@
             {
               "name": "DRIVE_P_OUTPUT_HIGH_V",
               "value": 0,
-              "label": "±95 V range, FBratio 31 (default)"
+              "label": "±95V"
             },
             {
               "name": "DRIVE_P_OUTPUT_LOW_V",
               "value": 1,
-              "label": "±13.28 V range, FBratio 4.33"
+              "label": "±13.28V"
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "range",
+          "label": "Output voltage range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -266,17 +275,26 @@
             {
               "name": "DRIVE_P_SENSE_COARSE_GAIN",
               "value": 0,
-              "label": "54.5 mV LSB, FBratio 31"
+              "label": "Coarse (54.5 mV per step)"
             },
             {
               "name": "DRIVE_P_SENSE_FINE_GAIN",
               "value": 1,
-              "label": "7.6 mV LSB, FBratio 4.33 (default)"
+              "label": "Fine (7.6 mV per step)"
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "gain",
+          "label": "Touch sensing resolution",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -296,6 +314,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "retain",
+          "label": "Keep settings while asleep",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -315,6 +343,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Sleep after 4 ms idle",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -334,6 +372,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Never return energy to the supply",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t*"
     },
     {

@@ -197,6 +197,8 @@ typedef enum {
 /**
  * @brief  Output voltage range (CONFIG.GAIND).
  *
+ * High range is FBratio 31 (the chip default); low range is FBratio 4.33.
+ *
  * @note   Switching range invalidates the PARCAP / TI_RISE values
  *         set during init (those are computed against the configured
  *         FBratio, which is determined by GAIND). After changing the
@@ -204,16 +206,18 @@ typedef enum {
  *         new FBratio if precise output behaviour matters.
  */
 typedef enum {
-    DRIVE_P_OUTPUT_HIGH_V = 0,  /**< ±95 V range, FBratio 31 (default) */
-    DRIVE_P_OUTPUT_LOW_V  = 1,  /**< ±13.28 V range, FBratio 4.33 */
+    DRIVE_P_OUTPUT_HIGH_V = 0,  /**< ±95V */
+    DRIVE_P_OUTPUT_LOW_V  = 1,  /**< ±13.28V */
 } drive_p_output_range_t;
 
 /**
  * @brief  Sense-channel resolution (CONFIG.GAINS).
+ *
+ * Coarse is FBratio 31; fine is FBratio 4.33 (the chip default).
  */
 typedef enum {
-    DRIVE_P_SENSE_COARSE_GAIN = 0,  /**< 54.5 mV LSB, FBratio 31 */
-    DRIVE_P_SENSE_FINE_GAIN   = 1,  /**< 7.6 mV LSB, FBratio 4.33 (default) */
+    DRIVE_P_SENSE_COARSE_GAIN = 0,  /**< Coarse (54.5 mV per step) */
+    DRIVE_P_SENSE_FINE_GAIN   = 1,  /**< Fine (7.6 mV per step) */
 } drive_p_sense_gain_t;
 
 /* -------------------------------------------------------------- */
@@ -407,6 +411,7 @@ uint8_t tile_drive_p_check_and_recover(tile_t* tile, drive_p_mode_t restore_mode
 /**
  * @brief  Select the output voltage range (CONFIG.GAIND).
  * @studio expose category=tile name=set_output_range section=config
+ * @studio control range label="Output voltage range" tier=basic default=DRIVE_P_OUTPUT_HIGH_V
  *
  * High-V (±95 V) is the BOS1921 default and suits most piezo
  * actuators. Low-V (±13.28 V) is for low-voltage piezos where the
@@ -427,6 +432,7 @@ void tile_drive_p_set_output_range(tile_t* tile, drive_p_output_range_t range);
 /**
  * @brief  Select the sense-channel resolution (CONFIG.GAINS).
  * @studio expose category=tile name=set_sense_gain section=config
+ * @studio control gain label="Touch sensing resolution" tier=advanced default=DRIVE_P_SENSE_FINE_GAIN
  *
  * Fine gain (7.6 mV LSB) is the BOS1921 default and gives the
  * highest sensing resolution. Coarse gain (54.5 mV LSB) widens the
@@ -442,6 +448,7 @@ void tile_drive_p_set_sense_gain(tile_t* tile, drive_p_sense_gain_t gain);
 /**
  * @brief  Configure register and RAM retention during SLEEP (CONFIG.RET).
  * @studio expose category=tile name=set_sleep_retention section=config
+ * @studio control retain label="Keep settings while asleep" tier=advanced type=bool default=1
  *
  * Default is retain (~2.4 µA quiescent) so that RAM contents and
  * register configuration survive a sleep cycle. Disabling retention
@@ -456,6 +463,7 @@ void tile_drive_p_set_sleep_retention(tile_t* tile, uint8_t retain);
 /**
  * @brief  Enable or disable the auto-sleep timeout (COMM.TOUT).
  * @studio expose category=tile name=set_auto_sleep section=config
+ * @studio control enabled label="Sleep after 4 ms idle" tier=advanced type=bool default=0
  *
  * When enabled, the device drops into SLEEP after 4 ms of bus
  * inactivity during Direct or FIFO playback. Useful for unattended
@@ -474,6 +482,7 @@ void tile_drive_p_set_auto_sleep(tile_t* tile, uint8_t enabled);
 /**
  * @brief  Enable or disable the Unidirectional Power Input (PARCAP.UPI).
  * @studio expose category=tile name=set_upi section=config
+ * @studio control enabled label="Never return energy to the supply" tier=advanced type=bool default=0
  *
  * UPI forces the BOS1921 into sink-only operation: energy
  * recovered from piezo discharge is dumped instead of pushed back

@@ -159,7 +159,7 @@ typedef enum {
  * @brief Optional init-time configuration for Sense.ACP.
  *
  * Pass NULL to tile_sense_acp_init() for defaults: ALS gain 16x,
- * integration ~133 ms (ATIME 0x2F), proximity gain 4x, LED drive 12 mA,
+ * integration ~135 ms (ATIME 0x2F), proximity gain 4x, LED drive 12 mA,
  * both the ALS and proximity engines enabled.
  */
 typedef struct {
@@ -217,6 +217,7 @@ void tile_sense_acp_wake(tile_t *tile);
 /**
  * @brief  Set the ALS/Color gain.
  * @studio expose category=tile name=set_als_gain section=config
+ * @studio control gain label="Light sensor gain" tier=basic default=SENSE_ACP_ALS_GAIN_16X
  * @param  tile  Initialised tile handle.
  * @param  gain  ALS gain selection (sense_acp_als_gain_t).
  */
@@ -226,19 +227,23 @@ void tile_sense_acp_set_als_gain(tile_t *tile, sense_acp_als_gain_t gain);
  * @brief  Set the ALS integration time.
  *
  * @studio expose category=tile name=set_integration_time section=config
+ * @studio control atime label="Light integration time" tier=basic default=47 show="(atime + 1) * 2.81" unit=ms
  *
- * Integration time is (atime + 1) x 2.78 ms; the maximum ALS count scales
- * with it (1024 per 2.78 ms step, saturating at 65535). For example
- * 0x00 = 2.8 ms, 0x2F = ~133 ms (default), 0xFF = ~719 ms.
+ * Integration time is (atime + 1) steps of nominally 2.8 ms; the maximum ALS
+ * count scales with it (1024 per step, saturating at 65535). The datasheet
+ * prose says 2.78 ms per step, but its own table (0x3F = 180 ms, 0xFF = 719 ms)
+ * and clock arithmetic work out to 2.81 ms, which is what is shown to the user.
+ * For example 0x00 = 2.8 ms, 0x2F = ~135 ms (default), 0xFF = ~719 ms.
  *
  * @param  tile   Initialised tile handle.
- * @param  atime  Raw ATIME register value (0-255).
+ * @param  atime  [0..255] Raw ATIME register value.
  */
 void tile_sense_acp_set_integration_time(tile_t *tile, uint8_t atime);
 
 /**
  * @brief  Set the proximity IR-sensor gain.
  * @studio expose category=tile name=set_prox_gain section=config
+ * @studio control gain label="Proximity sensor gain" tier=advanced default=SENSE_ACP_PROX_GAIN_4X
  * @param  tile  Initialised tile handle.
  * @param  gain  Proximity gain selection (sense_acp_prox_gain_t).
  */
@@ -248,6 +253,7 @@ void tile_sense_acp_set_prox_gain(tile_t *tile, sense_acp_prox_gain_t gain);
  * @brief  Set the proximity IR-LED drive current.
  *
  * @studio expose category=tile name=set_prox_drive_ma section=config
+ * @studio control ma label="Proximity LED current" tier=advanced default=12
  *
  * The LED current is programmed in ~6 mA steps: i_LED = 6 x (PLDRIVE + 1),
  * so the request is clamped to 6-192 mA and rounded down to the nearest
@@ -255,7 +261,7 @@ void tile_sense_acp_set_prox_gain(tile_t *tile, sense_acp_prox_gain_t gain);
  * treat the value as approximate.
  *
  * @param  tile  Initialised tile handle.
- * @param  ma    Desired LED drive current in milliamps (6-192).
+ * @param  ma    [6..192] mA Desired LED drive current, in milliamps.
  */
 void tile_sense_acp_set_prox_drive_ma(tile_t *tile, uint8_t ma);
 

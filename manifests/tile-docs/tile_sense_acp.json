@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@18abd82",
+  "source": "tiles@f5a0d22",
   "file": "tile_sense_acp.h",
   "brief": "TMD3725 ambient-light, RGB colour & proximity sensor.",
   "description": "Platform-agnostic driver for the ams/OSRAM TMD3725 ALS/Color/Proximity\nmodule on Sense.ACP. Provides RGBC ambient-light sensing (four 16-bit\ndata converters — Clear/Red/Green/Blue) plus an integrated IR-LED\nproximity engine with an 8-bit result.\n\nKey specifications:\n - RGBC ambient light: 16-bit Clear/Red/Green/Blue channels\n - Programmable ALS gain (1/4/16/64x) and integration time (2.8-719 ms)\n - Proximity: integrated, factory-trimmed IR LED, 8-bit output\n - Programmable proximity gain (1/2/4/8x) and LED drive (6-192 mA)\n - 1.8 V supply and 1.8 V I2C (up to 400 kHz), fixed address 0x39\n\nBoard note: on Sense.ACP the proximity IR LED anode (LEDA) is fed from\nan on-tile TPS61099 boost converter, so the LED drive current is drawn\nfrom a boosted rail rather than the 1.8 V input directly. The boost is\nalways-on hardware; this driver only sets the LED drive strength via\nPLDRIVE.\n\n\nDatasheet: ams TMD3725, \"ALS, Color and Proximity Sensor Module\"\n(v2-00, 2023-Mar-21).\n\n@studio tile label=Sense.ACP icon=🎨\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Threshold interrupts (ALS / proximity INT pin)\" section=config\n  Driver-deferred AND definition-gated. The TMD3725 asserts its INT pin\n  (open-drain, active-low) when the Clear channel or the proximity\n  result crosses the AILT/AIHT or PILT/PIHT thresholds past the PERS\n  persistence count. The tile routes INT to pad 7, but Sense-ACP-b.json\n  does not declare that pad, so Studio cannot wire it as an event\n  source. Polled reads (get_clear / get_proximity) cover the same ground\n  for v1 — a DSL comparison yields \"near/far\" without the INT path.\n  Closing this needs the tile definition updated to declare pad 7 = INT,\n  then a follow-up pass to expose the threshold/PERS/INTENAB registers\n  and a tile event.\n\n@studio unsupported severity=advanced category=\"Illuminance (lux) and correlated colour temperature\"\n  Out of scope for an integer driver. Converting RGBC counts to lux or\n  CCT requires the device-specific calibration coefficients from the ams\n  application note plus floating-point maths. This driver exposes the raw\n  per-channel counts (clear/red/green/blue); compute lux/CCT on the host\n  where floats and calibration data are available.\n\n@studio unsupported severity=niche category=\"Wait state, proximity offset calibration, IR-channel mux\"\n  Deferred, not gated. The wait feature (WEN/WTIME/WLONG idle timing),\n  the proximity offset-cancellation engine (POFFSET + CALIB autozero),\n  and the IR_TO_GREEN mux (route the IR photodiode into the green data\n  converter) are left at sane power-on defaults and not surfaced. A later\n  pass can expose them if a use-case needs them.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
@@ -121,7 +121,7 @@
     {
       "name": "sense_acp_cfg_t",
       "brief": "Optional init-time configuration for Sense.ACP.",
-      "description": "Pass NULL to tile_sense_acp_init() for defaults: ALS gain 16x,\nintegration ~133 ms (ATIME 0x2F), proximity gain 4x, LED drive 12 mA,\nboth the ALS and proximity engines enabled.",
+      "description": "Pass NULL to tile_sense_acp_init() for defaults: ALS gain 16x,\nintegration ~135 ms (ATIME 0x2F), proximity gain 4x, LED drive 12 mA,\nboth the ALS and proximity engines enabled.",
       "fields": [
         {
           "type": "uint8_t",
@@ -258,14 +258,14 @@
         },
         {
           "name": "atime",
-          "description": "Raw ATIME register value (0-255)."
+          "description": "[0..255] Raw ATIME register value."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the ALS integration time.",
-      "description": "Integration time is (atime + 1) x 2.78 ms; the maximum ALS count scales\nwith it (1024 per 2.78 ms step, saturating at 65535). For example\n0x00 = 2.8 ms, 0x2F = ~133 ms (default), 0xFF = ~719 ms.",
+      "description": "Integration time is (atime + 1) steps of nominally 2.8 ms; the maximum ALS\ncount scales with it (1024 per step, saturating at 65535). The datasheet\nprose says 2.78 ms per step, but its own table (0x3F = 180 ms, 0xFF = 719 ms)\nand clock arithmetic work out to 2.81 ms, which is what is shown to the user.\nFor example 0x00 = 2.8 ms, 0x2F = ~135 ms (default), 0xFF = ~719 ms.",
       "name": "tile_sense_acp_set_integration_time"
     },
     {
@@ -296,7 +296,7 @@
         },
         {
           "name": "ma",
-          "description": "Desired LED drive current in milliamps (6-192)."
+          "description": "[6..192] mA Desired LED drive current, in milliamps."
         }
       ],
       "notes": [],
@@ -407,5 +407,65 @@
   "version": "1.0.0",
   "tile_family": "Sense",
   "tile_name": "ACP",
-  "display_name": "Sense.ACP"
+  "display_name": "Sense.ACP",
+  "vibe_settings": [
+    {
+      "label": "Light sensor gain",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_als_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "1x",
+        "4x",
+        "16x (default)",
+        "64x"
+      ],
+      "default": "16x (default)"
+    },
+    {
+      "label": "Light integration time",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_integration_time",
+      "param": "atime",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 47,
+      "computed_unit": "ms"
+    },
+    {
+      "label": "Proximity sensor gain",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_prox_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "1x",
+        "2x",
+        "4x (default)",
+        "8x"
+      ],
+      "default": "4x (default)"
+    },
+    {
+      "label": "Proximity LED current",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_prox_drive_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        6,
+        192
+      ],
+      "unit": "mA",
+      "default": 12
+    }
+  ]
 }
