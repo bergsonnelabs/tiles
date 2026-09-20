@@ -1403,7 +1403,7 @@ def main():
             "definition": ROOT / "definitions/Sense-MIC-a.json",
             "prefix": "tile_sense_mic",
             "init": "tile_sense_mic_init",
-            "version": "2.2.0",
+            "version": "2.3.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_i_9.h",
