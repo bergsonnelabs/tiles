@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -68,7 +68,34 @@
         {
           "name": "ref",
           "type": "int",
-          "description": "One of the sense_mic_ref_t values (VDD, INTERNAL, etc.)"
+          "description": "One of the sense_mic_ref_t values (VDD, INTERNAL, etc.)",
+          "choices": [
+            {
+              "name": "SENSE_MIC_REF_VDD",
+              "value": 0,
+              "label": "VDD reference (default)"
+            },
+            {
+              "name": "SENSE_MIC_REF_EXTERNAL",
+              "value": 1,
+              "label": "External ref on REF pin"
+            },
+            {
+              "name": "SENSE_MIC_REF_INTERNAL",
+              "value": 2,
+              "label": "Internal 2.048V, always on"
+            },
+            {
+              "name": "SENSE_MIC_REF_INTERNAL_BUF",
+              "value": 3,
+              "label": "Internal 2.048V, buffered"
+            },
+            {
+              "name": "SENSE_MIC_REF_EXTERNAL_BUF",
+              "value": 5,
+              "label": "External ref, buffered"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -87,7 +114,19 @@
         {
           "name": "ch",
           "type": "int",
-          "description": "SENSE_MIC_CH_AIN0 (mic) or SENSE_MIC_CH_AIN1"
+          "description": "SENSE_MIC_CH_AIN0 (mic) or SENSE_MIC_CH_AIN1",
+          "choices": [
+            {
+              "name": "SENSE_MIC_CH_AIN0",
+              "value": 0,
+              "label": "AIN0 — microphone (default)"
+            },
+            {
+              "name": "SENSE_MIC_CH_AIN1",
+              "value": 1,
+              "label": "AIN1"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -106,7 +145,24 @@
         {
           "name": "scan",
           "type": "int",
-          "description": "SENSE_MIC_SCAN_SINGLE, SENSE_MIC_SCAN_UP, or SENSE_MIC_SCAN_8X"
+          "description": "SENSE_MIC_SCAN_SINGLE, SENSE_MIC_SCAN_UP, or SENSE_MIC_SCAN_8X",
+          "choices": [
+            {
+              "name": "SENSE_MIC_SCAN_SINGLE",
+              "value": 3,
+              "label": "Single channel conversion (default)"
+            },
+            {
+              "name": "SENSE_MIC_SCAN_UP",
+              "value": 0,
+              "label": "Scan from AIN0 up to CS0"
+            },
+            {
+              "name": "SENSE_MIC_SCAN_8X",
+              "value": 1,
+              "label": "Convert CS0 8 times (averaging)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -125,7 +181,19 @@
         {
           "name": "clk",
           "type": "int",
-          "description": "SENSE_MIC_CLOCK_INTERNAL or SENSE_MIC_CLOCK_EXTERNAL"
+          "description": "SENSE_MIC_CLOCK_INTERNAL or SENSE_MIC_CLOCK_EXTERNAL",
+          "choices": [
+            {
+              "name": "SENSE_MIC_CLOCK_INTERNAL",
+              "value": 0,
+              "label": "Internal 2.8 MHz oscillator (default)"
+            },
+            {
+              "name": "SENSE_MIC_CLOCK_EXTERNAL",
+              "value": 1,
+              "label": "Host-clocked via SCL"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -144,7 +212,19 @@
         {
           "name": "pol",
           "type": "int",
-          "description": "SENSE_MIC_POLARITY_UNIPOLAR or SENSE_MIC_POLARITY_BIPOLAR"
+          "description": "SENSE_MIC_POLARITY_UNIPOLAR or SENSE_MIC_POLARITY_BIPOLAR",
+          "choices": [
+            {
+              "name": "SENSE_MIC_POLARITY_UNIPOLAR",
+              "value": 0,
+              "label": "0 .. VREF, straight binary (default)"
+            },
+            {
+              "name": "SENSE_MIC_POLARITY_BIPOLAR",
+              "value": 1,
+              "label": "±VREF/2, two's complement"
+            }
+          ]
         }
       ],
       "returns": "void",

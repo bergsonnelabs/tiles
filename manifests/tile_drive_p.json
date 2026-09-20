@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -29,7 +29,39 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "One of the drive_p_mode_t values"
+          "description": "One of the drive_p_mode_t values",
+          "choices": [
+            {
+              "name": "DRIVE_P_MODE_IDLE",
+              "value": 0,
+              "label": "Output disabled, status readback"
+            },
+            {
+              "name": "DRIVE_P_MODE_SENSE_FINE",
+              "value": 1,
+              "label": "Piezo sensing, 7.6 mV/LSB resolution"
+            },
+            {
+              "name": "DRIVE_P_MODE_SENSE_COARSE",
+              "value": 2,
+              "label": "Piezo sensing, 54.5 mV/LSB resolution"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_DIRECT",
+              "value": 3,
+              "label": "Direct waveform output"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_FIFO",
+              "value": 4,
+              "label": "FIFO-buffered playback, 8 ksps"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_RAM_SYNTH",
+              "value": 5,
+              "label": "RAM Synthesis waveform playback"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -146,7 +178,39 @@
         {
           "name": "restore_mode",
           "type": "int",
-          "description": "Mode to re-enter after recovery"
+          "description": "Mode to re-enter after recovery",
+          "choices": [
+            {
+              "name": "DRIVE_P_MODE_IDLE",
+              "value": 0,
+              "label": "Output disabled, status readback"
+            },
+            {
+              "name": "DRIVE_P_MODE_SENSE_FINE",
+              "value": 1,
+              "label": "Piezo sensing, 7.6 mV/LSB resolution"
+            },
+            {
+              "name": "DRIVE_P_MODE_SENSE_COARSE",
+              "value": 2,
+              "label": "Piezo sensing, 54.5 mV/LSB resolution"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_DIRECT",
+              "value": 3,
+              "label": "Direct waveform output"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_FIFO",
+              "value": 4,
+              "label": "FIFO-buffered playback, 8 ksps"
+            },
+            {
+              "name": "DRIVE_P_MODE_PLAY_RAM_SYNTH",
+              "value": 5,
+              "label": "RAM Synthesis waveform playback"
+            }
+          ]
         }
       ],
       "returns": "uint8_t",
@@ -166,7 +230,19 @@
         {
           "name": "range",
           "type": "int",
-          "description": "DRIVE_P_OUTPUT_HIGH_V or DRIVE_P_OUTPUT_LOW_V"
+          "description": "DRIVE_P_OUTPUT_HIGH_V or DRIVE_P_OUTPUT_LOW_V",
+          "choices": [
+            {
+              "name": "DRIVE_P_OUTPUT_HIGH_V",
+              "value": 0,
+              "label": "±95 V range, FBratio 31 (default)"
+            },
+            {
+              "name": "DRIVE_P_OUTPUT_LOW_V",
+              "value": 1,
+              "label": "±13.28 V range, FBratio 4.33"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -185,7 +261,19 @@
         {
           "name": "gain",
           "type": "int",
-          "description": "DRIVE_P_SENSE_FINE_GAIN or DRIVE_P_SENSE_COARSE_GAIN"
+          "description": "DRIVE_P_SENSE_FINE_GAIN or DRIVE_P_SENSE_COARSE_GAIN",
+          "choices": [
+            {
+              "name": "DRIVE_P_SENSE_COARSE_GAIN",
+              "value": 0,
+              "label": "54.5 mV LSB, FBratio 31"
+            },
+            {
+              "name": "DRIVE_P_SENSE_FINE_GAIN",
+              "value": 1,
+              "label": "7.6 mV LSB, FBratio 4.33 (default)"
+            }
+          ]
         }
       ],
       "returns": "void",

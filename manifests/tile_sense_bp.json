@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Sense.BP",
   "palette": {
     "label": "Sense.BP",
@@ -68,7 +68,54 @@
         {
           "name": "odr",
           "type": "int",
-          "description": "Desired output data rate."
+          "description": "Desired output data rate.",
+          "choices": [
+            {
+              "name": "SENSE_BP_ODR_POWERDOWN",
+              "value": 0,
+              "label": "Power-down / one-shot"
+            },
+            {
+              "name": "SENSE_BP_ODR_1HZ",
+              "value": 1,
+              "label": "1 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_4HZ",
+              "value": 2,
+              "label": "4 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_10HZ",
+              "value": 3,
+              "label": "10 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_25HZ",
+              "value": 4,
+              "label": "25 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_50HZ",
+              "value": 5,
+              "label": "50 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_75HZ",
+              "value": 6,
+              "label": "75 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_100HZ",
+              "value": 7,
+              "label": "100 Hz"
+            },
+            {
+              "name": "SENSE_BP_ODR_200HZ",
+              "value": 8,
+              "label": "200 Hz"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -87,7 +134,44 @@
         {
           "name": "avg",
           "type": "int",
-          "description": "Desired averaging."
+          "description": "Desired averaging.",
+          "choices": [
+            {
+              "name": "SENSE_BP_AVG_4",
+              "value": 0,
+              "label": "4 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_8",
+              "value": 1,
+              "label": "8 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_16",
+              "value": 2,
+              "label": "16 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_32",
+              "value": 3,
+              "label": "32 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_64",
+              "value": 4,
+              "label": "64 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_128",
+              "value": 5,
+              "label": "128 samples"
+            },
+            {
+              "name": "SENSE_BP_AVG_512",
+              "value": 7,
+              "label": "512 samples"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -106,7 +190,19 @@
         {
           "name": "fs",
           "type": "int",
-          "description": "Full-scale selection."
+          "description": "Full-scale selection.",
+          "choices": [
+            {
+              "name": "SENSE_BP_FS_1260HPA",
+              "value": 0,
+              "label": "Mode 1: 260–1260 hPa, 4096 LSB/hPa"
+            },
+            {
+              "name": "SENSE_BP_FS_4060HPA",
+              "value": 1,
+              "label": "Mode 2: 260–4060 hPa, 2048 LSB/hPa"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -130,7 +226,19 @@
         {
           "name": "bw",
           "type": "int",
-          "description": "Bandwidth selection (only used if enable = 1)."
+          "description": "Bandwidth selection (only used if enable = 1).",
+          "choices": [
+            {
+              "name": "SENSE_BP_LPF_ODR_4",
+              "value": 0,
+              "label": "Bandwidth = ODR/4"
+            },
+            {
+              "name": "SENSE_BP_LPF_ODR_9",
+              "value": 1,
+              "label": "Bandwidth = ODR/9"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -260,7 +368,39 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "FIFO mode selection."
+          "description": "FIFO mode selection.",
+          "choices": [
+            {
+              "name": "SENSE_BP_FIFO_BYPASS",
+              "value": 0,
+              "label": "FIFO disabled"
+            },
+            {
+              "name": "SENSE_BP_FIFO_FIFO",
+              "value": 1,
+              "label": "Stop when full"
+            },
+            {
+              "name": "SENSE_BP_FIFO_CONTINUOUS",
+              "value": 2,
+              "label": "Dynamic stream, overwrites oldest"
+            },
+            {
+              "name": "SENSE_BP_FIFO_BYP2FIFO",
+              "value": 5,
+              "label": "Bypass-to-FIFO on trigger"
+            },
+            {
+              "name": "SENSE_BP_FIFO_BYP2CONT",
+              "value": 6,
+              "label": "Bypass-to-continuous on trigger"
+            },
+            {
+              "name": "SENSE_BP_FIFO_CONT2FIFO",
+              "value": 7,
+              "label": "Continuous-to-FIFO on trigger"
+            }
+          ]
         }
       ],
       "returns": "void",

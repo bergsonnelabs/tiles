@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Drive.DC.H",
   "palette": {
     "label": "Drive.DC.H",
@@ -81,7 +81,24 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Bridge control source (DRIVE_DC_H_CTRL_*)"
+          "description": "Bridge control source (DRIVE_DC_H_CTRL_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_CTRL_I2C",
+              "value": 0,
+              "label": "I²C registers control bridge (PWM mode)"
+            },
+            {
+              "name": "DRIVE_DC_H_CTRL_PAD_PHEN",
+              "value": 1,
+              "label": "Pads 2/3 = EN/PH (one PWM + dir)"
+            },
+            {
+              "name": "DRIVE_DC_H_CTRL_PAD_IN1IN2",
+              "value": 2,
+              "label": "Pads 2/3 = IN1/IN2 (independent half-bridge PWM)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -119,7 +136,29 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Regulation mode (DRIVE_DC_H_REG_*)"
+          "description": "Regulation mode (DRIVE_DC_H_REG_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_REG_OPEN_LOOP",
+              "value": 0,
+              "label": "00b: fixed-off-time current reg only (open-loop drive)"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_CYCLE_BY_CYCLE",
+              "value": 1,
+              "label": "01b: cycle-by-cycle current reg"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_SPEED",
+              "value": 2,
+              "label": "10b: speed regulation (requires ripple counting)"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_VOLTAGE",
+              "value": 3,
+              "label": "11b: voltage regulation (default)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -138,7 +177,29 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Current regulation mode (DRIVE_DC_H_IMODE_*)"
+          "description": "Current regulation mode (DRIVE_DC_H_IMODE_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_IMODE_DISABLED",
+              "value": 0,
+              "label": "00b: no current regulation"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_INRUSH",
+              "value": 1,
+              "label": "01b: regulate during tINRUSH only (default for I²C)"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_ALWAYS",
+              "value": 2,
+              "label": "10b: always regulate at ITRIP threshold"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_DISABLED_ALT",
+              "value": 3,
+              "label": "11b: disabled (alt encoding)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -214,7 +275,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "DRIVE_DC_H_STALL_LATCH or DRIVE_DC_H_STALL_REPORT"
+          "description": "DRIVE_DC_H_STALL_LATCH or DRIVE_DC_H_STALL_REPORT",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_STALL_LATCH",
+              "value": 0,
+              "label": "0b: latch outputs off on stall"
+            },
+            {
+              "name": "DRIVE_DC_H_STALL_REPORT",
+              "value": 1,
+              "label": "1b: report only, keep driving (default)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -426,7 +499,19 @@
         {
           "name": "direction",
           "type": "int",
-          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE"
+          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_DIR_FORWARD",
+              "value": 0,
+              "label": "OUT1=H, OUT2=L (matches forward())"
+            },
+            {
+              "name": "DRIVE_DC_H_DIR_REVERSE",
+              "value": 1,
+              "label": "OUT1=L, OUT2=H (matches reverse())"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -479,7 +564,19 @@
         {
           "name": "direction",
           "type": "int",
-          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE"
+          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_DIR_FORWARD",
+              "value": 0,
+              "label": "OUT1=H, OUT2=L (matches forward())"
+            },
+            {
+              "name": "DRIVE_DC_H_DIR_REVERSE",
+              "value": 1,
+              "label": "OUT1=L, OUT2=H (matches reverse())"
+            }
+          ]
         }
       ],
       "returns": "void",

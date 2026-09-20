@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Sense.ACP",
   "palette": {
     "label": "Sense.ACP",
@@ -55,7 +55,29 @@
         {
           "name": "gain",
           "type": "int",
-          "description": "ALS gain selection (sense_acp_als_gain_t)."
+          "description": "ALS gain selection (sense_acp_als_gain_t).",
+          "choices": [
+            {
+              "name": "SENSE_ACP_ALS_GAIN_1X",
+              "value": 0,
+              "label": "1x"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_4X",
+              "value": 1,
+              "label": "4x"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_16X",
+              "value": 2,
+              "label": "16x (default)"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_64X",
+              "value": 3,
+              "label": "64x"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -93,7 +115,29 @@
         {
           "name": "gain",
           "type": "int",
-          "description": "Proximity gain selection (sense_acp_prox_gain_t)."
+          "description": "Proximity gain selection (sense_acp_prox_gain_t).",
+          "choices": [
+            {
+              "name": "SENSE_ACP_PROX_GAIN_1X",
+              "value": 0,
+              "label": "1x"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_2X",
+              "value": 1,
+              "label": "2x"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_4X",
+              "value": 2,
+              "label": "4x (default)"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_8X",
+              "value": 3,
+              "label": "8x"
+            }
+          ]
         }
       ],
       "returns": "void",
