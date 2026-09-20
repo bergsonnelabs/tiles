@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@ffdbe83",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",

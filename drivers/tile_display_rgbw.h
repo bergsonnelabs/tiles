@@ -1,7 +1,7 @@
 /**
  * @file   tile_display_rgbw.h
  * @brief  RGBW LED driver for the Display.RGBW tile (LP5811).
- * @version 2.4.0
+ * @version 2.4.1
  *
  * 4-channel LED driver with independent PWM + current control.
  * Channels: R (LED0), G (LED2), B (LED1), W (LED3).
