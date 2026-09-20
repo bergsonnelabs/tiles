@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@f5a0d22",
   "tile": "Sense.ACP",
   "palette": {
     "label": "Sense.ACP",
@@ -81,6 +81,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "gain",
+          "label": "Light sensor gain",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -96,10 +105,43 @@
         {
           "name": "atime",
           "type": "int",
-          "description": "Raw ATIME register value (0-255)."
+          "range": [
+            0,
+            255
+          ],
+          "description": "Raw ATIME register value."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "atime",
+          "label": "Light integration time",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "ms",
+          "default": 47,
+          "show": {
+            "op": "*",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "ref": "set_integration_time.atime"
+                  },
+                  {
+                    "num": 1
+                  }
+                ]
+              },
+              {
+                "num": 2.81
+              }
+            ]
+          }
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -141,6 +183,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "gain",
+          "label": "Proximity sensor gain",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 2
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -156,10 +207,24 @@
         {
           "name": "ma",
           "type": "int",
-          "description": "Desired LED drive current in milliamps (6-192)."
+          "range": [
+            6,
+            192
+          ],
+          "unit": "mA",
+          "description": "Desired LED drive current, in milliamps."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Proximity LED current",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 12
+        }
+      ],
       "receiver": "tile_t *"
     },
     {

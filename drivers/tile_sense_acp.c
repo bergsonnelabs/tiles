@@ -123,7 +123,7 @@ void tile_sense_acp_init(tiles_pal_t *hal, uint8_t instance,
 
     /* Resolve config with defaults (matches the header's documented set). */
     uint8_t als_gain  = cfg ? cfg->als_gain  : SENSE_ACP_ALS_GAIN_16X;
-    uint8_t atime     = cfg ? cfg->atime     : 0x2F;   /* ~133 ms */
+    uint8_t atime     = cfg ? cfg->atime     : 0x2F;   /* ~135 ms */
     uint8_t prox_gain = cfg ? cfg->prox_gain : SENSE_ACP_PROX_GAIN_4X;
     uint8_t drive_ma  = cfg ? cfg->prox_drive_ma : 12;
     uint8_t en_als    = cfg ? cfg->enable_als  : 1;

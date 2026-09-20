@@ -220,8 +220,8 @@ TILES_CHECK_VERSION(1, 0);
  * the new range — DC=255 always means full-scale. Default at init: 51 mA.
  */
 typedef enum {
-    DISP_RGBW_MAX_CURRENT_25_5_MA = 0,  /**< 25.5 mA full scale per channel */
-    DISP_RGBW_MAX_CURRENT_51_MA   = 1,  /**< 51 mA full scale per channel */
+    DISP_RGBW_MAX_CURRENT_25_5_MA = 0,  /**< 25.5 mA full scale per channel @studio value=25.5 */
+    DISP_RGBW_MAX_CURRENT_51_MA   = 1,  /**< 51 mA full scale per channel @studio value=51 */
 } disp_rgbw_max_current_t;
 
 /* ---- LED fault status ---- */
@@ -331,6 +331,10 @@ void tile_display_rgbw_off(tile_t *tile);
  * @brief Set per-channel current limit.
  *
  * @studio expose category=tile icon=◑ name=set_current section=runtime
+ * @studio control r label="Red current" tier=basic default=5 show="r * value(set_max_current.mode) / 255" unit=mA
+ * @studio control g label="Green current" tier=basic default=5 show="g * value(set_max_current.mode) / 255" unit=mA
+ * @studio control b label="Blue current" tier=basic default=5 show="b * value(set_max_current.mode) / 255" unit=mA
+ * @studio control w label="White current" tier=basic default=5 show="w * value(set_max_current.mode) / 255" unit=mA
  * @param r [0..255] Red current (fraction of full-scale max).
  * @param g [0..255] Green current.
  * @param b [0..255] Blue current.
@@ -352,6 +356,7 @@ void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b
  * actually take effect.
  *
  * @studio expose category=tile icon=◑ name=set_max_current section=config
+ * @studio control mode label="Full-scale current" tier=advanced default=DISP_RGBW_MAX_CURRENT_51_MA
  * @param  tile  Initialised tile handle
  * @param  mode  25.5 mA (0) or 51 mA (1)
  */
@@ -404,6 +409,7 @@ void tile_display_rgbw_clear_faults(tile_t *tile);
  * likely to mis-fire on cold LEDs whose Vf hasn't settled.
  *
  * @studio expose category=tile icon=◑ name=set_short_threshold section=config
+ * @studio control threshold label="Short detection threshold" tier=advanced default=DISP_RGBW_LSD_TH_0_65
  * @param  tile       Initialised tile handle
  * @param  threshold  One of DISP_RGBW_LSD_TH_*
  */
@@ -419,6 +425,7 @@ void tile_display_rgbw_set_short_threshold(tile_t *tile,
  * driving — firmware decides what to do.
  *
  * @studio expose category=tile icon=◑ name=set_short_shutdown section=config
+ * @studio control enabled label="Shut down on a short" tier=advanced type=bool default=0
  * @param  tile     Initialised tile handle
  * @param  enabled  1 = chip auto-shuts-down on LSD, 0 = report only
  */
@@ -434,6 +441,7 @@ void tile_display_rgbw_set_short_shutdown(tile_t *tile, uint8_t enabled);
  * wants to retry rather than relying on the chip to recover.
  *
  * @studio expose category=tile icon=◑ name=set_open_shutdown section=config
+ * @studio control enabled label="Shut down an open channel" tier=advanced type=bool default=1
  * @param  tile     Initialised tile handle
  * @param  enabled  1 = chip auto-shuts-down a single sink, 0 = report only
  */

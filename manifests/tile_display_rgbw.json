@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@ffdbe83",
+  "source": "tiles@f5a0d22",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -129,6 +129,116 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "r",
+          "label": "Red current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.r"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "g",
+          "label": "Green current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.g"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "b",
+          "label": "Blue current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.b"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "w",
+          "label": "White current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.w"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        }
+      ],
       "icon": "◑",
       "receiver": "tile_t *"
     },
@@ -150,17 +260,28 @@
             {
               "name": "DISP_RGBW_MAX_CURRENT_25_5_MA",
               "value": 0,
-              "label": "25.5 mA full scale per channel"
+              "label": "25.5 mA full scale per channel",
+              "quantity": 25.5
             },
             {
               "name": "DISP_RGBW_MAX_CURRENT_51_MA",
               "value": 1,
-              "label": "51 mA full scale per channel"
+              "label": "51 mA full scale per channel",
+              "quantity": 51
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Full-scale current",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        }
+      ],
       "icon": "◑",
       "receiver": "tile_t *"
     },
@@ -237,6 +358,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Short detection threshold",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3
+        }
+      ],
       "icon": "◑",
       "receiver": "tile_t *"
     },
@@ -257,6 +387,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Shut down on a short",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
       "icon": "◑",
       "receiver": "tile_t *"
     },
@@ -277,6 +417,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Shut down an open channel",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "icon": "◑",
       "receiver": "tile_t *"
     },
