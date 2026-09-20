@@ -372,21 +372,21 @@ typedef enum {
  * Rates above 200 Hz require Low-Noise mode. Rates below 12.5 Hz are accel LP only.
  */
 typedef enum {
-    SENSE_I_6P6_ODR_32KHZ    = 0x01,    /**< 32 kHz */
-    SENSE_I_6P6_ODR_16KHZ    = 0x02,    /**< 16 kHz */
-    SENSE_I_6P6_ODR_8KHZ     = 0x03,    /**< 8 kHz */
-    SENSE_I_6P6_ODR_4KHZ     = 0x04,    /**< 4 kHz */
-    SENSE_I_6P6_ODR_2KHZ     = 0x05,    /**< 2 kHz */
-    SENSE_I_6P6_ODR_1KHZ     = 0x06,    /**< 1 kHz */
-    SENSE_I_6P6_ODR_200HZ    = 0x07,    /**< 200 Hz */
-    SENSE_I_6P6_ODR_100HZ    = 0x08,    /**< 100 Hz */
-    SENSE_I_6P6_ODR_50HZ     = 0x09,    /**< 50 Hz */
-    SENSE_I_6P6_ODR_25HZ     = 0x0A,    /**< 25 Hz */
-    SENSE_I_6P6_ODR_12_5HZ   = 0x0B,    /**< 12.5 Hz */
-    SENSE_I_6P6_ODR_6_25HZ   = 0x0C,    /**< 6.25 Hz (accel LP only) */
-    SENSE_I_6P6_ODR_3_125HZ  = 0x0D,    /**< 3.125 Hz (accel LP only) */
-    SENSE_I_6P6_ODR_1_5625HZ = 0x0E,    /**< 1.5625 Hz (accel LP only) */
-    SENSE_I_6P6_ODR_500HZ    = 0x0F,    /**< 500 Hz */
+    SENSE_I_6P6_ODR_32KHZ    = 0x01,    /**< 32 kHz @studio value=32000 */
+    SENSE_I_6P6_ODR_16KHZ    = 0x02,    /**< 16 kHz @studio value=16000 */
+    SENSE_I_6P6_ODR_8KHZ     = 0x03,    /**< 8 kHz @studio value=8000 */
+    SENSE_I_6P6_ODR_4KHZ     = 0x04,    /**< 4 kHz @studio value=4000 */
+    SENSE_I_6P6_ODR_2KHZ     = 0x05,    /**< 2 kHz @studio value=2000 */
+    SENSE_I_6P6_ODR_1KHZ     = 0x06,    /**< 1 kHz @studio value=1000 */
+    SENSE_I_6P6_ODR_200HZ    = 0x07,    /**< 200 Hz @studio value=200 */
+    SENSE_I_6P6_ODR_100HZ    = 0x08,    /**< 100 Hz @studio value=100 */
+    SENSE_I_6P6_ODR_50HZ     = 0x09,    /**< 50 Hz @studio value=50 */
+    SENSE_I_6P6_ODR_25HZ     = 0x0A,    /**< 25 Hz @studio value=25 */
+    SENSE_I_6P6_ODR_12_5HZ   = 0x0B,    /**< 12.5 Hz @studio value=12.5 */
+    SENSE_I_6P6_ODR_6_25HZ   = 0x0C,    /**< 6.25 Hz (accel LP only) @studio value=6.25 */
+    SENSE_I_6P6_ODR_3_125HZ  = 0x0D,    /**< 3.125 Hz (accel LP only) @studio value=3.125 */
+    SENSE_I_6P6_ODR_1_5625HZ = 0x0E,    /**< 1.5625 Hz (accel LP only) @studio value=1.5625 */
+    SENSE_I_6P6_ODR_500HZ    = 0x0F,    /**< 500 Hz @studio value=500 */
 } sense_i_6p6_odr_t;
 
 /**
@@ -403,18 +403,21 @@ typedef enum {
  * @brief  UI filter bandwidth selection.
  *
  * Used for both accel and gyro in GYRO_ACCEL_CONFIG0 (0x52).
- * In Low-Noise mode: sets the digital low-pass filter cutoff relative to ODR.
+ * In Low-Noise mode: sets the digital low-pass filter cutoff. Per the datasheet
+ * (GYRO_ACCEL_CONFIG0, 0x52) the cutoff is ODR/2 for setting 0 and
+ * max(400 Hz, ODR)/N for settings 1–7 — NOT ODR/N: below 400 Hz the filter stops
+ * tracking the data rate. `@studio value=` is the divisor N.
  * In Low-Power mode: sets averaging factor.
  */
 typedef enum {
-    SENSE_I_6P6_FILT_BW_ODR_2     = 0x00,  /**< ODR/2 (Nyquist) */
-    SENSE_I_6P6_FILT_BW_ODR_4     = 0x01,  /**< max(400,ODR)/4 (default) */
-    SENSE_I_6P6_FILT_BW_ODR_5     = 0x02,  /**< ODR/5 */
-    SENSE_I_6P6_FILT_BW_ODR_8     = 0x03,  /**< ODR/8 */
-    SENSE_I_6P6_FILT_BW_ODR_10    = 0x04,  /**< ODR/10 */
-    SENSE_I_6P6_FILT_BW_ODR_16    = 0x05,  /**< ODR/16 */
-    SENSE_I_6P6_FILT_BW_ODR_20    = 0x06,  /**< ODR/20 */
-    SENSE_I_6P6_FILT_BW_ODR_40    = 0x07,  /**< ODR/40 */
+    SENSE_I_6P6_FILT_BW_ODR_2     = 0x00,  /**< ODR/2 (Nyquist) @studio value=2 */
+    SENSE_I_6P6_FILT_BW_ODR_4     = 0x01,  /**< max(400 Hz, ODR)/4 (default) @studio value=4 */
+    SENSE_I_6P6_FILT_BW_ODR_5     = 0x02,  /**< max(400 Hz, ODR)/5 @studio value=5 */
+    SENSE_I_6P6_FILT_BW_ODR_8     = 0x03,  /**< max(400 Hz, ODR)/8 @studio value=8 */
+    SENSE_I_6P6_FILT_BW_ODR_10    = 0x04,  /**< max(400 Hz, ODR)/10 @studio value=10 */
+    SENSE_I_6P6_FILT_BW_ODR_16    = 0x05,  /**< max(400 Hz, ODR)/16 @studio value=16 */
+    SENSE_I_6P6_FILT_BW_ODR_20    = 0x06,  /**< max(400 Hz, ODR)/20 @studio value=20 */
+    SENSE_I_6P6_FILT_BW_ODR_40    = 0x07,  /**< max(400 Hz, ODR)/40 @studio value=40 */
     SENSE_I_6P6_FILT_LP_1X_AVG    = 0x01,  /**< LP mode: 1× averaging (default) */
     SENSE_I_6P6_FILT_LP_16X_AVG   = 0x06,  /**< LP mode: 16× averaging */
 } sense_i_6p6_filter_bw_t;
@@ -432,13 +435,13 @@ typedef enum {
  * @brief  Temperature filter bandwidth.
  */
 typedef enum {
-    SENSE_I_6P6_TEMP_FILT_4000HZ = 0x00,  /**< 4000 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_170HZ  = 0x01,  /**< 170 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_82HZ   = 0x02,  /**< 82 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_40HZ   = 0x03,  /**< 40 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_20HZ   = 0x04,  /**< 20 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_10HZ   = 0x05,  /**< 10 Hz cutoff */
-    SENSE_I_6P6_TEMP_FILT_5HZ    = 0x06,  /**< 5 Hz cutoff */
+    SENSE_I_6P6_TEMP_FILT_4000HZ = 0x00,  /**< 4000 Hz cutoff @studio value=4000 */
+    SENSE_I_6P6_TEMP_FILT_170HZ  = 0x01,  /**< 170 Hz cutoff @studio value=170 */
+    SENSE_I_6P6_TEMP_FILT_82HZ   = 0x02,  /**< 82 Hz cutoff @studio value=82 */
+    SENSE_I_6P6_TEMP_FILT_40HZ   = 0x03,  /**< 40 Hz cutoff @studio value=40 */
+    SENSE_I_6P6_TEMP_FILT_20HZ   = 0x04,  /**< 20 Hz cutoff @studio value=20 */
+    SENSE_I_6P6_TEMP_FILT_10HZ   = 0x05,  /**< 10 Hz cutoff @studio value=10 */
+    SENSE_I_6P6_TEMP_FILT_5HZ    = 0x06,  /**< 5 Hz cutoff @studio value=5 */
 } sense_i_6p6_temp_filter_t;
 
 /**
@@ -634,6 +637,7 @@ void tile_sense_i_6p6_reset(tile_t *tile);
  * @brief  Set accelerometer full-scale range.
  *
  * @studio expose category=tile name=set_accel_range section=runtime
+ * @studio control range label="Accel range" tier=basic default=SENSE_I_6P6_ACCEL_8G
  */
 void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t range);
 
@@ -641,6 +645,7 @@ void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t ra
  * @brief  Set gyroscope full-scale range.
  *
  * @studio expose category=tile name=set_gyro_range section=runtime
+ * @studio control range label="Gyro range" tier=basic default=SENSE_I_6P6_GYRO_1000DPS
  */
 void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t range);
 
@@ -648,6 +653,9 @@ void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t rang
  * @brief  Set accelerometer output data rate.
  *
  * @studio expose category=tile name=set_accel_odr section=runtime
+ * @studio control odr label="Accel data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate
+ * @studio require expr="value(odr) >= 12.5" when="set_power_mode.accel == SENSE_I_6P6_MODE_LN" message="Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first."
+ * @studio require expr="value(odr) <= 500" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates."
  */
 void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr);
 
@@ -655,6 +663,7 @@ void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr);
  * @brief  Set gyroscope output data rate.
  *
  * @studio expose category=tile name=set_gyro_odr section=runtime
+ * @studio control odr label="Gyro data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate allow=SENSE_I_6P6_ODR_32KHZ,SENSE_I_6P6_ODR_16KHZ,SENSE_I_6P6_ODR_8KHZ,SENSE_I_6P6_ODR_4KHZ,SENSE_I_6P6_ODR_2KHZ,SENSE_I_6P6_ODR_1KHZ,SENSE_I_6P6_ODR_500HZ,SENSE_I_6P6_ODR_200HZ,SENSE_I_6P6_ODR_100HZ,SENSE_I_6P6_ODR_50HZ,SENSE_I_6P6_ODR_25HZ,SENSE_I_6P6_ODR_12_5HZ
  */
 void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr);
 
@@ -662,6 +671,8 @@ void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr);
  * @brief  Set power mode independently for accel and gyro.
  *
  * @studio expose category=tile name=set_power_mode section=runtime
+ * @studio control accel label="Accel power mode" tier=advanced default=SENSE_I_6P6_MODE_LN allow=SENSE_I_6P6_MODE_OFF,SENSE_I_6P6_MODE_LP,SENSE_I_6P6_MODE_LN
+ * @studio control gyro label="Gyro power mode" tier=advanced default=SENSE_I_6P6_MODE_LN allow=SENSE_I_6P6_MODE_OFF,SENSE_I_6P6_MODE_STANDBY,SENSE_I_6P6_MODE_LN
  * @note   Wait 200 µs after changing mode before accessing other registers.
  */
 void tile_sense_i_6p6_set_power_mode(tile_t *tile,
@@ -672,6 +683,9 @@ void tile_sense_i_6p6_set_power_mode(tile_t *tile,
  * @brief  Set UI filter bandwidth for both accel and gyro.
  *
  * @studio expose category=tile name=set_filter_bw section=config
+ * @studio control accel_bw label="Accel filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="accel_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_accel_odr.odr) / 2 : max(400, value(set_accel_odr.odr)) / value(accel_bw)" unit=Hz
+ * @studio require expr="accel_bw == SENSE_I_6P6_FILT_BW_ODR_4 || accel_bw == SENSE_I_6P6_FILT_BW_ODR_20" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid."
+ * @studio control gyro_bw label="Gyro filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="gyro_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_gyro_odr.odr) / 2 : max(400, value(set_gyro_odr.odr)) / value(gyro_bw)" unit=Hz
  */
 void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
                                      sense_i_6p6_filter_bw_t accel_bw,
@@ -681,6 +695,8 @@ void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
  * @brief  Set UI filter order for accel and gyro (1st, 2nd, or 3rd).
  *
  * @studio expose category=tile name=set_filter_order section=config
+ * @studio control accel_order label="Accel filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND
+ * @studio control gyro_order label="Gyro filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND
  */
 void tile_sense_i_6p6_set_filter_order(tile_t *tile,
                                         sense_i_6p6_filter_order_t accel_order,
@@ -690,6 +706,7 @@ void tile_sense_i_6p6_set_filter_order(tile_t *tile,
  * @brief  Set temperature sensor filter bandwidth.
  *
  * @studio expose category=tile name=set_temp_filter section=config
+ * @studio control bw label="Temperature filter" tier=advanced default=SENSE_I_6P6_TEMP_FILT_4000HZ
  */
 void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw);
 
@@ -697,6 +714,8 @@ void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw
  * @brief  Enable or disable the temperature sensor.
  *
  * @studio expose category=tile name=set_temp_enabled section=config
+ * @studio control enabled label="Temperature sensor" tier=advanced type=bool default=1
+ * @param  enabled [0..1] 1 = on, 0 = off.
  */
 void tile_sense_i_6p6_set_temp_enabled(tile_t *tile, uint8_t enabled);
 
@@ -787,7 +806,8 @@ uint8_t tile_sense_i_6p6_is_face_down(tile_t *tile);
  * so the helper triggers on both lift and drop. Range-aware.
  *
  * @studio expose category=tile name=is_moving returns=bool section=runtime
- * @param  threshold_mg  Deviation threshold in milli-g (typical: 50–200).
+ * @studio control threshold_mg label="Motion threshold" tier=basic scope=usage
+ * @param  threshold_mg [1..32000] Deviation threshold in milli-g (typical: 50–200).
  * @return 1 if moving, 0 otherwise.
  */
 uint8_t tile_sense_i_6p6_is_moving(tile_t *tile, uint16_t threshold_mg);
@@ -819,7 +839,8 @@ uint8_t tile_sense_i_6p6_read_tilt_centi_degrees(tile_t *tile,
  * a positive return to retrieve count/axis/direction.
  *
  * @studio expose category=tile name=wait_for_tap returns=bool section=tap
- * @param  timeout_ms  Max time to wait, in ms. Use 0 for a single-shot poll.
+ * @studio control timeout_ms label="Tap wait timeout" tier=advanced scope=usage
+ * @param  timeout_ms [1..60000] ms Max time to wait, in ms. Use 0 for a single-shot poll.
  * @return 1 if a tap was detected, 0 on timeout.
  */
 uint8_t tile_sense_i_6p6_wait_for_tap(tile_t *tile, uint32_t timeout_ms);
@@ -832,7 +853,8 @@ uint8_t tile_sense_i_6p6_wait_for_tap(tile_t *tile, uint32_t timeout_ms);
  * latch.
  *
  * @studio expose category=tile name=wait_for_motion returns=bool section=wom
- * @param  timeout_ms  Max time to wait, in ms. Use 0 for a single-shot poll.
+ * @studio control timeout_ms label="Motion wait timeout" tier=advanced scope=usage
+ * @param  timeout_ms [1..60000] ms Max time to wait, in ms. Use 0 for a single-shot poll.
  * @return 1 if motion was detected, 0 on timeout.
  */
 uint8_t tile_sense_i_6p6_wait_for_motion(tile_t *tile, uint32_t timeout_ms);
@@ -859,6 +881,8 @@ void tile_sense_i_6p6_fifo_config(tile_t *tile, sense_i_6p6_fifo_mode_t mode,
  * @brief  Set the FIFO watermark threshold in records (1–4095).
  *
  * @studio expose category=tile name=fifo_set_watermark section=fifo
+ * @studio control records label="FIFO watermark" tier=advanced scope=usage
+ * @param  records [1..4095] Records in the FIFO that raise the watermark interrupt.
  */
 void tile_sense_i_6p6_fifo_set_watermark(tile_t *tile, uint16_t records);
 
@@ -1095,9 +1119,13 @@ uint8_t tile_sense_i_6p6_get_int_status3(tile_t *tile);
  * @brief  Configure Wake-on-Motion thresholds.
  *
  * @studio expose category=tile name=wom_config section=wom
- * @param  x_mg  X-axis threshold in mg (0–1000, resolution ~3.9 mg)
- * @param  y_mg  Y-axis threshold in mg
- * @param  z_mg  Z-axis threshold in mg
+ * @studio control x_mg label="Wake threshold X" tier=advanced scope=usage
+ * @studio control y_mg label="Wake threshold Y" tier=advanced scope=usage
+ * @studio control z_mg label="Wake threshold Z" tier=advanced scope=usage
+ * @studio control mode label="Wake compare" tier=advanced default=SENSE_I_6P6_WOM_INITIAL scope=usage
+ * @param  x_mg [0..1000] X-axis threshold in mg (resolution ~3.9 mg)
+ * @param  y_mg [0..1000] Y-axis threshold in mg
+ * @param  z_mg [0..1000] Z-axis threshold in mg
  * @param  mode  Compare against initial or previous sample
  *
  * @note  Requires accel to be running (LN or LP mode).
@@ -1128,6 +1156,7 @@ void tile_sense_i_6p6_wom_disable(tile_t *tile);
  * @brief  Configure and enable SMD. WOM thresholds must be set first.
  *
  * @studio expose category=tile name=smd_config section=smd
+ * @studio control mode label="Significant motion" tier=advanced default=SENSE_I_6P6_SMD_DISABLED scope=usage
  */
 void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode);
 
@@ -1141,6 +1170,7 @@ void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode);
  * Requires accel at ≥25 Hz. Initializes the DMP if not already running.
  *
  * @studio expose category=tile name=pedometer_enable section=pedometer
+ * @studio control dmp_odr label="Pedometer rate" tier=advanced scope=usage
  * @param  dmp_odr  DMP processing rate (25 or 50 Hz)
  */
 void tile_sense_i_6p6_pedometer_enable(tile_t *tile, sense_i_6p6_dmp_odr_t dmp_odr);
@@ -1187,6 +1217,7 @@ sense_i_6p6_activity_t tile_sense_i_6p6_get_activity(tile_t *tile);
  * Requires accel at ≥25 Hz. Initializes DMP if needed.
  *
  * @studio expose category=tile name=enable_tilt section=tilt
+ * @studio control wait_seconds label="Tilt delay" tier=advanced scope=usage
  * @param wait_seconds [0..6] s Time the tilt must be sustained (0, 2, 4, or 6).
  */
 void tile_sense_i_6p6_tilt_enable(tile_t *tile, uint8_t wait_seconds);

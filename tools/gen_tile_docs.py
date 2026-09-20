@@ -98,6 +98,56 @@ def build(stem, commit):
     # Provenance + schema, mirroring the SDK-docs manifests.
     out = {"schema": "tile-docs/v1", "source": f"tiles@{commit}"}
     out.update(doc)
+    out.update(vibe_settings(path))
+    return out
+
+
+def vibe_settings(path):
+    """The driver's `@studio control` / `@studio require` annotations as a table the
+    docs site renders under "Vibe Settings" — the same data Studio's Vibe inspector
+    and its assistant read, taken from the SAME parser (gen_studio_manifest), so the
+    docs cannot describe a setting Studio doesn't have. Keys are only emitted for
+    drivers that declare settings."""
+    import gen_studio_manifest as gsm
+
+    gsm.collect_enum_types(path.read_text())
+    hosts, _sections, _docs, _events = gsm.parse_header(path, scope="tile")
+    rows, rules = [], []
+    for host in hosts:
+        fn = host["qname"][-1]
+        for control in host.get("controls", []):
+            param = next(p for p in host["params"] if p["name"] == control["param"])
+            choices = control.get("choices") or param.get("choices") or []
+            row = {
+                "label": control["label"],
+                "tier": control["tier"],
+                "scope": control["scope"],
+                "function": fn,
+                "param": control["param"],
+                "kind": "bool" if control.get("type") == "bool" else "choice" if choices else "number",
+            }
+            if choices:
+                row["choices"] = [c["label"] for c in choices]
+            if param.get("range"):
+                row["range"] = param["range"]
+            if param.get("unit"):
+                row["unit"] = param["unit"]
+            if "default" in control:
+                named = next((c["label"] for c in choices if c["value"] == control["default"]), None)
+                row["default"] = named if named is not None else control["default"]
+            if "show" in control:
+                row["computed_unit"] = control.get("show_unit", "")
+            if "role" in control:
+                row["role"] = control["role"]
+            rows.append(row)
+        for rule in host.get("requires", []):
+            rules.append({"function": fn, "message": rule["message"]})
+    rows.sort(key=lambda r: r["tier"] != "basic")
+    out = {}
+    if rows:
+        out["vibe_settings"] = rows
+    if rules:
+        out["vibe_rules"] = rules
     return out
 
 

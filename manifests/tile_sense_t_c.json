@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@ed24fdf",
+  "source": "tiles@6897677",
   "tile": "Sense.T.C",
   "palette": {
     "label": "Sense.T.C",
@@ -254,7 +254,39 @@
       "params": [
         {
           "name": "mode",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_T_C_POWER_NORMAL",
+              "value": 0,
+              "label": "Normal power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_LOW",
+              "value": 1,
+              "label": "Low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_ULTRA_LOW",
+              "value": 2,
+              "label": "Ultra-low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_HALT",
+              "value": 3,
+              "label": "Halt (lowest power)"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO",
+              "value": 4,
+              "label": "Auto power mode switching"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO_NO_ULP",
+              "value": 5,
+              "label": "Auto mode, skip ultra-low power"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -376,7 +408,24 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Channel role"
+          "description": "Channel role",
+          "choices": [
+            {
+              "name": "SENSE_T_C_CHANNEL_INDEPENDENT",
+              "value": 0,
+              "label": "Stand-alone sensing channel"
+            },
+            {
+              "name": "SENSE_T_C_CHANNEL_FOLLOWER",
+              "value": 1,
+              "label": "Subtracts a reference channel's LTA"
+            },
+            {
+              "name": "SENSE_T_C_CHANNEL_REFERENCE",
+              "value": 2,
+              "label": "Acts as ambient reference for followers"
+            }
+          ]
         },
         {
           "name": "reference_id",
@@ -400,7 +449,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Event or streaming"
+          "description": "Event or streaming",
+          "choices": [
+            {
+              "name": "SENSE_T_C_COMM_STREAM",
+              "value": 0,
+              "label": "Continuous reporting at the configured power-mode rate"
+            },
+            {
+              "name": "SENSE_T_C_COMM_EVENT",
+              "value": 1,
+              "label": "RDY pulses only on enabled events (default)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -547,7 +608,39 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Which power mode's rate to set (NORMAL/LOW/ULTRA_LOW/HALT)."
+          "description": "Which power mode's rate to set (NORMAL/LOW/ULTRA_LOW/HALT).",
+          "choices": [
+            {
+              "name": "SENSE_T_C_POWER_NORMAL",
+              "value": 0,
+              "label": "Normal power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_LOW",
+              "value": 1,
+              "label": "Low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_ULTRA_LOW",
+              "value": 2,
+              "label": "Ultra-low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_HALT",
+              "value": 3,
+              "label": "Halt (lowest power)"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO",
+              "value": 4,
+              "label": "Auto power mode switching"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO_NO_ULP",
+              "value": 5,
+              "label": "Auto mode, skip ultra-low power"
+            }
+          ]
         },
         {
           "name": "ms",

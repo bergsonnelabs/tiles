@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Sense.I.9",
   "palette": {
     "label": "Sense.I.9",
@@ -43,7 +43,29 @@
         {
           "name": "range",
           "type": "int",
-          "description": "One of the sense_i_9_accel_range_t values"
+          "description": "One of the sense_i_9_accel_range_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_ACCEL_2G",
+              "value": 0,
+              "label": "±2 g"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_4G",
+              "value": 2,
+              "label": "bits [2:1] of ACCEL_CONFIG"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_8G",
+              "value": 4,
+              "label": "±8 g"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_16G",
+              "value": 6,
+              "label": "±16 g"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -62,7 +84,29 @@
         {
           "name": "range",
           "type": "int",
-          "description": "One of the sense_i_9_gyro_range_t values"
+          "description": "One of the sense_i_9_gyro_range_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_GYRO_250DPS",
+              "value": 0,
+              "label": "±250 deg/s"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_500DPS",
+              "value": 2,
+              "label": "bits [2:1] of GYRO_CONFIG"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_1000DPS",
+              "value": 4,
+              "label": "±1000 deg/s"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_2000DPS",
+              "value": 6,
+              "label": "±2000 deg/s"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -81,7 +125,39 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "One of the sense_i_9_mag_mode_t values"
+          "description": "One of the sense_i_9_mag_mode_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_MAG_POWER_DOWN",
+              "value": 0,
+              "label": "Power-down"
+            },
+            {
+              "name": "SENSE_I_9_MAG_SINGLE",
+              "value": 1,
+              "label": "Single measurement"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_10HZ",
+              "value": 2,
+              "label": "Continuous at 10 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_20HZ",
+              "value": 4,
+              "label": "Continuous at 20 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_50HZ",
+              "value": 6,
+              "label": "Continuous at 50 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_100HZ",
+              "value": 8,
+              "label": "Continuous at 100 Hz"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -419,7 +495,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "Compare against initial sample or previous sample"
+          "description": "Compare against initial sample or previous sample",
+          "choices": [
+            {
+              "name": "SENSE_I_9_WOM_VS_INITIAL",
+              "value": 0,
+              "label": "Compare against first sample"
+            },
+            {
+              "name": "SENSE_I_9_WOM_VS_PREVIOUS",
+              "value": 1,
+              "label": "Compare against previous sample"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -464,7 +552,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "FIFO operating mode (stream or snapshot)"
+          "description": "FIFO operating mode (stream or snapshot)",
+          "choices": [
+            {
+              "name": "SENSE_I_9_FIFO_STREAM",
+              "value": 0,
+              "label": "Overwrite oldest data when full"
+            },
+            {
+              "name": "SENSE_I_9_FIFO_SNAPSHOT",
+              "value": 31,
+              "label": "Stop accepting writes when full"
+            }
+          ]
         },
         {
           "name": "accel",

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@unknown",
   "tile": "Sense.I.6P6",
   "palette": {
     "label": "Sense.I.6P6",
@@ -104,10 +104,46 @@
       "params": [
         {
           "name": "range",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ACCEL_32G",
+              "value": 0,
+              "label": "±32 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_16G",
+              "value": 1,
+              "label": "±16 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_8G",
+              "value": 2,
+              "label": "±8 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_4G",
+              "value": 3,
+              "label": "±4 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_2G",
+              "value": 4,
+              "label": "±2 g"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "range",
+          "label": "Accel range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -122,10 +158,61 @@
       "params": [
         {
           "name": "range",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_GYRO_4000DPS",
+              "value": 0,
+              "label": "±4000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_2000DPS",
+              "value": 1,
+              "label": "±2000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_1000DPS",
+              "value": 2,
+              "label": "±1000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_500DPS",
+              "value": 3,
+              "label": "±500 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_250DPS",
+              "value": 4,
+              "label": "±250 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_125DPS",
+              "value": 5,
+              "label": "±125 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_62_5DPS",
+              "value": 6,
+              "label": "±62.5 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_31_25DPS",
+              "value": 7,
+              "label": "±31.25 deg/s"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "range",
+          "label": "Gyro range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -140,11 +227,167 @@
       "params": [
         {
           "name": "odr",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_6_25HZ",
+              "value": 12,
+              "label": "6.25 Hz (accel LP only)",
+              "quantity": 6.25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_3_125HZ",
+              "value": 13,
+              "label": "3.125 Hz (accel LP only)",
+              "quantity": 3.125
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1_5625HZ",
+              "value": 14,
+              "label": "1.5625 Hz (accel LP only)",
+              "quantity": 1.5625
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ]
         }
       ],
       "returns": "void",
-      "receiver": "tile_t *"
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Accel data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 8
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": ">=",
+            "args": [
+              {
+                "value": "set_accel_odr.odr"
+              },
+              {
+                "num": 12.5
+              }
+            ]
+          },
+          "message": "Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LN",
+                "num": 3
+              }
+            ]
+          }
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "value": "set_accel_odr.odr"
+              },
+              {
+                "num": 500
+              }
+            ]
+          },
+          "message": "In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LP",
+                "num": 2
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "qname": [
@@ -158,10 +401,186 @@
       "params": [
         {
           "name": "odr",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_6_25HZ",
+              "value": 12,
+              "label": "6.25 Hz (accel LP only)",
+              "quantity": 6.25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_3_125HZ",
+              "value": 13,
+              "label": "3.125 Hz (accel LP only)",
+              "quantity": 3.125
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1_5625HZ",
+              "value": 14,
+              "label": "1.5625 Hz (accel LP only)",
+              "quantity": 1.5625
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Gyro data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 8,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ]
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -176,14 +595,108 @@
       "params": [
         {
           "name": "accel",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
         },
         {
           "name": "gyro",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "accel",
+          "label": "Accel power mode",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        },
+        {
+          "param": "gyro",
+          "label": "Gyro power mode",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -198,15 +711,391 @@
       "params": [
         {
           "name": "accel_bw",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_1X_AVG",
+              "value": 1,
+              "label": "LP mode: 1× averaging (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_16X_AVG",
+              "value": 6,
+              "label": "LP mode: 16× averaging"
+            }
+          ]
         },
         {
           "name": "gyro_bw",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_1X_AVG",
+              "value": 1,
+              "label": "LP mode: 1× averaging (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_16X_AVG",
+              "value": 6,
+              "label": "LP mode: 16× averaging"
+            }
+          ]
         }
       ],
       "returns": "void",
-      "receiver": "tile_t *"
+      "controls": [
+        {
+          "param": "accel_bw",
+          "label": "Accel filter bandwidth",
+          "tier": "advanced",
+          "scope": "config",
+          "show_unit": "Hz",
+          "default": 1,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            }
+          ],
+          "show": {
+            "cond": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_2",
+                    "num": 0
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "value": "set_accel_odr.odr"
+                  },
+                  {
+                    "num": 2
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "call": "max",
+                    "args": [
+                      {
+                        "num": 400
+                      },
+                      {
+                        "value": "set_accel_odr.odr"
+                      }
+                    ]
+                  },
+                  {
+                    "value": "set_filter_bw.accel_bw"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "param": "gyro_bw",
+          "label": "Gyro filter bandwidth",
+          "tier": "advanced",
+          "scope": "config",
+          "show_unit": "Hz",
+          "default": 1,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            }
+          ],
+          "show": {
+            "cond": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.gyro_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_2",
+                    "num": 0
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "value": "set_gyro_odr.odr"
+                  },
+                  {
+                    "num": 2
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "call": "max",
+                    "args": [
+                      {
+                        "num": 400
+                      },
+                      {
+                        "value": "set_gyro_odr.odr"
+                      }
+                    ]
+                  },
+                  {
+                    "value": "set_filter_bw.gyro_bw"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "||",
+            "args": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_4",
+                    "num": 1
+                  }
+                ]
+              },
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_20",
+                    "num": 6
+                  }
+                ]
+              }
+            ]
+          },
+          "message": "In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LP",
+                "num": 2
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "qname": [
@@ -220,14 +1109,64 @@
       "params": [
         {
           "name": "accel_order",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_1ST",
+              "value": 0,
+              "label": "1st order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_2ND",
+              "value": 1,
+              "label": "2nd order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_3RD",
+              "value": 2,
+              "label": "3rd order"
+            }
+          ]
         },
         {
           "name": "gyro_order",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_1ST",
+              "value": 0,
+              "label": "1st order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_2ND",
+              "value": 1,
+              "label": "2nd order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_3RD",
+              "value": 2,
+              "label": "3rd order"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "accel_order",
+          "label": "Accel filter order",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        },
+        {
+          "param": "gyro_order",
+          "label": "Gyro filter order",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -242,10 +1181,63 @@
       "params": [
         {
           "name": "bw",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_4000HZ",
+              "value": 0,
+              "label": "4000 Hz cutoff",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_170HZ",
+              "value": 1,
+              "label": "170 Hz cutoff",
+              "quantity": 170
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_82HZ",
+              "value": 2,
+              "label": "82 Hz cutoff",
+              "quantity": 82
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_40HZ",
+              "value": 3,
+              "label": "40 Hz cutoff",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_20HZ",
+              "value": 4,
+              "label": "20 Hz cutoff",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_10HZ",
+              "value": 5,
+              "label": "10 Hz cutoff",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_5HZ",
+              "value": 6,
+              "label": "5 Hz cutoff",
+              "quantity": 5
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "bw",
+          "label": "Temperature filter",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -260,10 +1252,25 @@
       "params": [
         {
           "name": "enabled",
-          "type": "int"
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "1 = on, 0 = off."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Temperature sensor",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -407,10 +1414,22 @@
         {
           "name": "threshold_mg",
           "type": "int",
+          "range": [
+            1,
+            32000
+          ],
           "description": "Deviation threshold in milli-g (typical: 50–200)."
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "threshold_mg",
+          "label": "Motion threshold",
+          "tier": "basic",
+          "scope": "usage"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     },
@@ -452,10 +1471,23 @@
         {
           "name": "timeout_ms",
           "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
           "description": "Max time to wait, in ms. Use 0 for a single-shot poll."
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Tap wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     },
@@ -472,10 +1504,23 @@
         {
           "name": "timeout_ms",
           "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
           "description": "Max time to wait, in ms. Use 0 for a single-shot poll."
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Motion wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     },
@@ -492,7 +1537,24 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "FIFO operating mode (bypass/stream/stop-on-full)"
+          "description": "FIFO operating mode (bypass/stream/stop-on-full)",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FIFO_BYPASS",
+              "value": 0,
+              "label": "FIFO disabled"
+            },
+            {
+              "name": "SENSE_I_6P6_FIFO_STREAM",
+              "value": 1,
+              "label": "Stream mode (oldest data replaced)"
+            },
+            {
+              "name": "SENSE_I_6P6_FIFO_STOP_ON_FULL",
+              "value": 2,
+              "label": "Stop on full"
+            }
+          ]
         },
         {
           "name": "accel",
@@ -530,10 +1592,23 @@
       "params": [
         {
           "name": "records",
-          "type": "int"
+          "type": "int",
+          "range": [
+            1,
+            4095
+          ],
+          "description": "Records in the FIFO that raise the watermark interrupt."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "records",
+          "label": "FIFO watermark",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -785,7 +1860,19 @@
         {
           "name": "pulse",
           "type": "int",
-          "description": "Pulse-width selector"
+          "description": "Pulse-width selector",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_INT_PULSE_100US",
+              "value": 0,
+              "label": "100 µs pulse (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_INT_PULSE_8US",
+              "value": 1,
+              "label": "8 µs pulse — for fast hosts"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -804,7 +1891,19 @@
         {
           "name": "which",
           "type": "int",
-          "description": "Subsystem to reset"
+          "description": "Subsystem to reset",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_RESET_APEX",
+              "value": 0,
+              "label": "APEX (DMP) memory + state"
+            },
+            {
+              "name": "SENSE_I_6P6_RESET_TEMP",
+              "value": 1,
+              "label": "Temperature signal path"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -865,25 +1964,76 @@
         {
           "name": "x_mg",
           "type": "int",
-          "description": "X-axis threshold in mg (0–1000, resolution ~3.9 mg)"
+          "range": [
+            0,
+            1000
+          ],
+          "description": "X-axis threshold in mg (resolution ~3.9 mg)"
         },
         {
           "name": "y_mg",
           "type": "int",
+          "range": [
+            0,
+            1000
+          ],
           "description": "Y-axis threshold in mg"
         },
         {
           "name": "z_mg",
           "type": "int",
+          "range": [
+            0,
+            1000
+          ],
           "description": "Z-axis threshold in mg"
         },
         {
           "name": "mode",
           "type": "int",
-          "description": "Compare against initial or previous sample"
+          "description": "Compare against initial or previous sample",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_WOM_INITIAL",
+              "value": 0,
+              "label": "Compare against first sample"
+            },
+            {
+              "name": "SENSE_I_6P6_WOM_PREVIOUS",
+              "value": 1,
+              "label": "Compare against previous sample"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "x_mg",
+          "label": "Wake threshold X",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "y_mg",
+          "label": "Wake threshold Y",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "z_mg",
+          "label": "Wake threshold Z",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "mode",
+          "label": "Wake compare",
+          "tier": "advanced",
+          "scope": "usage",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -924,10 +2074,36 @@
       "params": [
         {
           "name": "mode",
-          "type": "int"
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_SMD_DISABLED",
+              "value": 0,
+              "label": "Disabled"
+            },
+            {
+              "name": "SENSE_I_6P6_SMD_SHORT",
+              "value": 2,
+              "label": "1 second WOM window"
+            },
+            {
+              "name": "SENSE_I_6P6_SMD_LONG",
+              "value": 3,
+              "label": "3 second WOM window"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Significant motion",
+          "tier": "advanced",
+          "scope": "usage",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -943,10 +2119,30 @@
         {
           "name": "dmp_odr",
           "type": "int",
-          "description": "DMP processing rate (25 or 50 Hz)"
+          "description": "DMP processing rate (25 or 50 Hz)",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_DMP_ODR_25HZ",
+              "value": 0,
+              "label": "25 Hz"
+            },
+            {
+              "name": "SENSE_I_6P6_DMP_ODR_50HZ",
+              "value": 2,
+              "label": "50 Hz"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "dmp_odr",
+          "label": "Pedometer rate",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -1026,6 +2222,14 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "wait_seconds",
+          "label": "Tilt delay",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
