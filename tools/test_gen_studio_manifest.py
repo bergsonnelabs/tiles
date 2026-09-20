@@ -346,6 +346,18 @@ typedef enum {
             {"op": "==", "args": [{"ref": "set_mode.mode"}, {"member": "SENSE_Y_MODE_LN", "num": 3}]},
         )
 
+    def test_control_when_is_compiled_and_must_resolve(self):
+        hosts, errors = self._hosts(
+            [self.ODR + ' when="set_mode.mode != SENSE_Y_MODE_LP"']
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            hosts[0]["controls"][0]["when"],
+            {"op": "!=", "args": [{"ref": "set_mode.mode"}, {"member": "SENSE_Y_MODE_LP", "num": 2}]},
+        )
+        _, errors = self._hosts([self.ODR + ' when="set_nope.mode == 1"'])
+        self.assertTrue(any("no exposed function named 'set_nope'" in e for e in errors))
+
     def test_sample_rate_must_be_computable(self):
         # enum members carry it…
         _, errors = self._hosts([self.ODR])

@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@76608af",
+  "source": "tiles@4232e99",
   "file": "tile_sense_mic.h",
   "brief": "Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC). I2C-only, command-based protocol via tiles_pal_t raw I2C.",
-  "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.2.0\n\nAnalog signal chain: an analog MEMS microphone is AC-coupled into an\nAD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is\nalso tapped out to a pad). Components:\n  - Same Sky / CUI CMM-2718AT-42316-TR: omnidirectional ANALOG MEMS mic,\n    −42 dBV/Pa sensitivity, 57 dBA SNR, 130 dB SPL AOP, 300 Ω output.\n  - Analog Devices AD8605: precision RRIO op-amp, non-inverting gain\n    ~48× (R4 47k / R3 1k → 1 + 47). The ADC therefore sees ~48× the\n    bare mic voltage — the mV→SPL conversion divides this back out.\n  - Maxim MAX11645: 12-bit 2-channel ADC, up to 94.4 ksps,\n    I2C up to 1.7 MHz, internal 2.048V reference.\n\nThe amplified analog output is also brought out to a tile pad (the\nschematic routes it to pad 8). NOTE: as of this writing the canonical\ntile JSON is mid-reconciliation — it lists the older PUI AMM-2742 mic\nand labels pad 6 (not 8) as the analog out, and omits the AD8605. The\ndriver here reflects the real schematic; the product DB still needs the\nmic part, the AD8605, and the analog-out pad (8) updated to match.\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  The MAX11645 supports an external reference on its REF/AIN1\n  pin, but the Sense.MIC tile does not route REF/AIN1 to any\n  pad (pad 6 carries the chip's analog audio output, not the\n  ADC reference). Closing this gap requires a tile hardware\n  revision that breaks REF out to a connector pad. Until then,\n  the SENSE_MIC_REF_EXTERNAL* enum values configure the chip\n  but have no usable external pin.",
+  "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.3.0\n\nAnalog signal chain: an analog MEMS microphone is AC-coupled into an\nAD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is\nalso tapped out to a pad). Components:\n  - Same Sky / CUI CMM-2718AT-42316-TR: omnidirectional ANALOG MEMS mic,\n    −42 dBV/Pa sensitivity, 57 dBA SNR, 130 dB SPL AOP, 300 Ω output.\n  - Analog Devices AD8605: precision RRIO op-amp, non-inverting gain\n    ~48× (R4 47k / R3 1k → 1 + 47). The ADC therefore sees ~48× the\n    bare mic voltage — the mV→SPL conversion divides this back out.\n  - Maxim MAX11645: 12-bit 2-channel ADC, up to 94.4 ksps,\n    I2C up to 1.7 MHz, internal 2.048V reference.\n\nThe amplified analog output is also brought out to a tile pad (the\nschematic routes it to pad 8). NOTE: as of this writing the canonical\ntile JSON is mid-reconciliation — it lists the older PUI AMM-2742 mic\nand labels pad 6 (not 8) as the analog out, and omits the AD8605. The\ndriver here reflects the real schematic; the product DB still needs the\nmic part, the AD8605, and the analog-out pad (8) updated to match.\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  The MAX11645 supports an external reference on its REF/AIN1\n  pin, but the Sense.MIC tile does not route REF/AIN1 to any\n  pad (pad 6 carries the chip's analog audio output, not the\n  ADC reference). Closing this gap requires a tile hardware\n  revision that breaks REF out to a connector pad. Until then,\n  the SENSE_MIC_REF_EXTERNAL* enum values configure the chip\n  but have no usable external pin.",
   "code_examples": [
     {
       "label": "Quick start — polling",
@@ -36,7 +36,7 @@
     },
     {
       "name": "TILE_SENSE_MIC_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -63,32 +63,27 @@
     {
       "name": "sense_mic_ref_t",
       "brief": "Reference voltage selection.",
-      "description": "| Enum value        | Vref     | Notes                              |\n|-------------------|----------|------------------------------------|\n| REF_VDD           | VDD      | Simple, full-range (default)       |\n| REF_INTERNAL      | 2.048V   | Precise, always on                 |\n| REF_INTERNAL_BUF  | 2.048V   | Buffered output on REF pin         |\n| REF_EXTERNAL      | REF pin  | User-supplied reference             |\n| REF_EXTERNAL_BUF  | REF pin  | User-supplied, buffered             |",
+      "description": "| Enum value        | Vref     | Notes                                        |\n|-------------------|----------|----------------------------------------------|\n| REF_VDD           | VDD      | Simple, full-range (default)                 |\n| REF_INTERNAL      | 2.048 V  | Precise, always on (datasheet's preferred)   |\n| REF_INTERNAL_BUF  | 2.048 V  | Also driven out on the REF pin (not routed)  |\n| REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not routed   |\nValues are the MAX11645's SEL[2:0] field (Table 6). They changed in v2.3.0 —\nsee the MAX11645_SEL_* note above; the names did not.",
       "members": [
         {
           "name": "SENSE_MIC_REF_VDD",
           "value": "0x00",
-          "description": "VDD reference (default)"
+          "description": "Supply voltage (3.3 V)"
         },
         {
           "name": "SENSE_MIC_REF_EXTERNAL",
-          "value": "0x01",
-          "description": "External ref on REF pin"
+          "value": "0x02",
+          "description": "External reference on the REF pin (not routed on this tile)"
         },
         {
           "name": "SENSE_MIC_REF_INTERNAL",
-          "value": "0x02",
-          "description": "Internal 2.048V, always on"
+          "value": "0x05",
+          "description": "Internal 2.048 V"
         },
         {
           "name": "SENSE_MIC_REF_INTERNAL_BUF",
-          "value": "0x03",
-          "description": "Internal 2.048V, buffered"
-        },
-        {
-          "name": "SENSE_MIC_REF_EXTERNAL_BUF",
-          "value": "0x05",
-          "description": "External ref, buffered"
+          "value": "0x07",
+          "description": "Internal 2.048 V, also on the REF pin"
         }
       ]
     },
@@ -561,7 +556,7 @@
         },
         {
           "name": "timeout_ms",
-          "description": "Maximum wait, in milliseconds."
+          "description": "[1..60000] ms Maximum wait, in milliseconds."
         }
       ],
       "notes": [
@@ -583,7 +578,7 @@
         },
         {
           "name": "timeout_ms",
-          "description": "Maximum wait, in milliseconds."
+          "description": "[1..60000] ms Maximum wait, in milliseconds."
         }
       ],
       "notes": [
@@ -598,8 +593,49 @@
     }
   ],
   "source_file": "tile_sense_mic.h",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "tile_family": "Sense",
   "tile_name": "MIC",
-  "display_name": "Sense.MIC"
+  "display_name": "Sense.MIC",
+  "vibe_settings": [
+    {
+      "label": "Voltage reference",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_reference",
+      "param": "ref",
+      "kind": "choice",
+      "choices": [
+        "Supply voltage (3.3 V)",
+        "Internal 2.048 V"
+      ],
+      "default": "Supply voltage (3.3 V)"
+    },
+    {
+      "label": "Sound wait timeout",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wait_for_sound",
+      "param": "timeout_ms",
+      "kind": "number",
+      "range": [
+        1,
+        60000
+      ],
+      "unit": "ms"
+    },
+    {
+      "label": "Clap wait timeout",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "detect_clap",
+      "param": "timeout_ms",
+      "kind": "number",
+      "range": [
+        1,
+        60000
+      ],
+      "unit": "ms"
+    }
+  ]
 }

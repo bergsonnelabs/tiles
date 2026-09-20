@@ -2,7 +2,7 @@
  * @file   tile_sense_mic.h
  * @brief  Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC).
  *         I2C-only, command-based protocol via tiles_pal_t raw I2C.
- * @version 2.2.0
+ * @version 2.3.0
  *
  * Analog signal chain: an analog MEMS microphone is AC-coupled into an
  * AD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is
@@ -82,7 +82,7 @@
  * ================================================================ */
 
 #define TILE_SENSE_MIC_VERSION_MAJOR  2
-#define TILE_SENSE_MIC_VERSION_MINOR  2
+#define TILE_SENSE_MIC_VERSION_MINOR  3
 #define TILE_SENSE_MIC_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -117,15 +117,23 @@ TILES_CHECK_VERSION(1, 0);
 
 #define MAX11645_SETUP_REG       (1 << 7)   /**< Bit 7 = 1 → setup byte */
 
-/* SEL[2:0]: bits 6:4 — reference voltage selection */
+/* SEL[2:0]: bits 6:4 — reference voltage selection.
+ * Datasheet 19-4544 Rev 3, Table 6 (SEL2 SEL1 SEL0):
+ *   0 0 X  VDD                  REF pin not connected   internal ref off
+ *   0 1 X  external reference   REF pin = input         internal ref off
+ *   1 0 0  internal reference   REF pin not connected   ref off between conversions
+ *   1 0 1  internal reference   REF pin not connected   ref always on   (preferred)
+ *   1 1 0  internal reference   REF pin = output        ref off between conversions
+ *   1 1 1  internal reference   REF pin = output        ref always on
+ * v2.2.0 and earlier had these wrong: "internal" was 0x02 (= 0 1 0), which
+ * selects the EXTERNAL reference — and this tile does not route the REF pin, so
+ * the ADC referenced a floating input while the driver assumed 2048 mV. */
 #define MAX11645_SEL_VDD         (0x00 << 4)  /**< VDD as reference (default) */
-#define MAX11645_SEL_EXT         (0x01 << 4)  /**< External ref on REF pin */
-#define MAX11645_SEL_INT_ON      (0x02 << 4)  /**< Internal 2.048V, always on */
-#define MAX11645_SEL_INT_ON_BUF  (0x03 << 4)  /**< Internal 2.048V, buffered output */
-#define MAX11645_SEL_EXT2        (0x04 << 4)  /**< External ref (same as 001) */
-#define MAX11645_SEL_EXT_BUF     (0x05 << 4)  /**< External ref, buffered */
-#define MAX11645_SEL_AIN1_OFF    (0x06 << 4)  /**< AIN1/REF input, ref off after setup */
-#define MAX11645_SEL_AIN1_ON     (0x07 << 4)  /**< AIN1/REF input, ref on */
+#define MAX11645_SEL_EXT         (0x02 << 4)  /**< External reference on the REF pin */
+#define MAX11645_SEL_INT_AUTO    (0x04 << 4)  /**< Internal 2.048 V, off between conversions */
+#define MAX11645_SEL_INT_ON      (0x05 << 4)  /**< Internal 2.048 V, always on (preferred) */
+#define MAX11645_SEL_INT_AUTO_BUF (0x06 << 4) /**< Internal 2.048 V on the REF pin, off between conversions */
+#define MAX11645_SEL_INT_ON_BUF  (0x07 << 4)  /**< Internal 2.048 V on the REF pin, always on */
 
 /* CLK: bit 3 */
 #define MAX11645_CLK_INTERNAL    (0 << 3)     /**< Internal clock (default) */
@@ -169,20 +177,21 @@ TILES_CHECK_VERSION(1, 0);
 /**
  * @brief  Reference voltage selection.
  *
- * | Enum value        | Vref     | Notes                              |
- * |-------------------|----------|------------------------------------|
- * | REF_VDD           | VDD      | Simple, full-range (default)       |
- * | REF_INTERNAL      | 2.048V   | Precise, always on                 |
- * | REF_INTERNAL_BUF  | 2.048V   | Buffered output on REF pin         |
- * | REF_EXTERNAL      | REF pin  | User-supplied reference             |
- * | REF_EXTERNAL_BUF  | REF pin  | User-supplied, buffered             |
+ * | Enum value        | Vref     | Notes                                        |
+ * |-------------------|----------|----------------------------------------------|
+ * | REF_VDD           | VDD      | Simple, full-range (default)                 |
+ * | REF_INTERNAL      | 2.048 V  | Precise, always on (datasheet's preferred)   |
+ * | REF_INTERNAL_BUF  | 2.048 V  | Also driven out on the REF pin (not routed)  |
+ * | REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not routed   |
+ *
+ * Values are the MAX11645's SEL[2:0] field (Table 6). They changed in v2.3.0 —
+ * see the MAX11645_SEL_* note above; the names did not.
  */
 typedef enum {
-    SENSE_MIC_REF_VDD          = 0x00,  /**< VDD reference (default) */
-    SENSE_MIC_REF_EXTERNAL     = 0x01,  /**< External ref on REF pin */
-    SENSE_MIC_REF_INTERNAL     = 0x02,  /**< Internal 2.048V, always on */
-    SENSE_MIC_REF_INTERNAL_BUF = 0x03,  /**< Internal 2.048V, buffered */
-    SENSE_MIC_REF_EXTERNAL_BUF = 0x05,  /**< External ref, buffered */
+    SENSE_MIC_REF_VDD          = 0x00,  /**< Supply voltage (3.3 V) */
+    SENSE_MIC_REF_EXTERNAL     = 0x02,  /**< External reference on the REF pin (not routed on this tile) */
+    SENSE_MIC_REF_INTERNAL     = 0x05,  /**< Internal 2.048 V */
+    SENSE_MIC_REF_INTERNAL_BUF = 0x07,  /**< Internal 2.048 V, also on the REF pin */
 } sense_mic_ref_t;
 
 /**
@@ -329,6 +338,7 @@ void tile_sense_mic_reset(tile_t *tile);
  *         This function inserts a 1 ms delay automatically.
  *
  * @studio expose category=tile name=set_reference section=config
+ * @studio control ref label="Voltage reference" tier=advanced default=SENSE_MIC_REF_VDD allow=SENSE_MIC_REF_VDD,SENSE_MIC_REF_INTERNAL
  * @param  ref  One of the sense_mic_ref_t values (VDD, INTERNAL, etc.)
  */
 void tile_sense_mic_set_reference(tile_t *tile, sense_mic_ref_t ref);
@@ -615,9 +625,10 @@ int16_t tile_sense_mic_read_spl_db(tile_t *tile);
  *
  * @note  Blocking until threshold or timeout.
  *
+ * @studio control timeout_ms label="Sound wait timeout" tier=advanced scope=usage
  * @param  tile          Initialised tile handle.
  * @param  threshold_db  SPL threshold in 0.1 dB units.
- * @param  timeout_ms    Maximum wait, in milliseconds.
+ * @param  timeout_ms    [1..60000] ms Maximum wait, in milliseconds.
  * @return 1 if threshold was crossed, 0 on timeout.
  */
 uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db,
@@ -642,8 +653,9 @@ uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db,
  *        on door knocks / drawer slams are expected — this is a
  *        coarse pattern detector, not a trained classifier.
  *
+ * @studio control timeout_ms label="Clap wait timeout" tier=advanced scope=usage
  * @param  tile        Initialised tile handle.
- * @param  timeout_ms  Maximum wait, in milliseconds.
+ * @param  timeout_ms  [1..60000] ms Maximum wait, in milliseconds.
  * @return 1 if a clap pattern was detected, 0 on timeout.
  */
 uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms);

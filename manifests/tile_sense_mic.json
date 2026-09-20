@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@4232e99",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_mic",
     "header": "tile_sense_mic.h",
-    "version": "2.2.0"
+    "version": "2.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -73,32 +73,48 @@
             {
               "name": "SENSE_MIC_REF_VDD",
               "value": 0,
-              "label": "VDD reference (default)"
+              "label": "Supply voltage (3.3 V)"
             },
             {
               "name": "SENSE_MIC_REF_EXTERNAL",
-              "value": 1,
-              "label": "External ref on REF pin"
+              "value": 2,
+              "label": "External reference on the REF pin (not routed on this tile)"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL",
-              "value": 2,
-              "label": "Internal 2.048V, always on"
+              "value": 5,
+              "label": "Internal 2.048 V"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL_BUF",
-              "value": 3,
-              "label": "Internal 2.048V, buffered"
-            },
-            {
-              "name": "SENSE_MIC_REF_EXTERNAL_BUF",
-              "value": 5,
-              "label": "External ref, buffered"
+              "value": 7,
+              "label": "Internal 2.048 V, also on the REF pin"
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ref",
+          "label": "Voltage reference",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0,
+          "choices": [
+            {
+              "name": "SENSE_MIC_REF_VDD",
+              "value": 0,
+              "label": "Supply voltage (3.3 V)"
+            },
+            {
+              "name": "SENSE_MIC_REF_INTERNAL",
+              "value": 5,
+              "label": "Internal 2.048 V"
+            }
+          ]
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -493,10 +509,23 @@
         {
           "name": "timeout_ms",
           "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
           "description": "Maximum wait, in milliseconds."
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Sound wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     },
@@ -513,10 +542,23 @@
         {
           "name": "timeout_ms",
           "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
           "description": "Maximum wait, in milliseconds."
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Clap wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
       "dsl_returns": "bool",
       "receiver": "tile_t *"
     }
