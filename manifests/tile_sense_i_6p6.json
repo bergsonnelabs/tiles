@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@unknown",
+  "source": "tiles@4232e99",
   "tile": "Sense.I.6P6",
   "palette": {
     "label": "Sense.I.6P6",
@@ -141,7 +141,19 @@
           "label": "Accel range",
           "tier": "basic",
           "scope": "config",
-          "default": 2
+          "default": 2,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *"
@@ -210,7 +222,19 @@
           "label": "Gyro range",
           "tier": "basic",
           "scope": "config",
-          "default": 2
+          "default": 2,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *"
@@ -330,7 +354,19 @@
           "tier": "basic",
           "scope": "config",
           "role": "sample_rate",
-          "default": 8
+          "default": 8,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *",
@@ -578,7 +614,19 @@
               "label": "500 Hz",
               "quantity": 500
             }
-          ]
+          ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *"
@@ -897,6 +945,18 @@
               "quantity": 40
             }
           ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          },
           "show": {
             "cond": [
               {
@@ -1001,6 +1061,18 @@
               "quantity": 40
             }
           ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          },
           "show": {
             "cond": [
               {
@@ -1157,14 +1229,38 @@
           "label": "Accel filter order",
           "tier": "advanced",
           "scope": "config",
-          "default": 1
+          "default": 1,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         },
         {
           "param": "gyro_order",
           "label": "Gyro filter order",
           "tier": "advanced",
           "scope": "config",
-          "default": 1
+          "default": 1,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *"
@@ -1235,7 +1331,18 @@
           "label": "Temperature filter",
           "tier": "advanced",
           "scope": "config",
-          "default": 0
+          "default": 0,
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_temp_enabled.enabled"
+              },
+              {
+                "num": 1
+              }
+            ]
+          }
         }
       ],
       "receiver": "tile_t *"

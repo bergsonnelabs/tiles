@@ -637,7 +637,7 @@ void tile_sense_i_6p6_reset(tile_t *tile);
  * @brief  Set accelerometer full-scale range.
  *
  * @studio expose category=tile name=set_accel_range section=runtime
- * @studio control range label="Accel range" tier=basic default=SENSE_I_6P6_ACCEL_8G
+ * @studio control range label="Accel range" tier=basic default=SENSE_I_6P6_ACCEL_8G when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  */
 void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t range);
 
@@ -645,7 +645,7 @@ void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t ra
  * @brief  Set gyroscope full-scale range.
  *
  * @studio expose category=tile name=set_gyro_range section=runtime
- * @studio control range label="Gyro range" tier=basic default=SENSE_I_6P6_GYRO_1000DPS
+ * @studio control range label="Gyro range" tier=basic default=SENSE_I_6P6_GYRO_1000DPS when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
  */
 void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t range);
 
@@ -653,7 +653,7 @@ void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t rang
  * @brief  Set accelerometer output data rate.
  *
  * @studio expose category=tile name=set_accel_odr section=runtime
- * @studio control odr label="Accel data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate
+ * @studio control odr label="Accel data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  * @studio require expr="value(odr) >= 12.5" when="set_power_mode.accel == SENSE_I_6P6_MODE_LN" message="Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first."
  * @studio require expr="value(odr) <= 500" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates."
  */
@@ -663,7 +663,7 @@ void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr);
  * @brief  Set gyroscope output data rate.
  *
  * @studio expose category=tile name=set_gyro_odr section=runtime
- * @studio control odr label="Gyro data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate allow=SENSE_I_6P6_ODR_32KHZ,SENSE_I_6P6_ODR_16KHZ,SENSE_I_6P6_ODR_8KHZ,SENSE_I_6P6_ODR_4KHZ,SENSE_I_6P6_ODR_2KHZ,SENSE_I_6P6_ODR_1KHZ,SENSE_I_6P6_ODR_500HZ,SENSE_I_6P6_ODR_200HZ,SENSE_I_6P6_ODR_100HZ,SENSE_I_6P6_ODR_50HZ,SENSE_I_6P6_ODR_25HZ,SENSE_I_6P6_ODR_12_5HZ
+ * @studio control odr label="Gyro data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate allow=SENSE_I_6P6_ODR_32KHZ,SENSE_I_6P6_ODR_16KHZ,SENSE_I_6P6_ODR_8KHZ,SENSE_I_6P6_ODR_4KHZ,SENSE_I_6P6_ODR_2KHZ,SENSE_I_6P6_ODR_1KHZ,SENSE_I_6P6_ODR_500HZ,SENSE_I_6P6_ODR_200HZ,SENSE_I_6P6_ODR_100HZ,SENSE_I_6P6_ODR_50HZ,SENSE_I_6P6_ODR_25HZ,SENSE_I_6P6_ODR_12_5HZ when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
  */
 void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr);
 
@@ -683,9 +683,9 @@ void tile_sense_i_6p6_set_power_mode(tile_t *tile,
  * @brief  Set UI filter bandwidth for both accel and gyro.
  *
  * @studio expose category=tile name=set_filter_bw section=config
- * @studio control accel_bw label="Accel filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="accel_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_accel_odr.odr) / 2 : max(400, value(set_accel_odr.odr)) / value(accel_bw)" unit=Hz
+ * @studio control accel_bw label="Accel filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="accel_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_accel_odr.odr) / 2 : max(400, value(set_accel_odr.odr)) / value(accel_bw)" unit=Hz when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  * @studio require expr="accel_bw == SENSE_I_6P6_FILT_BW_ODR_4 || accel_bw == SENSE_I_6P6_FILT_BW_ODR_20" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid."
- * @studio control gyro_bw label="Gyro filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="gyro_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_gyro_odr.odr) / 2 : max(400, value(set_gyro_odr.odr)) / value(gyro_bw)" unit=Hz
+ * @studio control gyro_bw label="Gyro filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="gyro_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_gyro_odr.odr) / 2 : max(400, value(set_gyro_odr.odr)) / value(gyro_bw)" unit=Hz when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
  */
 void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
                                      sense_i_6p6_filter_bw_t accel_bw,
@@ -695,8 +695,8 @@ void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
  * @brief  Set UI filter order for accel and gyro (1st, 2nd, or 3rd).
  *
  * @studio expose category=tile name=set_filter_order section=config
- * @studio control accel_order label="Accel filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND
- * @studio control gyro_order label="Gyro filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND
+ * @studio control accel_order label="Accel filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
+ * @studio control gyro_order label="Gyro filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
  */
 void tile_sense_i_6p6_set_filter_order(tile_t *tile,
                                         sense_i_6p6_filter_order_t accel_order,
@@ -706,7 +706,7 @@ void tile_sense_i_6p6_set_filter_order(tile_t *tile,
  * @brief  Set temperature sensor filter bandwidth.
  *
  * @studio expose category=tile name=set_temp_filter section=config
- * @studio control bw label="Temperature filter" tier=advanced default=SENSE_I_6P6_TEMP_FILT_4000HZ
+ * @studio control bw label="Temperature filter" tier=advanced default=SENSE_I_6P6_TEMP_FILT_4000HZ when="set_temp_enabled.enabled == 1"
  */
 void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw);
 
