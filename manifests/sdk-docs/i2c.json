@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@6897677",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -344,6 +344,119 @@
       "layer": "core"
     },
     {
+      "name": "core_i2c_target_init",
+      "signature": "core_i2c_target_init(core_i2c_target_t * t, I2C_TypeDef * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, hal_i2c_target_cb_t cb, void * ctx)",
+      "returns": "hal_status_t",
+      "brief": "Bring up an I2C peripheral as a read-only target at `addr`.",
+      "params": [
+        {
+          "name": "addr",
+          "ctype": "core_i2c_target_t *",
+          "description": "7-bit own address, unshifted"
+        },
+        {
+          "name": "speed",
+          "ctype": "I2C_TypeDef *",
+          "description": "I2C_100K / I2C_400K / I2C_1M — match the controller"
+        },
+        {
+          "name": "addr",
+          "ctype": "uint8_t",
+          "description": "7-bit own address, unshifted"
+        },
+        {
+          "name": "speed",
+          "ctype": "uint32_t",
+          "description": "I2C_100K / I2C_400K / I2C_1M — match the controller"
+        },
+        {
+          "name": "regs",
+          "ctype": "uint8_t *",
+          "description": "register file the host reads from"
+        },
+        {
+          "name": "n_regs",
+          "ctype": "uint16_t",
+          "description": "size of regs[] in bytes"
+        },
+        {
+          "name": "cb",
+          "ctype": "hal_i2c_target_cb_t",
+          "description": "optional; NULL for none"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i2c_target_init_rw",
+      "signature": "core_i2c_target_init_rw(core_i2c_target_t * t, I2C_TypeDef * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, uint16_t first, uint16_t count, hal_i2c_target_cb_t cb, void * ctx)",
+      "returns": "hal_status_t",
+      "brief": "As core_i2c_target_init, but accepts host writes to the register range [first, first + count). Everything outside stays read-only.",
+      "params": [
+        {
+          "name": "t",
+          "ctype": "core_i2c_target_t *"
+        },
+        {
+          "name": "instance",
+          "ctype": "I2C_TypeDef *"
+        },
+        {
+          "name": "addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "speed",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "regs",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "n_regs",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "first",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "count",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "cb",
+          "ctype": "hal_i2c_target_cb_t"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i2c_target_deinit",
+      "signature": "core_i2c_target_deinit(core_i2c_target_t * t)",
+      "returns": "void",
+      "brief": "Stop answering on the bus.",
+      "params": [
+        {
+          "name": "t",
+          "ctype": "core_i2c_target_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "hal_i2c_init",
       "signature": "hal_i2c_init(hal_i2c_t * h, I2C_TypeDef * instance, const hal_i2c_config_t * cfg)",
       "returns": "hal_status_t",
@@ -588,6 +701,82 @@
       "layer": "hal"
     },
     {
+      "name": "void",
+      "signature": "void(*hal_i2c_target_cb_t)(void * ctx, hal_i2c_target_event_t evt, uint16_t reg, uint8_t value)",
+      "returns": "typedef",
+      "brief": "Called from ISR context. Keep it short and touch only volatile state.",
+      "params": [
+        {
+          "name": "ctx",
+          "ctype": "*hal_i2c_target_cb_t)(void *"
+        },
+        {
+          "name": "evt",
+          "ctype": "hal_i2c_target_event_t"
+        },
+        {
+          "name": "reg",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "value",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i2c_target_init",
+      "signature": "hal_i2c_target_init(hal_i2c_target_t * t, I2C_TypeDef * instance, const hal_i2c_target_config_t * cfg)",
+      "returns": "hal_status_t",
+      "brief": "Bring up I2C as a target and unmask its interrupt. The peripheral clock is auto-enabled; SDA/SCL must already be AF open-drain (coregen does this from the I2C pads in config.json). Returns HAL_ERROR if regs/n_regs are unset, the writable window falls outside the register file, or the instance is not one this build installs a vector for.",
+      "params": [
+        {
+          "name": "t",
+          "ctype": "hal_i2c_target_t *"
+        },
+        {
+          "name": "instance",
+          "ctype": "I2C_TypeDef *"
+        },
+        {
+          "name": "cfg",
+          "ctype": "const hal_i2c_target_config_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i2c_target_deinit",
+      "signature": "hal_i2c_target_deinit(hal_i2c_target_t * t)",
+      "returns": "void",
+      "brief": "Stop answering, mask the IRQ, and unregister the instance.",
+      "params": [
+        {
+          "name": "t",
+          "ctype": "hal_i2c_target_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i2c_target_irq",
+      "signature": "hal_i2c_target_irq(hal_i2c_target_t * t)",
+      "returns": "void",
+      "brief": "Service one I2C interrupt for this target. The SDK already installs the vectors for every I2C instance it knows, so calling this yourself is only needed with a custom vector table.",
+      "params": [
+        {
+          "name": "t",
+          "ctype": "hal_i2c_target_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
       "name": "ll_i2c_init",
       "signature": "ll_i2c_init(I2C_TypeDef * i2c, uint32_t timing)",
       "returns": "void",
@@ -712,6 +901,98 @@
         {
           "name": "kernel_mhz",
           "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_init",
+      "signature": "ll_i2c_target_init(I2C_TypeDef * i2c, uint32_t timing, uint8_t addr7)",
+      "returns": "void",
+      "brief": "Initialize I2C as a target (device) at a 7-bit own address. i2c:     I2C instance timing:  TIMINGR value (use LL_I2C_TIMING_* defines). A target does not drive SCL, but TIMINGR still sets SDADEL/SCLDEL, which govern data setup and hold. Use the constant matching the controller's speed. addr7:   7-bit own address, unshifted (e.g. 0x28) Enables address-match, RX, TX, NACK, STOP and error interrupts. The caller still has to unmask the IRQ in the NVIC.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
+        },
+        {
+          "name": "timing",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "addr7",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_disable",
+      "signature": "ll_i2c_target_disable(I2C_TypeDef * i2c)",
+      "returns": "void",
+      "brief": "Stop answering on the bus and release the own address.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_is_read",
+      "signature": "ll_i2c_target_is_read(I2C_TypeDef * i2c)",
+      "returns": "uint32_t",
+      "brief": "Direction of the transfer the controller just addressed us for. Returns 1 when the controller intends to READ from us (we transmit), 0 when it intends to write. Only meaningful while ADDR is set.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_addcode",
+      "signature": "ll_i2c_target_addcode(I2C_TypeDef * i2c)",
+      "returns": "uint8_t",
+      "brief": "The 7-bit address that actually matched. Worth reading when OAR2 or address masking puts more than one address on the same peripheral.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_flush_tx",
+      "signature": "ll_i2c_target_flush_tx(I2C_TypeDef * i2c)",
+      "returns": "void",
+      "brief": "Discard a byte still sitting in TXDR. TXE is write-1-to-flush. Always do this before answering a read. A controller that abandoned a previous read (or NACKed early) can leave a stale byte loaded, and without a flush that byte is the first thing the next read receives, shifting the whole transfer by one.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i2c_target_clear_addr",
+      "signature": "ll_i2c_target_clear_addr(I2C_TypeDef * i2c)",
+      "returns": "void",
+      "brief": "Clear the address match, which releases the stretched SCL.",
+      "params": [
+        {
+          "name": "i2c",
+          "ctype": "I2C_TypeDef *"
         }
       ],
       "studio_exposed": false,

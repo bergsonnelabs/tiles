@@ -106,7 +106,10 @@ LAYER_HEADERS = {
         "ll": (
             "ll_i2c.h",
             ["ll_i2c_init", "ll_i2c_init_fmp", "ll_i2c_write", "ll_i2c_read",
-             "ll_i2c_timing_100k", "ll_i2c_timing_400k", "ll_i2c_timing_1m"],
+             "ll_i2c_timing_100k", "ll_i2c_timing_400k", "ll_i2c_timing_1m",
+             "ll_i2c_target_init", "ll_i2c_target_disable",
+             "ll_i2c_target_is_read", "ll_i2c_target_addcode",
+             "ll_i2c_target_flush_tx", "ll_i2c_target_clear_addr"],
         ),
     },
     "spi": {

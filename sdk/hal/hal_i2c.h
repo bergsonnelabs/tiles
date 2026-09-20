@@ -98,4 +98,106 @@ hal_status_t hal_i2c_probe(hal_i2c_t *h, uint8_t addr);
 void hal_i2c_scan(hal_i2c_t *h, uint8_t *found, uint8_t *count,
                   uint8_t max_count);
 
+/* ============================================================
+ * Target (device) mode — register-file model
+ * ============================================================
+ *
+ * Lets a Core answer as an I2C device on a host's bus, in the shape
+ * almost every real sensor uses: the controller writes a register
+ * pointer, then reads or writes bytes from that offset with
+ * auto-increment.
+ *
+ * The driver owns the bus protocol; the application owns the bytes.
+ * You hand it a flat `regs` buffer and it services the whole transfer
+ * from the ISR, so the main loop only ever updates the buffer.
+ *
+ *   static uint8_t regs[16];
+ *   static hal_i2c_target_t tgt;
+ *
+ *   hal_i2c_target_config_t cfg = {
+ *       .addr   = 0x28,
+ *       .timing = LL_I2C_TIMING_400K_32MHZ,
+ *       .regs   = regs,
+ *       .n_regs = sizeof(regs),
+ *       .cb     = on_event,
+ *   };
+ *   hal_i2c_target_init(&tgt, I2C1, &cfg);
+ *
+ * Coherency is the caller's job, and the READ_START event is how you do
+ * it: it fires with SCL still stretched, before the first byte goes out,
+ * which is the one safe moment to latch a snapshot into `regs`.
+ * ============================================================ */
+
+typedef enum {
+    /** Controller addressed us for a read. Fires before the first byte
+     *  is transmitted, with SCL stretched. Latch your snapshot here. */
+    HAL_I2C_TARGET_READ_START = 0,
+    /** Controller wrote a byte to a register inside the writable window.
+     *  `reg` is the offset, `value` the byte, already stored in regs[]. */
+    HAL_I2C_TARGET_WRITE      = 1,
+    /** Transfer ended (STOP on the bus). */
+    HAL_I2C_TARGET_STOP       = 2,
+} hal_i2c_target_event_t;
+
+/** Called from ISR context. Keep it short and touch only volatile state. */
+typedef void (*hal_i2c_target_cb_t)(void *ctx, hal_i2c_target_event_t evt,
+                                    uint16_t reg, uint8_t value);
+
+typedef struct hal_i2c_target {
+    I2C_TypeDef *instance;
+    uint8_t     *regs;
+    uint16_t     n_regs;
+    uint16_t     writable_first;
+    uint16_t     writable_count;
+    hal_i2c_target_cb_t cb;
+    void        *ctx;
+    uint32_t     timing;
+    uint8_t      addr;
+
+    volatile uint16_t ptr;        /* current register pointer */
+    volatile uint8_t  have_ptr;   /* first byte of a write sets the pointer */
+
+    /* Diagnostics — useful when a host says "it went quiet". */
+    volatile uint32_t n_reads;    /* read transactions served */
+    volatile uint32_t n_writes;   /* register bytes accepted */
+    volatile uint32_t n_errors;   /* BERR / ARLO / OVR seen */
+} hal_i2c_target_t;
+
+typedef struct {
+    uint8_t   addr;            /* 7-bit own address, unshifted */
+    uint32_t  timing;          /* TIMINGR — match the controller's speed */
+    uint8_t  *regs;            /* backing register file */
+    uint16_t  n_regs;          /* size of regs[] in bytes */
+    /* Host writes are accepted only for offsets in
+     * [writable_first, writable_first + writable_count). Leave both zero
+     * for a read-only map: reads outside any window still work, and
+     * writes are absorbed without touching regs[]. */
+    uint16_t  writable_first;
+    uint16_t  writable_count;
+    hal_i2c_target_cb_t cb;    /* optional, may be NULL */
+    void     *ctx;             /* passed back to cb */
+} hal_i2c_target_config_t;
+
+/**
+ * Bring up I2C as a target and unmask its interrupt.
+ * The peripheral clock is auto-enabled; SDA/SCL must already be AF
+ * open-drain (coregen does this from the I2C pads in config.json).
+ *
+ * Returns HAL_ERROR if regs/n_regs are unset, the writable window falls
+ * outside the register file, or the instance is not one this build
+ * installs a vector for.
+ */
+hal_status_t hal_i2c_target_init(hal_i2c_target_t *t, I2C_TypeDef *instance,
+                                 const hal_i2c_target_config_t *cfg);
+
+/** Stop answering, mask the IRQ, and unregister the instance. */
+void hal_i2c_target_deinit(hal_i2c_target_t *t);
+
+/**
+ * Service one I2C interrupt for this target.
+ * The SDK already installs the vectors for every I2C instance it knows,
+ * so calling this yourself is only needed with a custom vector table.
+ */
+void hal_i2c_target_irq(hal_i2c_target_t *t);
+
 #endif /* HAL_I2C_H */

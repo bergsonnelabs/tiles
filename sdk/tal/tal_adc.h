@@ -215,15 +215,68 @@ static inline void tal_adc_stop_dma(hal_adc_t *adc)
  * @param pad  Pad number (must have been added via tal_adc_add_pad)
  * @return     Most recent raw ADC count for that pad
  */
+static inline int tal_adc_dma_slot(hal_adc_t *adc, uint8_t pad);
+
 static inline uint16_t tal_adc_dma_read_pad(hal_adc_t *adc, uint8_t pad)
 {
+    if (!adc->dma_buf) return 0;
+    int slot = tal_adc_dma_slot(adc, pad);
+    if (slot < 0 || (uint16_t)slot >= adc->dma_len) return 0;
+    return adc->dma_buf[slot];
+}
+
+/**
+ * Buffer slot a pad's sample lands in within one DMA scan.
+ *
+ * This is NOT always the order pads were registered in:
+ *
+ *   L0 / WBA(ADC4)  CHSELR is a bitmask, and with SCANDIR = 0 the ADC
+ *                   converts the selected channels in ascending
+ *                   CHANNEL-NUMBER order, whatever order they were added
+ *                   in. The slot is the channel's rank among the
+ *                   registered channels.
+ *   L4 / H5         SQR1..SQR4 are built from the registration order, so
+ *                   slot == registration index.
+ *
+ * When the buffer holds several scans for oversampling
+ * (len = n_channels * N), average slots slot, slot + n_channels,
+ * slot + 2*n_channels, ...
+ *
+ * @return slot index, or -1 if the pad is not a registered ADC input
+ */
+static inline int tal_adc_dma_slot(hal_adc_t *adc, uint8_t pad)
+{
     int ch = core_pad_adc_channel(pad);
-    if (ch < 0 || !adc->dma_buf) return 0;
+    if (ch < 0) return -1;
+
+    int registered = 0;
     for (uint8_t i = 0; i < adc->n_channels; i++) {
-        if (adc->channels[i].channel == (uint8_t)ch)
-            return adc->dma_buf[i];
+        if (adc->channels[i].channel == (uint8_t)ch) { registered = 1; break; }
     }
-    return 0;
+    if (!registered) return -1;
+
+#if defined(STM32L011xx) || defined(STM32WBA55xx)
+    int slot = 0;
+    for (uint8_t i = 0; i < adc->n_channels; i++) {
+        if (adc->channels[i].channel < (uint8_t)ch) slot++;
+    }
+    return slot;
+#else
+    for (uint8_t i = 0; i < adc->n_channels; i++) {
+        if (adc->channels[i].channel == (uint8_t)ch) return (int)i;
+    }
+    return -1;
+#endif
+}
+
+
+/**
+ * Most recent DMA result for a pad, in calibrated millivolts.
+ * VDDA must have been primed before DMA started — see hal_adc_raw_to_mv.
+ */
+static inline uint32_t tal_adc_dma_read_pad_mv(hal_adc_t *adc, uint8_t pad)
+{
+    return hal_adc_raw_to_mv(adc, tal_adc_dma_read_pad(adc, pad));
 }
 
 #endif /* TAL_ADC_H */

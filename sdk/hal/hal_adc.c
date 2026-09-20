@@ -628,14 +628,25 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
     return vdda;
 }
 
+uint32_t hal_adc_raw_to_mv(hal_adc_t *adc, uint16_t raw)
+{
+    if (adc->vdda_mv == 0) {
+        /* Needs the regular sequence, so this fails while DMA is running
+         * and leaves vdda_mv at 0. Prime it before hal_adc_start_dma. */
+        adc->vdda_mv = hal_adc_read_vdda_mv(adc);
+    }
+    uint32_t max_count = (1UL << (uint32_t)adc->effective_bits) - 1UL;
+    if (max_count == 0) return 0;
+    return ((uint32_t)raw * adc->vdda_mv) / max_count;
+}
+
 uint32_t hal_adc_read_mv(hal_adc_t *adc, uint8_t channel)
 {
     if (adc->vdda_mv == 0) {
         adc->vdda_mv = hal_adc_read_vdda_mv(adc);
     }
     uint16_t raw = hal_adc_read(adc, channel);
-    uint32_t max_count = (1UL << (uint32_t)adc->effective_bits) - 1UL;
-    return ((uint32_t)raw * adc->vdda_mv) / max_count;
+    return hal_adc_raw_to_mv(adc, raw);
 }
 
 int32_t hal_adc_read_temp_decidegc(hal_adc_t *adc)
@@ -731,6 +742,19 @@ void hal_adc_read_all(hal_adc_t *adc, uint16_t *buf)
 #define HAL_ADC_MAX_DMA_INSTANCES  2
 static hal_adc_t *_adc_dma_handles[HAL_ADC_MAX_DMA_INSTANCES];
 
+hal_status_t hal_adc_set_trigger(hal_adc_t *adc, uint8_t extsel,
+                                 hal_adc_trig_edge_t edge)
+{
+    if (!adc) return HAL_ERROR;
+    if ((uint32_t)edge > (uint32_t)HAL_ADC_TRIG_BOTH) return HAL_ERROR;
+    if (((uint32_t)extsel & ~LL_ADC_CFGR1_EXTSEL_MASK) != 0) return HAL_ERROR;
+    if (adc->dma_active) return HAL_BUSY;   /* applied by start_dma */
+
+    adc->trig_extsel = extsel;
+    adc->trig_edge   = (uint8_t)edge;
+    return HAL_OK;
+}
+
 /**
  * Configure the ADC for DMA: enable DMAEN, set circular + continuous,
  * enable the DMA channel.
@@ -767,12 +791,30 @@ hal_status_t hal_adc_start_dma(hal_adc_t *adc, uint16_t *buf, uint16_t len,
         while ((adc->instance->CR & LL_ADC_CR_ADSTP) && --t) {}
     }
 
-    /* Configure ADC: continuous, scan, DMA circular, overrun */
+    /* Configure ADC: scan, DMA circular, overrun. Conversions are either
+     * free-running (CONT) or paced by an external trigger, never both:
+     * with CONT set the ADC re-arms itself and ignores the trigger after
+     * the first edge. */
     SET_BITS(adc->instance->CFGR1,
-             LL_ADC_CFGR1_CONT          /* continuous mode */
-           | LL_ADC_CFGR1_OVRMOD        /* overwrite on overrun */
+             LL_ADC_CFGR1_OVRMOD        /* overwrite on overrun */
            | (1UL << 1)                 /* DMACFG: circular DMA */
            | (1UL << 0));               /* DMAEN: enable DMA requests */
+
+    if (adc->trig_edge != (uint8_t)HAL_ADC_TRIG_NONE) {
+        CLR_BITS(adc->instance->CFGR1, LL_ADC_CFGR1_CONT);
+        MOD_BITS(adc->instance->CFGR1,
+                 LL_ADC_CFGR1_EXTSEL_MASK << LL_ADC_CFGR1_EXTSEL_SHIFT,
+                 ((uint32_t)adc->trig_extsel & LL_ADC_CFGR1_EXTSEL_MASK)
+                     << LL_ADC_CFGR1_EXTSEL_SHIFT);
+        MOD_BITS(adc->instance->CFGR1,
+                 LL_ADC_CFGR1_EXTEN_MASK << LL_ADC_CFGR1_EXTEN_SHIFT,
+                 ((uint32_t)adc->trig_edge & LL_ADC_CFGR1_EXTEN_MASK)
+                     << LL_ADC_CFGR1_EXTEN_SHIFT);
+    } else {
+        MOD_BITS(adc->instance->CFGR1,
+                 LL_ADC_CFGR1_EXTEN_MASK << LL_ADC_CFGR1_EXTEN_SHIFT, 0);
+        SET_BITS(adc->instance->CFGR1, LL_ADC_CFGR1_CONT);
+    }
 
     /* Build the channel scan sequence */
 #if defined(STM32L011xx) || defined(STM32WBA55xx)

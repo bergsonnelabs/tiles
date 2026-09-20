@@ -82,6 +82,23 @@ static inline hal_status_t core_timer_init_freq(core_timer_t *h,
 }
 
 /**
+ * Route an internal timer event to TRGO so another peripheral can be
+ * paced by it, with no pin, no channel and no interrupt involved.
+ *
+ * LL_TIM_MMS_UPDATE is the periodic-pacer case: every counter overflow
+ * emits a trigger. Pair it with core_adc_set_trigger() to run the ADC at
+ * an exact rate instead of free-running.
+ *
+ *   core_timer_init_freq(&t, TIM2, 800);
+ *   core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE);
+ *   core_timer_start(&t);
+ */
+static inline void core_timer_set_trgo(core_timer_t *h, uint32_t mms)
+{
+    ll_tim_set_trgo(h->instance, mms);
+}
+
+/**
  * Initialize a timer at a given tick rate, free-running to max count.
  * Use for input capture — the tick rate sets the measurement
  * resolution, and the counter runs as long as possible before
