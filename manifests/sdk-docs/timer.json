@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@6897677",
   "category": "timer",
   "label": "Core.Timer",
   "icon": "◷",
@@ -27,6 +27,24 @@
         },
         {
           "name": "freq_hz",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_timer_set_trgo",
+      "signature": "core_timer_set_trgo(core_timer_t * h, uint32_t mms)",
+      "returns": "void",
+      "brief": "Route an internal timer event to TRGO so another peripheral can be paced by it, with no pin, no channel and no interrupt involved. LL_TIM_MMS_UPDATE is the periodic-pacer case: every counter overflow emits a trigger. Pair it with core_adc_set_trigger() to run the ADC at an exact rate instead of free-running. core_timer_init_freq(&t, TIM2, 800); core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE); core_timer_start(&t);",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_timer_t *"
+        },
+        {
+          "name": "mms",
           "ctype": "uint32_t"
         }
       ],
@@ -390,21 +408,17 @@
       "layer": "hal"
     },
     {
-      "name": "ll_tim_config",
-      "signature": "ll_tim_config(TIM_TypeDef * tim, uint32_t prescaler, uint32_t period)",
+      "name": "ll_tim_set_trgo",
+      "signature": "ll_tim_set_trgo(TIM_TypeDef * tim, uint32_t mms)",
       "returns": "void",
-      "brief": "Configure basic timebase. tim:       timer instance prescaler: clock divider (0 = no division, N = divide by N+1) period:    auto-reload value (counter counts 0 → period) Timer frequency = pclk / (prescaler + 1) Overflow rate   = pclk / (prescaler + 1) / (period + 1) Example: 80MHz pclk, 1kHz overflow: prescaler = 79 (→ 1MHz tick), period = 999 (→ 1kHz)",
+      "brief": "Route an internal timer event to TRGO, where another peripheral can consume it. LL_TIM_MMS_UPDATE turns the timer into a periodic pacer: every overflow emits a trigger, with no CPU involvement and no jitter from interrupt latency. No pin is involved and no channel is consumed, which is what makes this affordable on a part with every pad already committed.",
       "params": [
         {
           "name": "tim",
           "ctype": "TIM_TypeDef *"
         },
         {
-          "name": "prescaler",
-          "ctype": "uint32_t"
-        },
-        {
-          "name": "period",
+          "name": "mms",
           "ctype": "uint32_t"
         }
       ],

@@ -112,6 +112,39 @@ typedef struct {
 #define LL_NVIC_ICPR_BASE   0xE000E280UL   /* Interrupt Clear Pending */
 #define LL_NVIC_IPR_BASE    0xE000E400UL   /* Interrupt Priority */
 
+/* ============================================================
+ * Critical sections
+ * ============================================================ */
+
+/**
+ * Disable interrupts and return the previous PRIMASK.
+ *
+ * Save/restore rather than a bare disable/enable, so nesting one
+ * critical section inside another does not re-enable interrupts early.
+ *
+ *   uint32_t s = ll_irq_save();
+ *   ... update shared state an ISR also touches ...
+ *   ll_irq_restore(s);
+ *
+ * Keep the body short: this blocks every interrupt, not just the one
+ * you are racing with.
+ */
+static inline uint32_t ll_irq_save(void)
+{
+    uint32_t primask;
+    __asm volatile ("mrs %0, primask" : "=r" (primask));
+    __asm volatile ("cpsid i" ::: "memory");
+    return primask;
+}
+
+/** Restore the interrupt state captured by ll_irq_save(). */
+static inline void ll_irq_restore(uint32_t primask)
+{
+    if (!(primask & 1UL)) {
+        __asm volatile ("cpsie i" ::: "memory");
+    }
+}
+
 static inline void ll_nvic_enable_irq(uint32_t irq)
 {
     REG32(LL_NVIC_ISER_BASE + (irq / 32) * 4) = (1UL << (irq % 32));

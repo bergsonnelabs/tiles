@@ -29,6 +29,7 @@
     "i2c.std": "verified",
     "i2c.fast": "verified",
     "i2c.fmp": "na",
+    "i2c.target": "compile",
     "spi.master": {
       "status": "partial",
       "note": "APB7 clock + MODF bugs fixed; SPI v2 transfer sequence (CSTART/TSIZE) needs RM study — loopback times out on RXP"
@@ -36,8 +37,8 @@
     "spi.octo": "na",
     "timer.tick": "verified",
     "timer.pwm": "compile",
-    "timer.wdog": "compile",
     "timer.stepdir": "compile",
+    "timer.wdog": "compile",
     "adc.raw": "verified",
     "adc.mv": "verified",
     "adc.temp": {
@@ -50,7 +51,12 @@
     },
     "adc.oversamp": "verified",
     "adc.dma": "verified",
+    "adc.dma_mv": "compile",
     "adc.cont": "verified",
+    "adc.trigger": {
+      "status": "partial",
+      "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
+    },
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
@@ -90,6 +96,8 @@
       "status": "partial",
       "note": "Just Works legacy pairing + bonding only; no LE Secure Connections / passkey"
     },
-    "ble.central": "none"
+    "ble.central": "none",
+    "nvm.eeprom": "na",
+    "nvm.flash_emu": "none"
   }
 }

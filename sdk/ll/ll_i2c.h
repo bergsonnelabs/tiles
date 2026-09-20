@@ -58,6 +58,16 @@ typedef struct {
 #define LL_I2C_CR1_FMP          (1UL << 24)   /* Fast-mode plus enable (WBA55, H523) */
 #define LL_I2C_CR1_NOSTRETCH    (1UL << 17)   /* Clock stretching disable (slave mode) */
 #define LL_I2C_CR1_GCEN         (1UL << 19)   /* General call enable */
+#define LL_I2C_CR1_ADDRIE       (1UL << 3)    /* Address-match interrupt enable (target) */
+#define LL_I2C_CR1_TCIE         (1UL << 6)    /* Transfer-complete interrupt enable */
+#define LL_I2C_CR1_ERRIE        (1UL << 7)    /* Error interrupt enable */
+#define LL_I2C_CR1_SBC          (1UL << 16)   /* Slave byte control (target, needs RELOAD) */
+
+/* ---- OAR1 bit definitions (target-mode own address) ---- */
+
+#define LL_I2C_OAR1_OA1_SHIFT   1             /* Own address 1 [7:1] in 7-bit mode */
+#define LL_I2C_OAR1_OA1MODE     (1UL << 10)   /* 0 = 7-bit address, 1 = 10-bit */
+#define LL_I2C_OAR1_OA1EN       (1UL << 15)   /* Own address 1 enable */
 
 /* ---- CR2 bit definitions ---- */
 
@@ -85,6 +95,9 @@ typedef struct {
 #define LL_I2C_ISR_ARLO         (1UL << 9)    /* Arbitration lost */
 #define LL_I2C_ISR_OVR          (1UL << 10)   /* Overrun/underrun */
 #define LL_I2C_ISR_BUSY         (1UL << 15)   /* Bus busy */
+#define LL_I2C_ISR_DIR          (1UL << 16)   /* Transfer direction (target): 1 = controller reads */
+#define LL_I2C_ISR_ADDCODE_SHIFT 17           /* Matched address [7:1] (target) */
+#define LL_I2C_ISR_ADDCODE_MASK 0x7FUL
 
 /* ---- ICR bit definitions ---- */
 
@@ -729,6 +742,106 @@ static inline int ll_i2c_probe(I2C_TypeDef *i2c, uint8_t addr)
             return LL_I2C_TIMEOUT;
         }
     }
+}
+
+/* ============================================================
+ * Target (device / slave) mode
+ * ============================================================
+ *
+ * The same I2C IP on all four families can answer as a device on a
+ * host's bus. Target mode is interrupt-driven by nature: the controller
+ * sets the pace, and we answer inside the ISR.
+ *
+ * Clock stretching is deliberately left ENABLED (NOSTRETCH = 0). With
+ * it on, the peripheral holds SCL low at each address match and at each
+ * byte boundary until our ISR responds, so a late interrupt costs bus
+ * throughput rather than corrupting data. Setting NOSTRETCH turns every
+ * missed deadline into a silently wrong byte, so only disable it if the
+ * controller cannot tolerate stretching AND every deadline is provably
+ * met.
+ *
+ * See hal_i2c.c for the register-file target driver built on these.
+ * ============================================================ */
+
+/**
+ * Initialize I2C as a target (device) at a 7-bit own address.
+ *
+ *   i2c:     I2C instance
+ *   timing:  TIMINGR value (use LL_I2C_TIMING_* defines). A target does
+ *            not drive SCL, but TIMINGR still sets SDADEL/SCLDEL, which
+ *            govern data setup and hold. Use the constant matching the
+ *            controller's speed.
+ *   addr7:   7-bit own address, unshifted (e.g. 0x28)
+ *
+ * Enables address-match, RX, TX, NACK, STOP and error interrupts. The
+ * caller still has to unmask the IRQ in the NVIC.
+ */
+static inline void ll_i2c_target_init(I2C_TypeDef *i2c, uint32_t timing,
+                                      uint8_t addr7)
+{
+    /* PE must be 0 to write TIMINGR, and OA1EN must be 0 to change OA1. */
+    i2c->CR1 = 0;
+    i2c->TIMINGR = timing;
+
+    i2c->OAR1 = 0;
+    i2c->OAR1 = LL_I2C_OAR1_OA1EN
+              | (((uint32_t)addr7 & LL_I2C_ISR_ADDCODE_MASK)
+                 << LL_I2C_OAR1_OA1_SHIFT);
+    i2c->OAR2 = 0;
+
+    /* Drop anything latched from a previous life on the bus. */
+    i2c->ICR = LL_I2C_ICR_ADDRCF | LL_I2C_ICR_NACKCF | LL_I2C_ICR_STOPCF
+             | LL_I2C_ICR_BERRCF | LL_I2C_ICR_ARLOCF | LL_I2C_ICR_OVRCF;
+
+    i2c->CR1 = LL_I2C_CR1_PE
+             | LL_I2C_CR1_ADDRIE | LL_I2C_CR1_RXIE | LL_I2C_CR1_TXIE
+             | LL_I2C_CR1_NACKIE | LL_I2C_CR1_STOPIE | LL_I2C_CR1_ERRIE;
+}
+
+/** Stop answering on the bus and release the own address. */
+static inline void ll_i2c_target_disable(I2C_TypeDef *i2c)
+{
+    i2c->CR1 = 0;
+    i2c->OAR1 = 0;
+}
+
+/**
+ * Direction of the transfer the controller just addressed us for.
+ * Returns 1 when the controller intends to READ from us (we transmit),
+ * 0 when it intends to write. Only meaningful while ADDR is set.
+ */
+static inline uint32_t ll_i2c_target_is_read(I2C_TypeDef *i2c)
+{
+    return (i2c->ISR & LL_I2C_ISR_DIR) ? 1UL : 0UL;
+}
+
+/**
+ * The 7-bit address that actually matched. Worth reading when OAR2 or
+ * address masking puts more than one address on the same peripheral.
+ */
+static inline uint8_t ll_i2c_target_addcode(I2C_TypeDef *i2c)
+{
+    return (uint8_t)((i2c->ISR >> LL_I2C_ISR_ADDCODE_SHIFT)
+                     & LL_I2C_ISR_ADDCODE_MASK);
+}
+
+/**
+ * Discard a byte still sitting in TXDR. TXE is write-1-to-flush.
+ *
+ * Always do this before answering a read. A controller that abandoned a
+ * previous read (or NACKed early) can leave a stale byte loaded, and
+ * without a flush that byte is the first thing the next read receives,
+ * shifting the whole transfer by one.
+ */
+static inline void ll_i2c_target_flush_tx(I2C_TypeDef *i2c)
+{
+    i2c->ISR = LL_I2C_ISR_TXE;
+}
+
+/** Clear the address match, which releases the stretched SCL. */
+static inline void ll_i2c_target_clear_addr(I2C_TypeDef *i2c)
+{
+    i2c->ICR = LL_I2C_ICR_ADDRCF;
 }
 
 /* ============================================================

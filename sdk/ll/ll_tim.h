@@ -138,6 +138,32 @@ typedef struct {
  * Example: 80MHz pclk, 1kHz overflow:
  *   prescaler = 79 (→ 1MHz tick), period = 999 (→ 1kHz)
  */
+/* ---- Master mode (CR2 MMS): what the timer emits on TRGO ---- */
+
+#define LL_TIM_MMS_SHIFT     4
+#define LL_TIM_MMS_RESET     0x0UL   /* EGR.UG */
+#define LL_TIM_MMS_ENABLE    0x1UL   /* counter enable */
+#define LL_TIM_MMS_UPDATE    0x2UL   /* update event — the usual ADC pacer */
+#define LL_TIM_MMS_CMP_PULSE 0x3UL
+#define LL_TIM_MMS_OC1REF    0x4UL
+#define LL_TIM_MMS_OC2REF    0x5UL
+#define LL_TIM_MMS_OC3REF    0x6UL
+#define LL_TIM_MMS_OC4REF    0x7UL
+
+/**
+ * Route an internal timer event to TRGO, where another peripheral can
+ * consume it. LL_TIM_MMS_UPDATE turns the timer into a periodic pacer:
+ * every overflow emits a trigger, with no CPU involvement and no jitter
+ * from interrupt latency.
+ *
+ * No pin is involved and no channel is consumed, which is what makes
+ * this affordable on a part with every pad already committed.
+ */
+static inline void ll_tim_set_trgo(TIM_TypeDef *tim, uint32_t mms)
+{
+    MOD_BITS(tim->CR2, 0x7UL << LL_TIM_MMS_SHIFT, mms << LL_TIM_MMS_SHIFT);
+}
+
 static inline void ll_tim_config(TIM_TypeDef *tim, uint32_t prescaler, uint32_t period)
 {
     tim->CR1 = 0;

@@ -28,6 +28,7 @@
     "i2c.fast": "compile",
     "i2c.fmp": "na",
     "i2c.irq": "",
+    "i2c.target": "compile",
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
@@ -38,8 +39,8 @@
     "spi.octo": "na",
     "timer.tick": "verified",
     "timer.pwm": "verified",
-    "timer.capture": "verified",
     "timer.stepdir": "compile",
+    "timer.capture": "verified",
     "timer.oneshot": "",
     "timer.encoder": "",
     "timer.lptim": "",
@@ -53,7 +54,9 @@
     "adc.res": "verified",
     "adc.oversamp": "compile",
     "adc.dma": "compile",
+    "adc.dma_mv": "compile",
     "adc.cont": "compile",
+    "adc.trigger": "compile",
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "compile",
@@ -104,6 +107,8 @@
     "ble.gatt": "na",
     "ble.notify": "na",
     "ble.pairing": "na",
-    "ble.central": "na"
+    "ble.central": "na",
+    "nvm.eeprom": "compile",
+    "nvm.flash_emu": "na"
   }
 }

@@ -244,3 +244,207 @@ void hal_i2c_scan(hal_i2c_t *h, uint8_t *found, uint8_t *count,
         }
     }
 }
+
+/* ============================================================
+ * Target (device) mode
+ * ============================================================
+ *
+ * One registered target per I2C peripheral. The vectors below are
+ * strong definitions that override the weak ones in the startup file,
+ * matching how hal_exti.c and hal_adc.c install theirs. They cost a
+ * null check when no target is registered.
+ * ============================================================ */
+
+/* Slot 0 = I2C1 everywhere. Slot 1 = I2C3 on L4/WBA.
+ * H5 I2C2/I2C3 are deliberately absent: startup_stm32h523xx.s has no
+ * I2C2_ER or I2C3 vectors at all, and its slot 58 comment marks I2C2
+ * Error as shared with USART1. Registering a target there would route
+ * bus errors into the wrong handler. */
+#define _HAL_I2C_TGT_SLOTS 2
+
+static hal_i2c_target_t *_i2c_tgt[_HAL_I2C_TGT_SLOTS];
+
+static int _tgt_slot(I2C_TypeDef *instance)
+{
+    if (instance == I2C1) return 0;
+#if defined(STM32L422xx) || defined(STM32WBA55xx)
+    if (instance == I2C3) return 1;
+#endif
+    return -1;
+}
+
+static void _tgt_nvic(int slot, int enable)
+{
+    switch (slot) {
+    case 0:
+#if defined(STM32L011xx)
+        /* L0 folds event and error onto one vector. */
+        if (enable) {
+            hal_nvic_set_priority(HAL_IRQ_I2C1_EV, 2);
+            hal_nvic_enable_irq(HAL_IRQ_I2C1_EV);
+        } else {
+            hal_nvic_disable_irq(HAL_IRQ_I2C1_EV);
+        }
+#else
+        if (enable) {
+            hal_nvic_set_priority(HAL_IRQ_I2C1_EV, 2);
+            hal_nvic_set_priority(HAL_IRQ_I2C1_ER, 2);
+            hal_nvic_enable_irq(HAL_IRQ_I2C1_EV);
+            hal_nvic_enable_irq(HAL_IRQ_I2C1_ER);
+        } else {
+            hal_nvic_disable_irq(HAL_IRQ_I2C1_EV);
+            hal_nvic_disable_irq(HAL_IRQ_I2C1_ER);
+        }
+#endif
+        break;
+#if defined(STM32L422xx) || defined(STM32WBA55xx)
+    case 1:
+        if (enable) {
+            hal_nvic_set_priority(HAL_IRQ_I2C3_EV, 2);
+            hal_nvic_set_priority(HAL_IRQ_I2C3_ER, 2);
+            hal_nvic_enable_irq(HAL_IRQ_I2C3_EV);
+            hal_nvic_enable_irq(HAL_IRQ_I2C3_ER);
+        } else {
+            hal_nvic_disable_irq(HAL_IRQ_I2C3_EV);
+            hal_nvic_disable_irq(HAL_IRQ_I2C3_ER);
+        }
+        break;
+#endif
+    default:
+        break;
+    }
+}
+
+hal_status_t hal_i2c_target_init(hal_i2c_target_t *t, I2C_TypeDef *instance,
+                                 const hal_i2c_target_config_t *cfg)
+{
+    if (!t || !cfg || !cfg->regs || cfg->n_regs == 0) return HAL_ERROR;
+
+    int slot = _tgt_slot(instance);
+    if (slot < 0) return HAL_ERROR;
+
+    /* A writable window has to sit inside the register file, or a host
+     * write would run off the end of the buffer. */
+    if (cfg->writable_count > cfg->n_regs ||
+        cfg->writable_first > (uint16_t)(cfg->n_regs - cfg->writable_count)) {
+        return HAL_ERROR;
+    }
+
+    memset(t, 0, sizeof(*t));
+    t->instance       = instance;
+    t->regs           = cfg->regs;
+    t->n_regs         = cfg->n_regs;
+    t->writable_first = cfg->writable_first;
+    t->writable_count = cfg->writable_count;
+    t->cb             = cfg->cb;
+    t->ctx            = cfg->ctx;
+    t->timing         = cfg->timing;
+    t->addr           = cfg->addr;
+
+    _i2c_clk_enable(instance);
+    ll_i2c_target_init(instance, cfg->timing, cfg->addr);
+
+    _i2c_tgt[slot] = t;
+    _tgt_nvic(slot, 1);
+    return HAL_OK;
+}
+
+void hal_i2c_target_deinit(hal_i2c_target_t *t)
+{
+    if (!t || !t->instance) return;
+
+    int slot = _tgt_slot(t->instance);
+    if (slot >= 0) {
+        _tgt_nvic(slot, 0);
+        _i2c_tgt[slot] = NULL;
+    }
+    ll_i2c_target_disable(t->instance);
+    t->instance = NULL;
+}
+
+void hal_i2c_target_irq(hal_i2c_target_t *t)
+{
+    I2C_TypeDef *i2c = t->instance;
+    uint32_t isr = i2c->ISR;
+
+    if (isr & LL_I2C_ISR_ADDR) {
+        if (isr & LL_I2C_ISR_DIR) {
+            /* Controller will read from us. Drop any byte a previous,
+             * abandoned read left loaded, otherwise it becomes the first
+             * byte of this one and shifts the whole transfer. */
+            ll_i2c_target_flush_tx(i2c);
+            t->n_reads++;
+            /* SCL is still stretched here: the one safe moment for the
+             * application to latch a coherent snapshot into regs[]. */
+            if (t->cb) t->cb(t->ctx, HAL_I2C_TARGET_READ_START, t->ptr, 0);
+        } else {
+            /* Controller will write. First byte is the register pointer. */
+            t->have_ptr = 0;
+        }
+        ll_i2c_target_clear_addr(i2c);   /* releases SCL */
+    }
+
+    if (isr & LL_I2C_ISR_RXNE) {
+        uint8_t b = (uint8_t)i2c->RXDR;
+        if (!t->have_ptr) {
+            t->ptr = b;
+            t->have_ptr = 1;
+        } else {
+            uint16_t p = t->ptr;
+            uint16_t wlast = (uint16_t)(t->writable_first + t->writable_count);
+            if (t->writable_count && p >= t->writable_first && p < wlast) {
+                t->regs[p] = b;
+                t->n_writes++;
+                if (t->cb) t->cb(t->ctx, HAL_I2C_TARGET_WRITE, p, b);
+            }
+            /* Absorb writes outside the window: ACKing and discarding
+             * keeps a mis-addressed host from wedging the bus. */
+            if ((uint16_t)(p + 1) < t->n_regs) t->ptr = (uint16_t)(p + 1);
+        }
+    }
+
+    if (isr & LL_I2C_ISR_TXIS) {
+        uint16_t p = t->ptr;
+        /* Reads past the end return 0xFF rather than stalling, so a host
+         * that asks for too many bytes gets an obvious answer. */
+        i2c->TXDR = (p < t->n_regs) ? t->regs[p] : 0xFFU;
+        if ((uint16_t)(p + 1) < t->n_regs) t->ptr = (uint16_t)(p + 1);
+    }
+
+    if (isr & LL_I2C_ISR_NACKF) {
+        /* Expected: a controller NACKs the last byte it reads. */
+        i2c->ICR = LL_I2C_ICR_NACKCF;
+    }
+
+    if (isr & LL_I2C_ISR_STOPF) {
+        i2c->ICR = LL_I2C_ICR_STOPCF;
+        ll_i2c_target_flush_tx(i2c);
+        t->have_ptr = 0;
+        if (t->cb) t->cb(t->ctx, HAL_I2C_TARGET_STOP, t->ptr, 0);
+    }
+
+    if (isr & (LL_I2C_ISR_BERR | LL_I2C_ISR_ARLO | LL_I2C_ISR_OVR)) {
+        i2c->ICR = LL_I2C_ICR_BERRCF | LL_I2C_ICR_ARLOCF | LL_I2C_ICR_OVRCF;
+        t->n_errors++;
+    }
+}
+
+/* ---- Vectors ---- */
+
+static void _tgt_dispatch(int slot)
+{
+    hal_i2c_target_t *t = _i2c_tgt[slot];
+    if (t && t->instance) hal_i2c_target_irq(t);
+}
+
+#if defined(STM32L011xx)
+void I2C1_IRQHandler(void)    { _tgt_dispatch(0); }
+#else
+void I2C1_EV_IRQHandler(void) { _tgt_dispatch(0); }
+void I2C1_ER_IRQHandler(void) { _tgt_dispatch(0); }
+#endif
+
+#if defined(STM32L422xx) || defined(STM32WBA55xx)
+void I2C3_EV_IRQHandler(void) { _tgt_dispatch(1); }
+void I2C3_ER_IRQHandler(void) { _tgt_dispatch(1); }
+#endif

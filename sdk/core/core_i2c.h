@@ -240,6 +240,109 @@ static inline int core_i2c_probe_bus(uint8_t bus, uint8_t addr)
     return hal_i2c_probe(h, addr) == HAL_OK ? 1 : 0;
 }
 
+/* ============================================================
+ * Target (device) mode
+ * ============================================================
+ *
+ * Answer as a device on someone else's bus, instead of driving your own.
+ * The register-file model matches how a host expects to talk to a
+ * sensor: write a register pointer, then read or write from there with
+ * auto-increment.
+ *
+ *   static uint8_t regs[16];
+ *   static core_i2c_target_t tgt;
+ *
+ *   static void on_evt(void *ctx, hal_i2c_target_event_t e,
+ *                      uint16_t reg, uint8_t val)
+ *   {
+ *       if (e == HAL_I2C_TARGET_READ_START) latch_snapshot();
+ *   }
+ *
+ *   core_i2c_target_init(&tgt, I2C1, 0x28, I2C_400K, regs, sizeof(regs),
+ *                        on_evt, NULL);
+ *
+ * The pads still come from config.json (I2C1.CLK / I2C1.DAT); coregen
+ * sets them up as AF open-drain and this re-initializes the peripheral
+ * in target mode, so the coregen-emitted master handle for the same bus
+ * goes unused. One role per peripheral: a Core cannot be controller and
+ * target on the same I2C at once.
+ *
+ * C-level only. The callback and register buffer have no DSL
+ * representation, so there is no Tier 2 / Studio surface for this yet.
+ */
+
+/** Core-level I2C target handle. Alias for hal_i2c_target_t. */
+typedef hal_i2c_target_t core_i2c_target_t;
+
+/** Event codes and callback signature come straight from the HAL. */
+#define I2C_TARGET_READ_START  HAL_I2C_TARGET_READ_START
+#define I2C_TARGET_WRITE       HAL_I2C_TARGET_WRITE
+#define I2C_TARGET_STOP        HAL_I2C_TARGET_STOP
+
+/**
+ * Bring up an I2C peripheral as a read-only target at `addr`.
+ *
+ * @param addr   7-bit own address, unshifted
+ * @param speed  I2C_100K / I2C_400K / I2C_1M — match the controller
+ * @param regs   register file the host reads from
+ * @param n_regs size of regs[] in bytes
+ * @param cb     optional; NULL for none
+ */
+static inline hal_status_t core_i2c_target_init(core_i2c_target_t *t,
+                                                I2C_TypeDef *instance,
+                                                uint8_t addr, uint32_t speed,
+                                                uint8_t *regs, uint16_t n_regs,
+                                                hal_i2c_target_cb_t cb,
+                                                void *ctx)
+{
+    uint32_t timing = _core_i2c_timing(speed);
+    if (!timing) return HAL_ERROR;
+    hal_i2c_target_config_t cfg = {
+        .addr           = addr,
+        .timing         = timing,
+        .regs           = regs,
+        .n_regs         = n_regs,
+        .writable_first = 0,
+        .writable_count = 0,
+        .cb             = cb,
+        .ctx            = ctx,
+    };
+    return hal_i2c_target_init(t, instance, &cfg);
+}
+
+/**
+ * As core_i2c_target_init, but accepts host writes to the register
+ * range [first, first + count). Everything outside stays read-only.
+ */
+static inline hal_status_t core_i2c_target_init_rw(core_i2c_target_t *t,
+                                                   I2C_TypeDef *instance,
+                                                   uint8_t addr, uint32_t speed,
+                                                   uint8_t *regs, uint16_t n_regs,
+                                                   uint16_t first, uint16_t count,
+                                                   hal_i2c_target_cb_t cb,
+                                                   void *ctx)
+{
+    uint32_t timing = _core_i2c_timing(speed);
+    if (!timing) return HAL_ERROR;
+    hal_i2c_target_config_t cfg = {
+        .addr           = addr,
+        .timing         = timing,
+        .regs           = regs,
+        .n_regs         = n_regs,
+        .writable_first = first,
+        .writable_count = count,
+        .cb             = cb,
+        .ctx            = ctx,
+    };
+    return hal_i2c_target_init(t, instance, &cfg);
+}
+
+/** Stop answering on the bus. */
+static inline void core_i2c_target_deinit(core_i2c_target_t *t)
+{
+    hal_i2c_target_deinit(t);
+}
+
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
 // @studio unsupported tier=2 value=M title="Tier 2 is byte-level only — no bulk / scan"
@@ -260,9 +363,21 @@ static inline int core_i2c_probe_bus(uint8_t bus, uint8_t addr)
 //   No DMA path for bulk reads/writes. Long FIFO drains (e.g., IMU
 //   water-level batch reads) currently block on polled byte loops.
 //
-// @studio unsupported tier=1 value=M title="Slave / device mode"
-//   Master-only today. Slave-mode would let a Core respond as an I2C
-//   device on a host bus.
+// @studio unsupported tier=2 value=M title="Target mode is C-only"
+//   Target (device) mode landed at Tier 1: core_i2c_target_init() lets a
+//   Core answer as an I2C device on a host bus, using a register-file
+//   model with an optional ISR callback. There is no Tier 2 / DSL
+//   surface, because a register buffer and a callback have no
+//   representation in the DSL host-call ABI. A Studio-level version
+//   would need a declarative "expose these variables as registers"
+//   binding, close to what the BLE characteristic binding does.
+//
+// @studio unsupported tier=1 value=L title="Target mode on H5 I2C2 / I2C3"
+//   startup_stm32h523xx.s carries vectors for I2C1_EV, I2C1_ER and
+//   I2C2_EV only. There is no I2C2_ER or I2C3 entry, and slot 58 is
+//   labelled as I2C2 Error shared with USART1, so target mode is
+//   restricted to I2C1 on Core.ST.H5. I2C1 + I2C3 both work on
+//   Core.ST.L4 and Core.ST.W5; Core.ST.L0 has only I2C1.
 //
 // @studio unsupported tier=1 value=M title="10-bit addressing"
 //   API takes uint8_t addr — 7-bit only. No path for 10-bit-addressed

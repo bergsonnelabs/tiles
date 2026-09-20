@@ -107,6 +107,11 @@ typedef struct {
     /* VREFINT calibration cache — computed lazily on first read_mv call */
     uint32_t              vdda_mv;       /* 0 = not yet measured */
 
+    /* External trigger, applied by hal_adc_start_dma. Edge NONE means
+     * free-running continuous mode, which is the historic behavior. */
+    uint8_t               trig_extsel;
+    uint8_t               trig_edge;
+
     /* Effective output bit depth — equals resolution bits normally, but
      * increases when hal_adc_set_oversample_ex is used with shift < log2(N).
      * hal_adc_read_mv uses this as the full-scale denominator. */
@@ -187,6 +192,54 @@ uint16_t hal_adc_read(hal_adc_t *adc, uint8_t channel);
  * The VDDA measurement is cached after the first call.
  */
 uint32_t hal_adc_read_mv(hal_adc_t *adc, uint8_t channel);
+
+/**
+ * Convert a raw count to millivolts using the VREFINT-derived VDDA.
+ *
+ * Does no conversion of its own, so unlike hal_adc_read_mv it is safe to
+ * call while continuous DMA owns the regular sequence. That is the point
+ * of it: hal_adc_start_dma fills the buffer with raw counts and there is
+ * otherwise no supported way to scale them.
+ *
+ * VDDA is measured on first use, and measuring VREFINT DOES need the
+ * regular sequence. So prime it (call this once, or hal_adc_read_vdda_mv)
+ * BEFORE hal_adc_start_dma; priming it afterwards returns 0.
+ */
+uint32_t hal_adc_raw_to_mv(hal_adc_t *adc, uint16_t raw);
+
+/* ============================================================
+ * External trigger
+ * ============================================================ */
+
+typedef enum {
+    HAL_ADC_TRIG_NONE    = 0,   /* free-running continuous conversion */
+    HAL_ADC_TRIG_RISING  = 1,
+    HAL_ADC_TRIG_FALLING = 2,
+    HAL_ADC_TRIG_BOTH    = 3,
+} hal_adc_trig_edge_t;
+
+/**
+ * Pace conversions from a hardware trigger instead of free-running.
+ *
+ * Call BEFORE hal_adc_start_dma; it only records the setting, and
+ * start_dma applies it. With a trigger set, start_dma clears CONT and
+ * one scan of the whole channel list runs per trigger edge.
+ *
+ * This is what lets a slow output rate average over its whole period
+ * rather than over one burst. Free-running fills the DMA ring as fast
+ * as the ADC can convert, so a ring of N scans only ever holds the last
+ * N conversion times worth of signal, however long the period is. That
+ * averages noise but does nothing about aliasing, and burns power
+ * converting samples nobody reads. Pacing the scans so the ring spans
+ * the full output period turns the same average into a boxcar filter,
+ * with nulls at the output rate and its multiples.
+ *
+ * `extsel` is the family-specific trigger encoding. On Core.ST.L0 use
+ * the LL_ADC_L0_TRG_* constants (RM0377 Table 58); LL_ADC_L0_TRG_TIM2_TRGO
+ * paired with ll_tim_set_trgo(TIM2, LL_TIM_MMS_UPDATE) is the usual pair.
+ */
+hal_status_t hal_adc_set_trigger(hal_adc_t *adc, uint8_t extsel,
+                                 hal_adc_trig_edge_t edge);
 
 /**
  * Read die temperature in tenths of a degree C.
