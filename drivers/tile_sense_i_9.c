@@ -1228,9 +1228,12 @@ static void dmp_chip_setup(tile_t *tile)
     icm_modify(tile, ICM20948_USER_CTRL,
                (uint8_t)(ICM20948_USER_CTRL_FIFO_EN | ICM20948_USER_CTRL_DMP_EN), 0);
 
-    /* Accel: ±4 g, DLPF on (per eMD recommendation for DMP). */
+    /* Accel: ±4 g, DLPF on (per eMD recommendation for DMP). ACCEL_FS_SEL is bits [2:1],
+     * so ±4 g = 01 → 0x02; with DLPF_EN (bit 0) + DLPFCFG=1 (bits [5:3]) that's 0x0B.
+     * NB: 0x09 (used previously) is FS_SEL=00 = ±2 g — a 2x mismatch with the ±4 g
+     * DMP-RAM ACC_SCALE constants below (gravity read as 2 g). */
     set_bank(tile, ICM20948_BANK_2);
-    icm_write(tile, ICM20948_REG_ACCEL_CONFIG, 0x09);  /* DLPF=1, FS=4g, DLPF_EN */
+    icm_write(tile, ICM20948_REG_ACCEL_CONFIG, 0x0B);  /* FS=±4g, DLPFCFG=1, DLPF_EN */
     /* Gyro: ±2000 dps, DLPF on. */
     icm_write(tile, ICM20948_REG_GYRO_CONFIG, 0x07);   /* DLPF=0, FS=2000dps, DLPF_EN */
 
