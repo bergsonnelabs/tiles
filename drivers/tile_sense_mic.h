@@ -188,10 +188,10 @@ TILES_CHECK_VERSION(1, 0);
  * see the MAX11645_SEL_* note above; the names did not.
  */
 typedef enum {
-    SENSE_MIC_REF_VDD          = 0x00,  /**< Supply voltage (3.3 V) */
+    SENSE_MIC_REF_VDD          = 0x00,  /**< Supply voltage (3.3V) */
     SENSE_MIC_REF_EXTERNAL     = 0x02,  /**< External reference on the REF pin (not routed on this tile) */
-    SENSE_MIC_REF_INTERNAL     = 0x05,  /**< Internal 2.048 V */
-    SENSE_MIC_REF_INTERNAL_BUF = 0x07,  /**< Internal 2.048 V, also on the REF pin */
+    SENSE_MIC_REF_INTERNAL     = 0x05,  /**< Internal 2.048V */
+    SENSE_MIC_REF_INTERNAL_BUF = 0x07,  /**< Internal 2.048V, also on the REF pin */
 } sense_mic_ref_t;
 
 /**
@@ -583,8 +583,10 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw);
  *
  * @note  Blocking. Takes ~5 ms while sampling.
  *
+ * @studio control threshold_db label="Loudness threshold" tier=basic scope=usage scale=0.1 unit=dB
  * @param  tile          Initialised tile handle.
- * @param  threshold_db  SPL threshold in 0.1 dB units (e.g. 700 = 70 dB).
+ * @param  threshold_db  [300..1300] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the
+ *                       driver's noise floor; 1300 is the microphone's 130 dB acoustic overload point.
  * @return 1 if measured SPL > threshold, 0 otherwise.
  */
 uint8_t tile_sense_mic_is_loud(tile_t *tile, int16_t threshold_db);
@@ -625,9 +627,10 @@ int16_t tile_sense_mic_read_spl_db(tile_t *tile);
  *
  * @note  Blocking until threshold or timeout.
  *
+ * @studio control threshold_db label="Sound wait threshold" tier=basic scope=usage scale=0.1 unit=dB
  * @studio control timeout_ms label="Sound wait timeout" tier=advanced scope=usage
  * @param  tile          Initialised tile handle.
- * @param  threshold_db  SPL threshold in 0.1 dB units.
+ * @param  threshold_db  [300..1300] SPL threshold in 0.1 dB units.
  * @param  timeout_ms    [1..60000] ms Maximum wait, in milliseconds.
  * @return 1 if threshold was crossed, 0 on timeout.
  */

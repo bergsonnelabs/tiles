@@ -796,6 +796,19 @@ def build_host_entry(tag, doxy_lines, sig, header_name, scope, all_tags=()):
         # (rate="1000 / period_ms"), a divider (rate="1125 / (1 + divider)").
         if "rate" in attrs:
             control["_rate_src"] = attrs["rate"]
+        # scale=<n> unit=<u>: the argument is stored in sub-units (0.1 dB, 0.01 °C);
+        # people read and type value × scale, in `unit`. Unlike show= this is
+        # invertible, so it drives the INPUT as well as the display.
+        if "scale" in attrs:
+            try:
+                k = float(attrs["scale"])
+                if k <= 0:
+                    raise ValueError
+                control["scale"] = int(k) if k == int(k) else k
+            except ValueError:
+                VIBE_ERRORS.append(f"{sig['name']}: control {pname}: scale={attrs['scale']!r} must be a positive number")
+            if "unit" in attrs and "show" not in attrs:
+                control["display_unit"] = attrs["unit"]
         # when="<expr>": the setting only APPLIES while this holds (a filter on a
         # sensor that is switched off; a range on a powered-down axis). Studio
         # greys it out and keeps it, and the part it gates, out of the story.
@@ -1062,6 +1075,10 @@ def resolve_vibe_settings(hosts, where):
                 elif any("quantity" not in c for c in offered):
                     missing = ", ".join(c["name"] for c in offered if "quantity" not in c)
                     VIBE_ERRORS.append(f"{tag}: role=sample_rate needs `@studio value=<Hz>` on every offered member (missing: {missing}) or rate=…")
+            if "scale" in control and (choices or control.get("type") == "bool"):
+                VIBE_ERRORS.append(f"{tag}: scale= only applies to a numeric argument")
+            if "scale" in control and "show" in control:
+                VIBE_ERRORS.append(f"{tag}: use scale= (invertible) OR show= (computed), not both")
             when_src = control.pop("_when_src", None)
             if when_src is not None:
                 ast = compile_expr(when_src, fn, "when")
