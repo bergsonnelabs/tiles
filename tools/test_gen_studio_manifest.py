@@ -203,6 +203,209 @@ class BuildHostEntryEnum(unittest.TestCase):
         self.assertNotIn("enum", host["params"][0])
 
 
+class BuildHostEntryChoicesAndControls(unittest.TestCase):
+    """Enum-typed params carry the header's own enum members as `choices`
+    (name / value / human label), and `@studio control` marks an argument of
+    an exposed function as a user-facing setting with a tier + default."""
+
+    HEADER = """
+typedef enum {
+    SENSE_X_ACCEL_8G = 0x02,  /**< +/- 8g */
+    SENSE_X_ACCEL_2G = 0x04,  /**< +/- 2g */
+} sense_x_accel_range_t;
+"""
+
+    def _build(self, extra=()):
+        import gen_studio_manifest as gsm
+
+        gsm.collect_enum_types(self.HEADER)
+        doxy_lines = [
+            "@brief Set accelerometer range.",
+            "@studio expose category=tile name=set_accel_range section=runtime",
+            "@param range Full-scale range setting.",
+            *extra,
+        ]
+        tags = parse_studio_tags(doxy_lines)
+        expose = next((a for v, _, a in tags if v == "expose"), None)
+        sig = {
+            "returns": "void",
+            "name": "tile_sense_x_set_accel_range",
+            "params": [
+                {"name": "tile", "ctype": "tile_t *"},
+                {"name": "range", "ctype": "sense_x_accel_range_t"},
+            ],
+        }
+        err = io.StringIO()
+        with redirect_stderr(err):
+            host = build_host_entry(expose, doxy_lines, sig, "x.h", scope="tile", all_tags=tags)
+        return host, err.getvalue()
+
+    def test_enum_param_gets_choices_with_values_and_human_labels(self):
+        host, _ = self._build()
+        self.assertEqual(
+            host["params"][0]["choices"],
+            [
+                {"name": "SENSE_X_ACCEL_8G", "value": 2, "label": "±8 g"},
+                {"name": "SENSE_X_ACCEL_2G", "value": 4, "label": "±2 g"},
+            ],
+        )
+        self.assertNotIn("controls", host)
+
+    def test_control_with_quoted_label_tier_and_enum_default(self):
+        host, err = self._build(
+            ['@studio control range label="Accel range" tier=basic default=SENSE_X_ACCEL_8G']
+        )
+        self.assertEqual(
+            host["controls"],
+            [
+                {
+                    "param": "range",
+                    "label": "Accel range",
+                    "tier": "basic",
+                    "scope": "config",
+                    "default": 2,
+                }
+            ],
+        )
+        self.assertEqual(err, "")
+
+    def test_control_on_unknown_param_warns_and_is_dropped(self):
+        host, err = self._build(["@studio control nope tier=basic"])
+        self.assertNotIn("controls", host)
+        self.assertIn("doesn't match any parameter", err)
+
+    def test_bad_tier_falls_back_to_advanced(self):
+        host, err = self._build(["@studio control range tier=loud"])
+        self.assertEqual(host["controls"][0]["tier"], "advanced")
+        self.assertIn("must be basic|advanced", err)
+
+
+class VibeSettingsRulesAndLints(unittest.TestCase):
+    """The second pass (`resolve_vibe_settings`): expressions become ASTs with
+    every name resolved, and authoring mistakes fail the build."""
+
+    HEADER = """
+typedef enum {
+    SENSE_Y_ODR_100HZ = 0x08,  /**< 100 Hz @studio value=100 */
+    SENSE_Y_ODR_6HZ   = 0x0C,  /**< 6.25 Hz @studio value=6.25 */
+} sense_y_odr_t;
+typedef enum {
+    SENSE_Y_MODE_LP = 0x02,  /**< Low power */
+    SENSE_Y_MODE_LN = 0x03,  /**< Low noise */
+    SENSE_Y_MODE_ALIAS = 0x03,  /**< Same register value, another name */
+} sense_y_mode_t;
+"""
+
+    def _hosts(self, odr_tags, mode_tags=('@studio control mode label="Power mode" tier=advanced default=SENSE_Y_MODE_LN allow=SENSE_Y_MODE_LP,SENSE_Y_MODE_LN',)):
+        import gen_studio_manifest as gsm
+
+        gsm.VIBE_ERRORS.clear()
+        gsm.collect_enum_types(self.HEADER)
+        hosts = []
+        for name, arg, ctype, extra in (
+            ("set_odr", "odr", "sense_y_odr_t", odr_tags),
+            ("set_mode", "mode", "sense_y_mode_t", mode_tags),
+        ):
+            lines = [f"@studio expose category=tile name={name} section=config", *extra]
+            tags = parse_studio_tags(lines)
+            sig = {
+                "returns": "void",
+                "name": f"tile_sense_y_{name}",
+                "params": [{"name": "tile", "ctype": "tile_t *"}, {"name": arg, "ctype": ctype}],
+            }
+            with redirect_stderr(io.StringIO()):
+                hosts.append(
+                    build_host_entry(tags[0][2], lines, sig, "y.h", scope="tile", all_tags=tags)
+                )
+        gsm.resolve_vibe_settings(hosts, "y.h")
+        return hosts, list(gsm.VIBE_ERRORS)
+
+    ODR = '@studio control odr label="Data rate" tier=basic default=SENSE_Y_ODR_100HZ role=sample_rate'
+
+    def test_member_quantity_is_lifted_out_of_the_label(self):
+        hosts, errors = self._hosts([self.ODR])
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            hosts[0]["params"][0]["choices"][0],
+            {"name": "SENSE_Y_ODR_100HZ", "value": 8, "label": "100 Hz", "quantity": 100},
+        )
+        self.assertEqual(hosts[0]["controls"][0]["role"], "sample_rate")
+
+    def test_require_becomes_an_ast_with_cross_function_refs_resolved(self):
+        hosts, errors = self._hosts(
+            [
+                self.ODR,
+                '@studio require expr="value(odr) >= 12.5" when="set_mode.mode == SENSE_Y_MODE_LN" message="Too slow for low-noise."',
+            ]
+        )
+        self.assertEqual(errors, [])
+        rule = hosts[0]["requires"][0]
+        self.assertEqual(rule["expr"], {"op": ">=", "args": [{"value": "set_odr.odr"}, {"num": 12.5}]})
+        self.assertEqual(
+            rule["when"],
+            {"op": "==", "args": [{"ref": "set_mode.mode"}, {"member": "SENSE_Y_MODE_LN", "num": 3}]},
+        )
+
+    def test_sample_rate_must_be_computable(self):
+        # enum members carry it…
+        _, errors = self._hosts([self.ODR])
+        self.assertEqual(errors, [])
+        # …a member without a quantity would make the rule silently never fire
+        import gen_studio_manifest as gsm
+
+        header = self.HEADER
+        try:
+            type(self).HEADER = header.replace(" @studio value=6.25", "")
+            gsm.ENUM_MEMBERS.clear()
+            _, errors = self._hosts([self.ODR])
+        finally:
+            type(self).HEADER = header
+            gsm.ENUM_MEMBERS.clear()
+        self.assertTrue(any("needs `@studio value=<Hz>`" in e and "SENSE_Y_ODR_6HZ" in e for e in errors), errors)
+        # an explicit rate= expression is parsed like any other, and needs the role
+        hosts, errors = self._hosts(
+            ['@studio control odr label="Data rate" tier=basic default=SENSE_Y_ODR_100HZ role=sample_rate rate="1000 / (1 + odr)"']
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(hosts[0]["controls"][0]["rate"]["op"], "/")
+        _, errors = self._hosts(
+            ['@studio control odr label="Data rate" tier=basic default=SENSE_Y_ODR_100HZ rate="1000 / odr"']
+        )
+        self.assertTrue(any("only means something with role=sample_rate" in e for e in errors))
+
+    def test_allow_narrows_a_shared_enum_to_this_arguments_members(self):
+        hosts, errors = self._hosts([self.ODR])
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            [c["name"] for c in hosts[1]["controls"][0]["choices"]],
+            ["SENSE_Y_MODE_LP", "SENSE_Y_MODE_LN"],
+        )
+
+    def test_authoring_mistakes_fail_the_build(self):
+        cases = {
+            "no exposed function named 'set_nope'": [self.ODR, '@studio require expr="set_nope.x == 1" message="m"'],
+            "has no argument 'speed'": [self.ODR, '@studio require expr="speed > 1" message="m"'],
+            "unexpected": [self.ODR, '@studio require expr="odr >" message="m"'],
+            "needs default=": ['@studio control odr label="Data rate" tier=basic'],
+            'needs expr="…" and message="…"': [self.ODR, '@studio require expr="odr > 1"'],
+        }
+        for needle, tags in cases.items():
+            _, errors = self._hosts(tags)
+            self.assertTrue(any(needle in e for e in errors), f"{needle!r} not in {errors}")
+        # two offered members with one register value is ambiguous…
+        _, errors = self._hosts(
+            [self.ODR],
+            mode_tags=['@studio control mode label="Power mode" tier=advanced default=SENSE_Y_MODE_LN'],
+        )
+        self.assertTrue(any("share a value" in e for e in errors))
+        # …and one label may name only one setting
+        _, errors = self._hosts(
+            [self.ODR],
+            mode_tags=['@studio control mode label="Data rate" tier=advanced default=SENSE_Y_MODE_LN allow=SENSE_Y_MODE_LN'],
+        )
+        self.assertTrue(any("already used" in e for e in errors))
+
+
 class BuildHostEntryOutBuffer(unittest.TestCase):
     """`@studio out_buffer <cname> type=... length=...` strips the
     param from the DSL-facing list and emits `c_out_buffer` on the host.

@@ -61,14 +61,7 @@
         "center_x": -1600,
         "center_y": -800
       },
-      "functions": [
-        {
-          "note": "",
-          "type": "interface",
-          "function": "I2C.CLK",
-          "direction": "bidirectional"
-        }
-      ]
+      "functions": []
     },
     {
       "pad": "5",
@@ -78,14 +71,7 @@
         "center_x": -1600,
         "center_y": -1600
       },
-      "functions": [
-        {
-          "note": "",
-          "type": "interface",
-          "function": "I2C.DAT",
-          "direction": "bidirectional"
-        }
-      ]
+      "functions": []
     },
     {
       "pad": "6",
@@ -270,8 +256,8 @@
     }
   ],
   "interfaces": [],
-  "updated_at": "2026-06-05T08:51:25.996Z",
+  "updated_at": "2026-09-12T12:06:58.645Z",
   "description": "",
-  "json_version": "0.3",
+  "json_version": "0.4",
   "application_notes": []
 }

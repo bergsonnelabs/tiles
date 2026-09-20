@@ -152,6 +152,12 @@
           "name": "interrupt-driven"
         },
         {
+          "id": "i2c.target",
+          "layer": "Core",
+          "name": "target / device mode",
+          "desc": "Answer as a device on a host bus instead of driving one. Register-file model with an ISR callback: the host writes a register pointer, then reads or writes with auto-increment."
+        },
+        {
           "id": "i2c.dma",
           "name": "DMA"
         },
@@ -213,6 +219,12 @@
           "id": "timer.pwm",
           "layer": "Studio",
           "name": "PWM output"
+        },
+        {
+          "id": "timer.stepdir",
+          "layer": "Core",
+          "name": "STEP/DIR stepper pulses",
+          "desc": "Timer-paced STEP/DIR generator for external stepper drivers: trapezoidal ramps, position and velocity moves, signed microstep count (core_stepper)."
         },
         {
           "id": "timer.capture",
@@ -283,15 +295,45 @@
           "name": "DMA"
         },
         {
+          "id": "adc.dma_mv",
+          "layer": "Core",
+          "name": "DMA results in millivolts",
+          "desc": "Scale raw counts from a DMA buffer to calibrated millivolts without a fresh conversion. VDDA must be primed before DMA claims the regular sequence."
+        },
+        {
           "id": "adc.cont",
           "layer": "Core",
           "name": "continuous / scan mode",
           "desc": "ADC free-runs through a sequence of channels, continuously updating results in a buffer."
         },
         {
+          "id": "adc.trigger",
+          "layer": "Core",
+          "name": "external trigger (TIMx TRGO / EXTI)",
+          "desc": "Pace DMA conversions from a hardware trigger instead of free-running, so a DMA ring spans the whole output period. Turns the average into an anti-alias filter rather than a burst average."
+        },
+        {
           "id": "adc.watchdog",
           "name": "analog watchdog",
           "desc": "Triggers an interrupt when a conversion result crosses a configured high or low voltage threshold."
+        }
+      ]
+    },
+    {
+      "id": "nvm",
+      "name": "NVM",
+      "features": [
+        {
+          "id": "nvm.eeprom",
+          "layer": "Core",
+          "name": "true EEPROM",
+          "desc": "Byte-granular read / write with no erase cycle. Core.ST.L0 has 512 B of real data EEPROM at 0x08080000; the other Cores have none and use flash emulation instead."
+        },
+        {
+          "id": "nvm.flash_emu",
+          "layer": "Core",
+          "name": "flash emulation",
+          "desc": "Emulated byte-level NVM on Cores without real EEPROM, including the wear levelling that needs. Not implemented: core_nvm_write returns -1 on those parts."
         }
       ]
     },

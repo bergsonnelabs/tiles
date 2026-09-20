@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Power.L.1T",
   "palette": {
     "label": "Power.L.1T",
@@ -350,7 +350,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "LDO mode (POWER_L_1T_LDO_MODE_LDO or _LOAD_SWITCH)"
+          "description": "LDO mode (POWER_L_1T_LDO_MODE_LDO or _LOAD_SWITCH)",
+          "choices": [
+            {
+              "name": "POWER_L_1T_LDO_MODE_LDO",
+              "value": 0,
+              "label": "Regulated LDO output"
+            },
+            {
+              "name": "POWER_L_1T_LDO_MODE_LOAD_SWITCH",
+              "value": 1,
+              "label": "Pass-through load switch"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -584,7 +596,29 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "power_l_1t_safety_timer_t (3h / 6h / 12h / off)."
+          "description": "power_l_1t_safety_timer_t (3h / 6h / 12h / off).",
+          "choices": [
+            {
+              "name": "POWER_L_1T_SAFETY_3H",
+              "value": 0,
+              "label": "3-hour fast-charge timer"
+            },
+            {
+              "name": "POWER_L_1T_SAFETY_6H",
+              "value": 1,
+              "label": "6-hour (default)"
+            },
+            {
+              "name": "POWER_L_1T_SAFETY_12H",
+              "value": 2,
+              "label": "12-hour"
+            },
+            {
+              "name": "POWER_L_1T_SAFETY_OFF",
+              "value": 3,
+              "label": "disabled"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -603,7 +637,29 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "power_l_1t_pmid_mode_t."
+          "description": "power_l_1t_pmid_mode_t.",
+          "choices": [
+            {
+              "name": "POWER_L_1T_PMID_AUTO",
+              "value": 0,
+              "label": "powered from BAT or VIN (default)"
+            },
+            {
+              "name": "POWER_L_1T_PMID_BAT_ONLY",
+              "value": 1,
+              "label": "forced from BAT even when VIN present"
+            },
+            {
+              "name": "POWER_L_1T_PMID_FLOAT",
+              "value": 2,
+              "label": "disconnected, floating"
+            },
+            {
+              "name": "POWER_L_1T_PMID_PULLDOWN",
+              "value": 3,
+              "label": "disconnected, pulled down"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -627,7 +683,49 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "power_l_1t_adc_channel_t to monitor."
+          "description": "power_l_1t_adc_channel_t to monitor.",
+          "choices": [
+            {
+              "name": "POWER_L_1T_ADC_CH_DISABLED",
+              "value": 0,
+              "label": "POWER_L_1T_ADC_CH_DISABLED"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_ADCIN",
+              "value": 1,
+              "label": "POWER_L_1T_ADC_CH_ADCIN"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_TS",
+              "value": 2,
+              "label": "POWER_L_1T_ADC_CH_TS"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_VBAT",
+              "value": 3,
+              "label": "POWER_L_1T_ADC_CH_VBAT"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_ICHARGE",
+              "value": 4,
+              "label": "POWER_L_1T_ADC_CH_ICHARGE"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_VIN",
+              "value": 5,
+              "label": "POWER_L_1T_ADC_CH_VIN"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_PMID",
+              "value": 6,
+              "label": "POWER_L_1T_ADC_CH_PMID"
+            },
+            {
+              "name": "POWER_L_1T_ADC_CH_IIN",
+              "value": 7,
+              "label": "POWER_L_1T_ADC_CH_IIN"
+            }
+          ]
         },
         {
           "name": "threshold",

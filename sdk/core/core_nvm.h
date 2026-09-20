@@ -77,7 +77,11 @@
  */
 static inline int core_nvm_read(uint32_t offset, void *buf, uint32_t len)
 {
-    if (offset + len > CORE_NVM_SIZE)
+    /* Written this way, not `offset + len > SIZE`, because that sum wraps:
+     * a large offset with a small len passes the naive check and then
+     * reads or writes outside the region. */
+    if (len > (uint32_t)CORE_NVM_SIZE ||
+        offset > (uint32_t)CORE_NVM_SIZE - len)
         return -1;
 
     memcpy(buf, (const void *)(CORE_NVM_BASE + offset), len);
@@ -94,7 +98,11 @@ static inline int core_nvm_read(uint32_t offset, void *buf, uint32_t len)
  */
 static inline int core_nvm_write(uint32_t offset, const void *data, uint32_t len)
 {
-    if (offset + len > CORE_NVM_SIZE)
+    /* Written this way, not `offset + len > SIZE`, because that sum wraps:
+     * a large offset with a small len passes the naive check and then
+     * reads or writes outside the region. */
+    if (len > (uint32_t)CORE_NVM_SIZE ||
+        offset > (uint32_t)CORE_NVM_SIZE - len)
         return -1;
 
 #if CORE_NVM_EEPROM

@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@6897677",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -238,6 +238,82 @@
       "layer": "core"
     },
     {
+      "name": "core_adc_dma_read_mv",
+      "signature": "core_adc_dma_read_mv(core_adc_t * adc, uint8_t pad)",
+      "returns": "uint32_t",
+      "brief": "Read most recent DMA result for a pad, in calibrated millivolts. Prime VDDA before starting DMA (call core_adc_vdd(adc) once), since measuring VREFINT needs the regular sequence that DMA owns.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "core_adc_t *"
+        },
+        {
+          "name": "pad",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_adc_raw_to_mv",
+      "signature": "core_adc_raw_to_mv(core_adc_t * adc, uint16_t raw)",
+      "returns": "uint32_t",
+      "brief": "Convert a raw count from a DMA buffer to millivolts.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "core_adc_t *"
+        },
+        {
+          "name": "raw",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_adc_set_trigger",
+      "signature": "core_adc_set_trigger(core_adc_t * adc, uint8_t extsel, uint32_t edge)",
+      "returns": "hal_status_t",
+      "brief": "Pace DMA conversions from a hardware trigger instead of free-running. Call before core_adc_start_dma. See hal_adc_set_trigger for why this matters to any slow output rate: it is what makes a DMA ring span the whole output period, turning the average into a real anti-alias filter instead of a burst average. core_timer_init_freq(&t, TIM2, 800); core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE); core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, ADC_TRIG_RISING); core_adc_start_dma(adc, buf, len, 0, 0); core_timer_start(&t);",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "core_adc_t *"
+        },
+        {
+          "name": "extsel",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "edge",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_adc_dma_slot",
+      "signature": "core_adc_dma_slot(core_adc_t * adc, uint8_t pad)",
+      "returns": "int",
+      "brief": "Buffer slot a pad occupies in one DMA scan (-1 if not registered). Use the stride when the buffer holds several scans for averaging.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "core_adc_t *"
+        },
+        {
+          "name": "pad",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "hal_adc_init",
       "signature": "hal_adc_init(hal_adc_t * adc, ADC_TypeDef * instance, uint32_t sysclk_hz, hal_adc_res_t res)",
       "returns": "hal_status_t",
@@ -363,6 +439,46 @@
         {
           "name": "channel",
           "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_adc_raw_to_mv",
+      "signature": "hal_adc_raw_to_mv(hal_adc_t * adc, uint16_t raw)",
+      "returns": "uint32_t",
+      "brief": "Convert a raw count to millivolts using the VREFINT-derived VDDA. Does no conversion of its own, so unlike hal_adc_read_mv it is safe to call while continuous DMA owns the regular sequence. That is the point of it: hal_adc_start_dma fills the buffer with raw counts and there is otherwise no supported way to scale them. VDDA is measured on first use, and measuring VREFINT DOES need the regular sequence. So prime it (call this once, or hal_adc_read_vdda_mv) BEFORE hal_adc_start_dma; priming it afterwards returns 0.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "hal_adc_t *"
+        },
+        {
+          "name": "raw",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_adc_set_trigger",
+      "signature": "hal_adc_set_trigger(hal_adc_t * adc, uint8_t extsel, hal_adc_trig_edge_t edge)",
+      "returns": "hal_status_t",
+      "brief": "Pace conversions from a hardware trigger instead of free-running. Call BEFORE hal_adc_start_dma; it only records the setting, and start_dma applies it. With a trigger set, start_dma clears CONT and one scan of the whole channel list runs per trigger edge. This is what lets a slow output rate average over its whole period rather than over one burst. Free-running fills the DMA ring as fast as the ADC can convert, so a ring of N scans only ever holds the last N conversion times worth of signal, however long the period is. That averages noise but does nothing about aliasing, and burns power converting samples nobody reads. Pacing the scans so the ring spans the full output period turns the same average into a boxcar filter, with nulls at the output rate and its multiples. `extsel` is the family-specific trigger encoding. On Core.ST.L0 use the LL_ADC_L0_TRG_* constants (RM0377 Table 58); LL_ADC_L0_TRG_TIM2_TRGO paired with ll_tim_set_trgo(TIM2, LL_TIM_MMS_UPDATE) is the usual pair.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "hal_adc_t *"
+        },
+        {
+          "name": "extsel",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "edge",
+          "ctype": "hal_adc_trig_edge_t"
         }
       ],
       "studio_exposed": false,

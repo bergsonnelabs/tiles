@@ -948,6 +948,11 @@ int hal_usb_cdc_printf(const char *fmt, ...)
     int n = vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
     if (n > 0) {
+        /* vsnprintf returns the length the text WOULD have had; a message
+         * longer than the buffer was truncated. Send only what was formatted:
+         * sending `n` bytes reads past the stack buffer (bus fault at the top
+         * of RAM, seen 2026-09-08 with a ~450-byte help text). */
+        if ((size_t)n > sizeof(buf) - 1) n = (int)(sizeof(buf) - 1);
         hal_usb_cdc_write((const uint8_t *)buf, (uint16_t)n);
     }
     return n;

@@ -27,6 +27,7 @@ Usage:
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -105,7 +106,10 @@ LAYER_HEADERS = {
         "ll": (
             "ll_i2c.h",
             ["ll_i2c_init", "ll_i2c_init_fmp", "ll_i2c_write", "ll_i2c_read",
-             "ll_i2c_timing_100k", "ll_i2c_timing_400k", "ll_i2c_timing_1m"],
+             "ll_i2c_timing_100k", "ll_i2c_timing_400k", "ll_i2c_timing_1m",
+             "ll_i2c_target_init", "ll_i2c_target_disable",
+             "ll_i2c_target_is_read", "ll_i2c_target_addcode",
+             "ll_i2c_target_flush_tx", "ll_i2c_target_clear_addr"],
         ),
     },
     "spi": {
@@ -241,7 +245,12 @@ def parse_studio_tags(lines):
 
         positional = None
         attrs = {}
-        for tok in rest.split():
+        # shlex keeps a quoted value together: label="Full-scale range".
+        try:
+            tokens = shlex.split(rest) if '"' in rest else rest.split()
+        except ValueError:
+            tokens = rest.split()
+        for tok in tokens:
             if "=" in tok:
                 k, v = tok.split("=", 1)
                 attrs[k] = v
@@ -366,6 +375,32 @@ def extract_signature(source, after_offset):
 
 ENUM_TYPES = set()
 
+# Enum type name → [{"name", "value", "label"}], from the header's own
+# `typedef enum { A = 0x00, /**< label */ ... } name_t;`. Emitted as `choices`
+# on every enum-typed param so Studio can offer a labelled list instead of a
+# magic int (block editor dropdowns; Vibe's adjustable values).
+ENUM_MEMBERS = {}
+# Every enum constant the scanned headers declare, name → value (Vibe Settings
+# expressions may name them). And the authoring errors that must fail the build.
+ENUM_CONSTANTS = {}
+VIBE_ERRORS = []
+
+_ENUM_BLOCK_RE = re.compile(r"typedef\s+enum\s*\{([^}]*)\}\s*(\w+)\s*;")
+_ENUM_MEMBER_RE = re.compile(
+    r"(\w+)\s*=\s*(0[xX][0-9A-Fa-f]+|\d+)\s*,?\s*(?:/\*\*?<?\s*(.*?)\s*\*/)?"
+)
+
+
+def _choice_label(text, fallback):
+    """Member doc comment → a label a person would say ("+/- 2g" → "±2 g")."""
+    label = (text or "").strip().rstrip(".")
+    if not label:
+        return fallback
+    label = label.replace("+/-", "±").replace("± ", "±")
+    # "±2g" / "500dps" → "±2 g" / "500 dps": a space between number and unit.
+    label = re.sub(r"(\d)(g|dps|Hz|kHz|ms)\b", r"\1 \2", label)
+    return label
+
 
 def collect_enum_types(source):
     """Record header-declared `typedef enum {...} name_t;` type names.
@@ -378,6 +413,24 @@ def collect_enum_types(source):
     ENUM_TYPES.update(
         re.findall(r"typedef\s+enum\s*\{[^}]*\}\s*(\w+)\s*;", source)
     )
+    for body, type_name in _ENUM_BLOCK_RE.findall(source):
+        members = []
+        for name, value, doc in _ENUM_MEMBER_RE.findall(body):
+            # `@studio value=<number>` in a member's doc comment is the physical
+            # quantity it stands for (ODR_100HZ → 100), which Vibe Settings
+            # expressions read through value(<arg>). It is not part of the label.
+            quantity = None
+            qm = re.search(r"@studio\s+value=(-?\d+(?:\.\d+)?)", doc or "")
+            if qm:
+                quantity = float(qm.group(1)) if "." in qm.group(1) else int(qm.group(1))
+                doc = (doc[: qm.start()] + doc[qm.end():]).strip()
+            member = {"name": name, "value": int(value, 0), "label": _choice_label(doc, name)}
+            if quantity is not None:
+                member["quantity"] = quantity
+            members.append(member)
+            ENUM_CONSTANTS[name] = int(value, 0)
+        if members:
+            ENUM_MEMBERS[type_name] = members
 
 
 def dsl_type_of(ctype, override):
@@ -665,6 +718,10 @@ def build_host_entry(tag, doxy_lines, sig, header_name, scope, all_tags=()):
         #     array.
         #   - `enum {K=label, ...}` attaches friendly labels for
         #     int-valued enum C params.
+        # Enum-typed C params carry their members as `choices`.
+        enum_members = ENUM_MEMBERS.get(cp["ctype"].strip())
+        if enum_members:
+            entry["choices"] = enum_members
         tp = studio_params.get(cp["name"]) or studio_params.get(entry["name"])
         if tp:
             if "type" in tp:
@@ -692,6 +749,85 @@ def build_host_entry(tag, doxy_lines, sig, header_name, scope, all_tags=()):
     # callable as a CallExpr. Void hosts (no `returns=`) stay statement-
     # only; this is orthogonal to the C-level `returns` field above which
     # records the underlying C return type verbatim.
+    # `@studio control <cparam> label="…" tier=basic|advanced [default=<ENUM|n>]`
+    # marks an argument of THIS function as a user-facing setting. A control is
+    # always defined in terms of an exposed function — never a second API — so
+    # the block editor, the compiler's checks and Vibe all read one source.
+    #   tier=basic     worth surfacing for a plain ask ("read the IMU" → range)
+    #   tier=advanced  only when the user asks for it
+    controls = []
+    dsl_names = {cp["name"]: dp["name"] for cp, dp in zip(c_params, dsl_params)}
+    for verb, positional, attrs in all_tags:
+        if verb != "control" or not positional:
+            continue
+        if positional not in dsl_names and positional not in dsl_names.values():
+            print(
+                f"warn: {sig['name']}: @studio control {positional} doesn't match any parameter",
+                file=sys.stderr,
+            )
+            continue
+        pname = dsl_names.get(positional, positional)
+        tier = attrs.get("tier", "advanced")
+        if tier not in ("basic", "advanced"):
+            print(
+                f"warn: {sig['name']}: @studio control {positional} tier={tier!r} must be basic|advanced",
+                file=sys.stderr,
+            )
+            tier = "advanced"
+        control = {"param": pname, "label": attrs.get("label", pname), "tier": tier}
+        # scope=config (default): a pure setting — it has a value whether or not
+        #   the program sets it, so Studio may write the call itself.
+        # scope=usage: an argument of something the program DOES (a wait timeout, a
+        #   detection threshold) — only a setting once the program makes the call.
+        scope_attr = attrs.get("scope", "config")
+        if scope_attr not in ("config", "usage"):
+            VIBE_ERRORS.append(f"{sig['name']}: control {pname}: scope={scope_attr!r} must be config|usage")
+        control["scope"] = scope_attr
+        if attrs.get("type") == "bool":
+            control["type"] = "bool"
+        elif "type" in attrs:
+            VIBE_ERRORS.append(f"{sig['name']}: control {pname}: type={attrs['type']!r} — only type=bool exists")
+        if "role" in attrs:
+            if attrs["role"] != "sample_rate":
+                VIBE_ERRORS.append(f"{sig['name']}: control {pname}: role={attrs['role']!r} — only role=sample_rate exists")
+            control["role"] = attrs["role"]
+        # rate="<expr>": the sample rate in Hz this setting produces, when the argument
+        # is not an enum whose members carry it (`@studio value=`): a period
+        # (rate="1000 / period_ms"), a divider (rate="1125 / (1 + divider)").
+        if "rate" in attrs:
+            control["_rate_src"] = attrs["rate"]
+        if "allow" in attrs:
+            control["_allow_src"] = [a for a in attrs["allow"].split(",") if a]
+        if "show" in attrs:
+            control["_show_src"] = attrs["show"]
+            if "unit" in attrs:
+                control["show_unit"] = attrs["unit"]
+        if "default" in attrs:
+            raw = attrs["default"]
+            param_entry = next((dp for dp in dsl_params if dp["name"] == pname), {})
+            member = next(
+                (c for c in param_entry.get("choices", []) if c["name"] == raw), None
+            )
+            if member is not None:
+                control["default"] = member["value"]
+            else:
+                try:
+                    control["default"] = int(raw, 0)
+                except ValueError:
+                    print(
+                        f"warn: {sig['name']}: @studio control {positional} default={raw!r} is neither an enum member nor an integer",
+                        file=sys.stderr,
+                    )
+        controls.append(control)
+    if controls:
+        host["controls"] = controls
+    # `@studio require expr="…" [when="…"] message="…"` — a relation that must hold
+    # between this tile's settings. Parsed + resolved in resolve_vibe_settings().
+    requires = [
+        attrs for verb, _, attrs in all_tags if verb == "require"
+    ]
+    if requires:
+        host["_requires_src"] = requires
     if "returns" in tag:
         host["dsl_returns"] = tag["returns"]
     if "icon" in tag:
@@ -839,7 +975,105 @@ def parse_header(path, scope):
         # so the SDK reference page includes init / sos / etc. even though
         # they're not palette-exposed.
         docs.append(build_doc_entry(lines, sig, bool(expose), source, m.end()))
+    resolve_vibe_settings(hosts, path.name)
     return hosts, sections, docs, events
+
+
+def resolve_vibe_settings(hosts, where):
+    """Second pass over ONE tile's hosts: turn every Vibe Settings expression into
+    an AST, resolve names, and lint. Anything wrong is an authoring error that
+    fails the build (VIBE_ERRORS) — a bad rule must never reach a user."""
+    from studio_expr import ExprError, parse as parse_expr
+
+    by_fn = {h["qname"][-1]: h for h in hosts}
+
+    def resolver(this_fn):
+        def resolve_ref(name):
+            fn, _, arg = name.rpartition(".")
+            fn = fn or this_fn
+            host = by_fn.get(fn)
+            if host is None:
+                raise ExprError(f"no exposed function named {fn!r} on this tile")
+            if not any(p["name"] == arg for p in host["params"]):
+                raise ExprError(f"{fn} has no argument {arg!r}")
+            return f"{fn}.{arg}"
+
+        return resolve_ref
+
+    def compile_expr(text, this_fn, what):
+        try:
+            return parse_expr(text, resolver(this_fn), ENUM_CONSTANTS.get)
+        except ExprError as err:
+            VIBE_ERRORS.append(f"{where}: {this_fn}: {what} {text!r}: {err}")
+            return None
+
+    labels = {}
+    for host in hosts:
+        fn = host["qname"][-1]
+        for control in host.get("controls", []):
+            param = next(p for p in host["params"] if p["name"] == control["param"])
+            choices = param.get("choices") or []
+            tag = f"{where}: {fn}: control {control['param']}"
+            # one label, one setting
+            if control["label"] in labels:
+                VIBE_ERRORS.append(f"{tag}: label {control['label']!r} is already used by {labels[control['label']]}")
+            labels[control["label"]] = f"{fn}.{control['param']}"
+            # allow=<MEMBER,…>: the members THIS argument may take, when the enum type
+            # is shared (one power-mode enum, but only the gyro has Standby) or gives
+            # one register value two names. Studio offers exactly `choices`.
+            allow_src = control.pop("_allow_src", None)
+            offered = choices
+            if allow_src is not None:
+                for name in allow_src:
+                    if not any(c["name"] == name for c in choices):
+                        VIBE_ERRORS.append(f"{tag}: allow={name} is not a member of the argument's enum")
+                offered = [c for c in choices if c["name"] in allow_src]
+                control["choices"] = offered
+            values = [c["value"] for c in offered]
+            if len(values) != len(set(values)):
+                VIBE_ERRORS.append(f"{tag}: two offered enum members share a value — pick with allow=…")
+            if control.get("type") == "bool" and choices:
+                VIBE_ERRORS.append(f"{tag}: type=bool on an enum argument")
+            if "default" in control and offered and control["default"] not in values:
+                VIBE_ERRORS.append(f"{tag}: default is not one of the offered members")
+            # A config setting is in force even when the program never sets it, so
+            # Studio must know what it is. (A usage setting has no value until used.)
+            if control["scope"] == "config" and "default" not in control:
+                VIBE_ERRORS.append(f"{tag}: scope=config needs default=… (the power-on / init value, from the datasheet)")
+            if not choices and control.get("type") != "bool" and not param.get("range"):
+                VIBE_ERRORS.append(f"{tag}: a numeric setting needs `@param {control['param']} [min..max]` so Studio can bound it")
+            rate_src = control.pop("_rate_src", None)
+            if rate_src is not None:
+                if control.get("role") != "sample_rate":
+                    VIBE_ERRORS.append(f"{tag}: rate=… only means something with role=sample_rate")
+                ast = compile_expr(rate_src, fn, "rate")
+                if ast is not None:
+                    control["rate"] = ast
+            elif control.get("role") == "sample_rate":
+                # Without rate=, the rate IS the selected member's quantity — so every
+                # offered member must have one, or the rule silently never fires.
+                if not offered:
+                    VIBE_ERRORS.append(f'{tag}: role=sample_rate on a numeric argument needs rate="<expr in Hz>"')
+                elif any("quantity" not in c for c in offered):
+                    missing = ", ".join(c["name"] for c in offered if "quantity" not in c)
+                    VIBE_ERRORS.append(f"{tag}: role=sample_rate needs `@studio value=<Hz>` on every offered member (missing: {missing}) or rate=…")
+            show_src = control.pop("_show_src", None)
+            if show_src is not None:
+                ast = compile_expr(show_src, fn, "show")
+                if ast is not None:
+                    control["show"] = ast
+        rules = []
+        for attrs in host.pop("_requires_src", []):
+            if "expr" not in attrs or "message" not in attrs:
+                VIBE_ERRORS.append(f'{where}: {fn}: @studio require needs expr="…" and message="…"')
+                continue
+            rule = {"expr": compile_expr(attrs["expr"], fn, "require"), "message": attrs["message"]}
+            if "when" in attrs:
+                rule["when"] = compile_expr(attrs["when"], fn, "when")
+            if rule["expr"] is not None and rule.get("when", True) is not None:
+                rules.append(rule)
+        if rules:
+            host["requires"] = rules
 
 
 def parse_event_payload(spec):
@@ -1282,6 +1516,13 @@ def main():
         if bus_addrs:
             manifest["bus_addresses"] = bus_addrs
         targets.append((TILE_OUT_DIR / f"{t['path'].stem}.json", manifest))
+
+    if VIBE_ERRORS:
+        # Authoring errors in `@studio control` / `@studio require`. These never
+        # degrade to warnings: a rule Studio cannot trust is worse than no rule.
+        for err in VIBE_ERRORS:
+            print(f"error: vibe settings: {err}", file=sys.stderr)
+        sys.exit(1)
 
     if args.check:
         # The `source` sha tracks the commit, not the content: it legitimately

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@0ba8262",
+  "source": "tiles@ffdbe83",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -145,7 +145,19 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "25.5 mA (0) or 51 mA (1)"
+          "description": "25.5 mA (0) or 51 mA (1)",
+          "choices": [
+            {
+              "name": "DISP_RGBW_MAX_CURRENT_25_5_MA",
+              "value": 0,
+              "label": "25.5 mA full scale per channel"
+            },
+            {
+              "name": "DISP_RGBW_MAX_CURRENT_51_MA",
+              "value": 1,
+              "label": "51 mA full scale per channel"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -199,7 +211,29 @@
         {
           "name": "threshold",
           "type": "int",
-          "description": "One of DISP_RGBW_LSD_TH_*"
+          "description": "One of DISP_RGBW_LSD_TH_*",
+          "choices": [
+            {
+              "name": "DISP_RGBW_LSD_TH_0_35",
+              "value": 0,
+              "label": "0.35 × VOUT (most sensitive)"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_45",
+              "value": 1,
+              "label": "0.45 × VOUT"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_55",
+              "value": 2,
+              "label": "0.55 × VOUT"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_65",
+              "value": 3,
+              "label": "0.65 × VOUT (least sensitive — driver default)"
+            }
+          ]
         }
       ],
       "returns": "void",

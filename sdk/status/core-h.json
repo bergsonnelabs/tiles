@@ -28,12 +28,17 @@
     "i2c.fast": "compile",
     "i2c.fmp": "compile",
     "i2c.irq": "",
+    "i2c.target": {
+      "status": "partial",
+      "note": "I2C1 only. startup_stm32h523xx.s has no I2C2_ER or I2C3 vectors, and slot 58 marks I2C2 Error as shared with USART1."
+    },
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
     "spi.master": "compile",
     "timer.tick": "verified",
     "timer.pwm": "verified",
+    "timer.stepdir": "compile",
     "timer.capture": "verified",
     "timer.oneshot": "",
     "timer.encoder": "",
@@ -45,7 +50,12 @@
     "adc.res": "verified",
     "adc.oversamp": "verified",
     "adc.dma": "compile",
+    "adc.dma_mv": "compile",
     "adc.cont": "compile",
+    "adc.trigger": {
+      "status": "partial",
+      "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
+    },
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
@@ -93,6 +103,8 @@
     "ble.gatt": "na",
     "ble.notify": "na",
     "ble.pairing": "na",
-    "ble.central": "na"
+    "ble.central": "na",
+    "nvm.eeprom": "na",
+    "nvm.flash_emu": "none"
   }
 }

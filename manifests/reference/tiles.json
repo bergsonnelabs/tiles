@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@e3a9c64",
+  "source": "tiles@6897677",
   "tiles": [
     {
       "family": "Sense",
@@ -1754,20 +1754,6 @@
           "default": {
             "name": "VIN",
             "type": "power"
-          },
-          "alt": []
-        },
-        "4": {
-          "default": {
-            "name": "I2C.CLK",
-            "type": "interface"
-          },
-          "alt": []
-        },
-        "5": {
-          "default": {
-            "name": "I2C.DAT",
-            "type": "interface"
           },
           "alt": []
         },

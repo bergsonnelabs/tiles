@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@be0209a",
+  "source": "tiles@6897677",
   "tile": "Sense.TOF",
   "palette": {
     "label": "Sense.TOF",
@@ -352,7 +352,24 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "New distance mode."
+          "description": "New distance mode.",
+          "choices": [
+            {
+              "name": "SENSE_TOF_SHORT_RANGE",
+              "value": 0,
+              "label": "Short range, ~200 mm max, lowest power"
+            },
+            {
+              "name": "SENSE_TOF_RANGE_2500MM",
+              "value": 1,
+              "label": "Medium range up to 2500 mm (default)"
+            },
+            {
+              "name": "SENSE_TOF_RANGE_5000MM",
+              "value": 2,
+              "label": "Long range up to 5000 mm"
+            }
+          ]
         }
       ],
       "returns": "void",

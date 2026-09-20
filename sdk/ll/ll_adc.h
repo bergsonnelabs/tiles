@@ -79,6 +79,31 @@ typedef struct {
 #define LL_ADC_CFGR1_OVRMOD     (1UL << 12)   /* Overrun management */
 #define LL_ADC_CFGR1_DISCEN     (1UL << 16)   /* Discontinuous mode */
 
+/* ---- External trigger (CFGR1) ----
+ * EXTSEL selects one of the timer/EXTI trigger sources; the mapping is
+ * per family, so callers pass the encoded value. EXTSEL is 3 bits wide
+ * on the v3 ADC (L0, WBA ADC4) and 4 bits on L4/H5, where bit 9 is part
+ * of EXTSEL rather than ALIGN. Masking the wrong width on L0 would
+ * clobber ALIGN, hence the split. */
+#define LL_ADC_CFGR1_EXTSEL_SHIFT  6
+#if defined(STM32L011xx) || defined(STM32WBA55xx)
+  #define LL_ADC_CFGR1_EXTSEL_MASK 0x7UL
+#else
+  #define LL_ADC_CFGR1_EXTSEL_MASK 0xFUL
+#endif
+#define LL_ADC_CFGR1_EXTEN_SHIFT   10
+#define LL_ADC_CFGR1_EXTEN_MASK    0x3UL
+
+/* L0 (RM0377 Table 58) trigger sources, for EXTSEL. */
+#define LL_ADC_L0_TRG_TIM6_TRGO    0x0UL
+#define LL_ADC_L0_TRG_TIM21_CH2    0x1UL
+#define LL_ADC_L0_TRG_TIM2_TRGO    0x2UL
+#define LL_ADC_L0_TRG_TIM2_CH4     0x3UL
+#define LL_ADC_L0_TRG_TIM21_TRGO   0x4UL
+#define LL_ADC_L0_TRG_TIM2_CH3     0x5UL
+#define LL_ADC_L0_TRG_TIM3_TRGO    0x6UL
+#define LL_ADC_L0_TRG_EXTI11       0x7UL
+
 /* ---- Resolution values ---- */
 
 #define LL_ADC_RES_12BIT        0x0UL

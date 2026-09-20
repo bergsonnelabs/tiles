@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e1430b1",
+  "source": "tiles@6897677",
   "tile": "Drive.A.2",
   "palette": {
     "label": "Drive.A.2",
@@ -128,7 +128,39 @@
         {
           "name": "gain",
           "type": "int",
-          "description": "One of the drive_a_2_gain_t values"
+          "description": "One of the drive_a_2_gain_t values",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_GAIN_1X_EXT",
+              "value": 0,
+              "label": "1x, external VREF pin"
+            },
+            {
+              "name": "DRIVE_A_2_GAIN_1X_VDD",
+              "value": 1,
+              "label": "1x, VDD as reference (default)"
+            },
+            {
+              "name": "DRIVE_A_2_GAIN_1P5X_INT",
+              "value": 2,
+              "label": "1.5x, internal 1.21V → 0–1.815V"
+            },
+            {
+              "name": "DRIVE_A_2_GAIN_2X_INT",
+              "value": 3,
+              "label": "2x, internal 1.21V → 0–2.42V"
+            },
+            {
+              "name": "DRIVE_A_2_GAIN_3X_INT",
+              "value": 4,
+              "label": "3x, internal 1.21V → 0–3.63V"
+            },
+            {
+              "name": "DRIVE_A_2_GAIN_4X_INT",
+              "value": 5,
+              "label": "4x, internal 1.21V → 0–4.84V"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -152,7 +184,34 @@
         {
           "name": "wave",
           "type": "int",
-          "description": "Waveform shape"
+          "description": "Waveform shape",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_WAVE_TRIANGLE",
+              "value": 0,
+              "label": "Triangular wave"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_SAWTOOTH",
+              "value": 1,
+              "label": "Sawtooth (ramp up)"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_INV_SAW",
+              "value": 2,
+              "label": "Inverse sawtooth (ramp down)"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_SINE",
+              "value": 4,
+              "label": "Sine wave"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_OFF",
+              "value": 7,
+              "label": "Function generation disabled"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -214,7 +273,89 @@
         {
           "name": "slew",
           "type": "int",
-          "description": "Slew-rate code (drive_a_2_slew_t value 0–15)"
+          "description": "Slew-rate code (drive_a_2_slew_t value 0–15)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_SLEW_NONE",
+              "value": 0,
+              "label": "No slew (default) — immediate update"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_4_US",
+              "value": 1,
+              "label": "DRIVE_A_2_SLEW_4_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_8_US",
+              "value": 2,
+              "label": "DRIVE_A_2_SLEW_8_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_12_US",
+              "value": 3,
+              "label": "DRIVE_A_2_SLEW_12_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_18_US",
+              "value": 4,
+              "label": "DRIVE_A_2_SLEW_18_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_27_US",
+              "value": 5,
+              "label": "DRIVE_A_2_SLEW_27_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_41_US",
+              "value": 6,
+              "label": "DRIVE_A_2_SLEW_41_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_61_US",
+              "value": 7,
+              "label": "DRIVE_A_2_SLEW_61_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_91_US",
+              "value": 8,
+              "label": "DRIVE_A_2_SLEW_91_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_137_US",
+              "value": 9,
+              "label": "DRIVE_A_2_SLEW_137_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_239_US",
+              "value": 10,
+              "label": "DRIVE_A_2_SLEW_239_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_419_US",
+              "value": 11,
+              "label": "DRIVE_A_2_SLEW_419_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_733_US",
+              "value": 12,
+              "label": "DRIVE_A_2_SLEW_733_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_1282_US",
+              "value": 13,
+              "label": "DRIVE_A_2_SLEW_1282_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_2564_US",
+              "value": 14,
+              "label": "DRIVE_A_2_SLEW_2564_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_5128_US",
+              "value": 15,
+              "label": "DRIVE_A_2_SLEW_5128_US"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -238,7 +379,49 @@
         {
           "name": "step",
           "type": "int",
-          "description": "Code-step code (drive_a_2_step_t value 0–7)"
+          "description": "Code-step code (drive_a_2_step_t value 0–7)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_STEP_1_LSB",
+              "value": 0,
+              "label": "1 LSB per step (default — finest)"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_2_LSB",
+              "value": 1,
+              "label": "DRIVE_A_2_STEP_2_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_3_LSB",
+              "value": 2,
+              "label": "DRIVE_A_2_STEP_3_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_4_LSB",
+              "value": 3,
+              "label": "DRIVE_A_2_STEP_4_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_6_LSB",
+              "value": 4,
+              "label": "DRIVE_A_2_STEP_6_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_8_LSB",
+              "value": 5,
+              "label": "DRIVE_A_2_STEP_8_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_16_LSB",
+              "value": 6,
+              "label": "DRIVE_A_2_STEP_16_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_32_LSB",
+              "value": 7,
+              "label": "DRIVE_A_2_STEP_32_LSB"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -291,7 +474,29 @@
         {
           "name": "phase",
           "type": "int",
-          "description": "Phase offset (drive_a_2_phase_t)"
+          "description": "Phase offset (drive_a_2_phase_t)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_PHASE_0",
+              "value": 0,
+              "label": "0° (default)"
+            },
+            {
+              "name": "DRIVE_A_2_PHASE_120",
+              "value": 1,
+              "label": "120°"
+            },
+            {
+              "name": "DRIVE_A_2_PHASE_240",
+              "value": 2,
+              "label": "240°"
+            },
+            {
+              "name": "DRIVE_A_2_PHASE_90",
+              "value": 3,
+              "label": "90° (quadrature)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -315,17 +520,168 @@
         {
           "name": "wave",
           "type": "int",
-          "description": "Waveform shape (drive_a_2_wave_t)"
+          "description": "Waveform shape (drive_a_2_wave_t)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_WAVE_TRIANGLE",
+              "value": 0,
+              "label": "Triangular wave"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_SAWTOOTH",
+              "value": 1,
+              "label": "Sawtooth (ramp up)"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_INV_SAW",
+              "value": 2,
+              "label": "Inverse sawtooth (ramp down)"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_SINE",
+              "value": 4,
+              "label": "Sine wave"
+            },
+            {
+              "name": "DRIVE_A_2_WAVE_OFF",
+              "value": 7,
+              "label": "Function generation disabled"
+            }
+          ]
         },
         {
           "name": "step",
           "type": "int",
-          "description": "Code-step (drive_a_2_step_t)"
+          "description": "Code-step (drive_a_2_step_t)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_STEP_1_LSB",
+              "value": 0,
+              "label": "1 LSB per step (default — finest)"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_2_LSB",
+              "value": 1,
+              "label": "DRIVE_A_2_STEP_2_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_3_LSB",
+              "value": 2,
+              "label": "DRIVE_A_2_STEP_3_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_4_LSB",
+              "value": 3,
+              "label": "DRIVE_A_2_STEP_4_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_6_LSB",
+              "value": 4,
+              "label": "DRIVE_A_2_STEP_6_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_8_LSB",
+              "value": 5,
+              "label": "DRIVE_A_2_STEP_8_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_16_LSB",
+              "value": 6,
+              "label": "DRIVE_A_2_STEP_16_LSB"
+            },
+            {
+              "name": "DRIVE_A_2_STEP_32_LSB",
+              "value": 7,
+              "label": "DRIVE_A_2_STEP_32_LSB"
+            }
+          ]
         },
         {
           "name": "slew",
           "type": "int",
-          "description": "Time per step (drive_a_2_slew_t)"
+          "description": "Time per step (drive_a_2_slew_t)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_SLEW_NONE",
+              "value": 0,
+              "label": "No slew (default) — immediate update"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_4_US",
+              "value": 1,
+              "label": "DRIVE_A_2_SLEW_4_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_8_US",
+              "value": 2,
+              "label": "DRIVE_A_2_SLEW_8_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_12_US",
+              "value": 3,
+              "label": "DRIVE_A_2_SLEW_12_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_18_US",
+              "value": 4,
+              "label": "DRIVE_A_2_SLEW_18_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_27_US",
+              "value": 5,
+              "label": "DRIVE_A_2_SLEW_27_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_41_US",
+              "value": 6,
+              "label": "DRIVE_A_2_SLEW_41_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_61_US",
+              "value": 7,
+              "label": "DRIVE_A_2_SLEW_61_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_91_US",
+              "value": 8,
+              "label": "DRIVE_A_2_SLEW_91_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_137_US",
+              "value": 9,
+              "label": "DRIVE_A_2_SLEW_137_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_239_US",
+              "value": 10,
+              "label": "DRIVE_A_2_SLEW_239_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_419_US",
+              "value": 11,
+              "label": "DRIVE_A_2_SLEW_419_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_733_US",
+              "value": 12,
+              "label": "DRIVE_A_2_SLEW_733_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_1282_US",
+              "value": 13,
+              "label": "DRIVE_A_2_SLEW_1282_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_2564_US",
+              "value": 14,
+              "label": "DRIVE_A_2_SLEW_2564_US"
+            },
+            {
+              "name": "DRIVE_A_2_SLEW_5128_US",
+              "value": 15,
+              "label": "DRIVE_A_2_SLEW_5128_US"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -520,7 +876,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         },
         {
           "name": "freq_hz",
@@ -549,7 +922,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         },
         {
           "name": "ms",
@@ -573,7 +963,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         },
         {
           "name": "start_hz",
@@ -607,7 +1014,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         },
         {
           "name": "pct",
@@ -631,7 +1055,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         }
       ],
       "returns": "void",
@@ -650,7 +1091,24 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
+          "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)",
+          "choices": [
+            {
+              "name": "DRIVE_A_2_CH_LEFT",
+              "value": 0,
+              "label": "DAC0 / left amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_RIGHT",
+              "value": 1,
+              "label": "DAC1 / right amp logically"
+            },
+            {
+              "name": "DRIVE_A_2_CH_BOTH",
+              "value": 2,
+              "label": "Both DAC channels (amp writes still hit both)"
+            }
+          ]
         }
       ],
       "returns": "void",

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@555a591",
+  "source": "tiles@6897677",
   "tile": "Power.L.1N",
   "palette": {
     "label": "Power.L.1N",
@@ -254,7 +254,29 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "power_l_1n_led_mode_t."
+          "description": "power_l_1n_led_mode_t.",
+          "choices": [
+            {
+              "name": "NPM1300_LED_ERROR",
+              "value": 0,
+              "label": "auto: on for charger error"
+            },
+            {
+              "name": "NPM1300_LED_CHARGING",
+              "value": 1,
+              "label": "auto: on while charging"
+            },
+            {
+              "name": "NPM1300_LED_HOST",
+              "value": 2,
+              "label": "software-controlled via led_set()"
+            },
+            {
+              "name": "NPM1300_LED_NOTUSED",
+              "value": 3,
+              "label": "disabled"
+            }
+          ]
         }
       ],
       "returns": "void",

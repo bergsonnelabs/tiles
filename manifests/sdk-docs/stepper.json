@@ -1,0 +1,471 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@8e95159",
+  "category": "stepper",
+  "label": "Core.Stepper",
+  "icon": "⟳",
+  "header": "core_stepper.h",
+  "headers": {
+    "core": "core_stepper.h"
+  },
+  "functions": [
+    {
+      "name": "core_stepper_init",
+      "signature": "core_stepper_init(core_stepper_t * h, uint8_t step_pad, uint8_t dir_pad)",
+      "returns": "hal_status_t",
+      "brief": "Bind a stepper axis to a STEP pad (timer output) and a DIR pad. The timer and channel come from the pad's TIMx.y assignment in config.json, which is also what routes the pin to the timer. Loads conservative defaults: 1000 steps/s cruise, 100 steps/s start, 4000 steps/s^2 ramp, 8 us pulses. The timer is left stopped until a move. Do not share the timer with a PWM output — the module rewrites its period on every step.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle to initialise."
+        },
+        {
+          "name": "step_pad",
+          "ctype": "uint8_t",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Pad wired to the driver's STEP / PUL input; must carry a TIMx.y function."
+        },
+        {
+          "name": "dir_pad",
+          "ctype": "uint8_t",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Pad wired to the driver's DIR input."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_init_ch",
+      "signature": "core_stepper_init_ch(core_stepper_t * h, TIM_TypeDef * instance, uint8_t channel, uint8_t step_pad, uint8_t dir_pad)",
+      "returns": "hal_status_t",
+      "brief": "Bind an axis with an explicit timer instance and channel (no coregen lookup). The caller must have configured the STEP pad's alternate function for that channel. Everything else as core_stepper_init().",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle to initialise."
+        },
+        {
+          "name": "instance",
+          "ctype": "TIM_TypeDef *",
+          "description": "Timer instance, e.g. TIM2."
+        },
+        {
+          "name": "channel",
+          "ctype": "uint8_t",
+          "range": [
+            1,
+            4
+          ],
+          "description": "Output channel wired to the STEP pad."
+        },
+        {
+          "name": "step_pad",
+          "ctype": "uint8_t",
+          "range": [
+            1,
+            64
+          ],
+          "description": "STEP pad (recorded only; its AF is the caller's job)."
+        },
+        {
+          "name": "dir_pad",
+          "ctype": "uint8_t",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Pad wired to the driver's DIR input."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_enable_pad",
+      "signature": "core_stepper_set_enable_pad(core_stepper_t * h, uint8_t en_pad, bool active_low)",
+      "returns": "void",
+      "brief": "Add an ENABLE output. The pad is driven to its disabled level immediately; call core_stepper_enable() to power the driver. Pass pad 0 to remove it.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "en_pad",
+          "ctype": "uint8_t",
+          "range": [
+            0,
+            64
+          ],
+          "description": "Pad wired to the driver's ENA input (0 = none)."
+        },
+        {
+          "name": "active_low",
+          "ctype": "bool",
+          "description": "true if the driver enables on a LOW level."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_enable",
+      "signature": "core_stepper_enable(core_stepper_t * h, bool on)",
+      "returns": "void",
+      "brief": "Drive the ENABLE pad. No effect without core_stepper_set_enable_pad(). Motion is not interlocked: halt before disabling if you care where the rotor ends up.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "on",
+          "ctype": "bool",
+          "description": "true to enable the driver."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_polarity",
+      "signature": "core_stepper_set_polarity(core_stepper_t * h, bool step_active_low, bool dir_invert)",
+      "returns": "void",
+      "brief": "Set signal polarities. Call while idle.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "step_active_low",
+          "ctype": "bool",
+          "description": "true if the driver steps on the FALLING edge (STEP idles high)."
+        },
+        {
+          "name": "dir_invert",
+          "ctype": "bool",
+          "description": "true to swap which DIR level counts as positive."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_pulse_us",
+      "signature": "core_stepper_set_pulse_us(core_stepper_t * h, uint32_t pulse_us)",
+      "returns": "void",
+      "brief": "Set the STEP pulse width; the low time between pulses is kept at least as long, which also bounds DIR setup. 8 us (default) satisfies the DM320T's 7.5 us; a DRV8428 is happy with 1 us. The maximum step rate is 1 / (2 * pulse_us).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "pulse_us",
+          "ctype": "uint32_t",
+          "range": [
+            1,
+            1000
+          ],
+          "unit": "us",
+          "description": "Pulse width."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_speed",
+      "signature": "core_stepper_set_speed(core_stepper_t * h, uint32_t steps_per_s)",
+      "returns": "void",
+      "brief": "Set the cruise rate for position moves and the cap for run(). Takes effect at the next step; a move in flight ramps to the new value.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps_per_s",
+          "ctype": "uint32_t",
+          "range": [
+            1,
+            500000
+          ],
+          "unit": "hz",
+          "description": "Microsteps per second."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_accel",
+      "signature": "core_stepper_set_accel(core_stepper_t * h, uint32_t steps_per_s2)",
+      "returns": "void",
+      "brief": "Set the acceleration used for every ramp, or 0 to switch instantly between the start rate and full speed (fine for small, unloaded motors at low rates; expect stalls otherwise).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps_per_s2",
+          "ctype": "uint32_t",
+          "range": [
+            0,
+            1000000
+          ],
+          "description": "Microsteps per second per second."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_min_speed",
+      "signature": "core_stepper_set_min_speed(core_stepper_t * h, uint32_t steps_per_s)",
+      "returns": "void",
+      "brief": "Set the rate a ramp starts from and stops at. Steppers can start instantly at a few hundred full steps per second; starting from a crawl only wastes time. Clamped to at least 1 (16 on a 16-bit timer).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps_per_s",
+          "ctype": "uint32_t",
+          "range": [
+            1,
+            500000
+          ],
+          "unit": "hz",
+          "description": "Start / stop rate."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_move",
+      "signature": "core_stepper_move(core_stepper_t * h, int32_t steps)",
+      "returns": "void",
+      "brief": "Move a signed number of microsteps relative to the current target (so two quick calls of +160 travel 320). Retargets a move in flight; a reversal decelerates to the start rate before flipping DIR.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps",
+          "ctype": "int32_t",
+          "description": "Microsteps, negative for the reverse direction."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_move_to",
+      "signature": "core_stepper_move_to(core_stepper_t * h, int32_t position)",
+      "returns": "void",
+      "brief": "Move to an absolute microstep position.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "position",
+          "ctype": "int32_t",
+          "description": "Target position."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_run",
+      "signature": "core_stepper_run(core_stepper_t * h, int32_t steps_per_s)",
+      "returns": "void",
+      "brief": "Run continuously at a signed rate, ramping from the current speed. Rate 0 decelerates to a stop (same as core_stepper_stop()). The magnitude is capped at the cruise rate from core_stepper_set_speed().",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps_per_s",
+          "ctype": "int32_t",
+          "description": "Signed microsteps per second."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_stop",
+      "signature": "core_stepper_stop(core_stepper_t * h)",
+      "returns": "void",
+      "brief": "Decelerate to a stop using the configured acceleration. Position continues to count during the ramp. Idempotent.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_halt",
+      "signature": "core_stepper_halt(core_stepper_t * h)",
+      "returns": "void",
+      "brief": "Stop instantly: timer off, STEP forced to idle. A pulse whose rising edge the driver has already seen is counted. A loaded motor at speed will lose steps; the position counter reflects the pulses sent.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_busy",
+      "signature": "core_stepper_busy(const core_stepper_t * h)",
+      "returns": "bool",
+      "brief": "true while pulses are being generated (including a ramp to zero).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_state",
+      "signature": "core_stepper_state(const core_stepper_t * h)",
+      "returns": "core_stepper_state_t",
+      "brief": "Current motion state.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_position",
+      "signature": "core_stepper_position(const core_stepper_t * h)",
+      "returns": "int32_t",
+      "brief": "Current signed microstep position (pulses actually issued).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_set_position",
+      "signature": "core_stepper_set_position(core_stepper_t * h, int32_t position)",
+      "returns": "void",
+      "brief": "Redefine the current position without moving (homing). Only while idle; the target follows so the next move() is relative to it.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "position",
+          "ctype": "int32_t",
+          "description": "New value for the current position."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_target",
+      "signature": "core_stepper_target(const core_stepper_t * h)",
+      "returns": "int32_t",
+      "brief": "Target position of the current or last move.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_speed",
+      "signature": "core_stepper_speed(const core_stepper_t * h)",
+      "returns": "int32_t",
+      "brief": "Current signed step rate.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_stepper_stop_distance",
+      "signature": "core_stepper_stop_distance(const core_stepper_t * h, uint32_t steps_per_s)",
+      "returns": "uint32_t",
+      "brief": "Microsteps needed to decelerate from `steps_per_s` to the start rate at the configured acceleration. Useful for planning where a run() will stop, e.g. to land on a pocket boundary.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "const core_stepper_t *",
+          "description": "Axis handle."
+        },
+        {
+          "name": "steps_per_s",
+          "ctype": "uint32_t",
+          "description": "Rate to stop from."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    }
+  ]
+}

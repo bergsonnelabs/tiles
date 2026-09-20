@@ -253,6 +253,7 @@ The `core_` layer provides platform-agnostic naming for application code. It is 
 | `core_watchdog.h` | `core_watchdog_start(ms)`, `core_watchdog_feed()`, `core_watchdog_caused_reset()` |
 | `core_usb.h` | `core_usb_init()`, `core_usb_write()`, `core_usb_printf`, includes `<stdio.h>` |
 | `core_timing.h` | `core_delay_ms/us()`, `core_millis()`, `core_timeout()` |
+| `core_stepper.h` | STEP/DIR pulse generator for external stepper drivers: `core_stepper_init(&s, step_pad, dir_pad)` (STEP pad declared as `TIMx.y` in config.json; the pulse comes from that timer channel, one ISR per step), `set_speed/accel/min_speed()`, `move/move_to/run/stop/halt()`, `busy/position()`. Trapezoidal ramps, 1 us resolution. Backed by `core_stepper.c` (compiled per project like `core_led.c`). |
 
 **Timer init has two variants:**
 - `core_timer_init_freq(&t, TIM2, 1000)` — overflow at 1 kHz (for PWM, periodic tick)
@@ -405,6 +406,70 @@ void tile_sense_i_9_get_raw_accels(tile_t *tile, int16_t accel[3]);
 - `instance` selects the I2C address variant (0 = primary address, 1 = alternate, etc.)
 - For SPI tiles, `instance` is per-CS-line (each CS = one device = one instance)
 - Drivers access hardware only through `tiles_pal_t` function pointers — never directly
+
+### Vibe Settings (`@studio control` / `@studio require`)
+
+Studio's Vibe interface lets someone who has never read a datasheet change a tile's
+settings, from the tile inspector and from the plain-language story. **The driver
+header is the only place those settings are defined.** Nothing is hand-curated in
+Studio, and nothing is a second API: a setting is always an argument of a function
+that is already `@studio expose`d. Reference driver: `drivers/tile_sense_i_6p6.h`.
+
+```c
+/**
+ * @brief  Set accelerometer output data rate.
+ * @studio expose category=tile name=set_accel_odr section=runtime
+ * @studio control odr label="Accel data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate
+ * @studio require expr="value(odr) >= 12.5" when="set_power_mode.accel == SENSE_I_6P6_MODE_LN" message="Below 12.5 Hz the accelerometer only runs in low-power mode. ..."
+ */
+```
+
+`@studio control <arg> label="…" tier=basic|advanced …`
+
+| Attribute | Meaning |
+|---|---|
+| `label` | What a person calls it. Unique per tile. |
+| `tier` | `basic` = shown by default and always surfaced in the story; `advanced` = behind the inspector's Advanced toggle. |
+| `default` | The value in force when the program never sets it: the driver's init value, else the chip's reset value **from the datasheet**. An enum member name or an integer. **Required** for `scope=config`. |
+| `scope` | `config` (default): a pure setting, so Studio may write the call itself. `usage`: an argument of something the program *does* (a wait timeout, a detection threshold) and only a setting once the program makes that call. |
+| `type=bool` | A 0/1 argument shown as on/off. |
+| `allow=A,B,…` | The enum members THIS argument may take, when an enum type is shared between arguments or gives one register value two names. |
+| `role=sample_rate` | This setting is the rate at which the part produces data. Studio never lets a program read or stream faster than it. The rate is the selected enum member's `@studio value=` (in Hz), so every offered member needs one, unless `rate=` is given. |
+| `rate="<expr>"` | With `role=sample_rate`: the rate in Hz as an expression, for arguments that are not a rate enum. A period: `rate="1000 / period_ms"`. A divider: `rate="1125 / (1 + divider)"`. Required when the argument is numeric. |
+| `show="<expr>" unit=Hz` | What the value *means*, computed for the reader (a filter setting shown as its bandwidth in Hz rather than "ODR/16"). |
+
+Numeric settings take their bounds from `@param <arg> [min..max] unit`, which is
+required. Enum settings take their options and labels from the enum's member doc
+comments; add `@studio value=<number>` to a member's comment to give it a physical
+quantity (`/**< 100 Hz @studio value=100 */`).
+
+`@studio require expr="…" [when="…"] message="…"` states a relation between settings.
+`when` makes it conditional. `message` is shown to the user verbatim when a change
+would break the rule, so write it as advice: say what to change first.
+
+**Expressions are a strict language, not interpreted strings** (`tools/studio_expr.py`).
+The generator parses them into a JSON AST, resolves every name, and fails the build on
+anything it cannot resolve. Studio only ever evaluates the AST.
+
+- Operands: numbers, enum member names, `arg` (an argument of this function),
+  `function.arg` (another exposed function on this tile).
+- A bare reference is the raw register value; `value(ref)` is the selected member's
+  `@studio value=` quantity.
+- Operators: `+ - * /`, `< <= > >= == !=`, `&& || !`, `a ? b : c`, parentheses,
+  `min(...)`, `max(...)`.
+
+The generator refuses to build (exit 1, `error: vibe settings: …`) when: a name or
+member does not resolve, a `scope=config` control has no default, a numeric control
+has no `[min..max]`, a default is not an offered member, two offered members share a
+register value, or two settings share a label. Treat these as compile errors.
+
+Read the datasheet for every default and every rule (`~/Documents/local/tile references/<Stem>/`).
+The 6P6 sweep found the header's own filter-bandwidth comments were wrong
+(`max(400 Hz, ODR)/N`, not `ODR/N`).
+
+The same annotations feed three places, all generated: `manifests/tile_<driver>.json`
+(Studio), `manifests/tile-docs/<driver>.json` (`vibe_settings` + `vibe_rules`, the
+"Vibe Settings" table on the docs site), and Studio's assistant briefing.
 
 ### Using Tile Drivers in User Code
 

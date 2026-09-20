@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@daabfda",
+  "source": "tiles@8e95159",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -65,6 +65,10 @@
     "spi": {
       "label": "Core.SPI",
       "icon": "⇆"
+    },
+    "stepper": {
+      "label": "Core.Stepper",
+      "icon": "⟳"
     },
     "timer": {
       "label": "Core.Timer",

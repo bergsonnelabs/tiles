@@ -113,7 +113,18 @@ static inline void hal_nvic_disable_irq(uint32_t irqn)
 
 static inline void hal_nvic_set_priority(uint32_t irqn, uint8_t priority)
 {
-    ((volatile uint8_t *)0xE000E400UL)[irqn] = priority << 4;
+#if defined(__ARM_ARCH_6M__)
+    /* ARMv6-M (Cortex-M0+, i.e. Core.ST.L0): NVIC_IPR is word-accessible
+     * only, so the byte write used below is architecturally undefined and
+     * can be dropped silently. Read-modify-write the containing word,
+     * which is what CMSIS does for __CORTEX_M < 3. */
+    volatile uint32_t *ipr = &((volatile uint32_t *)0xE000E400UL)[irqn >> 2];
+    uint32_t shift = (irqn & 3UL) * 8UL;
+    uint32_t val   = ((uint32_t)priority << 4) & 0xFFUL;
+    *ipr = (*ipr & ~(0xFFUL << shift)) | (val << shift);
+#else
+    ((volatile uint8_t *)0xE000E400UL)[irqn] = (uint8_t)(priority << 4);
+#endif
 }
 
 static inline void hal_nvic_clear_pending(uint32_t irqn)

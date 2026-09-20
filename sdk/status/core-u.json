@@ -28,6 +28,7 @@
     "i2c.fast": "verified",
     "i2c.fmp": "compile",
     "i2c.irq": "",
+    "i2c.target": "compile",
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
@@ -41,6 +42,7 @@
       "status": "verified",
       "note": "TIM15 PWM → EXTI loopback verified on Core.ST.L4.2 (projects/timers-pwmg_u2)"
     },
+    "timer.stepdir": { "status": "verified", "note": "DM320T + NEMA 11 over STEP/DIR at 3.3 V, 8 us pulses (projects/RealReeler, 2026-09-08)" },
     "timer.capture": {
       "status": "verified",
       "note": "TIM2 32-bit capture measuring TIM15 PWM period — 499995 us @ 2 Hz (projects/timers-pwmg_u2)"
@@ -58,7 +60,12 @@
     "adc.res": "verified",
     "adc.oversamp": "verified",
     "adc.dma": "verified",
+    "adc.dma_mv": "compile",
     "adc.cont": "verified",
+    "adc.trigger": {
+      "status": "partial",
+      "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
+    },
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
@@ -127,6 +134,8 @@
     "ble.gatt": "na",
     "ble.notify": "na",
     "ble.pairing": "na",
-    "ble.central": "na"
+    "ble.central": "na",
+    "nvm.eeprom": "na",
+    "nvm.flash_emu": "none"
   }
 }

@@ -189,6 +189,53 @@ static inline uint16_t core_adc_dma_read(core_adc_t *adc, uint8_t pad)
     return tal_adc_dma_read_pad(adc, pad);
 }
 
+/** Read most recent DMA result for a pad, in calibrated millivolts.
+ *  Prime VDDA before starting DMA (call core_adc_vdd(adc) once),
+ *  since measuring VREFINT needs the regular sequence that DMA owns. */
+static inline uint32_t core_adc_dma_read_mv(core_adc_t *adc, uint8_t pad)
+{
+    return tal_adc_dma_read_pad_mv(adc, pad);
+}
+
+/** Convert a raw count from a DMA buffer to millivolts. */
+static inline uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw)
+{
+    return hal_adc_raw_to_mv(adc, raw);
+}
+
+/* ---- External trigger ---- */
+
+#define ADC_TRIG_NONE     HAL_ADC_TRIG_NONE
+#define ADC_TRIG_RISING   HAL_ADC_TRIG_RISING
+#define ADC_TRIG_FALLING  HAL_ADC_TRIG_FALLING
+#define ADC_TRIG_BOTH     HAL_ADC_TRIG_BOTH
+
+/**
+ * Pace DMA conversions from a hardware trigger instead of free-running.
+ * Call before core_adc_start_dma. See hal_adc_set_trigger for why this
+ * matters to any slow output rate: it is what makes a DMA ring span the
+ * whole output period, turning the average into a real anti-alias filter
+ * instead of a burst average.
+ *
+ *   core_timer_init_freq(&t, TIM2, 800);
+ *   core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE);
+ *   core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, ADC_TRIG_RISING);
+ *   core_adc_start_dma(adc, buf, len, 0, 0);
+ *   core_timer_start(&t);
+ */
+static inline hal_status_t core_adc_set_trigger(core_adc_t *adc,
+                                                uint8_t extsel, uint32_t edge)
+{
+    return hal_adc_set_trigger(adc, extsel, (hal_adc_trig_edge_t)edge);
+}
+
+/** Buffer slot a pad occupies in one DMA scan (-1 if not registered).
+ *  Use the stride when the buffer holds several scans for averaging. */
+static inline int core_adc_dma_slot(core_adc_t *adc, uint8_t pad)
+{
+    return tal_adc_dma_slot(adc, pad);
+}
+
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
 // @studio unsupported tier=2 value=L title="Twin VDD / die-temp are constants"
@@ -215,9 +262,11 @@ static inline uint16_t core_adc_dma_read(core_adc_t *adc, uint8_t pad)
 //   convenience wrapper — callers reach into tal_adc / hal_adc to set
 //   OVSR/OVSS bits manually.
 //
-// @studio unsupported tier=1 value=L title="No external-trigger / injected channels"
-//   ADC injected groups + external triggers (TIMx TRGO, EXTI line)
-//   are not surfaced. Bring-your-own register writes if you need a
-//   timer-synchronized analog sample for control loops.
+// @studio unsupported tier=1 value=L title="No injected channels"
+//   Regular-group external triggers ARE supported: core_adc_set_trigger()
+//   paces DMA conversions from a TIMx TRGO or EXTI line. Injected groups
+//   (a second, higher-priority conversion sequence that preempts the
+//   regular one) are not surfaced. Bring-your-own register writes if you
+//   need a preempting sample inside a control loop.
 
 #endif /* CORE_ADC_H */
