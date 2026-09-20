@@ -103,7 +103,7 @@ hal_status_t hal_exti_enable(uint8_t pad, uint32_t edge,
 
     /* Enable NVIC */
     uint32_t irqn = _exti_irqn(line);
-    hal_nvic_set_priority(irqn, 0x40);
+    hal_nvic_set_priority(irqn, 4);   /* raw NVIC 0x40 (the helper shifts <<4) */
     hal_nvic_enable_irq(irqn);
 
     return HAL_OK;
