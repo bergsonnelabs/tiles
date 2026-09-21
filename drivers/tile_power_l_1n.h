@@ -108,6 +108,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* ── VBUS input (VBUSIN, base 0x02) ────────────────────────────────────────── */
 #define NPM1300_REG_TASKUPDATEILIMSW    0x0200  /**< Write 1: VBUSINILIM0 takes effect */
 #define NPM1300_REG_VBUSINILIM0         0x0201  /**< Input limit, code = mA / 100 (1-15) */
+#define NPM1300_REG_VBUSINILIMSTARTUP   0x0202  /**< Limit VBUS re-plug falls back to, same code */
 
 /* ── charger (BCHARGER, base 0x03) ─────────────────────────────────────────── */
 #define NPM1300_REG_BCHGENABLESET       0x0304
@@ -171,11 +172,15 @@ typedef enum {
     NPM1300_LED_NOTUSED  = 3,  /**< disabled                          */
 } power_l_1n_led_mode_t;
 
-/** Optional init config (pass NULL for defaults: 100 mA, 4.20 V, charging on). */
+/** Optional init config (pass NULL for defaults: 500 mA USB input limit, 100 mA
+ *  charge, 4.20 V, charging on). New fields go at the END, so an existing
+ *  initialiser keeps meaning what it meant. */
 typedef struct {
     uint16_t charge_current_ma;  /**< 32-800 mA. 0 = default (100 mA).     */
     uint16_t term_mv;            /**< 3500-4450 mV. 0 = default (4200 mV). */
     uint8_t  enable_charging;    /**< 0 = leave charging off, 1 = enable.  */
+    uint16_t vbus_limit_ma;      /**< 100-1500 mA. 0 = default (500 mA). Use 100
+                                  *   for a source that has not granted more. */
 } power_l_1n_cfg_t;
 
 /**
@@ -217,20 +222,27 @@ void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on);
 /**
  * @brief  Set the VBUS (USB) input current limit.
  *
- * The nPM1300 starts with a 100 mA input limit, and returns to it on every
- * reset and every time VBUS is removed — so call this at start-up, and again
- * after a re-plug. The limit caps what is drawn from USB for the system AND
- * the charger together. It does not regulate VSYS: asking for more than the
- * limit gives makes the battery supplement the load, or, with no battery,
- * sags VSYS (measured: a 100 mA charge on the default limit took VSYS from
- * 5.15 V to ~3.65 V) until the rails brown out.
+ * The nPM1300 powers up with a 100 mA input limit; init() raises it to 500 mA
+ * (what any USB port gives) unless the config says otherwise. The limit caps
+ * what is drawn from USB for the system AND the charger together. It does not
+ * regulate VSYS: with a battery attached, asking for more than the limit gives
+ * cuts the charge back and lets VSYS fall to just above the battery voltage
+ * (measured: a 100 mA charge on the 100 mA limit took VSYS from 5.15 V to
+ * ~3.65 V; both bucks held, but with only ~350 mV of headroom on 3.3 V, which a
+ * load with a start-up surge can dip). With no battery, VSYS simply sags.
+ *
+ * The chip falls back to its START-UP limit whenever VBUS is removed, which
+ * matters for exactly the system that charges: one with a battery keeps running
+ * through an unplug, and would otherwise be back at 100 mA on re-plug. So this
+ * writes the start-up limit too, and the value holds until the chip is RESET
+ * (when it returns to 100 mA, and init() sets it again).
  *
  * Settable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step
  * (never more than asked) and clamped to that range. 100 and 500 mA are the
  * USB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.
  *
  * @studio expose category=tile name=set_vbus_limit_ma section=config
- * @studio control ma label="USB input limit" tier=basic default=100
+ * @studio control ma label="USB input limit" tier=basic default=500
  * @param  ma  [100..1500] mA Input current limit, in milliamps.
  */
 void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma);

@@ -118,16 +118,24 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * out-of-range thermistor reading. */
     pmic_write(tile, NPM1300_REG_ADCNTCRSEL, 0x00);
 
-    /* Charger configuration — defaults: 100 mA, 4.20 V, charging enabled. */
+    /* Defaults: 500 mA USB input limit, 100 mA charge, 4.20 V, charging on. */
+    uint16_t vbus_ma   = 500;
     uint16_t charge_ma = 100;
     uint16_t term_mv   = 4200;
     uint8_t  enable    = 1;
     if (cfg != NULL) {
+        if (cfg->vbus_limit_ma != 0)     vbus_ma   = cfg->vbus_limit_ma;
         if (cfg->charge_current_ma != 0) charge_ma = cfg->charge_current_ma;
         if (cfg->term_mv != 0)           term_mv   = cfg->term_mv;
         enable = cfg->enable_charging ? 1 : 0;
     }
 
+    /* The input limit FIRST, before the charger is enabled. The part powers up
+     * at 100 mA, and a 100 mA charge on a 100 mA limit takes the whole USB
+     * allowance: VSYS then falls to just above the battery (5.15 V -> ~3.65 V
+     * measured) and the 3.3 V rail is left ~350 mV of headroom. 500 mA is what
+     * any USB port gives; a design that must stay at 100 sets vbus_limit_ma. */
+    tile_power_l_1n_set_vbus_limit_ma(tile, vbus_ma);
     tile_power_l_1n_set_charge_current_ma(tile, charge_ma);
     tile_power_l_1n_set_term_mv(tile, term_mv);
     tile_power_l_1n_charger_enable(tile, enable);
@@ -156,7 +164,13 @@ void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma)
      * (datasheet 6.1.1, 6.1.8). */
     if (ma < 100)  ma = 100;
     if (ma > 1500) ma = 1500;
-    pmic_write(tile, NPM1300_REG_VBUSINILIM0, (uint8_t)(ma / 100));
+    uint8_t code = (uint8_t)(ma / 100);
+    /* The start-up limit is what the part falls back to when VBUS is removed
+     * ("Vbus removal results in switch back to vbusinIlimStartup"). A system
+     * with a battery stays up through an unplug, so without this it would be
+     * back at 100 mA on re-plug — the system that charges is the one it bites. */
+    pmic_write(tile, NPM1300_REG_VBUSINILIMSTARTUP, code);
+    pmic_write(tile, NPM1300_REG_VBUSINILIM0, code);
     pmic_write(tile, NPM1300_REG_TASKUPDATEILIMSW, 0x01);
 }
 

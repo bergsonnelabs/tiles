@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@c1ea12a",
+  "source": "tiles@afd63a3",
   "tile": "Power.L.1N",
   "palette": {
     "label": "Power.L.1N",
@@ -73,7 +73,7 @@
           "label": "USB input limit",
           "tier": "basic",
           "scope": "config",
-          "default": 100
+          "default": 500
         }
       ],
       "receiver": "tile_t*"
