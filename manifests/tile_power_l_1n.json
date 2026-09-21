@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@c1ea12a",
   "tile": "Power.L.1N",
   "palette": {
     "label": "Power.L.1N",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_power_l_1n",
     "header": "tile_power_l_1n.h",
-    "version": "1.0.1"
+    "version": "1.1.0"
   },
   "handle": {
     "type": "tile_t",
@@ -33,6 +33,49 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "on",
+          "label": "Charge the battery",
+          "tier": "basic",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_vbus_limit_ma"
+      ],
+      "symbol": "tile_power_l_1n_set_vbus_limit_ma",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set the VBUS (USB) input current limit.",
+      "params": [
+        {
+          "name": "ma",
+          "type": "int",
+          "range": [
+            100,
+            1500
+          ],
+          "unit": "mA",
+          "description": "Input current limit, in milliamps."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "USB input limit",
+          "tier": "basic",
+          "scope": "config",
+          "default": 100
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -52,10 +95,20 @@
             32,
             800
           ],
+          "unit": "mA",
           "description": "Charge current in milliamps."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Charge current",
+          "tier": "basic",
+          "scope": "config",
+          "default": 100
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -71,10 +124,26 @@
         {
           "name": "mv",
           "type": "int",
+          "range": [
+            3500,
+            4450
+          ],
+          "unit": "mV",
           "description": "Termination voltage in millivolts (e.g. 4200)."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mv",
+          "label": "Charge to",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 4200
+        }
+      ],
       "receiver": "tile_t*"
     },
     {

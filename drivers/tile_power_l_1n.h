@@ -79,16 +79,12 @@
  *   Driver-deferred. Power-fail early-warning (via GPIO) and buck
  *   retention-voltage / forced-PWM modes aren't exposed yet.
  *
- * @studio unsupported severity=advanced category="VBUS input current limit (ILIM)"
- *   Driver-deferred. The nPM1300 boots with a 100 mA VBUS input limit, and
- *   VBUSINILIM0 (VBUSIN base 0x0200, offset 0x1) plus the TASKUPDATEILIMSW
- *   commit are not exposed, so it cannot be raised for a 500 mA USB or a
- *   1500 mA USB-C supply. This is not cosmetic: measured on the bench,
- *   enabling a 100 mA charge collapsed VSYS from 5.15 V to ~3.65 V as input
- *   current hit the limit (datasheet Fig. 6). Both bucks stayed in
- *   regulation — VSYSMIN is 2.7 V — but headroom on a 3.3 V VOUT2 drops to
- *   ~350 mV, and a load with a startup surge can brown the rail out
- *   entirely (see the Sense.CAM.P bring-up).
+ * @studio unsupported severity=advanced category="USB-C source detection (CC1 / CC2)"
+ *   Driver-deferred. The nPM1300 reports what the attached source can supply
+ *   (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to
+ *   pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore
+ *   takes the caller's word for what the source can give: 500 mA is safe for
+ *   any USB port, more is only safe for a supply known to deliver it.
  */
 
 #ifndef INC_TILE_POWER_L_1N_H_
@@ -102,12 +98,16 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_POWER_L_1N_VERSION_MAJOR  1
-#define TILE_POWER_L_1N_VERSION_MINOR  0
-#define TILE_POWER_L_1N_VERSION_PATCH  1
+#define TILE_POWER_L_1N_VERSION_MINOR  1
+#define TILE_POWER_L_1N_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
 #define NPM1300_I2C_ADDR                0x6B
+
+/* ── VBUS input (VBUSIN, base 0x02) ────────────────────────────────────────── */
+#define NPM1300_REG_TASKUPDATEILIMSW    0x0200  /**< Write 1: VBUSINILIM0 takes effect */
+#define NPM1300_REG_VBUSINILIM0         0x0201  /**< Input limit, code = mA / 100 (1-15) */
 
 /* ── charger (BCHARGER, base 0x03) ─────────────────────────────────────────── */
 #define NPM1300_REG_BCHGENABLESET       0x0304
@@ -209,9 +209,31 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
 /**
  * @brief  Enable or disable battery charging.
  * @studio expose category=tile name=charger_enable section=config
+ * @studio control on label="Charge the battery" tier=basic type=bool default=1
  * @param  on  1 = enable charging, 0 = disable.
  */
 void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on);
+
+/**
+ * @brief  Set the VBUS (USB) input current limit.
+ *
+ * The nPM1300 starts with a 100 mA input limit, and returns to it on every
+ * reset and every time VBUS is removed — so call this at start-up, and again
+ * after a re-plug. The limit caps what is drawn from USB for the system AND
+ * the charger together. It does not regulate VSYS: asking for more than the
+ * limit gives makes the battery supplement the load, or, with no battery,
+ * sags VSYS (measured: a 100 mA charge on the default limit took VSYS from
+ * 5.15 V to ~3.65 V) until the rails brown out.
+ *
+ * Settable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step
+ * (never more than asked) and clamped to that range. 100 and 500 mA are the
+ * USB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.
+ *
+ * @studio expose category=tile name=set_vbus_limit_ma section=config
+ * @studio control ma label="USB input limit" tier=basic default=100
+ * @param  ma  [100..1500] mA Input current limit, in milliamps.
+ */
+void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma);
 
 /**
  * @brief  Set the constant-current charge level.
@@ -219,7 +241,8 @@ void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on);
  * Programmable 32-800 mA in 2 mA steps; out-of-range values clamp.
  *
  * @studio expose category=tile name=set_charge_current_ma section=config
- * @param  ma  [32..800] Charge current in milliamps.
+ * @studio control ma label="Charge current" tier=basic default=100
+ * @param  ma  [32..800] mA Charge current in milliamps.
  */
 void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma);
 
@@ -230,7 +253,8 @@ void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma);
  * gap is not supported and clamps to 3.65 V.
  *
  * @studio expose category=tile name=set_term_mv section=config
- * @param  mv  Termination voltage in millivolts (e.g. 4200).
+ * @studio control mv label="Charge to" tier=advanced default=4200 scale=0.001 unit=V
+ * @param  mv  [3500..4450] mV Termination voltage in millivolts (e.g. 4200).
  */
 void tile_power_l_1n_set_term_mv(tile_t* tile, uint16_t mv);
 

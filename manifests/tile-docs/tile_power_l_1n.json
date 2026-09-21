@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@555a591",
+  "source": "tiles@c1ea12a",
   "file": "tile_power_l_1n.h",
   "brief": "Power.L.1N tile driver — Nordic nPM1300 PMIC.",
-  "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nDriver mode assignment made by init():\n  LED0 → HOST mode     (firmware \"ready\"/status)\n  LED1 → CHARGING mode (auto, on while charging)\n  LED2 → ERROR mode    (auto, on for charger faults)\n\n@warning The LED index → colour mapping is taken from the schematic and is\nNOT verified on hardware. All three LEDDRV channels are confirmed working\n(bench, 2026-08-10), but the only tile available was misstuffed with three\nidentical red parts, so colour could not be checked. The BOM refdes order\n(U3 red, U4 orange, U5 green) runs opposite to the LED0/1/2 order assumed\nhere. This matters: init() puts ERROR on LED2, so if LED2 is in fact the\ngreen part, a charger fault lights GREEN. Verify against a correctly\nstuffed tile before relying on colour to convey meaning.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship/hibernate modes\n  (battery disconnect for storage). Not yet exposed — the ship-mode task\n  register address needs datasheet confirmation before wiring.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.\n\n@studio unsupported severity=advanced category=\"VBUS input current limit (ILIM)\"\n  Driver-deferred. The nPM1300 boots with a 100 mA VBUS input limit, and\n  VBUSINILIM0 (VBUSIN base 0x0200, offset 0x1) plus the TASKUPDATEILIMSW\n  commit are not exposed, so it cannot be raised for a 500 mA USB or a\n  1500 mA USB-C supply. This is not cosmetic: measured on the bench,\n  enabling a 100 mA charge collapsed VSYS from 5.15 V to ~3.65 V as input\n  current hit the limit (datasheet Fig. 6). Both bucks stayed in\n  regulation — VSYSMIN is 2.7 V — but headroom on a 3.3 V VOUT2 drops to\n  ~350 mV, and a load with a startup surge can brown the rail out\n  entirely (see the Sense.CAM.P bring-up).",
+  "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nDriver mode assignment made by init():\n  LED0 → HOST mode     (firmware \"ready\"/status)\n  LED1 → CHARGING mode (auto, on while charging)\n  LED2 → ERROR mode    (auto, on for charger faults)\n\n@warning The LED index → colour mapping is taken from the schematic and is\nNOT verified on hardware. All three LEDDRV channels are confirmed working\n(bench, 2026-08-10), but the only tile available was misstuffed with three\nidentical red parts, so colour could not be checked. The BOM refdes order\n(U3 red, U4 orange, U5 green) runs opposite to the LED0/1/2 order assumed\nhere. This matters: init() puts ERROR on LED2, so if LED2 is in fact the\ngreen part, a charger fault lights GREEN. Verify against a correctly\nstuffed tile before relying on colour to convey meaning.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship/hibernate modes\n  (battery disconnect for storage). Not yet exposed — the ship-mode task\n  register address needs datasheet confirmation before wiring.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.\n\n@studio unsupported severity=advanced category=\"USB-C source detection (CC1 / CC2)\"\n  Driver-deferred. The nPM1300 reports what the attached source can supply\n  (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to\n  pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore\n  takes the caller's word for what the source can give: 500 mA is safe for\n  any USB port, more is only safe for a supply known to deliver it.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -47,8 +47,8 @@
     },
     {
       "severity": "advanced",
-      "category": "VBUS input current limit (ILIM)",
-      "brief": "Driver-deferred. The nPM1300 boots with a 100 mA VBUS input limit, and VBUSINILIM0 (VBUSIN base 0x0200, offset 0x1) plus the TASKUPDATEILIMSW commit are not exposed, so it cannot be raised for a 500 mA USB or a 1500 mA USB-C supply. This is not cosmetic: measured on the bench, enabling a 100 mA charge collapsed VSYS from 5.15 V to ~3.65 V as input current hit the limit (datasheet Fig. 6). Both bucks stayed in regulation — VSYSMIN is 2.7 V — but headroom on a 3.3 V VOUT2 drops to ~350 mV, and a load with a startup surge can brown the rail out entirely (see the Sense.CAM.P bring-up)."
+      "category": "USB-C source detection (CC1 / CC2)",
+      "brief": "Driver-deferred. The nPM1300 reports what the attached source can supply (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore takes the caller's word for what the source can give: 500 mA is safe for any USB port, more is only safe for a supply known to deliver it."
     }
   ],
   "defines": [
@@ -60,13 +60,13 @@
     },
     {
       "name": "TILE_POWER_L_1N_VERSION_MINOR",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_POWER_L_1N_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -190,11 +190,26 @@
       "name": "tile_power_l_1n_charger_enable"
     },
     {
+      "signature": "void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma)",
+      "params": [
+        {
+          "name": "ma",
+          "description": "[100..1500] mA Input current limit, in milliamps."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the VBUS (USB) input current limit.",
+      "description": "The nPM1300 starts with a 100 mA input limit, and returns to it on every\nreset and every time VBUS is removed — so call this at start-up, and again\nafter a re-plug. The limit caps what is drawn from USB for the system AND\nthe charger together. It does not regulate VSYS: asking for more than the\nlimit gives makes the battery supplement the load, or, with no battery,\nsags VSYS (measured: a 100 mA charge on the default limit took VSYS from\n5.15 V to ~3.65 V) until the rails brown out.\n\nSettable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step\n(never more than asked) and clamped to that range. 100 and 500 mA are the\nUSB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.",
+      "name": "tile_power_l_1n_set_vbus_limit_ma"
+    },
+    {
       "signature": "void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma)",
       "params": [
         {
           "name": "ma",
-          "description": "[32..800] Charge current in milliamps."
+          "description": "[32..800] mA Charge current in milliamps."
         }
       ],
       "notes": [],
@@ -209,7 +224,7 @@
       "params": [
         {
           "name": "mv",
-          "description": "Termination voltage in millivolts (e.g. 4200)."
+          "description": "[3500..4450] mV Termination voltage in millivolts (e.g. 4200)."
         }
       ],
       "notes": [],
@@ -396,8 +411,61 @@
     }
   ],
   "source_file": "tile_power_l_1n.h",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "tile_family": "Power",
   "tile_name": "L.1N",
-  "display_name": "Power.L.1N"
+  "display_name": "Power.L.1N",
+  "vibe_settings": [
+    {
+      "label": "Charge the battery",
+      "tier": "basic",
+      "scope": "config",
+      "function": "charger_enable",
+      "param": "on",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "USB input limit",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_vbus_limit_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        100,
+        1500
+      ],
+      "unit": "mA",
+      "default": 100
+    },
+    {
+      "label": "Charge current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_charge_current_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        32,
+        800
+      ],
+      "unit": "mA",
+      "default": 100
+    },
+    {
+      "label": "Charge to",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_term_mv",
+      "param": "mv",
+      "kind": "number",
+      "range": [
+        3.5,
+        4.45
+      ],
+      "unit": "V",
+      "default": 4200
+    }
+  ]
 }

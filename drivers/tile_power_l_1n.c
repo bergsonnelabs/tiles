@@ -146,6 +146,20 @@ void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on)
     else    pmic_write(tile, NPM1300_REG_BCHGENABLECLR, 0x01);
 }
 
+void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma)
+{
+    /* VBUSINILIM0 holds the limit as a 4-bit code = mA / 100, 1 (100 mA) to
+     * 15 (1500 mA); code 0 is a second spelling of 500 mA, never written here.
+     * Integer division rounds DOWN, so the limit is never more than asked.
+     * The new value only takes effect when TASKUPDATEILIMSW is written, and
+     * the part falls back to its start-up limit (100 mA) when VBUS is removed
+     * (datasheet 6.1.1, 6.1.8). */
+    if (ma < 100)  ma = 100;
+    if (ma > 1500) ma = 1500;
+    pmic_write(tile, NPM1300_REG_VBUSINILIM0, (uint8_t)(ma / 100));
+    pmic_write(tile, NPM1300_REG_TASKUPDATEILIMSW, 0x01);
+}
+
 void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma)
 {
     /* nPM1300 charge current is programmable 32-800 mA in 2 mA steps.
