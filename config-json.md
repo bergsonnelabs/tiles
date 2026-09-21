@@ -437,44 +437,54 @@ Studio do.
 
 ```json
 "probe": {
-  "target_power": "3v3",
-  "target_logic": "3v3"
+  "target_power": "5v"
 }
 ```
 
 | Field          | Values                     | Meaning |
 |----------------|----------------------------|---------|
-| `target_power` | `off` `1v8` `3v3` `5v`     | What the probe puts on T.V+. Default `off`. |
-| `target_logic` | `1v8` `3v3`                | The level the board runs its IO at. **Required** whenever `target_power` is not `off`. |
+| `target_power` | `off` `5v`                 | What the probe puts on T.V+. Default `off`. Current boards supply only 5 V (see below). |
+| `target_logic` | —                          | **Ignored.** The logic level is sensed, not declared. Older projects may still carry it; the tooling says so and it is safe to delete. |
 
-**Why both, and why neither is inferred.** Supplying the wrong voltage is
-destructive — 5 V into a 1V8 part kills it — so nothing guesses. And the two
-are independent: a board with an onboard regulator fed 5 V still runs 3V3
-logic, so the supply does not tell you the logic level. A probe-powered board
-must state both.
+**Why the supply is declared.** Supplying the wrong voltage is destructive, and
+nothing the probe can measure on an unpowered board tells it what that board
+wants. So a person says, and the tooling refuses rather than guessing.
+
+**Why the logic level is not.** Once the board is up, the probe reads it
+directly: the sense taps the target's own SWDIO pull-up, so it reports the rail
+the board actually runs its IO at, not what was fed in. A board fed 5 V that
+regulates to 1.8 V senses as 1.8 V. The probe's firmware does this itself and
+sets its level shifter from the reading. **The shifter is never set before the
+target has been sensed**, which is why declaring a level would be worse than
+useless: it could only ever override a measurement.
 
 **Why it lives in the project.** It is a property of *the board*, so it belongs
 with the project rather than being remembered per probe or per session: a probe
-setting outlives the board it was chosen for, and a stale `5v` meeting a 1V8
-target is exactly the destructive case. Here it travels with the project and
-shows up in a diff.
+setting outlives the board it was chosen for, and a stale supply meeting the
+wrong board is exactly the destructive case. Here it travels with the project
+and shows up in a diff.
 
 **Omitting it means self-powered**, which is what a project that never thought
 about this means. The probe then supplies nothing and senses the board's logic
 level from its SWDIO pull-up.
 
 **A board that already has its own rail is never fed**, whatever this says. The
-probe's three supply switches share one node and the hardware has no contention
-protection, so the tooling senses first and declines to supply a live board.
+tooling senses first and declines to supply a live board.
 
 ```sh
 make flash-coreprobe    # applies the declaration, then flashes via probe-rs
 make probe-power-check  # says what it WOULD do, drives nothing
 ```
 
-`5v` is currently **refused** by both Studio and the SDK tooling: it back-feeds
-the probe's own 3V3 rail through the load switch, measured at 4.4 V on the
-shifter supply and on the target's SWDIO. Pending a hardware fix.
+**Current boards supply only 5 V.** Every CoreProbe has been reworked to two
+modes, self-powered or 5 V, by removing the 3.3 V and 1.8 V load switches: with
+all three fitted, selecting 5 V back-fed the probe's own rails to about 4.4 V
+through the disabled switches. `1v8` and `3v3` are refused until rev b refits
+them. A 5 V target is expected to regulate its own logic rail.
+
+A probe that has **not** been reworked must not be given 5 V, and nothing in
+software can tell the two apart. It is not caught after supplying either: such a
+probe senses about 1.45 V, which reads as a valid 1V8 target.
 
 ---
 
