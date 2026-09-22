@@ -79,6 +79,10 @@ static uint32_t _ble_seq_count;
 /* User's service builder function */
 static void (*_services_builder)(void);
 
+/* Extra builders from SDK modules (core_ble_add_services) */
+#define CORE_BLE_EXTRA_BUILDERS 2
+static void (*_extra_builders[CORE_BLE_EXTRA_BUILDERS])(void);
+
 /* TX power codes: 0=low, 1=medium, 2=high */
 static const uint8_t _tx_power_codes[] = { 0x00, 0x19, 0x1F };
 
@@ -90,6 +94,9 @@ static void _register_services(void)
      * encrypted link so the host actually bonds (see ble_svc_set_secure). */
     ble_svc_set_secure(ble_app_pairing_enabled);
     if (_services_builder) _services_builder();
+    for (int i = 0; i < CORE_BLE_EXTRA_BUILDERS; i++) {
+        if (_extra_builders[i]) _extra_builders[i]();
+    }
 }
 
 /* ============================================================
@@ -99,6 +106,19 @@ static void _register_services(void)
 void core_ble_set_services(void (*builder)(void))
 {
     _services_builder = builder;
+}
+
+int core_ble_add_services(void (*builder)(void))
+{
+    if (_ble_initialized || !builder) return -1;
+    for (int i = 0; i < CORE_BLE_EXTRA_BUILDERS; i++) {
+        if (_extra_builders[i] == builder) return 0;
+        if (!_extra_builders[i]) {
+            _extra_builders[i] = builder;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 void core_ble_init(void)

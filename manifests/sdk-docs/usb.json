@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@5d70049",
+  "source": "tiles@452b1b1",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
@@ -33,6 +33,24 @@
       "signature": "core_usb_write(const uint8_t * buf, uint16_t len)",
       "returns": "int",
       "brief": "Transmit data (blocking). Returns bytes sent, or -1 if not configured.",
+      "params": [
+        {
+          "name": "buf",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_usb_try_write",
+      "signature": "core_usb_try_write(const uint8_t * buf, uint16_t len)",
+      "returns": "int",
+      "brief": "Transmit without waiting: queues the whole buffer or none of it. Returns len if queued, 0 if there is no room right now (offer it again later), -1 if no terminal is connected. Main loop only.",
       "params": [
         {
           "name": "buf",

@@ -654,6 +654,15 @@ static void _handle_setup(void)
  * USB reset handler
  * ============================================================ */
 
+/* TX queue for hal_usb_cdc_try_write() — see the TX section below. */
+static uint8_t           _txq[HAL_USB_CDC_TX_QUEUE_SIZE];
+static volatile uint16_t _txq_head;   /* written by try_write (main) */
+static volatile uint16_t _txq_tail;   /* written by _txq_send_next   */
+/* Set by the first try_write. The ISR chains through this pointer rather than
+ * calling _txq_send_next directly, so a project that never uses try_write
+ * links neither it nor the queue buffer (--gc-sections). */
+static void (*volatile _txq_chain)(void);
+
 static void _handle_reset(void)
 {
     /* Configure EP0 (control) */
@@ -673,6 +682,7 @@ static void _handle_reset(void)
     _cdc.configured = 0;
     _cdc.dtr = 0;
     _cdc.tx_busy = 0;
+    _txq_tail = _txq_head;          /* drop anything queued for the old session */
     _cdc.ep0_state = EP0_IDLE;
 
     /* Enable interrupts: CTR + RESET + SUSPEND + WAKEUP */
@@ -780,6 +790,7 @@ static void _handle_ctr(void)
         if (ep1r & USB_EP_CTR_TX) {
             ll_usb_ep_clr_ctr_tx(1);
             _cdc.tx_busy = 0;
+            if (_txq_chain) _txq_chain();
         }
     }
 
@@ -915,14 +926,68 @@ void hal_usb_cdc_set_rx_callback(hal_usb_cdc_rx_cb_t cb, void *ctx)
 
 /* ---- TX ---- */
 
+/* ---- TX queue (non-blocking writes) ----
+ *
+ * hal_usb_cdc_try_write() queues a buffer all-or-nothing and returns; the
+ * TX-complete interrupt drains the queue a packet at a time. The blocking
+ * write path does not use the queue, but it waits for the queue to empty
+ * first — so bytes reach the host in call order, and a queued buffer (a
+ * Scope frame) is never split by print text. With nothing queued the
+ * blocking path behaves exactly as it did before the queue existed. */
+
+/* Send the next queued packet if the endpoint is idle. Runs in the USB
+ * interrupt, and from try_write with interrupts masked. Packets are capped
+ * one byte short of full: a transfer ending on a full 64-byte packet is not
+ * complete until a ZLP follows, and some hosts hold the data until then. */
+static void _txq_send_next(void)
+{
+    if (_cdc.tx_busy) return;
+    uint16_t n = (uint16_t)(_txq_head - _txq_tail);
+    if (n == 0) return;
+    if (n > EP1_MAX_PACKET - 1) n = EP1_MAX_PACKET - 1;
+
+    uint8_t pkt[EP1_MAX_PACKET];
+    for (uint16_t i = 0; i < n; i++) {
+        pkt[i] = _txq[(uint16_t)(_txq_tail + i) & (HAL_USB_CDC_TX_QUEUE_SIZE - 1)];
+    }
+    _txq_tail = (uint16_t)(_txq_tail + n);
+
+    ll_usb_pma_write(PMA_EP1_TX, pkt, n);
+    ll_usb_bdt_set_tx_count(1, n);
+    _cdc.tx_busy = 1;
+    ll_usb_ep_set_stat_tx(1, USB_EP_STAT_VALID);
+}
+
+int hal_usb_cdc_try_write(const uint8_t *buf, uint16_t len)
+{
+    if (!_cdc.configured || !_cdc.dtr) return -1;
+    if (len == 0) return 0;
+
+    uint16_t used = (uint16_t)(_txq_head - _txq_tail);
+    if (len > (uint16_t)(HAL_USB_CDC_TX_QUEUE_SIZE - used)) return 0;
+
+    uint16_t head = _txq_head;
+    for (uint16_t i = 0; i < len; i++) {
+        _txq[(uint16_t)(head + i) & (HAL_USB_CDC_TX_QUEUE_SIZE - 1)] = buf[i];
+    }
+    _txq_head = (uint16_t)(head + len);
+    _txq_chain = _txq_send_next;
+
+    uint32_t irq = ll_irq_save();
+    _txq_send_next();
+    ll_irq_restore(irq);
+    return (int)len;
+}
+
 int hal_usb_cdc_write(const uint8_t *buf, uint16_t len)
 {
     if (!_cdc.configured || !_cdc.dtr) return -1;
 
     uint16_t sent = 0;
     while (sent < len) {
-        /* Wait for previous TX to complete, bail if host disconnects */
-        while (_cdc.tx_busy) {
+        /* Wait for previous TX to complete (and for anything queued by
+         * try_write to go out first), bail if host disconnects */
+        while (_cdc.tx_busy || _txq_head != _txq_tail) {
             if (!_cdc.dtr) return (int)sent;
         }
 
@@ -1561,6 +1626,15 @@ static void _handle_setup(void)
  * USB reset handler
  * ============================================================ */
 
+/* TX queue for hal_usb_cdc_try_write() — see the TX section below. */
+static uint8_t           _txq[HAL_USB_CDC_TX_QUEUE_SIZE];
+static volatile uint16_t _txq_head;   /* written by try_write (main) */
+static volatile uint16_t _txq_tail;   /* written by _txq_send_next   */
+/* Set by the first try_write. The ISR chains through this pointer rather than
+ * calling _txq_send_next directly, so a project that never uses try_write
+ * links neither it nor the queue buffer (--gc-sections). */
+static void (*volatile _txq_chain)(void);
+
 static void _handle_reset(void)
 {
     /* Configure EP0 (control) */
@@ -1578,6 +1652,7 @@ static void _handle_reset(void)
     _cdc.configured = 0;
     _cdc.dtr = 0;
     _cdc.tx_busy = 0;
+    _txq_tail = _txq_head;          /* drop anything queued for the old session */
     _cdc.ep0_state = EP0_IDLE;
 
     /* Enable interrupts: CTR + RESET + SUSPEND + WAKEUP */
@@ -1678,6 +1753,7 @@ static void _handle_ctr(void)
         if (chep1 & USB_CHEP_VTTX) {
             ll_usb_drd_chep_clr_vttx(1);
             _cdc.tx_busy = 0;
+            if (_txq_chain) _txq_chain();
         }
     }
 
@@ -1835,13 +1911,67 @@ void hal_usb_cdc_set_rx_callback(hal_usb_cdc_rx_cb_t cb, void *ctx)
     _cdc.rx_cb_ctx = ctx;
 }
 
+/* ---- TX queue (non-blocking writes) ----
+ *
+ * hal_usb_cdc_try_write() queues a buffer all-or-nothing and returns; the
+ * TX-complete interrupt drains the queue a packet at a time. The blocking
+ * write path does not use the queue, but it waits for the queue to empty
+ * first — so bytes reach the host in call order, and a queued buffer (a
+ * Scope frame) is never split by print text. With nothing queued the
+ * blocking path behaves exactly as it did before the queue existed. */
+
+/* Send the next queued packet if the endpoint is idle. Runs in the USB
+ * interrupt, and from try_write with interrupts masked. Packets are capped
+ * one byte short of full: a transfer ending on a full 64-byte packet is not
+ * complete until a ZLP follows, and some hosts hold the data until then. */
+static void _txq_send_next(void)
+{
+    if (_cdc.tx_busy) return;
+    uint16_t n = (uint16_t)(_txq_head - _txq_tail);
+    if (n == 0) return;
+    if (n > EP1_MAX_PACKET - 1) n = EP1_MAX_PACKET - 1;
+
+    uint8_t pkt[EP1_MAX_PACKET];
+    for (uint16_t i = 0; i < n; i++) {
+        pkt[i] = _txq[(uint16_t)(_txq_tail + i) & (HAL_USB_CDC_TX_QUEUE_SIZE - 1)];
+    }
+    _txq_tail = (uint16_t)(_txq_tail + n);
+
+    ll_usb_drd_pma_write(PMA_EP1_TX, pkt, n);
+    ll_usb_drd_bdt_set_tx_count(1, n);
+    _cdc.tx_busy = 1;
+    ll_usb_drd_chep_set_stat_tx(1, USB_CHEP_STAT_VALID);
+}
+
+int hal_usb_cdc_try_write(const uint8_t *buf, uint16_t len)
+{
+    if (!_cdc.configured || !_cdc.dtr) return -1;
+    if (len == 0) return 0;
+
+    uint16_t used = (uint16_t)(_txq_head - _txq_tail);
+    if (len > (uint16_t)(HAL_USB_CDC_TX_QUEUE_SIZE - used)) return 0;
+
+    uint16_t head = _txq_head;
+    for (uint16_t i = 0; i < len; i++) {
+        _txq[(uint16_t)(head + i) & (HAL_USB_CDC_TX_QUEUE_SIZE - 1)] = buf[i];
+    }
+    _txq_head = (uint16_t)(head + len);
+    _txq_chain = _txq_send_next;
+
+    uint32_t irq = ll_irq_save();
+    _txq_send_next();
+    ll_irq_restore(irq);
+    return (int)len;
+}
+
 int hal_usb_cdc_write(const uint8_t *buf, uint16_t len)
 {
     if (!_cdc.configured || !_cdc.dtr) return -1;
 
     uint16_t sent = 0;
     while (sent < len) {
-        while (_cdc.tx_busy) {
+        /* Anything queued by try_write goes out first. */
+        while (_cdc.tx_busy || _txq_head != _txq_tail) {
             if (!_cdc.dtr) return (int)sent;
         }
 

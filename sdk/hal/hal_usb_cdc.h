@@ -21,6 +21,10 @@
  * Configuration
  * ============================================================ */
 
+#ifndef HAL_USB_CDC_TX_QUEUE_SIZE
+  #define HAL_USB_CDC_TX_QUEUE_SIZE 512   /* Must be power of 2; try_write only */
+#endif
+
 #ifndef HAL_USB_CDC_RX_BUF_SIZE
   #define HAL_USB_CDC_RX_BUF_SIZE   256   /* Must be power of 2 */
 #endif
@@ -81,6 +85,17 @@ int hal_usb_cdc_connected(void);
  * Returns number of bytes sent, or -1 if not configured.
  */
 int hal_usb_cdc_write(const uint8_t *buf, uint16_t len);
+
+/**
+ * Transmit without waiting (non-blocking).
+ * Queues the WHOLE buffer or none of it and returns at once; the USB
+ * interrupt sends it. Returns `len` if queued, 0 if the queue has no room
+ * right now (offer it again later), -1 if not configured / no terminal.
+ * A queued buffer reaches the host contiguously and in call order relative
+ * to hal_usb_cdc_write(), which waits for the queue to empty before sending.
+ * Call from one context only (the main loop). len <= HAL_USB_CDC_TX_QUEUE_SIZE.
+ */
+int hal_usb_cdc_try_write(const uint8_t *buf, uint16_t len);
 
 /**
  * Printf over USB CDC (blocking).

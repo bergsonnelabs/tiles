@@ -56,6 +56,14 @@ static inline int core_usb_write(const uint8_t *buf, uint16_t len)
     return hal_usb_cdc_write(buf, len);
 }
 
+/** Transmit without waiting: queues the whole buffer or none of it.
+ * Returns len if queued, 0 if there is no room right now (offer it again
+ * later), -1 if no terminal is connected. Main loop only. */
+static inline int core_usb_try_write(const uint8_t *buf, uint16_t len)
+{
+    return hal_usb_cdc_try_write(buf, len);
+}
+
 /** Printf over USB CDC (blocking). */
 #define core_usb_printf  hal_usb_cdc_printf
 
