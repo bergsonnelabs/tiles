@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@5149237",
+  "source": "tiles@452b1b1",
   "category": "ble",
   "label": "Core.BLE",
   "icon": "ᛒ",
@@ -14,6 +14,15 @@
       "signature": "core_ble_set_services(void)",
       "returns": "void",
       "brief": "Register a service builder function. Called before core_ble_init(). The builder is invoked during init after the GATT server is ready.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_ble_add_services",
+      "signature": "core_ble_add_services(void)",
+      "returns": "int",
+      "brief": "Register an ADDITIONAL service builder, run after the application's own. For SDK modules that bring a GATT service of their own (core_scope's Studio Link) without taking over core_ble_set_services(), which the application — or coregen's generated contract — owns. Call before core_ble_init(). Registering the same builder twice is harmless. Returns 0, or -1 if the slots are full or the stack has already started.",
       "params": [],
       "studio_exposed": false,
       "layer": "core"

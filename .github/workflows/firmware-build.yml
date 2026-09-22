@@ -19,6 +19,10 @@ on:
       - 'tools/coregen/**'
       - 'tools/test_ble_contract.py'
       - 'tests/val-watchdog/**'
+      - 'tests/val-scope/**'
+      - 'tools/test_core_scope*'
+      - 'tools/scope_decode.py'
+      - 'docs/scope-protocol.md'
       - 'tests/ble-*/**'
       - 'tests/val-ble*/**'
       - 'tests/val-guard-ble/**'
@@ -53,6 +57,15 @@ jobs:
       # for the hal_dfu.h break described above.
       - name: val-watchdog (${{ matrix.core }})
         run: make -C tests/val-watchdog TILE=${{ matrix.core }}
+
+      # The Scope picks its link per Core at compile time (USB / none here;
+      # Bluetooth is built in the ble job), so it has to build on all of them,
+      # and again compiled out.
+      - name: val-scope (${{ matrix.core }})
+        run: |
+          make -C tests/val-scope TILE=${{ matrix.core }}
+          make -C tests/val-scope clean
+          make -C tests/val-scope TILE=${{ matrix.core }} SCOPE_ENABLED=0
 
       # The starter templates are what a new user's first build actually runs.
       - name: starter template (${{ matrix.core }})
@@ -92,11 +105,17 @@ jobs:
       - name: BLE contract binding tests
         run: python3 tools/test_ble_contract.py
 
+      # core_scope compiled with the host cc against a scripted link, checked
+      # by the reference decoder: framing, every type, drops, BLE batching, and
+      # the example frames printed in docs/scope-protocol.md.
+      - name: Scope protocol tests
+        run: python3 tools/test_core_scope.py
+
       # These take BLE_ENABLED from their config.json "ble" block, so they also
       # exercise the config-driven path Studio and the build service rely on.
       - name: Build the BLE projects
         run: |
-          for p in ble-test ble-missing ble-beacon ble-contract val-ble val-ble-temp; do
+          for p in ble-test ble-missing ble-beacon ble-contract val-ble val-ble-temp val-ble-scope; do
             echo "::group::$p"
             make -C "tests/$p"
             echo "::endgroup::"

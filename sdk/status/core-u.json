@@ -116,6 +116,8 @@
     "security.pka": "na",
     "security.hash": "na",
     "conn.usb_cdc": "verified",
+    "conn.scope_usb": "compile",
+    "conn.scope_ble": "na",
     "conn.usb_hid": "compile",
     "conn.usb_msc": "",
     "conn.dfu": "verified",
