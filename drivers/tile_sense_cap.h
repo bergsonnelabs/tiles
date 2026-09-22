@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_cap.h
  * @brief  Capacitive trackpad driver for the Sense.CAP tile (IQS7211A).
- * @version 0.3.1
+ * @version 0.4.0
  *
  * Azoteq IQS7211A mutual-capacitance trackpad controller: up to 2-finger
  * absolute XY tracking, relative XY, per-channel touch status, built-in
@@ -153,8 +153,8 @@
  * ================================================================ */
 
 #define TILE_SENSE_CAP_VERSION_MAJOR  0
-#define TILE_SENSE_CAP_VERSION_MINOR  3
-#define TILE_SENSE_CAP_VERSION_PATCH  1
+#define TILE_SENSE_CAP_VERSION_MINOR  4
+#define TILE_SENSE_CAP_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -1073,6 +1073,25 @@ uint16_t tile_sense_cap_get_channel_delta(tile_t *tile, uint8_t channel);
 uint8_t tile_sense_cap_is_alp_active(tile_t *tile);
 
 /**
+ * @brief  Read every channel's count and delta in two bus transactions.
+ *
+ * get_channel_count() / get_channel_delta() each open their own
+ * communication window, so a per-channel sweep of a 6-channel surface
+ * costs twelve window waits (~10 ms each at the fastest report rate).
+ * This reads the count block and the delta block as two auto-incrementing
+ * bursts: two windows for the whole surface. Use it for any live view.
+ *
+ * @studio expose category=tile name=read_channels returns=bool section=runtime
+ * @param  tile    Tile handle
+ * @param  counts  Out: `n` counts, or NULL to skip
+ * @param  deltas  Out: `n` deltas (signed, cast to int16_t), or NULL to skip
+ * @param  n       Channels to read, 1-32
+ * @return 1 if every requested block came back valid, 0 otherwise.
+ */
+uint8_t tile_sense_cap_read_channels(tile_t *tile, uint16_t *counts,
+                                     uint16_t *deltas, uint8_t n);
+
+/**
  * @brief  Read the raw ALP channel count.
  * @studio expose category=tile name=get_alp_count returns=int section=runtime
  * @param  tile  Tile handle
@@ -1157,13 +1176,42 @@ void tile_sense_cap_set_swipe_timing(tile_t *tile, uint16_t swipe_ms,
 void tile_sense_cap_set_report_rate(tile_t *tile, uint8_t mode, uint16_t ms);
 
 /**
+ * @brief  Bound how long a polled read can block.
+ *
+ * Without a RDY line the host cannot know when a communication window is
+ * open, so every polled read clock-stretches until the part's NEXT report
+ * cycle. That is ~10 ms in Active but grows with each power mode, to
+ * ~160 ms in LP2 — measured on hardware as a 130 ms stall per process()
+ * call once an untouched surface had drifted down to LP2. A host with
+ * anything else to do (a radio, audio DMA, other tiles on the bus) cannot
+ * afford that.
+ *
+ * This sets one report period for every mode, LP2 included, so a read
+ * blocks for at most `ms` whatever mode the part is in. The cost is
+ * power: the low-power modes stop saving anything, because their saving
+ * IS the slow cycle. Use it while polling responsively and restore the
+ * per-mode rates (set_report_rate) when idle — or fit RDY and use event
+ * mode, which needs neither.
+ *
+ * The host's I2C timeout must exceed `ms`, or the stretch is cut short
+ * and the read fails into the driver's window-request retries (8 x 16 ms).
+ *
+ * @studio expose category=tile name=set_poll_latency returns=bool section=config
+ * @param  tile  Tile handle
+ * @param  ms    Report period for all modes, in ms (minimum 5)
+ * @return 1 if every mode's rate verified, 0 otherwise.
+ */
+uint8_t tile_sense_cap_set_poll_latency(tile_t *tile, uint16_t ms);
+
+/**
  * @brief  Set the inactivity timeout that drops the device to the next mode.
  * @studio expose category=tile name=set_mode_timeout section=config
  * @param  tile     Tile handle
  * @param  mode     Mode to set the timeout for (Active, Idle-Touch, Idle or LP1)
  * @param  seconds  Timeout in seconds (0 = never time out of that mode)
+ * @return 1 if the write verified, 0 otherwise (bad mode, or no window).
  */
-void tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds);
+uint8_t tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds);
 
 /**
  * @brief  Set the maximum number of simultaneous fingers tracked (1 or 2).

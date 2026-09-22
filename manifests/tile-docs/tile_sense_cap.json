@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@129eab4",
+  "source": "tiles@92d73dd",
   "file": "tile_sense_cap.h",
   "brief": "Capacitive trackpad driver for the Sense.CAP tile (IQS7211A).",
-  "description": "@version 0.3.1\n\nAzoteq IQS7211A mutual-capacitance trackpad controller: up to 2-finger\nabsolute XY tracking, relative XY, per-channel touch status, built-in\ngesture engine (tap, press-and-hold, four-way swipe), and an Alternate\nLow-Power (ALP) channel for presence wake-up.\n\n**Surface configuration.** The trackpad's electrical geometry (Rx/Tx\ncount and mapping, conversion cycles, XY resolution, ATI target) is a\nproperty of the physical electrode surface. init() deliberately does\nNOT overwrite the chip's memory map — call\ntile_sense_cap_configure_surface() after init with a\nsense_cap_surface_t describing the attached surface, which writes the\ngeometry, packs the sensing cycles, sets the ATI target and runs\nre-ATI. The r0 2x3 surface (2 Rx strips x 3 Tx blocks) ships as the\nbuilt-in preset sense_cap_surface_2x3; setup_2x3() is the one-call\nform. Without a surface config the device runs on factory defaults\nand XY output is not meaningful.\n\nCommunication windows: the device only serves register data inside a\ncommunication window. In its default streaming mode a window opens every\nreport cycle and the part clock-stretches a master that arrives early\n(datasheet §11.9.2), so plain reads simply work. In event mode, in the\nlow-power modes, or with Comms Request enabled, they do not — the read\nreturns @ref IQS7211A_INVALID_RESPONSE (0xEEEE) instead. The driver\ntherefore retries every access behind an explicit comms request (write\n0x00 to 0xFF, wait, retry), the same shape as the IQS323 force-comms\ndance on Sense.T.C. One window serves one transaction — an I2C STOP\ncloses it again.\n\nThe 0xEEEE response is the sharp edge on this part: it is valid-looking\ndata with Comms Request, Event Mode, Manual Control and WDT bits all\nset. A read-modify-write that trusts it will write those bits back and\nstrand the device in request-only mode — recoverable only by power\ncycling the tile. Every helper here checks for it before writing.\n\nTwo communication modes:\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. **This is the required mode on r0\n    tiles fitted with the IQS7211A** — the board was designed for the\n    IQS7211E, whose A5 ball combines RDY+MCLR; on the A variant that\n    ball is MCLR only, so tile pad 3 is a hardware reset line (100k\n    pull-up on board), and the A's real RDY (ball C3) is unrouted.\n  - **RDY mode**: provide a rdy_pin in config. Usable once IQS7211E\n    parts are fitted (pad 3 then carries the combined RDY/MCLR line);\n    wire it to a Core pad and pass that pad number. An EXTI\n    falling-edge ISR sets a flag; process() only does I2C when set.\n\n\n\nDatasheet: Azoteq IQS7211A, Rev v1.3, April 2025\n\n@studio tile label=Sense.CAP icon=⬚\n\n@studio event name=touch_down mask=SENSE_CAP_EV_TOUCH_DOWN\n@studio event name=touch_up mask=SENSE_CAP_EV_TOUCH_UP\n@studio event name=tap mask=SENSE_CAP_EV_TAP\n@studio event name=double_tap mask=SENSE_CAP_EV_DOUBLE_TAP\n@studio event name=long_press mask=SENSE_CAP_EV_LONG_PRESS\n@studio event name=swipe mask=SENSE_CAP_EV_SWIPE_ANY\n@studio event name=drag mask=SENSE_CAP_EV_DRAG\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"ATI fine tuning\" section=config\n  The ATI *target* is part of the surface config, and re_ati() /\n  reseed() re-run auto-tuning at any time. The finer knobs — trackpad\n  and ALP ATI multipliers/dividers, compensation dividers and drift\n  limits (0x30-0x31, 0x33-0x3B) — are left at chip defaults, to be\n  revisited if re-ATI against the real surface proves insufficient.\n  Reachable through write_reg meanwhile.\n\n@studio unsupported severity=niche category=\"ALP fine tuning\" section=config\n  The ALP wake channel is configured by the surface config (electrode\n  selection, mutual sensing, count filter, ATI target) and its\n  threshold is settable at runtime. Still at chip defaults: the set/\n  clear debounce counts (0x56), the count-filter betas (0x70/0x71),\n  and the LPX auto-prox cycle setting. ALP count, LTA and output\n  status are readable at runtime.\n\n@studio unsupported severity=advanced category=\"XY filtering and trim\" section=config\n  Axis switch and X/Y flips are part of the surface config, and the\n  recommended MAV + dynamic-IIR filters are enabled there. The filter\n  *parameters* (0x64-0x66), finger-split factor and stationary-touch\n  threshold (0x67), and X/Y trim (0x68, 0x69) are not exposed —\n  surface-tuning knobs, left at chip defaults until real-finger\n  testing says otherwise.\n\n@studio unsupported severity=niche category=\"Analog hardware settings\" section=advanced\n  Main oscillator selection and adjustment, calibration-capacitor\n  selection (0x52), and trackpad/ALP charge-transfer frequency\n  (0x58/0x59) are not exposed. These are GUI-derived analog settings\n  for a specific electrode stack-up.\n\n@studio unsupported severity=niche category=\"Comms-request mode selection\" section=advanced\n  Config bit \"Comms Request EN\" (0x51 bit 4) chooses whether the device\n  clock-stretches a early master or requires an explicit window\n  request. The driver speaks both — it retries through a comms request\n  whenever a read comes back invalid — but does not expose a setter for\n  the bit itself, since the automatic fallback covers both settings.\n\n@studio unsupported severity=niche category=\"MCLR hardware reset\" section=lifecycle\n  Driver-deferred: on r0 tiles with the IQS7211A fitted, tile pad 3\n  carries the chip's MCLR (active-low reset, 100k pull-up on board) —\n  a Core pad wired there could hard-reset a comms-locked device, the\n  one failure the software reset cannot reach. Not yet exposed as an\n  API; software reset covers normal operation. (There is no\n  definitions/Sense-CAP-*.json yet; when one lands, this note should\n  be re-checked against the real pad table.)\n\n@studio unsupported severity=niche category=\"Tx short test\" section=advanced\n  The Tx short-test configuration (0x50 bit 15) is a production-line\n  electrode-fault test, out of scope for a runtime driver.",
+  "description": "@version 0.4.0\n\nAzoteq IQS7211A mutual-capacitance trackpad controller: up to 2-finger\nabsolute XY tracking, relative XY, per-channel touch status, built-in\ngesture engine (tap, press-and-hold, four-way swipe), and an Alternate\nLow-Power (ALP) channel for presence wake-up.\n\n**Surface configuration.** The trackpad's electrical geometry (Rx/Tx\ncount and mapping, conversion cycles, XY resolution, ATI target) is a\nproperty of the physical electrode surface. init() deliberately does\nNOT overwrite the chip's memory map — call\ntile_sense_cap_configure_surface() after init with a\nsense_cap_surface_t describing the attached surface, which writes the\ngeometry, packs the sensing cycles, sets the ATI target and runs\nre-ATI. The r0 2x3 surface (2 Rx strips x 3 Tx blocks) ships as the\nbuilt-in preset sense_cap_surface_2x3; setup_2x3() is the one-call\nform. Without a surface config the device runs on factory defaults\nand XY output is not meaningful.\n\nCommunication windows: the device only serves register data inside a\ncommunication window. In its default streaming mode a window opens every\nreport cycle and the part clock-stretches a master that arrives early\n(datasheet §11.9.2), so plain reads simply work. In event mode, in the\nlow-power modes, or with Comms Request enabled, they do not — the read\nreturns @ref IQS7211A_INVALID_RESPONSE (0xEEEE) instead. The driver\ntherefore retries every access behind an explicit comms request (write\n0x00 to 0xFF, wait, retry), the same shape as the IQS323 force-comms\ndance on Sense.T.C. One window serves one transaction — an I2C STOP\ncloses it again.\n\nThe 0xEEEE response is the sharp edge on this part: it is valid-looking\ndata with Comms Request, Event Mode, Manual Control and WDT bits all\nset. A read-modify-write that trusts it will write those bits back and\nstrand the device in request-only mode — recoverable only by power\ncycling the tile. Every helper here checks for it before writing.\n\nTwo communication modes:\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. **This is the required mode on r0\n    tiles fitted with the IQS7211A** — the board was designed for the\n    IQS7211E, whose A5 ball combines RDY+MCLR; on the A variant that\n    ball is MCLR only, so tile pad 3 is a hardware reset line (100k\n    pull-up on board), and the A's real RDY (ball C3) is unrouted.\n  - **RDY mode**: provide a rdy_pin in config. Usable once IQS7211E\n    parts are fitted (pad 3 then carries the combined RDY/MCLR line);\n    wire it to a Core pad and pass that pad number. An EXTI\n    falling-edge ISR sets a flag; process() only does I2C when set.\n\n\n\nDatasheet: Azoteq IQS7211A, Rev v1.3, April 2025\n\n@studio tile label=Sense.CAP icon=⬚\n\n@studio event name=touch_down mask=SENSE_CAP_EV_TOUCH_DOWN\n@studio event name=touch_up mask=SENSE_CAP_EV_TOUCH_UP\n@studio event name=tap mask=SENSE_CAP_EV_TAP\n@studio event name=double_tap mask=SENSE_CAP_EV_DOUBLE_TAP\n@studio event name=long_press mask=SENSE_CAP_EV_LONG_PRESS\n@studio event name=swipe mask=SENSE_CAP_EV_SWIPE_ANY\n@studio event name=drag mask=SENSE_CAP_EV_DRAG\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"ATI fine tuning\" section=config\n  The ATI *target* is part of the surface config, and re_ati() /\n  reseed() re-run auto-tuning at any time. The finer knobs — trackpad\n  and ALP ATI multipliers/dividers, compensation dividers and drift\n  limits (0x30-0x31, 0x33-0x3B) — are left at chip defaults, to be\n  revisited if re-ATI against the real surface proves insufficient.\n  Reachable through write_reg meanwhile.\n\n@studio unsupported severity=niche category=\"ALP fine tuning\" section=config\n  The ALP wake channel is configured by the surface config (electrode\n  selection, mutual sensing, count filter, ATI target) and its\n  threshold is settable at runtime. Still at chip defaults: the set/\n  clear debounce counts (0x56), the count-filter betas (0x70/0x71),\n  and the LPX auto-prox cycle setting. ALP count, LTA and output\n  status are readable at runtime.\n\n@studio unsupported severity=advanced category=\"XY filtering and trim\" section=config\n  Axis switch and X/Y flips are part of the surface config, and the\n  recommended MAV + dynamic-IIR filters are enabled there. The filter\n  *parameters* (0x64-0x66), finger-split factor and stationary-touch\n  threshold (0x67), and X/Y trim (0x68, 0x69) are not exposed —\n  surface-tuning knobs, left at chip defaults until real-finger\n  testing says otherwise.\n\n@studio unsupported severity=niche category=\"Analog hardware settings\" section=advanced\n  Main oscillator selection and adjustment, calibration-capacitor\n  selection (0x52), and trackpad/ALP charge-transfer frequency\n  (0x58/0x59) are not exposed. These are GUI-derived analog settings\n  for a specific electrode stack-up.\n\n@studio unsupported severity=niche category=\"Comms-request mode selection\" section=advanced\n  Config bit \"Comms Request EN\" (0x51 bit 4) chooses whether the device\n  clock-stretches a early master or requires an explicit window\n  request. The driver speaks both — it retries through a comms request\n  whenever a read comes back invalid — but does not expose a setter for\n  the bit itself, since the automatic fallback covers both settings.\n\n@studio unsupported severity=niche category=\"MCLR hardware reset\" section=lifecycle\n  Driver-deferred: on r0 tiles with the IQS7211A fitted, tile pad 3\n  carries the chip's MCLR (active-low reset, 100k pull-up on board) —\n  a Core pad wired there could hard-reset a comms-locked device, the\n  one failure the software reset cannot reach. Not yet exposed as an\n  API; software reset covers normal operation. (There is no\n  definitions/Sense-CAP-*.json yet; when one lands, this note should\n  be re-checked against the real pad table.)\n\n@studio unsupported severity=niche category=\"Tx short test\" section=advanced\n  The Tx short-test configuration (0x50 bit 15) is a production-line\n  electrode-fault test, out of scope for a runtime driver.",
   "code_examples": [
     {
       "label": "Polling example (Cores SDK)",
@@ -91,13 +91,13 @@
     },
     {
       "name": "TILE_SENSE_CAP_VERSION_MINOR",
-      "value": "3",
+      "value": "4",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_SENSE_CAP_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -1236,6 +1236,34 @@
       "name": "tile_sense_cap_is_alp_active"
     },
     {
+      "signature": "uint8_t tile_sense_cap_read_channels(tile_t *tile, uint16_t *counts, uint16_t *deltas, uint8_t n)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "counts",
+          "description": "Out: `n` counts, or NULL to skip"
+        },
+        {
+          "name": "deltas",
+          "description": "Out: `n` deltas (signed, cast to int16_t), or NULL to skip"
+        },
+        {
+          "name": "n",
+          "description": "Channels to read, 1-32"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if every requested block came back valid, 0 otherwise.",
+      "brief": "Read every channel's count and delta in two bus transactions.",
+      "description": "get_channel_count() / get_channel_delta() each open their own\ncommunication window, so a per-channel sweep of a 6-channel surface\ncosts twelve window waits (~10 ms each at the fastest report rate).\nThis reads the count block and the delta block as two auto-incrementing\nbursts: two windows for the whole surface. Use it for any live view.",
+      "name": "tile_sense_cap_read_channels"
+    },
+    {
       "signature": "uint16_t tile_sense_cap_get_alp_count(tile_t *tile)",
       "params": [
         {
@@ -1392,7 +1420,27 @@
       "name": "tile_sense_cap_set_report_rate"
     },
     {
-      "signature": "void tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds)",
+      "signature": "uint8_t tile_sense_cap_set_poll_latency(tile_t *tile, uint16_t ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "ms",
+          "description": "Report period for all modes, in ms (minimum 5)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "1 if every mode's rate verified, 0 otherwise.",
+      "brief": "Bound how long a polled read can block.",
+      "description": "Without a RDY line the host cannot know when a communication window is\nopen, so every polled read clock-stretches until the part's NEXT report\ncycle. That is ~10 ms in Active but grows with each power mode, to\n~160 ms in LP2 — measured on hardware as a 130 ms stall per process()\ncall once an untouched surface had drifted down to LP2. A host with\nanything else to do (a radio, audio DMA, other tiles on the bus) cannot\nafford that.\n\nThis sets one report period for every mode, LP2 included, so a read\nblocks for at most `ms` whatever mode the part is in. The cost is\npower: the low-power modes stop saving anything, because their saving\nIS the slow cycle. Use it while polling responsively and restore the\nper-mode rates (set_report_rate) when idle — or fit RDY and use event\nmode, which needs neither.\n\nThe host's I2C timeout must exceed `ms`, or the stretch is cut short\nand the read fails into the driver's window-request retries (8 x 16 ms).",
+      "name": "tile_sense_cap_set_poll_latency"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds)",
       "params": [
         {
           "name": "tile",
@@ -1410,6 +1458,7 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
+      "return": "1 if the write verified, 0 otherwise (bad mode, or no window).",
       "brief": "Set the inactivity timeout that drops the device to the next mode.",
       "description": "",
       "name": "tile_sense_cap_set_mode_timeout"
@@ -1616,7 +1665,7 @@
     }
   ],
   "source_file": "tile_sense_cap.h",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "tile_family": "Sense",
   "tile_name": "CAP",
   "display_name": "Sense.CAP"

@@ -200,6 +200,29 @@ static uint16_t iqs_read_ext(tile_t *tile, uint16_t reg)
     return v;
 }
 
+/**
+ * Read `n` consecutive 16-bit extended-map words in ONE transaction (the
+ * address auto-increments, §11.5). One window serves the whole block, so
+ * a 6-channel read costs one window wait instead of six. Same retry shape.
+ *
+ * @return 1 on success, 0 if the block never came back valid.
+ */
+static uint8_t iqs_read_ext_block(tile_t *tile, uint16_t reg, uint16_t *out, uint8_t n)
+{
+    uint8_t buf[64];
+    if (n == 0 || n > 32) return 0;
+    for (uint8_t attempt = 0; attempt <= IQS_WINDOW_RETRIES; attempt++) {
+        if (attempt) iqs_request_window(tile);
+        tile->hal->i2c_read(tile->hal->handle, tile->id, reg, buf, (uint16_t)(n * 2));
+        uint16_t first = (uint16_t)(((uint16_t)buf[1] << 8) | buf[0]);
+        if (first == IQS7211A_INVALID_RESPONSE) continue;
+        for (uint8_t i = 0; i < n; i++)
+            out[i] = (uint16_t)(((uint16_t)buf[2 * i + 1] << 8) | buf[2 * i]);
+        return 1;
+    }
+    return 0;
+}
+
 /** Write a 16-bit little-endian register. */
 static void iqs_write(tile_t *tile, uint8_t reg, uint16_t value)
 {
@@ -1268,6 +1291,16 @@ uint16_t tile_sense_cap_get_channel_delta(tile_t *tile, uint8_t channel)
     return (v == IQS7211A_INVALID_RESPONSE) ? 0 : v;
 }
 
+uint8_t tile_sense_cap_read_channels(tile_t *tile, uint16_t *counts,
+                                     uint16_t *deltas, uint8_t n)
+{
+    if (tile->state != TILE_STATE_READY || n == 0 || n > 32) return 0;
+    uint8_t ok = 1;
+    if (counts && !iqs_read_ext_block(tile, IQS7211A_REG_EXT_COUNTS, counts, n)) ok = 0;
+    if (deltas && !iqs_read_ext_block(tile, IQS7211A_REG_EXT_DELTAS, deltas, n)) ok = 0;
+    return ok;
+}
+
 uint8_t tile_sense_cap_is_alp_active(tile_t *tile)
 {
     return (cached_info(tile) & IQS7211A_INFO_ALP_OUTPUT) ? 1 : 0;
@@ -1343,7 +1376,27 @@ void tile_sense_cap_set_report_rate(tile_t *tile, uint8_t mode, uint16_t ms)
     if (tile->state != TILE_STATE_READY) return;
     uint8_t reg = rate_reg_for_mode(mode);
     if (!reg) return;
-    iqs_write(tile, reg, ms);
+    /* Verified: a write that misses its window is silently dropped, and a
+     * report rate that did not land shows up later as a slow poll. */
+    iqs_write_verified(tile, reg, ms);
+}
+
+uint8_t tile_sense_cap_set_poll_latency(tile_t *tile, uint16_t ms)
+{
+    if (tile->state != TILE_STATE_READY) return 0;
+    if (ms < 5) ms = 5;
+
+    /* One period for every charging mode, LP2 included: whichever mode the
+     * part has drifted into, the next window is at most `ms` away. */
+    static const uint8_t regs[5] = {
+        IQS7211A_REG_RATE_ACTIVE, IQS7211A_REG_RATE_IDLE_TOUCH,
+        IQS7211A_REG_RATE_IDLE,   IQS7211A_REG_RATE_LP1,
+        IQS7211A_REG_RATE_LP2,
+    };
+    uint8_t ok = 1;
+    for (uint8_t i = 0; i < 5; i++)
+        if (!iqs_write_verified(tile, regs[i], ms)) ok = 0;
+    return ok;
 }
 
 /** Map a mode onto its timeout register. LP2 has no timeout — it is the floor. */
@@ -1358,12 +1411,12 @@ static uint8_t timeout_reg_for_mode(uint8_t mode)
     }
 }
 
-void tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds)
+uint8_t tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds)
 {
-    if (tile->state != TILE_STATE_READY) return;
+    if (tile->state != TILE_STATE_READY) return 0;
     uint8_t reg = timeout_reg_for_mode(mode);
-    if (!reg) return;
-    iqs_write(tile, reg, seconds);
+    if (!reg) return 0;
+    return iqs_write_verified(tile, reg, seconds);
 }
 
 void tile_sense_cap_set_max_touches(tile_t *tile, uint8_t fingers)

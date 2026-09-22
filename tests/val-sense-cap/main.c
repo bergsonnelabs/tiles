@@ -172,6 +172,10 @@ int main(void)
     uint16_t dlt = tile_sense_cap_get_channel_delta(&pad, 5);
     (void)cnt; (void)dlt;
 
+    uint16_t counts[6], deltas[6];
+    uint8_t rc = tile_sense_cap_read_channels(&pad, counts, deltas, 6);
+    (void)rc; (void)counts; (void)deltas;
+
     /* ---- ALP ---- */
 
     uint8_t alp = tile_sense_cap_is_alp_active(&pad);
@@ -194,7 +198,10 @@ int main(void)
     tile_sense_cap_set_tap_timing(&pad, 150, 300);
     tile_sense_cap_set_swipe_timing(&pad, 150, 128, 96);
     tile_sense_cap_set_report_rate(&pad, SENSE_CAP_MODE_ACTIVE, 10);
-    tile_sense_cap_set_mode_timeout(&pad, SENSE_CAP_MODE_IDLE, 30);
+    uint8_t mt = tile_sense_cap_set_mode_timeout(&pad, SENSE_CAP_MODE_IDLE, 30);
+    (void)mt;
+    uint8_t pl = tile_sense_cap_set_poll_latency(&pad, 10);
+    (void)pl;
     tile_sense_cap_set_max_touches(&pad, 1);
     tile_sense_cap_set_resolution(&pad, 512, 256);
     tile_sense_cap_set_touch_multipliers(&pad, 20, 10);
