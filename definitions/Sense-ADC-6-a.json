@@ -175,6 +175,12 @@
       ]
     }
   ],
+  "twin": {
+    "score": 1,
+    "source": "// Digital twin for Sense.ADC.6 — six-channel analog input tile on I2C.\n//\n// Unlike the sensor tiles, this one has no external chip to model: the tile is\n// a purpose-burned Core.ST.L0.1 (STM32L011E4) whose firmware we own, so the\n// \"datasheet\" for its behavior is the tile's own register map, verified on\n// hardware on 2026-09-22. That makes most of the modeled behavior canonical\n// rather than inferred; the electrical numbers come from the STM32L011\n// datasheet (DocID027973 Rev 5).\n//\n// Physical world (controls): a voltage on each of the six inputs. Readings\n// clamp to the supply rail, because the ADC's full scale IS the rail — a\n// source above it simply reads full scale.\n//\n// Sampling: TIM2 paces sweeps at rate x oversamp per second, and the tile\n// publishes the average of the most recent window x oversamp sweeps. The\n// sequence number advances once per output period, which is how a host tells\n// a fresh set from a repeat. Modeled here by deriving the sequence from sim\n// time, so changing the rate changes how fast it advances.\n//\n// Pad map: GND (1), CH0 (2), CH1 (3), SCL (4), SDA (5), CH2 (6), CH3 (7),\n// CH4 (8), CH5 (9), V+ (10). The inputs are analog, and the tile drives no\n// digital output — there is no data-ready line, because no pad is left.\nimport type { TileSim } from '../tileSim';\n\nconst CHANNELS = 6;\nconst CH_PADS = ['2', '3', '6', '7', '8', '9'] as const;\n\n// Limits enforced by the tile firmware; an out-of-range set is rejected and\n// the tile keeps running as it was.\nconst RATE_MAX = 250;\nconst OVERSAMP_MAX = 32;\nconst WINDOW_MAX = 2;\nconst RING_SCANS_MAX = 32; // oversamp * window — the DMA ring is 12 B per sweep\nconst SCAN_HZ_MAX = 8000; // rate * oversamp — a sweep takes ~65 us\n\n// Status bits (tile_sense_adc_6.h).\nconst ST_VALID = 1 << 0;\nconst ST_SAMPLING = 1 << 1;\nconst ST_CALIBRATED = 1 << 2;\n\n// STM32L011 datasheet: Run mode at 32 MHz from HSI16+PLL, VCORE 1.8 V,\n// 4.7 mA typ. The ADC adds 40 uA on VDDA at 10 ksps rising to 200 uA at\n// 1.14 Msps; the default settings sweep 6 channels 800 times a second, so\n// about 4.8 ksps and the low end of that range.\nconst RUN_UA = 4700;\nconst ADC_UA_AT_10KSPS = 40;\nconst ADC_UA_AT_1140KSPS = 200;\n\n// A type alias, not an interface: TileSim<S> constrains S to SimState's\n// string index signature, which TypeScript grants to aliases but not to\n// interfaces.\ntype State = {\n  ch0_mv: number;\n  ch1_mv: number;\n  ch2_mv: number;\n  ch3_mv: number;\n  ch4_mv: number;\n  ch5_mv: number;\n  supply_mv: number;\n  rate_hz: number;\n  oversamp: number;\n  window: number;\n  seq: number;\n  valid: boolean;\n  address: number;\n};\n\nconst chMv = (s: State, ch: number): number => {\n  const raw = [s.ch0_mv, s.ch1_mv, s.ch2_mv, s.ch3_mv, s.ch4_mv, s.ch5_mv][ch] ?? 0;\n  // Full scale is the rail: anything above it reads as the rail, and the ADC\n  // cannot go negative.\n  return Math.max(0, Math.min(Math.round(raw), Math.round(s.supply_mv)));\n};\n\nconst settingsValid = (rate: number, oversamp: number, window: number): boolean =>\n  rate >= 1 &&\n  rate <= RATE_MAX &&\n  oversamp >= 1 &&\n  oversamp <= OVERSAMP_MAX &&\n  window >= 1 &&\n  window <= WINDOW_MAX &&\n  oversamp * window <= RING_SCANS_MAX &&\n  rate * oversamp <= SCAN_HZ_MAX;\n\nconst adcUa = (state: State): number => {\n  const sps = state.rate_hz * state.oversamp * CHANNELS;\n  const span = (ADC_UA_AT_1140KSPS - ADC_UA_AT_10KSPS) / (1_140_000 - 10_000);\n  return Math.round(Math.max(ADC_UA_AT_10KSPS, ADC_UA_AT_10KSPS + (sps - 10_000) * span));\n};\n\nconst sim: TileSim<State> = {\n  tile: 'Sense.ADC.6',\n\n  defaultState: {\n    ch0_mv: 0,\n    ch1_mv: 0,\n    ch2_mv: 0,\n    ch3_mv: 0,\n    ch4_mv: 0,\n    ch5_mv: 0,\n    supply_mv: 3300,\n    rate_hz: 100,\n    oversamp: 8,\n    window: 1,\n    seq: 0,\n    valid: true,\n    address: 0x28,\n  },\n\n  controls: [\n    {\n      type: 'slider',\n      field: 'ch0_mv',\n      label: 'CH0 (pad 2)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n    {\n      type: 'slider',\n      field: 'ch1_mv',\n      label: 'CH1 (pad 3)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n    {\n      type: 'slider',\n      field: 'ch2_mv',\n      label: 'CH2 (pad 6)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n    {\n      type: 'slider',\n      field: 'ch3_mv',\n      label: 'CH3 (pad 7)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n    {\n      type: 'slider',\n      field: 'ch4_mv',\n      label: 'CH4 (pad 8)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n    {\n      type: 'slider',\n      field: 'ch5_mv',\n      label: 'CH5 (pad 9)',\n      min: 0,\n      max: 3300,\n      step: 10,\n      unit: 'mV',\n    },\n  ],\n\n  hostCalls: {\n    tile_sense_adc_6_find: () => ({ scalar: 1 }),\n\n    tile_sense_adc_6_init: () => ({ scalar: 0, nextState: { valid: true } }),\n\n    // One transaction fetches status, sequence and all six channels, so the\n    // set is coherent by construction. Nothing to latch here: read_mv reads\n    // the same state this call would have copied.\n    tile_sense_adc_6_update: () => ({ scalar: 1 }),\n\n    tile_sense_adc_6_read_mv: ({ state, args }) => ({ scalar: chMv(state, args[0] ?? 0) }),\n\n    tile_sense_adc_6_read_all: ({ state }) => ({\n      array: Array.from({ length: CHANNELS }, (_, ch) => chMv(state, ch)),\n    }),\n\n    tile_sense_adc_6_sequence: ({ state }) => ({ scalar: state.seq & 0xff }),\n\n    tile_sense_adc_6_is_valid: ({ state }) => ({ scalar: state.valid ? 1 : 0 }),\n\n    tile_sense_adc_6_status: ({ state }) => ({\n      scalar: (state.valid ? ST_VALID : 0) | ST_SAMPLING | ST_CALIBRATED,\n    }),\n\n    tile_sense_adc_6_supply_mv: ({ state }) => ({ scalar: Math.round(state.supply_mv) }),\n\n    // Applied as a set, and rejected as a set: on rejection the tile keeps\n    // running exactly as it was.\n    tile_sense_adc_6_set_rate: ({ args }) => {\n      const [rate = 0, oversamp = 0, window = 0] = args;\n      if (!settingsValid(rate, oversamp, window)) return { scalar: 0 };\n      return { scalar: 1, nextState: { rate_hz: rate, oversamp, window } };\n    },\n\n    tile_sense_adc_6_get_rate: ({ state }) => ({ scalar: state.rate_hz }),\n    tile_sense_adc_6_get_oversamp: ({ state }) => ({ scalar: state.oversamp }),\n    tile_sense_adc_6_get_window: ({ state }) => ({ scalar: state.window }),\n\n    tile_sense_adc_6_save: () => ({ scalar: 1 }),\n\n    // The stored address only takes effect at the tile's next power-up, so the\n    // modeled state keeps answering on the old one, as the real tile does.\n    tile_sense_adc_6_set_address: ({ args }) => {\n      const addr = args[0] ?? 0;\n      return { scalar: addr >= 0x08 && addr <= 0x77 ? 1 : 0 };\n    },\n\n    tile_sense_adc_6_channel_pad: ({ args }) => {\n      const ch = args[0] ?? 0;\n      return { scalar: ch < CHANNELS ? Number(CH_PADS[ch]) : 0 };\n    },\n  },\n\n  // Everything here follows the tile's own register map and firmware, which we\n  // own and have verified on hardware — canonical rather than guessed. The\n  // exception is the address call, whose effect is deferred to a power cycle\n  // the twin does not model.\n  provenance: {\n    tile_sense_adc_6_find: 'canonical',\n    tile_sense_adc_6_init: 'canonical',\n    tile_sense_adc_6_update: 'canonical',\n    tile_sense_adc_6_read_mv: 'canonical',\n    tile_sense_adc_6_read_all: 'canonical',\n    tile_sense_adc_6_sequence: 'canonical',\n    tile_sense_adc_6_is_valid: 'canonical',\n    tile_sense_adc_6_status: 'canonical',\n    tile_sense_adc_6_supply_mv: 'canonical',\n    tile_sense_adc_6_set_rate: 'canonical',\n    tile_sense_adc_6_get_rate: 'canonical',\n    tile_sense_adc_6_get_oversamp: 'canonical',\n    tile_sense_adc_6_get_window: 'canonical',\n    tile_sense_adc_6_save: 'inferred',\n    tile_sense_adc_6_set_address: 'inferred',\n    tile_sense_adc_6_channel_pad: 'canonical',\n  },\n\n  // The sequence advances once per output period, wrapping at 255, so a host\n  // polling faster than the rate sees repeats — the same signal it gets from\n  // real hardware.\n  deriveState: (state, { t }) => ({\n    seq: Math.floor((t * state.rate_hz) / 1000) & 0xff,\n  }),\n\n  power: (state, ctx) => {\n    // Track the rail the tile is actually wired to: full scale follows it.\n    const railMv = ctx?.padVoltage?.['10'];\n    const supply_mv = railMv && railMv > 0 ? railMv : state.supply_mv;\n    const ua = RUN_UA + adcUa(state);\n    return {\n      draw_ua: ua,\n      rails: [\n        {\n          name: 'V+',\n          role: 'supply',\n          v_mv: supply_mv,\n          i_ua: ua,\n          pads: ['10'],\n          note: `STM32L011 run 32 MHz + ADC at ${state.rate_hz * state.oversamp} sweeps/s`,\n        },\n      ],\n    };\n  },\n};\n\nexport default sim;\n",
+    "status": "validated",
+    "updated_at": "2026-09-22T20:07:59.398Z"
+  },
   "power": [
     {
       "max": 3.6,
@@ -187,12 +193,230 @@
       "function": "",
       "direction": "input",
       "is_required": true,
-      "max_current": "",
+      "max_current": "5.5mA",
       "positive_pad": [
         "10"
       ]
     }
   ],
+  "config": {
+    "i2cAddress": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "I2C address",
+      "default": "0x28",
+      "options": [
+        {
+          "label": "0x28 (default)",
+          "value": "0x28",
+          "derived": {
+            "i2c_address": "0x28"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x28"
+            }
+          }
+        },
+        {
+          "label": "0x29",
+          "value": "0x29",
+          "derived": {
+            "i2c_address": "0x29"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x29"
+            }
+          }
+        },
+        {
+          "label": "0x2A",
+          "value": "0x2A",
+          "derived": {
+            "i2c_address": "0x2A"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x2A"
+            }
+          }
+        },
+        {
+          "label": "0x2B",
+          "value": "0x2B",
+          "derived": {
+            "i2c_address": "0x2B"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x2B"
+            }
+          }
+        }
+      ]
+    },
+    "outputRate": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Output rate",
+      "default": "100",
+      "options": [
+        {
+          "label": "10 Hz (nulls 50 and 60 Hz)",
+          "value": "10",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 10,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "50 Hz",
+          "value": "50",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 50,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "100 Hz (default)",
+          "value": "100",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 100,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "120 Hz (pairs with 60 Hz rejection)",
+          "value": "120",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 120,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "200 Hz",
+          "value": "200",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 200,
+              "register": "RATE_HZ"
+            }
+          ]
+        }
+      ]
+    },
+    "oversample": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Sweeps averaged per period",
+      "default": "8",
+      "options": [
+        {
+          "label": "4",
+          "value": "4",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 4,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "8 (default)",
+          "value": "8",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 8,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "16",
+          "value": "16",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 16,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "32",
+          "value": "32",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 32,
+              "register": "OVERSAMP"
+            }
+          ]
+        }
+      ]
+    },
+    "averagingWindow": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Averaging window",
+      "default": "1",
+      "options": [
+        {
+          "label": "One output period (fastest response)",
+          "value": "1",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 1,
+              "register": "WINDOW"
+            }
+          ]
+        },
+        {
+          "label": "Two output periods (nulls half the output rate: 50 Hz at 100 Hz out)",
+          "value": "2",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 2,
+              "register": "WINDOW"
+            }
+          ]
+        }
+      ]
+    }
+  },
   "family": "Sense",
   "package": {
     "pads": 10,
@@ -202,7 +426,7 @@
     "size_z": 0
   },
   "tile_id": 93,
-  "headline": "6-ch ADC",
+  "headline": "six-channel analog input",
   "components": [
     {
       "url": "",
@@ -246,14 +470,26 @@
       ]
     }
   ],
-  "updated_at": "2026-09-22T18:12:43.149Z",
-  "description": "",
-  "json_version": "0.4",
+  "updated_at": "2026-09-22T20:50:13.046Z",
+  "description": "Sense.ADC.6 turns six analog inputs into calibrated millivolt readings served over I2C, so a host reads voltages instead of managing an ADC. All sampling, filtering and timing happen on the tile. It sweeps the six channels continuously at a paced rate and publishes a filtered set at a configurable output rate, 100 Hz by default.\n\nEvery published set is coherent: all six channels come from the same instant, never a mix of old and new, and each set carries a sequence number so a host can tell a fresh reading from a repeat. Readings span 0 V to the tile's own supply and are calibrated against an internal reference, so they track the rail rather than assuming it. The supply is readable too, which doubles as the full-scale value.\n\nInputs accept source impedances up to roughly 30–50 kΩ.  Output rate (1–250 Hz), sweeps averaged per period (1–32), and filter-window length are all settable at runtime and can be stored on the tile to survive reboot.",
+  "json_version": "0.6",
   "application_notes": [
     {
       "sort": 0,
-      "details": "the I2C address can be updated and stored in the EEPROM (see driver details)",
+      "details": "The I2C address is stored on the tile and changeable across 0x08–0x77, so several tiles can share one bus; it ships at 0x28.",
       "heading": "I2C address",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "Filtering is a boxcar average whose window is set in output periods, which doubles as mains rejection: a two-period window nulls 50 Hz at a 100 Hz output, or 60 Hz at 120 Hz, and a 100 ms window nulls both",
+      "heading": "Filtering",
+      "image_url": ""
+    },
+    {
+      "sort": 2,
+      "details": "Poll a little faster than the output rate, two to three times, and use the sequence number to discard repeats. The tile's clock and the host's drift apart by about a percent, so polling at exactly the output rate will occasionally read the same set twice or miss one.",
+      "heading": "Polling",
       "image_url": ""
     }
   ]

@@ -3,19 +3,28 @@
  * @brief  Six-channel ADC input driver for the Sense.ADC.6 tile.
  * @version 1.0.0
  *
- * Six analog inputs sampled continuously and published as calibrated
- * millivolts over I2C. The tile filters and paces the sampling itself,
- * so the host just reads whenever it likes and always gets a coherent
- * set: all six channels come from the same instant, never a mix of old
- * and new.
+ * Sense.ADC.6 turns six analog inputs into calibrated millivolt readings
+ * served over I2C, so a host reads voltages instead of managing an ADC.
+ * All sampling, filtering and timing happen on the tile. It sweeps the six
+ * channels continuously at a paced rate and publishes a filtered set at a
+ * configurable output rate, 100 Hz by default.
+ *
+ * Every published set is coherent: all six channels come from the same
+ * instant, never a mix of old and new, and each set carries a sequence
+ * number so a host can tell a fresh reading from a repeat. Readings span
+ * 0 V to the tile's own supply and are calibrated against an internal
+ * reference, so they track the rail rather than assuming it. The supply is
+ * readable too, which doubles as the full-scale value.
  *
  * Channels map to pads in order:
  *
  *   CH0 pad 2   CH1 pad 3   CH2 pad 6
  *   CH3 pad 7   CH4 pad 8   CH5 pad 9
  *
- * Inputs read 0 V to the tile's own supply. Sources up to roughly
- * 30-50 kOhm are fine; above that, add a buffer or an RC at the input.
+ * Inputs accept source impedances up to roughly 30-50 kOhm; above that,
+ * add a buffer or an RC at the input. Output rate (1-250 Hz), sweeps
+ * averaged per period (1-32) and filter-window length are all settable at
+ * runtime and can be stored on the tile to survive a reboot.
  *
  * Typical use (Cores SDK):
  * @code
