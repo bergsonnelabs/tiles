@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@656b064",
+  "source": "tiles@f07f598",
   "tiles": [
     {
       "family": "Sense",
@@ -80,7 +80,7 @@
       "family": "Sense",
       "name": "ADC.6",
       "rev": "a",
-      "headline": "6-ch ADC",
+      "headline": "six-channel analog input",
       "i2c": [
         {
           "name": "I2C",
