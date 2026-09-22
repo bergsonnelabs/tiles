@@ -54,6 +54,9 @@ def i2c_interfaces(defn):
         if iface.get("type") != "I2C":
             continue
         addrs = (iface.get("parameters") or {}).get("addresses") or []
+        # Skip blank rows: the portal editor requires a second address row to
+        # mark one default, so single-address tiles carry an empty sibling.
+        addrs = [a for a in addrs if str((a or {}).get("address") or "").strip()]
         if not addrs:
             continue
         if len(addrs) == 1:

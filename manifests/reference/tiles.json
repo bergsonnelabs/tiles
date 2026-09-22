@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@656b064",
   "tiles": [
     {
       "family": "Sense",
@@ -64,6 +64,91 @@
           "default": {
             "name": "INT",
             "type": "digital"
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
+      "family": "Sense",
+      "name": "ADC.6",
+      "rev": "a",
+      "headline": "6-ch ADC",
+      "i2c": [
+        {
+          "name": "I2C",
+          "default": "0x28",
+          "alt": []
+        }
+      ],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "CH0",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "CH1",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "CH2",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "CH3",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "CH4",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "CH5",
+            "type": "analog"
           },
           "alt": []
         },

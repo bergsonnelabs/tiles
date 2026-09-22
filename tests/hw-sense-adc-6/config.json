@@ -1,0 +1,16 @@
+{
+  "core": "Core.ST.L4.1",
+  "clock": "max",
+  "bootloader": "rom",
+  "usb": { "enabled": true },
+  "pads": {
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT"
+  },
+  "interfaces": {
+    "I2C1": { "speed": 400000, "pullups": true }
+  },
+  "tiles": [
+    { "tile": "Sense.ADC.6", "bus": "I2C1", "instance": 0 }
+  ]
+}

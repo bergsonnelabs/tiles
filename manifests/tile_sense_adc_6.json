@@ -1,0 +1,245 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@656b064",
+  "tile": "Sense.ADC.6",
+  "palette": {
+    "label": "Sense.ADC.6",
+    "icon": "∿"
+  },
+  "driver": {
+    "prefix": "tile_sense_adc_6",
+    "header": "tile_sense_adc_6.h",
+    "version": "1.0.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_adc_6_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "update"
+      ],
+      "symbol": "tile_sense_adc_6_update",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Fetch one coherent set of readings from the tile.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_mv"
+      ],
+      "symbol": "tile_sense_adc_6_read_mv",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Millivolts on one channel, from the last update().",
+      "params": [
+        {
+          "name": "ch",
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "description": "Channel. CH0 is pad 2, CH1 pad 3, CH2 pad 6, CH3 pad 7, CH4 pad 8, CH5 pad 9."
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sequence"
+      ],
+      "symbol": "tile_sense_adc_6_sequence",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Sequence number of the last set, which advances once per",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_valid"
+      ],
+      "symbol": "tile_sense_adc_6_is_valid",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "True when the last set is current: sampling is running and",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "status"
+      ],
+      "symbol": "tile_sense_adc_6_status",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Status bits (SENSE_ADC_6_ST_*) from the last update().",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "supply_mv"
+      ],
+      "symbol": "tile_sense_adc_6_supply_mv",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "The tile's measured supply in millivolts, which is also the",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_rate"
+      ],
+      "symbol": "tile_sense_adc_6_set_rate",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Set output rate and averaging.",
+      "params": [
+        {
+          "name": "rate_hz",
+          "type": "int",
+          "range": [
+            1,
+            250
+          ],
+          "description": "Output rate in Hz."
+        },
+        {
+          "name": "oversamp",
+          "type": "int",
+          "range": [
+            1,
+            32
+          ],
+          "description": "Sweeps averaged per output period."
+        },
+        {
+          "name": "window",
+          "type": "int",
+          "range": [
+            1,
+            2
+          ],
+          "description": "Output periods averaged. 2 halves the null frequency."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_rate"
+      ],
+      "symbol": "tile_sense_adc_6_get_rate",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "The tile's current output rate in Hz.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_oversamp"
+      ],
+      "symbol": "tile_sense_adc_6_get_oversamp",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Sweeps averaged per output period.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_window"
+      ],
+      "symbol": "tile_sense_adc_6_get_window",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Output periods averaged (1 or 2).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "save"
+      ],
+      "symbol": "tile_sense_adc_6_save",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Store the current settings on the tile so they survive a",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_address"
+      ],
+      "symbol": "tile_sense_adc_6_set_address",
+      "header": "tile_sense_adc_6.h",
+      "category": "tile",
+      "description": "Give the tile a new I2C address, stored permanently.",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "range": [
+            8,
+            119
+          ],
+          "description": "New 7-bit address. 0x08 to 0x77."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x28",
+        "is_default": true
+      }
+    ]
+  }
+}
