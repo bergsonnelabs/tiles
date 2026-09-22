@@ -28,7 +28,7 @@
     "i2c.fast": "compile",
     "i2c.fmp": "na",
     "i2c.irq": "",
-    "i2c.target": "compile",
+    "i2c.target": "verified",
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
@@ -46,17 +46,23 @@
     "timer.lptim": "",
     "timer.wdog": "verified",
     "adc.raw": "verified",
-    "adc.mv": "verified",
+    "adc.mv": {
+      "status": "partial",
+      "note": "VREFINT was never enabled on the L0 before 2026-09-22 (VREFEN written to reserved CFGR2 bits), so earlier readings were ~9x off. Fixed; VDDA now reads 3292 mV on a ~3.3 V rail. Re-verify with known input voltages."
+    },
     "adc.temp": {
       "status": "verified",
       "note": "Reads sensor; factory cal at 0x1FF8007A — value offset needs investigation"
     },
     "adc.res": "verified",
     "adc.oversamp": "compile",
-    "adc.dma": "compile",
-    "adc.dma_mv": "compile",
-    "adc.cont": "compile",
-    "adc.trigger": "compile",
+    "adc.dma": "verified",
+    "adc.dma_mv": {
+      "status": "partial",
+      "note": "Scan-to-millivolt chain verified on silicon 2026-09-22; absolute accuracy not yet checked against known input voltages."
+    },
+    "adc.cont": "verified",
+    "adc.trigger": "verified",
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "compile",

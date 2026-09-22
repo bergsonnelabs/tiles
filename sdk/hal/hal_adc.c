@@ -317,15 +317,20 @@ static void _set_channel_samp(ADC_TypeDef *adc, uint8_t channel, uint32_t smpr_v
 static void _enable_internal_channels(void)
 {
 #if defined(STM32L011xx)
-    /* L0: CFGR1 VREFEN[22] and TSEN[23] */
-    /* Actually on L0 they sit in ADC->CFGR1 — but reference says
-       VREFEN is in ADC_CCR for some L0 variants.  On L011 the
-       internal channel enables are in the common register at +0x308
-       relative to ADC1 base, but since it's a single-ADC device the
-       common reg may not exist.  Instead use CFGR1 VREFEN/TSEN bits.
-       L0 RM0367: ADC_CCR does NOT exist on L0 single-ADC; VREFEN is
-       in ADC_CCR of the L0 multi-ADC line.  On L011 use CFGR2[22]. */
-    SET_BITS(ADC1->CFGR2, (1UL << 22) | (1UL << 23));  /* VREFEN, TSEN */
+    /* L0 (RM0377): two enables, both required.
+     *   1. SYSCFG_CFGR3 ENBUF_VREFINT_ADC / ENBUF_SENSOR_ADC turn on the
+     *      buffers that carry VREFINT and the temperature sensor to the
+     *      ADC. SYSCFG's clock has to be on for the write to land.
+     *   2. ADC_CCR (ADC base + 0x308) VREFEN[22] / TSEN[23].
+     * This used to write bits 22/23 of CFGR2, which are reserved on the L0,
+     * so both writes were silently dropped: VREFINT was never connected,
+     * VDDA came out around 9x too high, and every L0 millivolt and
+     * temperature reading was wrong. Confirmed on silicon 2026-09-22 by
+     * reading CCR and SYSCFG_CFGR3 back as 0 over SWD. */
+    SET_BITS(REG32(RCC_BASE + 0x34UL), 1UL << 0);         /* APB2ENR.SYSCFGEN */
+    (void)REG32(RCC_BASE + 0x34UL);
+    SET_BITS(SYSCFG_CFGR3, SYSCFG_CFGR3_ENBUF_VREFINT | SYSCFG_CFGR3_ENBUF_SENSOR);
+    SET_BITS(ADC_CCR, (1UL << 22) | (1UL << 23));         /* VREFEN, TSEN */
 
 #elif defined(STM32L422xx)
     /* L4: ADC_CCR bits VREFEN[22] and TSEN[23] */
@@ -625,15 +630,26 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
         }
     }
 
+
+    /* Cache it. Callers were each assigning the return to adc->vdda_mv
+     * themselves, so calling this directly (as core_adc_vdd does) measured
+     * VDDA and threw it away. That meant "prime VDDA before DMA" never
+     * primed, and the first raw_to_mv call converted mid-DMA. */
+    adc->vdda_mv = vdda;
     return vdda;
 }
 
 uint32_t hal_adc_raw_to_mv(hal_adc_t *adc, uint16_t raw)
 {
     if (adc->vdda_mv == 0) {
-        /* Needs the regular sequence, so this fails while DMA is running
-         * and leaves vdda_mv at 0. Prime it before hal_adc_start_dma. */
-        adc->vdda_mv = hal_adc_read_vdda_mv(adc);
+        /* Measuring VDDA runs a VREFINT conversion, which stops the ADC and
+         * rewrites the channel selection. With DMA running that does not
+         * fail cleanly: it hijacks the stream, and every later scan
+         * converts VREFINT only (seen on silicon 2026-09-22). So never
+         * measure here while DMA is active; return 0 and let the caller
+         * see it. Prime VDDA before hal_adc_start_dma instead. */
+        if (adc->dma_active) return 0;
+        hal_adc_read_vdda_mv(adc);                        /* caches vdda_mv */
     }
     uint32_t max_count = (1UL << (uint32_t)adc->effective_bits) - 1UL;
     if (max_count == 0) return 0;

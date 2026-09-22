@@ -30,9 +30,9 @@ typedef struct {
     volatile uint32_t _RESERVED0; /* 0x1C */
     volatile uint32_t TR;       /* 0x20: Watchdog threshold (L0) / TR1 (L4) */
     volatile uint32_t TR2;      /* 0x24: (L4 only) */
-    volatile uint32_t TR3;      /* 0x28: (L4 only) */
+    volatile uint32_t TR3;      /* 0x28: TR3 (L4) / CHSELR (L0, WBA ADC4) */
     volatile uint32_t _RESERVED1; /* 0x2C */
-    volatile uint32_t SQR1;     /* 0x30: Sequence register 1 (L4) / CHSELR (L0) */
+    volatile uint32_t SQR1;     /* 0x30: Sequence register 1 (L4); NOT CHSELR */
     volatile uint32_t SQR2;     /* 0x34: (L4 only) */
     volatile uint32_t SQR3;     /* 0x38: (L4 only) */
     volatile uint32_t SQR4;     /* 0x3C: (L4 only) */
@@ -43,6 +43,16 @@ typedef struct {
 
 #if defined(STM32L011xx)
   #define ADC1      ((ADC_TypeDef *)0x40012400UL)
+  /* RM0377 13.11.11: ADC_CCR at ADC base + 0x308. VREFEN is bit 22 and
+   * TSEN bit 23 here, NOT in CFGR2, where those bits are reserved and a
+   * write is silently dropped. */
+  #define ADC_CCR   REG32(0x40012708UL)
+  /* RM0377 SYSCFG_CFGR3 (SYSCFG base + 0x20). The L0 also needs these
+   * buffers on before VREFINT or the temperature sensor reach the ADC.
+   * SYSCFG's clock (RCC_APB2ENR bit 0) must be on to write it. */
+  #define SYSCFG_CFGR3               REG32(0x40010020UL)
+  #define SYSCFG_CFGR3_ENBUF_VREFINT (1UL << 8)
+  #define SYSCFG_CFGR3_ENBUF_SENSOR  (1UL << 9)
 
 #elif defined(STM32L422xx)
   #define ADC1      ((ADC_TypeDef *)0x50040000UL)
