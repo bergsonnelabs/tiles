@@ -1281,14 +1281,21 @@ def load_bus_addresses(def_path):
             continue
         # Copy each entry to strip any extra fields the tile-def schema
         # may add later (keeps the manifest shape stable).
+        #
+        # Blank entries are skipped: the portal's tile editor needs a second
+        # address row before it will let you mark one as default, so a tile
+        # with exactly one address picks up an empty sibling. Passing that
+        # through would show a blank alternate address in Studio and the docs.
         out[name] = [
             {
                 "address": a["address"],
                 **({"is_default": True} if a.get("is_default") else {}),
             }
             for a in addrs
-            if isinstance(a, dict) and "address" in a
+            if isinstance(a, dict) and str(a.get("address") or "").strip()
         ]
+        if not out[name]:
+            del out[name]
     return out
 
 
@@ -1407,6 +1414,13 @@ def main():
             "prefix": "tile_sense_i_6p6",
             "init": "tile_sense_i_6p6_init",
             "version": "1.2.0",
+        },
+        {
+            "path": ROOT / "drivers/tile_sense_adc_6.h",
+            "definition": ROOT / "definitions/Sense-ADC-6-a.json",
+            "prefix": "tile_sense_adc_6",
+            "init": "tile_sense_adc_6_init",
+            "version": "1.0.0",
         },
         {
             "path": ROOT / "drivers/tile_drive_h.h",

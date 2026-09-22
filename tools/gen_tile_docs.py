@@ -61,6 +61,7 @@ ACTIVE_TILES = [
     "tile_sense_cam_p",
     "tile_sense_cap",
     "tile_sense_i_6p6",
+    "tile_sense_adc_6",
     "tile_sense_i_9",
     "tile_sense_m_3g",
     "tile_sense_mic",

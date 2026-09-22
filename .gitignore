@@ -13,6 +13,7 @@ __pycache__/
 tests/**/core.h
 examples/**/core.h
 templates/**/core.h
+firmware/**/core.h
 
 # Generated tile handles (regenerated on build)
 **/tile_handles.h
