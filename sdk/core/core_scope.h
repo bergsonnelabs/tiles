@@ -44,6 +44,8 @@
  * has to happen before the stack starts: make the first core_scope_* call
  * (or core_scope_init()) BEFORE core_ble_init().
  *
+ * @studio category scope label=Core.Scope icon=📈
+ *
  * @studio coverage
  *   id:    scope
  *   name:  Scope — live variable streaming

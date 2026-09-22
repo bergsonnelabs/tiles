@@ -1,0 +1,205 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@83c9540",
+  "category": "scope",
+  "label": "Core.Scope",
+  "icon": "📈",
+  "header": "core_scope.h",
+  "headers": {
+    "core": "core_scope.h"
+  },
+  "functions": [
+    {
+      "name": "core_scope_init",
+      "signature": "core_scope_init(void)",
+      "returns": "void",
+      "brief": "Start the module on the Core's default link.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_set_link",
+      "signature": "core_scope_set_link(const core_scope_link_t * link)",
+      "returns": "void",
+      "brief": "Stream over a different link than the default.",
+      "params": [
+        {
+          "name": "link",
+          "ctype": "const core_scope_link_t *",
+          "description": "Link to use; must outlive the program. NULL = no link."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_add",
+      "signature": "core_scope_add(const char * name, const volatile void * ptr, core_scope_type_t type)",
+      "returns": "int",
+      "brief": "Register one variable as a channel.",
+      "params": [
+        {
+          "name": "name",
+          "ctype": "const char *",
+          "description": "Channel name shown on the plot. Not copied — must outlive"
+        },
+        {
+          "name": "ptr",
+          "ctype": "const volatile void *",
+          "description": "The variable. Read on every sample, so it must stay valid"
+        },
+        {
+          "name": "type",
+          "ctype": "core_scope_type_t",
+          "description": "The variable's type."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_add_array",
+      "signature": "core_scope_add_array(const char * name, const volatile void * ptr, core_scope_type_t type, uint8_t count)",
+      "returns": "int",
+      "brief": "Register a fixed array as channels `name[0]` .. `name[count-1]`.",
+      "params": [
+        {
+          "name": "name",
+          "ctype": "const char *",
+          "description": "Base name. Not copied."
+        },
+        {
+          "name": "ptr",
+          "ctype": "const volatile void *",
+          "description": "First element."
+        },
+        {
+          "name": "type",
+          "ctype": "core_scope_type_t",
+          "description": "Element type."
+        },
+        {
+          "name": "count",
+          "ctype": "uint8_t",
+          "description": "Number of elements."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_set_interval_ms",
+      "signature": "core_scope_set_interval_ms(uint32_t ms)",
+      "returns": "void",
+      "brief": "Limit core_scope_update() to one sample per `ms` milliseconds.",
+      "params": [
+        {
+          "name": "ms",
+          "ctype": "uint32_t",
+          "range": [
+            0,
+            60000
+          ],
+          "description": "Minimum time between samples."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_declare_rate_hz",
+      "signature": "core_scope_declare_rate_hz(uint32_t hz)",
+      "returns": "void",
+      "brief": "Promise that samples are taken at exactly this rate.",
+      "params": [
+        {
+          "name": "hz",
+          "ctype": "uint32_t",
+          "range": [
+            0,
+            4000000
+          ],
+          "description": "Samples per second."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_declare_rate_millihertz",
+      "signature": "core_scope_declare_rate_millihertz(uint32_t millihertz)",
+      "returns": "void",
+      "brief": "As core_scope_declare_rate_hz(), in millihertz — for rates that",
+      "params": [
+        {
+          "name": "millihertz",
+          "ctype": "uint32_t",
+          "description": "Samples per 1000 seconds."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_sample",
+      "signature": "core_scope_sample(void)",
+      "returns": "void",
+      "brief": "Snapshot the registered variables. ISR-safe.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_pump",
+      "signature": "core_scope_pump(void)",
+      "returns": "void",
+      "brief": "Frame the pending samples and hand them to the link. Main loop.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_update",
+      "signature": "core_scope_update(void)",
+      "returns": "void",
+      "brief": "core_scope_sample() + core_scope_pump(), honoring the interval",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_enable",
+      "signature": "core_scope_enable(int on)",
+      "returns": "void",
+      "brief": "Pause or resume at run time (a debug button, a BLE command).",
+      "params": [
+        {
+          "name": "on",
+          "ctype": "int",
+          "description": "0 = paused: calls cost one branch. Non-zero = running."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_active",
+      "signature": "core_scope_active(void)",
+      "returns": "int",
+      "brief": "Is a host listening right now?",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_scope_dropped",
+      "signature": "core_scope_dropped(void)",
+      "returns": "uint32_t",
+      "brief": "Samples dropped since boot because the ring was full.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    }
+  ]
+}

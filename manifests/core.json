@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@8e95159",
+  "source": "tiles@83c9540",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -57,6 +57,10 @@
     "rtc": {
       "label": "Core.RTC",
       "icon": "◴"
+    },
+    "scope": {
+      "label": "Core.Scope",
+      "icon": "📈"
     },
     "serial": {
       "label": "Core.Serial",
