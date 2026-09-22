@@ -405,6 +405,22 @@ ifeq ($(WAMR_ENABLED),1)
   include $(SDK_DIR)sdk/wamr/wamr.mk
 endif
 
+# ---- Scope (core_scope) ----
+#
+# On unless config.json says otherwise:
+#
+#   "scope": { "enabled": false }
+#
+# which compiles every core_scope_* call to nothing: the production-build
+# switch (no flash, no RAM, no Studio Link GATT service). A project that never
+# calls core_scope pays nothing either way: --gc-sections drops the module.
+# `make SCOPE_ENABLED=0` overrides for a local one-off.
+_SCOPE_CFG := $(shell $(PYTHON) -c "import json; c=json.load(open('$(CONFIG_JSON)')); print(0 if (c.get('scope') or {}).get('enabled') is False else 1)" 2>/dev/null || echo 1)
+SCOPE_ENABLED ?= $(_SCOPE_CFG)
+ifeq ($(SCOPE_ENABLED),0)
+  CFLAGS += -DCORE_SCOPE_ENABLED=0
+endif
+
 # ---- BLE support (Core.ST.W5 only) ----
 #
 # Driven from config.json, the same way "bootloader" is:
@@ -472,7 +488,7 @@ GEN_OBJS = $(GEN_SOURCES:.c=.o)
 # drives, core_pdm.c the PDM decimator, core_stepper.c the STEP/DIR pulse
 # generator's ISR state. (core_ble.o stays BLE-gated, below.)
 CORE_OBJS = $(BUILD_DIR)/sdk/core/core_led.o $(BUILD_DIR)/sdk/core/core_pdm.o \
-            $(BUILD_DIR)/sdk/core/core_stepper.o
+            $(BUILD_DIR)/sdk/core/core_stepper.o $(BUILD_DIR)/sdk/core/core_scope.o
 OBJECTS  = $(C_OBJS) $(ASM_OBJS) $(HAL_OBJS) $(CORE_OBJS) $(GEN_OBJS)
 
 ifeq ($(TILES_ENABLED),1)
@@ -598,6 +614,11 @@ $(BUILD_DIR)/sdk/core/core_pdm.o: $(SDK_DIR)sdk/core/core_pdm.c $(GEN_HEADERS)
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sdk/core/core_stepper.o: $(SDK_DIR)sdk/core/core_stepper.c $(GEN_HEADERS)
+	$(Q)mkdir -p $(dir $@)
+	$(LOG) "  CC    $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sdk/core/core_scope.o: $(SDK_DIR)sdk/core/core_scope.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@

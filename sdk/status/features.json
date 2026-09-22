@@ -467,6 +467,18 @@
           "desc": "Emulates a virtual COM port over USB — appears as a serial device on the host OS."
         },
         {
+          "id": "conn.scope_usb",
+          "layer": "Core",
+          "name": "Scope over USB",
+          "desc": "core_scope: live variable streaming to Studio or any host, sharing the CDC port with print text. Non-blocking; compiles out for production."
+        },
+        {
+          "id": "conn.scope_ble",
+          "layer": "Core",
+          "name": "Scope over Bluetooth",
+          "desc": "core_scope over BLE notifications on the Studio Link service (0x5C00 / 0x5C01), batched and sent only while a host is subscribed."
+        },
+        {
           "id": "conn.usb_hid",
           "name": "USB HID",
           "desc": "Human Interface Device class — used for custom input devices, sensor streams, and control panels."

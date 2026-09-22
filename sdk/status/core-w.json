@@ -79,6 +79,8 @@
     "security.pka": "none",
     "security.hash": "na",
     "conn.usb_cdc": "na",
+    "conn.scope_usb": "na",
+    "conn.scope_ble": "compile",
     "conn.usb_hid": "na",
     "conn.usb_msc": "na",
     "conn.dfu": "na",

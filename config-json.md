@@ -111,6 +111,7 @@ markers** — re-running coregen will clobber them. Edit `config.json` instead.
 | `timer`        | object | no       | none           | ✅ (Studio only) |
 | `pins`         | object | no       | —              | ✅ (legacy alias for `pads`) |
 | `ble`          | object | no       | —              | ✅ (radio + GATT contract) |
+| `scope`        | object | no       | enabled        | ❌ (read by the Makefile, see §10) |
 | `debug`        | object | no       | —              | ❌ **ignored** |
 | `isp`          | object | no       | —              | ❌ **ignored** |
 | `programming`  | object | no       | —              | ❌ **ignored** |
@@ -417,6 +418,20 @@ ROM_DFU build and stays dormant until a watchdog is actually running.
 
 The [project templates](templates/) for the USB-capable Cores ship with
 this configured and fed.
+
+### `scope`
+
+```json
+"scope": { "enabled": false }
+```
+
+The production switch for [`core_scope`](sdk/core/core_scope.h), the live
+variable stream Studio's Scope panel plots. Absent (or `true`) leaves the
+module available; a project that never calls it still pays nothing, because
+the linker drops it. `false` compiles every `core_scope_*` call to nothing —
+no flash, no RAM, and on a radio Core no Studio Link service in the GATT
+table. Read by the Makefile, not coregen (`make SCOPE_ENABLED=0` is the
+one-off override).
 
 ### `timer` (Studio only)
 
