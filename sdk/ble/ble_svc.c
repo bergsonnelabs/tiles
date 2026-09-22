@@ -22,7 +22,12 @@
 
 /* ---- Limits ---- */
 #define MAX_SERVICES  4
-#define MAX_CHARS     16
+/* Characteristic records. A registration past this returns handle 0 and every
+ * later set_value on it fails silently — the Ring hit exactly that at 18 chars
+ * (DIS 5 + Battery 1 + System 3 + Motion 2 + Haptics 2 + Audio 2 + Info 1 +
+ * Touch 2) on 2026-09-22. Keep it above what the largest app registers; the
+ * attribute budget in ble_app.c (CFG_BLE_NUM_GATT_ATTRIBUTES) is the real cap. */
+#define MAX_CHARS     24
 
 /* ---- Characteristic record ---- */
 typedef struct {
