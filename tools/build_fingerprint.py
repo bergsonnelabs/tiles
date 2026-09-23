@@ -21,10 +21,12 @@ changes, because a project may start calling it.
 """
 import ast
 import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
+import tokenize
 
 INPUTS = re.compile(
     r'^(Makefile|tiles[^/]*\.h|sdk/|hal/|drivers/|definitions/Core-|third_party/|'
@@ -56,15 +58,31 @@ def strip_c(src: bytes) -> bytes:
 
 
 def strip_py(src: bytes) -> bytes:
-    """Python as its AST, without docstrings: comments and layout drop out."""
-    tree = ast.parse(src)
-    for node in ast.walk(tree):
+    """Python without comments, docstrings or layout, as TEXT, so the result is
+    the same on every Python 3 (an AST dump is not: its format changes between
+    versions, which once made CI and a laptop disagree about the same commit)."""
+    text = src.decode('utf-8', errors='replace')
+    lines = text.splitlines()
+    # Docstrings: the first statement of a module / class / function, if it is a
+    # bare string. They sit on lines of their own, so blank those lines.
+    for node in ast.walk(ast.parse(text)):
         body = getattr(node, 'body', None)
         if (isinstance(body, list) and body and isinstance(body[0], ast.Expr)
                 and isinstance(getattr(body[0], 'value', None), ast.Constant)
                 and isinstance(body[0].value.value, str)):
-            node.body = body[1:] or [ast.Pass()]
-    return ast.dump(tree).encode()
+            doc = body[0]
+            for i in range(doc.lineno - 1, doc.end_lineno):
+                lines[i] = ''
+    # Comments: where the tokenizer says they are (never inside a string).
+    comments = {}
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type == tokenize.COMMENT:
+            comments[tok.start[0] - 1] = tok.start[1]
+    for i, col in comments.items():
+        if lines[i]:
+            lines[i] = lines[i][:col]
+    out = (re.sub(r'\s+', ' ', line).strip() for line in lines)
+    return '\n'.join(line for line in out if line).encode()
 
 
 def strip_json(src: bytes) -> bytes:
