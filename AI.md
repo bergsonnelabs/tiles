@@ -64,6 +64,7 @@ cores/
 ├── drivers/                    # Tile peripheral drivers (tile_*.h/c)
 │   └── _template/              # Driver scaffolding (tile_template.{h,c})
 ├── hal/                        # Tile PAL adapters (Arduino / ESP-IDF / STM32)
+├── twins/                      # Tile digital twins (TypeScript), one per tile — see twins/README.md
 ├── manifests/                  # Generated manifests (per-tile + SDK)
 ├── tools/
 │   └── coregen/

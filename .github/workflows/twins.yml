@@ -1,0 +1,36 @@
+name: twins
+
+# Each tile's digital twin lives in twins/ next to its driver, and is held to the
+# twin contract against the driver's generated manifest: call names, result
+# shapes, pad keys, and every field a call writes or power / indicators / ticks
+# read must exist in the twin's state. A driver change that breaks its twin
+# fails here, in the same PR.
+
+on:
+  pull_request:
+    paths:
+      - 'twins/**'
+      - 'manifests/**'
+      - 'drivers/**'
+      - '.github/workflows/twins.yml'
+  push:
+    branches: [main]
+
+jobs:
+  twins:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: twins
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: twins/package-lock.json
+      - run: npm ci
+      - name: Typecheck (strict, no unused)
+        run: npm run typecheck
+      - name: Contract tests
+        run: npm test
