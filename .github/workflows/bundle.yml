@@ -1,0 +1,112 @@
+name: bundle
+
+# Publish the tiles bundle for every commit on main: each tile's manifest, docs,
+# definitions and compiled twin, with an index carrying the twin contract
+# version and the build fingerprint (twins/scripts/build-bundle.mjs,
+# tools/build_fingerprint.py). Studio loads it at runtime through the site,
+# which hands each viewer only the tiles they may see, so a driver, twin or
+# docs change reaches Studio without a web deploy.
+#
+# Bundles are committed to the `bundles` branch as `<sha>/…`, with
+# `latest.json` pointing at the newest. Only the last 30 are kept on the branch
+# (git history holds the rest).
+#
+# Then the build server: if this commit's fingerprint differs from the one the
+# build server reports, what it compiles has changed, so web is asked to re-pin
+# and redeploy it (web workflow `builder-repin`). A comment-only change, a twin,
+# a doc: no redeploy.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bundle
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    outputs:
+      fingerprint: ${{ steps.fp.outputs.fingerprint }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: twins/package-lock.json
+      - name: Build fingerprint
+        id: fp
+        run: echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build the bundle
+        working-directory: twins
+        run: |
+          npm ci
+          npm run bundle -- --out "$RUNNER_TEMP/bundle" --sha "$GITHUB_SHA" \
+            --fingerprint "${{ steps.fp.outputs.fingerprint }}"
+      - name: Publish to the bundles branch
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/bundles"
+          url="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads "$url" bundles >/dev/null; then
+            git clone --quiet --depth 1 --branch bundles "$url" "$dest"
+          else
+            git init --quiet "$dest"
+            git -C "$dest" checkout --quiet --orphan bundles
+            git -C "$dest" remote add origin "$url"
+          fi
+          cd "$dest"
+          rm -rf "$GITHUB_SHA"
+          cp -R "$RUNNER_TEMP/bundle" "$GITHUB_SHA"
+          jq -n --arg sha "$GITHUB_SHA" --arg fp "${{ steps.fp.outputs.fingerprint }}" \
+            --argjson contract "$(jq .contract "$GITHUB_SHA/index.json")" \
+            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{sha: $sha, fingerprint: $fp, contract: $contract, publishedAt: $at}' > latest.json
+          # Keep the newest 30 bundles on the branch.
+          ls -1d */ 2>/dev/null | sed 's#/$##' | while read -r d; do
+            echo "$(jq -r .generatedAt "$d/index.json") $d"
+          done | sort -r | tail -n +31 | awk '{print $2}' | xargs -r rm -rf
+          git add -A
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit --quiet -m "bundle ${GITHUB_SHA::7} (fingerprint ${{ steps.fp.outputs.fingerprint }})"
+          git push --quiet origin bundles
+
+  builder:
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Does the build server need this commit?
+        id: check
+        run: |
+          deployed="$(curl -fsS --max-time 60 https://bergsonne-build.fly.dev/health | jq -r '.cores_fingerprint // empty' || true)"
+          echo "deployed=${deployed:-unknown}, this commit=${{ needs.bundle.outputs.fingerprint }}"
+          if [ "$deployed" = "${{ needs.bundle.outputs.fingerprint }}" ]; then
+            echo "repin=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "repin=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Mint a GitHub App token (scoped to web)
+        if: steps.check.outputs.repin == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TILES_SYNC_APP_ID }}
+          private-key: ${{ secrets.TILES_SYNC_APP_PRIVATE_KEY }}
+          owner: bergsonnelabs
+          repositories: web
+      - name: Ask web to re-pin the build server
+        if: steps.check.outputs.repin == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh api repos/bergsonnelabs/web/dispatches \
+            -f event_type=builder-repin \
+            -f 'client_payload[sha]=${{ github.sha }}' \
+            -f 'client_payload[fingerprint]=${{ needs.bundle.outputs.fingerprint }}'

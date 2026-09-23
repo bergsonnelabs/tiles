@@ -19,6 +19,8 @@ on:
       - 'tools/parse_driver_header.py'
       - 'tools/gen_reference_data.py'
       - 'tools/coreprobe_power.py'
+      - 'tools/build_fingerprint.py'
+      - 'tools/test_build_fingerprint.py'
       - 'tools/test_coreprobe_power.py'
       - '.github/workflows/studio-manifest.yml'
   push:
@@ -34,6 +36,8 @@ jobs:
           python-version: '3.11'
       - name: Parser unit tests
         run: python3 tools/test_gen_studio_manifest.py
+      - name: Build fingerprint unit tests
+        run: python3 tools/test_build_fingerprint.py
       # Pure Python: hidapi is only imported when a probe is opened, so this
       # needs nothing installed. It pins the safety rules, including that the
       # host has no way to set a fixed level-shifter voltage.

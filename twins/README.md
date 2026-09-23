@@ -44,3 +44,18 @@ the driver declares, pad keys are pad numbers, and every field a call writes or
 `power` / `indicators` / `padOutputs` / `deriveState` / `stimuli` read exists in
 the state. CI runs it on every PR that touches `twins/`, `manifests/` or
 `drivers/` (`.github/workflows/twins.yml`).
+
+## The bundle
+
+Every commit on `main` is published as a bundle (`npm run bundle`,
+`.github/workflows/bundle.yml`): each tile's manifest, docs, definitions and
+compiled twin (one ES module per tile), with an index carrying
+`CONTRACT_VERSION` and the build fingerprint. It goes to the `bundles` branch
+(`<sha>/…`, `latest.json`), and Studio loads it at runtime through the site,
+which hands each viewer only the tiles they may see. A twin change reaches
+Studio without a web deploy.
+
+The same workflow compares the commit's build fingerprint
+(`tools/build_fingerprint.py`: what the build server compiles, ignoring
+comments and docs) with the deployed build server's, and asks web to redeploy
+it only when they differ.
