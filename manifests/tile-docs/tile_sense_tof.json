@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@be0209a",
+  "source": "tiles@c2cc2d1",
   "file": "tile_sense_tof.h",
   "brief": "TMF8806 time-of-flight distance sensor.",
   "description": "Platform-agnostic driver for the AMS/Sciosense TMF8806 direct time-of-flight\n(dToF) sensor with integrated VCSEL emitter and SPAD detector array.\n\nKey specifications:\n - Distance measurement up to 5000 mm (short-range, 2.5 m, and 5 m modes)\n - 16-bit distance output in millimeters\n - Configurable measurement period (30 ms to 2000 ms, or single-shot)\n - Configurable iteration count for accuracy vs. speed trade-off\n - 6-bit reliability indicator (0 = no object, 63 = highest confidence)\n - On-chip factory calibration with host-side storage and reload\n - Algorithm state save/restore for ultra-low-power resume\n - Embedded 8-bit temperature sensor\n\n\nDatasheet: https://ams.com/tmf8806\n\n@studio tile label=Sense.TOF icon=◊\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"10 m extended-range mode\" section=advanced\n  Deferred to a dedicated session. TMF8806 App0 firmware supports\n  up to 5 m range out of ROM; 10 m mode requires downloading a\n  binary RAM patch from AMS via the bootloader's W_RAM +\n  RAMREMAP_RESET protocol — non-trivial firmware-loading flow not\n  in scope for this driver-coverage pass.\n\n@studio unsupported severity=niche category=\"GPIO0 / GPIO1 runtime control\"\n  GPIO0 is routed to tile pad 3 but is consumed as a hardware\n  strap: a 100 k on-board pull-up to V+ holds GPIO0 high at\n  startup, selecting the 1.8-3.3 V digital-I/O level required by\n  this tile's 2.7-3.6 V rail (TMF8806 datasheet §6.7). It is NOT\n  an I2C-address strap (the address is fixed at 0x41, changed only\n  via command 0x49). Because the strap fixes GPIO0 high, runtime\n  GPIO0 output modes (object-detect / VCSEL-sync, command 0x0F)\n  are not exposed — driving the pad would fight the pull-up and\n  risk changing the I/O level. GPIO1 is not routed to a pad.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
@@ -33,13 +33,13 @@
     },
     {
       "name": "TILE_SENSE_TOF_VERSION_MINOR",
-      "value": "4",
+      "value": "5",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_SENSE_TOF_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -214,6 +214,43 @@
           "name": "SENSE_TOF_RANGE_5000MM",
           "value": "2",
           "description": "Long range up to 5000 mm"
+        }
+      ]
+    },
+    {
+      "name": "sense_tof_period_t",
+      "brief": "Measurement repetition period (cmd_data2, `repetitionPeriodMs`).",
+      "description": "1-253 is the period in milliseconds; 0xFE and 0xFF are the chip's codes\nfor 1 s and 2 s (datasheet cmd 0x02). 0x00 (single shot) is what\nmeasure_single() uses internally and is not a rate, so it is not listed.\nAny other 1-253 value is accepted too. If one ranging takes longer than\nthe period (many iterations), the chip ranges back-to-back and the period\nis ignored.",
+      "members": [
+        {
+          "name": "SENSE_TOF_PERIOD_30MS",
+          "value": "0x1E",
+          "description": "Every 30 ms, ~33 per second (default) @studio value=33.3"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_50MS",
+          "value": "0x32",
+          "description": "Every 50 ms, 20 per second @studio value=20"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_100MS",
+          "value": "0x64",
+          "description": "Every 100 ms, 10 per second @studio value=10"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_250MS",
+          "value": "0xFA",
+          "description": "Every 250 ms, 4 per second @studio value=4"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_1S",
+          "value": "0xFE",
+          "description": "Every second @studio value=1"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_2S",
+          "value": "0xFF",
+          "description": "Every 2 seconds @studio value=0.5"
         }
       ]
     }
@@ -747,22 +784,22 @@
       "name": "tile_sense_tof_set_distance_mode"
     },
     {
-      "signature": "void tile_sense_tof_set_period(tile_t *tile, uint8_t period_ms)",
+      "signature": "void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period)",
       "params": [
         {
           "name": "tile",
           "description": "Initialised tile handle."
         },
         {
-          "name": "period_ms",
-          "description": "New period code (0x00=single, 0x1E=30ms, 0xFE=1s, 0xFF=2s)."
+          "name": "period",
+          "description": "New repetition period (sense_tof_period_t, or 1-253 ms)."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Change the measurement repetition period on the fly.",
-      "description": "Stops any active measurement, updates the cached period, and restarts.\nIf no measurement was running, only updates the config for the next start().",
+      "description": "Slower rates save most of the power: the laser only fires for the\nranging time (~24 ms at the default 900k iterations), and the chip\nidles at ~140 uA for the rest of each period.\n\nStops any active measurement, updates the cached period, and restarts.\nIf no measurement was running, only updates the config for the next start().",
       "name": "tile_sense_tof_set_period"
     },
     {
@@ -774,7 +811,7 @@
         },
         {
           "name": "kilo_iters",
-          "description": "Iterations in thousands (e.g. 900 = 900k)."
+          "description": "[10..4000] Iterations in thousands (e.g. 900 = 900k)."
         }
       ],
       "notes": [],
@@ -793,7 +830,7 @@
         },
         {
           "name": "threshold",
-          "description": "Detection threshold, 0-63."
+          "description": "[0..63] Detection threshold, 0-63."
         }
       ],
       "notes": [],
@@ -1082,8 +1119,68 @@
     }
   ],
   "source_file": "tile_sense_tof.h",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "tile_family": "Sense",
   "tile_name": "TOF",
-  "display_name": "Sense.TOF"
+  "display_name": "Sense.TOF",
+  "vibe_settings": [
+    {
+      "label": "Distance range",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_distance_mode",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Short range, ~200 mm max, lowest power",
+        "Medium range up to 2500 mm (default)",
+        "Long range up to 5000 mm"
+      ],
+      "default": "Medium range up to 2500 mm (default)"
+    },
+    {
+      "label": "Measurement rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_period",
+      "param": "period",
+      "kind": "choice",
+      "choices": [
+        "Every 30 ms, ~33 per second (default)",
+        "Every 50 ms, 20 per second",
+        "Every 100 ms, 10 per second",
+        "Every 250 ms, 4 per second",
+        "Every second",
+        "Every 2 seconds"
+      ],
+      "default": "Every 30 ms, ~33 per second (default)",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Iterations (thousands)",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_kilo_iters",
+      "param": "kilo_iters",
+      "kind": "number",
+      "range": [
+        10,
+        4000
+      ],
+      "default": 900
+    },
+    {
+      "label": "Detection threshold",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_threshold",
+      "param": "threshold",
+      "kind": "number",
+      "range": [
+        0,
+        63
+      ],
+      "default": 6
+    }
+  ]
 }

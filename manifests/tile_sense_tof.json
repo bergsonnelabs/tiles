@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@c2cc2d1",
   "tile": "Sense.TOF",
   "palette": {
     "label": "Sense.TOF",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_tof",
     "header": "tile_sense_tof.h",
-    "version": "1.4.1"
+    "version": "1.5.0"
   },
   "handle": {
     "type": "tile_t",
@@ -373,6 +373,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Distance range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -386,12 +395,60 @@
       "description": "Change the measurement repetition period on the fly.",
       "params": [
         {
-          "name": "period_ms",
+          "name": "period",
           "type": "int",
-          "description": "New period code (0x00=single, 0x1E=30ms, 0xFE=1s, 0xFF=2s)."
+          "description": "New repetition period (sense_tof_period_t, or 1-253 ms).",
+          "choices": [
+            {
+              "name": "SENSE_TOF_PERIOD_30MS",
+              "value": 30,
+              "label": "Every 30 ms, ~33 per second (default)",
+              "quantity": 33.3
+            },
+            {
+              "name": "SENSE_TOF_PERIOD_50MS",
+              "value": 50,
+              "label": "Every 50 ms, 20 per second",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_TOF_PERIOD_100MS",
+              "value": 100,
+              "label": "Every 100 ms, 10 per second",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_TOF_PERIOD_250MS",
+              "value": 250,
+              "label": "Every 250 ms, 4 per second",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_TOF_PERIOD_1S",
+              "value": 254,
+              "label": "Every second",
+              "quantity": 1
+            },
+            {
+              "name": "SENSE_TOF_PERIOD_2S",
+              "value": 255,
+              "label": "Every 2 seconds",
+              "quantity": 0.5
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "period",
+          "label": "Measurement rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 30
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -407,10 +464,23 @@
         {
           "name": "kilo_iters",
           "type": "int",
+          "range": [
+            10,
+            4000
+          ],
           "description": "Iterations in thousands (e.g. 900 = 900k)."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "kilo_iters",
+          "label": "Iterations (thousands)",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 900
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -426,10 +496,23 @@
         {
           "name": "threshold",
           "type": "int",
+          "range": [
+            0,
+            63
+          ],
           "description": "Detection threshold, 0-63."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Detection threshold",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 6
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
