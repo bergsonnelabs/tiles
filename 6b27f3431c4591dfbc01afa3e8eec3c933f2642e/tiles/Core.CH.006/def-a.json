@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "CH.006",
+  "pads": [],
+  "power": [],
+  "family": "Core",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 74,
+  "headline": "ultra-low-cost 32-bit RISC-V",
+  "components": [
+    {
+      "url": "",
+      "part": "CH32V006F8U7",
+      "datasheet": "",
+      "manufacturer": "WCH"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-06-03T17:21:33.605Z",
+  "description": "Built around the 48-MHz 32-bit RISC-V CH32V006F8U6 (QingKe V2C, RV32EC) with 62KB flash and 8KB SRAM.  More details soon.",
+  "json_version": "0.2",
+  "application_notes": []
+}

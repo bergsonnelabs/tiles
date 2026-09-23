@@ -1,0 +1,39 @@
+{
+  "rev": "a",
+  "name": "V",
+  "pads": [],
+  "power": [],
+  "family": "Link",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 46,
+  "features": {
+    "antenna": {
+      "kind": "antenna",
+      "label": "V-band antenna",
+      "protocols": [
+        "V-band short-range"
+      ],
+      "frequency_band": "60GHz"
+    }
+  },
+  "headline": "V-band 480Mbps short-range wireless",
+  "components": [
+    {
+      "url": "",
+      "part": "ST60A3H1",
+      "datasheet": "",
+      "manufacturer": "ST Microelectronics"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-05-01T12:08:17.129Z",
+  "description": "",
+  "json_version": "0.6",
+  "application_notes": []
+}
