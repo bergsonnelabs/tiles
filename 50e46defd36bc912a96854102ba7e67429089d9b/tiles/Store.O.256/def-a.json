@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "O.256",
+  "pads": [],
+  "power": [],
+  "family": "Store",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 38,
+  "headline": "256Mbit NOR flash",
+  "components": [
+    {
+      "url": "",
+      "part": "S25FS256",
+      "datasheet": "",
+      "manufacturer": "Infineon"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-03-02T10:39:45.834Z",
+  "description": "",
+  "json_version": "0.2",
+  "application_notes": []
+}

@@ -1,0 +1,2640 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@4232e99",
+  "tile": "Sense.I.6P6",
+  "palette": {
+    "label": "Sense.I.6P6",
+    "icon": "triad"
+  },
+  "driver": {
+    "prefix": "tile_sense_i_6p6",
+    "header": "tile_sense_i_6p6.h",
+    "version": "1.2.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_i_6p6_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_sense_i_6p6_process",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Process pending interrupt events. Call from your main loop.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_event"
+      ],
+      "symbol": "tile_sense_i_6p6_on_event",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Register or change the event callback.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?sense_i_6p6_event_cb_t",
+          "description": "Callback to fire on interrupt events. NULL to clear."
+        },
+        {
+          "name": "ctx",
+          "type": "?void *",
+          "description": "Opaque user pointer passed to the callback."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_i_6p6_sleep",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enter sleep mode (accel + gyro off). ~7.5 µA.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_i_6p6_wake",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Wake from sleep, restore low-noise mode. Range/ODR preserved.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_i_6p6_reset",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Software reset. Blocks ~2 ms. Must call init() again after.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_accel_range"
+      ],
+      "symbol": "tile_sense_i_6p6_set_accel_range",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set accelerometer full-scale range.",
+      "params": [
+        {
+          "name": "range",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ACCEL_32G",
+              "value": 0,
+              "label": "±32 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_16G",
+              "value": 1,
+              "label": "±16 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_8G",
+              "value": 2,
+              "label": "±8 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_4G",
+              "value": 3,
+              "label": "±4 g"
+            },
+            {
+              "name": "SENSE_I_6P6_ACCEL_2G",
+              "value": 4,
+              "label": "±2 g"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "range",
+          "label": "Accel range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gyro_range"
+      ],
+      "symbol": "tile_sense_i_6p6_set_gyro_range",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set gyroscope full-scale range.",
+      "params": [
+        {
+          "name": "range",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_GYRO_4000DPS",
+              "value": 0,
+              "label": "±4000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_2000DPS",
+              "value": 1,
+              "label": "±2000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_1000DPS",
+              "value": 2,
+              "label": "±1000 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_500DPS",
+              "value": 3,
+              "label": "±500 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_250DPS",
+              "value": 4,
+              "label": "±250 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_125DPS",
+              "value": 5,
+              "label": "±125 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_62_5DPS",
+              "value": 6,
+              "label": "±62.5 deg/s"
+            },
+            {
+              "name": "SENSE_I_6P6_GYRO_31_25DPS",
+              "value": 7,
+              "label": "±31.25 deg/s"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "range",
+          "label": "Gyro range",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_accel_odr"
+      ],
+      "symbol": "tile_sense_i_6p6_set_accel_odr",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set accelerometer output data rate.",
+      "params": [
+        {
+          "name": "odr",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_6_25HZ",
+              "value": 12,
+              "label": "6.25 Hz (accel LP only)",
+              "quantity": 6.25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_3_125HZ",
+              "value": 13,
+              "label": "3.125 Hz (accel LP only)",
+              "quantity": 3.125
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1_5625HZ",
+              "value": 14,
+              "label": "1.5625 Hz (accel LP only)",
+              "quantity": 1.5625
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Accel data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 8,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": ">=",
+            "args": [
+              {
+                "value": "set_accel_odr.odr"
+              },
+              {
+                "num": 12.5
+              }
+            ]
+          },
+          "message": "Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LN",
+                "num": 3
+              }
+            ]
+          }
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "value": "set_accel_odr.odr"
+              },
+              {
+                "num": 500
+              }
+            ]
+          },
+          "message": "In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LP",
+                "num": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gyro_odr"
+      ],
+      "symbol": "tile_sense_i_6p6_set_gyro_odr",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set gyroscope output data rate.",
+      "params": [
+        {
+          "name": "odr",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_6_25HZ",
+              "value": 12,
+              "label": "6.25 Hz (accel LP only)",
+              "quantity": 6.25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_3_125HZ",
+              "value": 13,
+              "label": "3.125 Hz (accel LP only)",
+              "quantity": 3.125
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1_5625HZ",
+              "value": 14,
+              "label": "1.5625 Hz (accel LP only)",
+              "quantity": 1.5625
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Gyro data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 8,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_ODR_32KHZ",
+              "value": 1,
+              "label": "32 kHz",
+              "quantity": 32000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_16KHZ",
+              "value": 2,
+              "label": "16 kHz",
+              "quantity": 16000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_8KHZ",
+              "value": 3,
+              "label": "8 kHz",
+              "quantity": 8000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_4KHZ",
+              "value": 4,
+              "label": "4 kHz",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_2KHZ",
+              "value": 5,
+              "label": "2 kHz",
+              "quantity": 2000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_1KHZ",
+              "value": 6,
+              "label": "1 kHz",
+              "quantity": 1000
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_200HZ",
+              "value": 7,
+              "label": "200 Hz",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_100HZ",
+              "value": 8,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_50HZ",
+              "value": 9,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_25HZ",
+              "value": 10,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_12_5HZ",
+              "value": 11,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_I_6P6_ODR_500HZ",
+              "value": 15,
+              "label": "500 Hz",
+              "quantity": 500
+            }
+          ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_power_mode"
+      ],
+      "symbol": "tile_sense_i_6p6_set_power_mode",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set power mode independently for accel and gyro.",
+      "params": [
+        {
+          "name": "accel",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        },
+        {
+          "name": "gyro",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "accel",
+          "label": "Accel power mode",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LP",
+              "value": 2,
+              "label": "Accel only: duty-cycled"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        },
+        {
+          "param": "gyro",
+          "label": "Gyro power mode",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_MODE_OFF",
+              "value": 0,
+              "label": "Powered off"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_STANDBY",
+              "value": 1,
+              "label": "Gyro only: drive on, no output"
+            },
+            {
+              "name": "SENSE_I_6P6_MODE_LN",
+              "value": 3,
+              "label": "Low-noise (full performance)"
+            }
+          ]
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_filter_bw"
+      ],
+      "symbol": "tile_sense_i_6p6_set_filter_bw",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set UI filter bandwidth for both accel and gyro.",
+      "params": [
+        {
+          "name": "accel_bw",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_1X_AVG",
+              "value": 1,
+              "label": "LP mode: 1× averaging (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_16X_AVG",
+              "value": 6,
+              "label": "LP mode: 16× averaging"
+            }
+          ]
+        },
+        {
+          "name": "gyro_bw",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_1X_AVG",
+              "value": 1,
+              "label": "LP mode: 1× averaging (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_LP_16X_AVG",
+              "value": 6,
+              "label": "LP mode: 16× averaging"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "accel_bw",
+          "label": "Accel filter bandwidth",
+          "tier": "advanced",
+          "scope": "config",
+          "show_unit": "Hz",
+          "default": 1,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            }
+          ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          },
+          "show": {
+            "cond": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_2",
+                    "num": 0
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "value": "set_accel_odr.odr"
+                  },
+                  {
+                    "num": 2
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "call": "max",
+                    "args": [
+                      {
+                        "num": 400
+                      },
+                      {
+                        "value": "set_accel_odr.odr"
+                      }
+                    ]
+                  },
+                  {
+                    "value": "set_filter_bw.accel_bw"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "param": "gyro_bw",
+          "label": "Gyro filter bandwidth",
+          "tier": "advanced",
+          "scope": "config",
+          "show_unit": "Hz",
+          "default": 1,
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+              "value": 0,
+              "label": "ODR/2 (Nyquist)",
+              "quantity": 2
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+              "value": 1,
+              "label": "max(400 Hz, ODR)/4 (default)",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+              "value": 2,
+              "label": "max(400 Hz, ODR)/5",
+              "quantity": 5
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+              "value": 3,
+              "label": "max(400 Hz, ODR)/8",
+              "quantity": 8
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+              "value": 4,
+              "label": "max(400 Hz, ODR)/10",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+              "value": 5,
+              "label": "max(400 Hz, ODR)/16",
+              "quantity": 16
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+              "value": 6,
+              "label": "max(400 Hz, ODR)/20",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+              "value": 7,
+              "label": "max(400 Hz, ODR)/40",
+              "quantity": 40
+            }
+          ],
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          },
+          "show": {
+            "cond": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.gyro_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_2",
+                    "num": 0
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "value": "set_gyro_odr.odr"
+                  },
+                  {
+                    "num": 2
+                  }
+                ]
+              },
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "call": "max",
+                    "args": [
+                      {
+                        "num": 400
+                      },
+                      {
+                        "value": "set_gyro_odr.odr"
+                      }
+                    ]
+                  },
+                  {
+                    "value": "set_filter_bw.gyro_bw"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "||",
+            "args": [
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_4",
+                    "num": 1
+                  }
+                ]
+              },
+              {
+                "op": "==",
+                "args": [
+                  {
+                    "ref": "set_filter_bw.accel_bw"
+                  },
+                  {
+                    "member": "SENSE_I_6P6_FILT_BW_ODR_20",
+                    "num": 6
+                  }
+                ]
+              }
+            ]
+          },
+          "message": "In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_LP",
+                "num": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_filter_order"
+      ],
+      "symbol": "tile_sense_i_6p6_set_filter_order",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set UI filter order for accel and gyro (1st, 2nd, or 3rd).",
+      "params": [
+        {
+          "name": "accel_order",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_1ST",
+              "value": 0,
+              "label": "1st order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_2ND",
+              "value": 1,
+              "label": "2nd order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_3RD",
+              "value": 2,
+              "label": "3rd order"
+            }
+          ]
+        },
+        {
+          "name": "gyro_order",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_1ST",
+              "value": 0,
+              "label": "1st order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_2ND",
+              "value": 1,
+              "label": "2nd order"
+            },
+            {
+              "name": "SENSE_I_6P6_FILT_ORDER_3RD",
+              "value": 2,
+              "label": "3rd order"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "accel_order",
+          "label": "Accel filter order",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.accel"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        },
+        {
+          "param": "gyro_order",
+          "label": "Gyro filter order",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1,
+          "when": {
+            "op": "!=",
+            "args": [
+              {
+                "ref": "set_power_mode.gyro"
+              },
+              {
+                "member": "SENSE_I_6P6_MODE_OFF",
+                "num": 0
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_temp_filter"
+      ],
+      "symbol": "tile_sense_i_6p6_set_temp_filter",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set temperature sensor filter bandwidth.",
+      "params": [
+        {
+          "name": "bw",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_4000HZ",
+              "value": 0,
+              "label": "4000 Hz cutoff",
+              "quantity": 4000
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_170HZ",
+              "value": 1,
+              "label": "170 Hz cutoff",
+              "quantity": 170
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_82HZ",
+              "value": 2,
+              "label": "82 Hz cutoff",
+              "quantity": 82
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_40HZ",
+              "value": 3,
+              "label": "40 Hz cutoff",
+              "quantity": 40
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_20HZ",
+              "value": 4,
+              "label": "20 Hz cutoff",
+              "quantity": 20
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_10HZ",
+              "value": 5,
+              "label": "10 Hz cutoff",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_I_6P6_TEMP_FILT_5HZ",
+              "value": 6,
+              "label": "5 Hz cutoff",
+              "quantity": 5
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "bw",
+          "label": "Temperature filter",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0,
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_temp_enabled.enabled"
+              },
+              {
+                "num": 1
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_temp_enabled"
+      ],
+      "symbol": "tile_sense_i_6p6_set_temp_enabled",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enable or disable the temperature sensor.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "1 = on, 0 = off."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Temperature sensor",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "data_ready"
+      ],
+      "symbol": "tile_sense_i_6p6_data_ready",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Check if new sensor data is available.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_accels"
+      ],
+      "symbol": "tile_sense_i_6p6_get_raw_accels",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read raw accelerometer [X, Y, Z]. Convert: g = raw / sensitivity.",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[3]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 3
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_gyros"
+      ],
+      "symbol": "tile_sense_i_6p6_get_raw_gyros",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read raw gyroscope [X, Y, Z]. Convert: dps = raw / sensitivity.",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[3]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 3
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_6dof"
+      ],
+      "symbol": "tile_sense_i_6p6_get_raw_6dof",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Burst read accel + gyro [AX, AY, AZ, GX, GY, GZ]. One transaction.",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[6]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 6
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_temperature"
+      ],
+      "symbol": "tile_sense_i_6p6_get_temperature",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read temperature. Convert: degC = raw / 132.48 + 25.0",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_all"
+      ],
+      "symbol": "tile_sense_i_6p6_get_raw_all",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read all 7 channels [Temp, AX, AY, AZ, GX, GY, GZ] in one burst.",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[7]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 7
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_face_up"
+      ],
+      "symbol": "tile_sense_i_6p6_is_face_up",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Detect whether the device is approximately face-up (Z ≈ +1g).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_face_down"
+      ],
+      "symbol": "tile_sense_i_6p6_is_face_down",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Detect whether the device is approximately face-down (Z ≈ −1g).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_moving"
+      ],
+      "symbol": "tile_sense_i_6p6_is_moving",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Detect motion: |‖a‖ − 1g| > threshold.",
+      "params": [
+        {
+          "name": "threshold_mg",
+          "type": "int",
+          "range": [
+            1,
+            32000
+          ],
+          "description": "Deviation threshold in milli-g (typical: 50–200)."
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "threshold_mg",
+          "label": "Motion threshold",
+          "tier": "basic",
+          "scope": "usage"
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_tilt_centi_degrees"
+      ],
+      "symbol": "tile_sense_i_6p6_read_tilt_centi_degrees",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Tilt angle of one axis vs gravity, in 0.01°.",
+      "params": [
+        {
+          "name": "axis",
+          "type": "int",
+          "description": "0 = X, 1 = Y, 2 = Z."
+        },
+        {
+          "name": "out_centi_deg",
+          "type": "?int16_t *",
+          "description": "Output tilt in 0.01° (signed, −18000..+18000)."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_tap"
+      ],
+      "symbol": "tile_sense_i_6p6_wait_for_tap",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Block until a tap interrupt fires or the timeout expires.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
+          "description": "Max time to wait, in ms. Use 0 for a single-shot poll."
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Tap wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_motion"
+      ],
+      "symbol": "tile_sense_i_6p6_wait_for_motion",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Block until a wake-on-motion interrupt fires or the timeout expires.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "unit": "ms",
+          "description": "Max time to wait, in ms. Use 0 for a single-shot poll."
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "timeout_ms",
+          "label": "Motion wait timeout",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_config"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_config",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Configure the FIFO.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "FIFO operating mode (bypass/stream/stop-on-full)",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_FIFO_BYPASS",
+              "value": 0,
+              "label": "FIFO disabled"
+            },
+            {
+              "name": "SENSE_I_6P6_FIFO_STREAM",
+              "value": 1,
+              "label": "Stream mode (oldest data replaced)"
+            },
+            {
+              "name": "SENSE_I_6P6_FIFO_STOP_ON_FULL",
+              "value": 2,
+              "label": "Stop on full"
+            }
+          ]
+        },
+        {
+          "name": "accel",
+          "type": "int",
+          "description": "Include accel data in FIFO packets"
+        },
+        {
+          "name": "gyro",
+          "type": "int",
+          "description": "Include gyro data in FIFO packets"
+        },
+        {
+          "name": "temp",
+          "type": "int",
+          "description": "Include temperature in FIFO packets"
+        },
+        {
+          "name": "hires",
+          "type": "int",
+          "description": "Enable 20-bit high-resolution mode (forces ±32g/±4000dps)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_set_watermark"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_set_watermark",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set the FIFO watermark threshold in records (1–4095).",
+      "params": [
+        {
+          "name": "records",
+          "type": "int",
+          "range": [
+            1,
+            4095
+          ],
+          "description": "Records in the FIFO that raise the watermark interrupt."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "records",
+          "label": "FIFO watermark",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "flush_fifo"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_flush",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Flush the FIFO (discard all data).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_read_packet"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_read_packet_flat",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "DSL-friendly flat-output variant of fifo_read_packet().",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[8]",
+      "c_out_buffer": {
+        "type": "int32_t",
+        "length": 8
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_read_packets"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_read_packets_flat",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "DSL-friendly flat-output variant of fifo_read_packets().",
+      "params": [
+        {
+          "name": "out",
+          "type": "int[]",
+          "description": "Output buffer; must be sized N × 8 ints."
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "c_out_buffer": {
+        "name": "out",
+        "type": "int32_t",
+        "cap_param": "cap_ints"
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_count"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_count",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read the FIFO record count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_lost_count"
+      ],
+      "symbol": "tile_sense_i_6p6_fifo_lost_count",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Get the number of lost FIFO packets since last check.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int1_config"
+      ],
+      "symbol": "tile_sense_i_6p6_int1_config",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Configure INT1 pin behavior.",
+      "params": [
+        {
+          "name": "config",
+          "type": "int",
+          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int1_data_ready"
+      ],
+      "symbol": "tile_sense_i_6p6_int1_data_ready",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route data-ready interrupt to INT1.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int1_fifo_ths"
+      ],
+      "symbol": "tile_sense_i_6p6_int1_fifo_ths",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route FIFO watermark interrupt to INT1.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int1_wom"
+      ],
+      "symbol": "tile_sense_i_6p6_int1_wom",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route WOM (wake-on-motion) interrupt to INT1.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int2_config"
+      ],
+      "symbol": "tile_sense_i_6p6_int2_config",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Configure INT2 pin behavior.",
+      "params": [
+        {
+          "name": "config",
+          "type": "int",
+          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc. (same"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int2_data_ready"
+      ],
+      "symbol": "tile_sense_i_6p6_int2_data_ready",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route data-ready interrupt to INT2.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int2_fifo_ths"
+      ],
+      "symbol": "tile_sense_i_6p6_int2_fifo_ths",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route FIFO watermark interrupt to INT2.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int2_wom"
+      ],
+      "symbol": "tile_sense_i_6p6_int2_wom",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Route WOM (wake-on-motion) interrupt to INT2.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_int_pulse_duration"
+      ],
+      "symbol": "tile_sense_i_6p6_set_int_pulse_duration",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set the INT pin pulse-width when configured for pulse mode.",
+      "params": [
+        {
+          "name": "pulse",
+          "type": "int",
+          "description": "Pulse-width selector",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_INT_PULSE_100US",
+              "value": 0,
+              "label": "100 µs pulse (default)"
+            },
+            {
+              "name": "SENSE_I_6P6_INT_PULSE_8US",
+              "value": 1,
+              "label": "8 µs pulse — for fast hosts"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "subsystem_reset"
+      ],
+      "symbol": "tile_sense_i_6p6_subsystem_reset",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Reset a single chip subsystem without touching the others.",
+      "params": [
+        {
+          "name": "which",
+          "type": "int",
+          "description": "Subsystem to reset",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_RESET_APEX",
+              "value": 0,
+              "label": "APEX (DMP) memory + state"
+            },
+            {
+              "name": "SENSE_I_6P6_RESET_TEMP",
+              "value": 1,
+              "label": "Temperature signal path"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status"
+      ],
+      "symbol": "tile_sense_i_6p6_get_int_status",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read and clear INT_STATUS register.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status2"
+      ],
+      "symbol": "tile_sense_i_6p6_get_int_status2",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read and clear INT_STATUS2 (WOM/SMD flags).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status3"
+      ],
+      "symbol": "tile_sense_i_6p6_get_int_status3",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read and clear INT_STATUS3 (APEX: step/tilt/tap flags).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_config"
+      ],
+      "symbol": "tile_sense_i_6p6_wom_config",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Configure Wake-on-Motion thresholds.",
+      "params": [
+        {
+          "name": "x_mg",
+          "type": "int",
+          "range": [
+            0,
+            1000
+          ],
+          "description": "X-axis threshold in mg (resolution ~3.9 mg)"
+        },
+        {
+          "name": "y_mg",
+          "type": "int",
+          "range": [
+            0,
+            1000
+          ],
+          "description": "Y-axis threshold in mg"
+        },
+        {
+          "name": "z_mg",
+          "type": "int",
+          "range": [
+            0,
+            1000
+          ],
+          "description": "Z-axis threshold in mg"
+        },
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Compare against initial or previous sample",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_WOM_INITIAL",
+              "value": 0,
+              "label": "Compare against first sample"
+            },
+            {
+              "name": "SENSE_I_6P6_WOM_PREVIOUS",
+              "value": 1,
+              "label": "Compare against previous sample"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "x_mg",
+          "label": "Wake threshold X",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "y_mg",
+          "label": "Wake threshold Y",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "z_mg",
+          "label": "Wake threshold Z",
+          "tier": "advanced",
+          "scope": "usage"
+        },
+        {
+          "param": "mode",
+          "label": "Wake compare",
+          "tier": "advanced",
+          "scope": "usage",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_enable"
+      ],
+      "symbol": "tile_sense_i_6p6_wom_enable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enable WOM. Must configure thresholds first.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_disable"
+      ],
+      "symbol": "tile_sense_i_6p6_wom_disable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Disable WOM.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "smd_config"
+      ],
+      "symbol": "tile_sense_i_6p6_smd_config",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Configure and enable SMD. WOM thresholds must be set first.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_SMD_DISABLED",
+              "value": 0,
+              "label": "Disabled"
+            },
+            {
+              "name": "SENSE_I_6P6_SMD_SHORT",
+              "value": 2,
+              "label": "1 second WOM window"
+            },
+            {
+              "name": "SENSE_I_6P6_SMD_LONG",
+              "value": 3,
+              "label": "3 second WOM window"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Significant motion",
+          "tier": "advanced",
+          "scope": "usage",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "pedometer_enable"
+      ],
+      "symbol": "tile_sense_i_6p6_pedometer_enable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enable the pedometer (step counter + step detector).",
+      "params": [
+        {
+          "name": "dmp_odr",
+          "type": "int",
+          "description": "DMP processing rate (25 or 50 Hz)",
+          "choices": [
+            {
+              "name": "SENSE_I_6P6_DMP_ODR_25HZ",
+              "value": 0,
+              "label": "25 Hz"
+            },
+            {
+              "name": "SENSE_I_6P6_DMP_ODR_50HZ",
+              "value": 2,
+              "label": "50 Hz"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "dmp_odr",
+          "label": "Pedometer rate",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "pedometer_disable"
+      ],
+      "symbol": "tile_sense_i_6p6_pedometer_disable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Disable the pedometer.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_step_count"
+      ],
+      "symbol": "tile_sense_i_6p6_get_step_count",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read the step count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_step_cadence"
+      ],
+      "symbol": "tile_sense_i_6p6_get_step_cadence",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read the step cadence.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_activity"
+      ],
+      "symbol": "tile_sense_i_6p6_get_activity",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read the activity classification.",
+      "params": [],
+      "returns": "sense_i_6p6_activity_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "enable_tilt"
+      ],
+      "symbol": "tile_sense_i_6p6_tilt_enable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enable tilt detection.",
+      "params": [
+        {
+          "name": "wait_seconds",
+          "type": "int",
+          "range": [
+            0,
+            6
+          ],
+          "unit": "s",
+          "description": "Time the tilt must be sustained (0, 2, 4, or 6)."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "wait_seconds",
+          "label": "Tilt delay",
+          "tier": "advanced",
+          "scope": "usage"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "disable_tilt"
+      ],
+      "symbol": "tile_sense_i_6p6_tilt_disable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Disable tilt detection.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "enable_tap"
+      ],
+      "symbol": "tile_sense_i_6p6_tap_enable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Enable tap detection (single + double tap).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "disable_tap"
+      ],
+      "symbol": "tile_sense_i_6p6_tap_disable",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Disable tap detection.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_tap_result"
+      ],
+      "symbol": "tile_sense_i_6p6_get_tap_result_flat",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "DSL-friendly flat-output variant of get_tap_result().",
+      "params": [
+        {
+          "name": "count",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: 0 = none, 1 = single tap, 2 = double."
+        },
+        {
+          "name": "axis",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: 0 = X, 1 = Y, 2 = Z."
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: 0 = positive, 1 = negative."
+        },
+        {
+          "name": "timing",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: double-tap timing (chip-specific units)."
+        }
+      ],
+      "returns": "void",
+      "c_out_scalars": [
+        {
+          "name": "count",
+          "type": "int32_t"
+        },
+        {
+          "name": "axis",
+          "type": "int32_t"
+        },
+        {
+          "name": "direction",
+          "type": "int32_t"
+        },
+        {
+          "name": "timing",
+          "type": "int32_t"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gyro_offset"
+      ],
+      "symbol": "tile_sense_i_6p6_set_gyro_offset",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set user-programmable gyro offset.",
+      "params": [
+        {
+          "name": "x_dps",
+          "type": "int",
+          "description": "X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)"
+        },
+        {
+          "name": "y_dps",
+          "type": "int",
+          "description": "Y offset"
+        },
+        {
+          "name": "z_dps",
+          "type": "int",
+          "description": "Z offset"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_accel_offset"
+      ],
+      "symbol": "tile_sense_i_6p6_set_accel_offset",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Set user-programmable accel offset.",
+      "params": [
+        {
+          "name": "x_mg",
+          "type": "int",
+          "description": "X offset in mg (12-bit signed, ±2000 mg max, 1 mg resolution)"
+        },
+        {
+          "name": "y_mg",
+          "type": "int",
+          "description": "Y offset"
+        },
+        {
+          "name": "z_mg",
+          "type": "int",
+          "description": "Z offset"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "self_test"
+      ],
+      "symbol": "tile_sense_i_6p6_self_test",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Perform self-test.",
+      "params": [
+        {
+          "name": "accel_pass",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: 1 if accel self-test passed, 0 if failed (per-axis OR'd)"
+        },
+        {
+          "name": "gyro_pass",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: 1 if gyro self-test passed, 0 if failed"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "c_out_scalars": [
+        {
+          "name": "accel_pass",
+          "type": "uint8_t"
+        },
+        {
+          "name": "gyro_pass",
+          "type": "uint8_t"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_reg"
+      ],
+      "symbol": "tile_sense_i_6p6_read_reg",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Read a register from any bank.",
+      "params": [
+        {
+          "name": "bank",
+          "type": "int",
+          "description": "Bank index (0, 1, 2, or 4)."
+        },
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address within the bank."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_reg"
+      ],
+      "symbol": "tile_sense_i_6p6_write_reg",
+      "header": "tile_sense_i_6p6.h",
+      "category": "tile",
+      "description": "Write a register in any bank.",
+      "params": [
+        {
+          "name": "bank",
+          "type": "int",
+          "description": "Bank index (0, 1, 2, or 4)."
+        },
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address within the bank."
+        },
+        {
+          "name": "val",
+          "type": "int",
+          "description": "Byte to write."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [
+    {
+      "name": "data_ready",
+      "payload": [],
+      "mask": "ICM42686P_INT_DATA_RDY"
+    },
+    {
+      "name": "fifo_watermark",
+      "payload": [],
+      "mask": "ICM42686P_INT_FIFO_THS"
+    },
+    {
+      "name": "tilt",
+      "payload": [],
+      "mask": "ICM42686P_INT_STATUS3_TILT_DET"
+    },
+    {
+      "name": "tap",
+      "payload": [
+        {
+          "name": "count",
+          "type": "int"
+        },
+        {
+          "name": "axis",
+          "type": "int"
+        },
+        {
+          "name": "direction",
+          "type": "int"
+        }
+      ],
+      "mask": "ICM42686P_INT_STATUS3_TAP_DET",
+      "read": "tile_sense_i_6p6_get_tap_result",
+      "read_type": "sense_i_6p6_tap_result_t"
+    },
+    {
+      "name": "wake_on_motion",
+      "payload": [],
+      "mask": "ICM42686P_INT_STATUS2_WOM_ANY"
+    }
+  ],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x69",
+        "is_default": true
+      },
+      {
+        "address": "0x68"
+      }
+    ]
+  }
+}

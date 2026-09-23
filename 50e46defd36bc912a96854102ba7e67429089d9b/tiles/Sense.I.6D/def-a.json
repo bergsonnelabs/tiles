@@ -1,0 +1,617 @@
+{
+  "rev": "a",
+  "name": "I.6D",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "type": "power",
+          "function": "GND",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "A weak internal pull-up sets I2C address to 0x6B.  Connect to GND to set I2C address to 0x6A.",
+          "type": "digital",
+          "function": "I2C.AD0",
+          "direction": "input",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "output",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "A weak internal pull-up enables I2C.  Connect to GND to switch to SPI mode.",
+          "type": "digital",
+          "function": "I2C.EN",
+          "direction": "input",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "bidirectional",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI3.CS",
+          "direction": "input",
+          "interface": "SPI3"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "bidirectional",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I3C.CLK",
+          "direction": "bidirectional",
+          "interface": "I3C"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI3.CLK",
+          "direction": "input",
+          "interface": "SPI3"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "input",
+          "interface": "SPI"
+        },
+        {
+          "type": "digital",
+          "function": "SPI3.DAT",
+          "direction": "bidirectional",
+          "interface": "SPI3"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I3C.DAT",
+          "direction": "bidirectional",
+          "interface": "I3C"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "programmable interrupt output",
+          "type": "digital",
+          "function": "INT1",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "see supply details",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    }
+  ],
+  "power": [
+    {
+      "max": 3.6,
+      "min": 1.71,
+      "type": "system",
+      "notes": "VDDIO is internally coneected to VDD",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "0.8mA",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "int1": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use INT1 line",
+      "binding": {
+        "pad": "9",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "INT_CONFIG.INT1"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "int1.attached",
+                "from": {
+                  "pad": "9",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "INT_CONFIG.INT1"
+            }
+          ]
+        }
+      ]
+    },
+    "i2cAddress": {
+      "kind": "select",
+      "when": {
+        "interfaceMode": "i2c"
+      },
+      "group": "Interfaces",
+      "label": "I2C address",
+      "binding": {
+        "pad": "2",
+        "kind": "strap",
+        "states": {
+          "low": "0x6A",
+          "high": "0x6B (forced)",
+          "open": "0x6B (default, via internal PU)"
+        }
+      },
+      "default": "default",
+      "options": [
+        {
+          "label": "0x6B (default)",
+          "value": "default",
+          "states": {
+            "2": "open"
+          },
+          "derived": {
+            "i2c_address": "0x6B"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x6B"
+            }
+          }
+        },
+        {
+          "label": "0x6A (alternate)",
+          "value": "alternate",
+          "states": {
+            "2": "low"
+          },
+          "derived": {
+            "i2c_address": "0x6A"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "i2cAddress.alternate.connection",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x6A"
+            }
+          }
+        }
+      ]
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "binding": {
+        "pad": "3",
+        "kind": "strap",
+        "states": {
+          "low": "SPI/SPI3",
+          "high": "I2C/I3C (forced)",
+          "open": "I2C/I3C (default, via internal PU)"
+        }
+      },
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "states": {
+            "3": "open"
+          },
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "SPI (4-wire)",
+          "value": "spi",
+          "states": {
+            "3": "low"
+          },
+          "activates": {
+            "interface": "SPI"
+          }
+        },
+        {
+          "label": "SPI (3-wire)",
+          "value": "spi3",
+          "states": {
+            "3": "low"
+          },
+          "activates": {
+            "interface": "SPI3"
+          }
+        },
+        {
+          "label": "I3C",
+          "value": "i3c",
+          "states": {
+            "3": "open"
+          },
+          "netlist": {
+            "assumes": [
+              "I3C uses 2-wire bus, I2C-compatible startup"
+            ]
+          },
+          "activates": {
+            "interface": "I3C"
+          }
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 3,
+  "headline": "digital 6-DOF IMU with dual accelerometers",
+  "components": [
+    {
+      "url": "https://www.st.com/en/mems-and-sensors/lsm6dsv320x.html",
+      "part": "LSM6DSV320X",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/3/ST_Microelectroncs-LSM6DSV320X.pdf",
+      "manufacturer": "ST Microelectroncs"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x6A"
+          },
+          {
+            "address": "0x6B",
+            "is_default": true
+          }
+        ],
+        "data_bits": [
+          8
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "strap",
+          "function": "I2C.AD0"
+        },
+        {
+          "pad": "3",
+          "role": "strap",
+          "function": "I2C.EN"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I3C",
+        "SPI",
+        "SPI3"
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "10MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MISO",
+          "is_required": true
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI.CS",
+          "is_required": true
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.MOSI",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C",
+        "I3C",
+        "SPI3"
+      ]
+    },
+    {
+      "name": "SPI3",
+      "type": "SPI3",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "10MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI3.CS",
+          "is_required": true
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI3.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI3.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C",
+        "I3C",
+        "SPI"
+      ]
+    },
+    {
+      "name": "I3C",
+      "type": "I3C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "12.5MHz (SDR)"
+      },
+      "pad_assignments": [
+        {
+          "pad": "3",
+          "role": "strap",
+          "function": "I2C.EN"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C",
+        "SPI",
+        "SPI3"
+      ]
+    }
+  ],
+  "updated_at": "2026-06-05T08:43:58.805Z",
+  "description": "The Sense.I.6D tile embeds the STMicroelectronics LSM6DSV320X digital IMU with dual-range accelerometers and sophisticated on-board activity tracking.  Serial communications via I2C (up to 1-MHz fast-mode plus), I3C, or SPI (up to 10-MHz) provide access to simultaneous 16-bit measurements of triaxial low-g accelerations (±2g-16g), triaxial high-g accelerations (±32-320g), and triaxial angular rate measurements (±250-4000 dps) with output data rates ranging from 7.5 Hz to 7.68 kHz.  The output path includes a 4.5-kB smart FIFO with dynamic data compression.  Onboard filtering, sensor fusion, and a 960-Hz finite state machine provide accurate motion computation and activity tracking, including attitude quaternions, gravity vector and gyro bias tracking, pedometry, step detection, step counting, and programmable motion-event interrupts (free fall, wake, tilt, tap, etc.).",
+  "json_version": "0.17",
+  "application_notes": [
+    {
+      "details": "The Z axis of the IMU protrudes through the center of the tile, while the XY plane is approximately 1.0mm from the bottom surface of the tile, with the X axis pointing toward the left side (pads 1-5), as shown.",
+      "heading": "Sensor Axes",
+      "image_url": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/3/app-note-0.png"
+    }
+  ]
+}
