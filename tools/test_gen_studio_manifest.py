@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gen_studio_manifest import (  # noqa: E402
     build_host_entry,
+    first_brief,
     load_bus_addresses,
     parse_enum_body,
     parse_layer_docs,
@@ -696,6 +697,24 @@ static inline void ll_x_extra(void) { }
             out = parse_layer_docs(self._write(), "ll", only=["ll_x_read", "ll_x_nope"])
         self.assertEqual([f["name"] for f in out], ["ll_x_read"])
         self.assertIn("ll_x_nope", err.getvalue())
+
+
+class FirstBriefTests(unittest.TestCase):
+    def test_wrapped_brief_keeps_its_ending(self):
+        lines = [
+            "@brief  Store the current settings on the tile so they survive a",
+            "        power cycle.",
+            "",
+            "Longer description that is not part of the brief.",
+        ]
+        self.assertEqual(
+            first_brief(lines),
+            "Store the current settings on the tile so they survive a power cycle.",
+        )
+
+    def test_brief_ends_at_the_next_command(self):
+        lines = ["@brief  Read it.", "@studio expose category=tile", "@param x  X."]
+        self.assertEqual(first_brief(lines), "Read it.")
 
 
 if __name__ == "__main__":

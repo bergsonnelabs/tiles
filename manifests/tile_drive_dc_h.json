@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@e95f3f8",
   "tile": "Drive.DC.H",
   "palette": {
     "label": "Drive.DC.H",
@@ -76,7 +76,7 @@
       "symbol": "tile_drive_dc_h_set_control_mode",
       "header": "tile_drive_dc_h.h",
       "category": "tile",
-      "description": "Switch the bridge control source between I²C and the EN/PH",
+      "description": "Switch the bridge control source between I²C and the EN/PH or IN1/IN2 tile pads.",
       "params": [
         {
           "name": "mode",
