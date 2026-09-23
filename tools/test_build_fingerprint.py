@@ -40,6 +40,11 @@ class JsonAndPythonTests(unittest.TestCase):
         self.assertEqual(normalize('m.py', a), normalize('m.py', b))
         self.assertNotEqual(normalize('m.py', b), normalize('m.py', b'def f():\n    return 2\n'))
 
+    def test_hash_inside_a_string_is_code(self):
+        a = b'x = "a#b"  # note\n'
+        self.assertEqual(normalize('m.py', a), b'x = "a#b"')
+        self.assertNotEqual(normalize('m.py', a), normalize('m.py', b'x = "a#c"\n'))
+
 
 if __name__ == '__main__':
     unittest.main()
