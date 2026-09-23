@@ -70,8 +70,8 @@
 /* ---- Driver version ---- */
 
 #define TILE_SENSE_TOF_VERSION_MAJOR  1
-#define TILE_SENSE_TOF_VERSION_MINOR  4
-#define TILE_SENSE_TOF_VERSION_PATCH  1
+#define TILE_SENSE_TOF_VERSION_MINOR  5
+#define TILE_SENSE_TOF_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -190,6 +190,25 @@ typedef enum {
     SENSE_TOF_RANGE_2500MM = 1,  /**< Medium range up to 2500 mm (default) */
     SENSE_TOF_RANGE_5000MM = 2,  /**< Long range up to 5000 mm */
 } sense_tof_distance_mode_t;
+
+/**
+ * @brief  Measurement repetition period (cmd_data2, `repetitionPeriodMs`).
+ *
+ * 1-253 is the period in milliseconds; 0xFE and 0xFF are the chip's codes
+ * for 1 s and 2 s (datasheet cmd 0x02). 0x00 (single shot) is what
+ * measure_single() uses internally and is not a rate, so it is not listed.
+ * Any other 1-253 value is accepted too. If one ranging takes longer than
+ * the period (many iterations), the chip ranges back-to-back and the period
+ * is ignored.
+ */
+typedef enum {
+    SENSE_TOF_PERIOD_30MS  = 0x1E,  /**< Every 30 ms, ~33 per second (default) @studio value=33.3 */
+    SENSE_TOF_PERIOD_50MS  = 0x32,  /**< Every 50 ms, 20 per second @studio value=20 */
+    SENSE_TOF_PERIOD_100MS = 0x64,  /**< Every 100 ms, 10 per second @studio value=10 */
+    SENSE_TOF_PERIOD_250MS = 0xFA,  /**< Every 250 ms, 4 per second @studio value=4 */
+    SENSE_TOF_PERIOD_1S    = 0xFE,  /**< Every second @studio value=1 */
+    SENSE_TOF_PERIOD_2S    = 0xFF,  /**< Every 2 seconds @studio value=0.5 */
+} sense_tof_period_t;
 
 /* ---- Configuration struct ---- */
 
@@ -586,6 +605,7 @@ void tile_sense_tof_get_serial_number_flat(tile_t *tile, int32_t *out);
 /**
  * @brief  Change the distance mode on the fly.
  * @studio expose category=tile name=set_distance_mode section=runtime
+ * @studio control mode label="Distance range" tier=basic default=SENSE_TOF_RANGE_2500MM
  *
  * Stops any active measurement, updates the cached mode, and restarts.
  * If no measurement was running, only updates the config for the next start().
@@ -598,18 +618,24 @@ void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mo
 /**
  * @brief  Change the measurement repetition period on the fly.
  * @studio expose category=tile name=set_period section=runtime
+ * @studio control period label="Measurement rate" tier=basic default=SENSE_TOF_PERIOD_30MS role=sample_rate
+ *
+ * Slower rates save most of the power: the laser only fires for the
+ * ranging time (~24 ms at the default 900k iterations), and the chip
+ * idles at ~140 uA for the rest of each period.
  *
  * Stops any active measurement, updates the cached period, and restarts.
  * If no measurement was running, only updates the config for the next start().
  *
- * @param  tile       Initialised tile handle.
- * @param  period_ms  New period code (0x00=single, 0x1E=30ms, 0xFE=1s, 0xFF=2s).
+ * @param  tile    Initialised tile handle.
+ * @param  period  New repetition period (sense_tof_period_t, or 1-253 ms).
  */
-void tile_sense_tof_set_period(tile_t *tile, uint8_t period_ms);
+void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period);
 
 /**
  * @brief  Change the per-measurement iteration count on the fly.
  * @studio expose category=tile name=set_kilo_iters section=runtime
+ * @studio control kilo_iters label="Iterations (thousands)" tier=advanced default=900
  *
  * Iterations (in thousands) trade power for SNR/range: more iterations
  * give a stronger return and longer reach at higher current draw.
@@ -617,20 +643,21 @@ void tile_sense_tof_set_period(tile_t *tile, uint8_t period_ms);
  * active measurement, updates the cached value, and restarts.
  *
  * @param  tile         Initialised tile handle.
- * @param  kilo_iters   Iterations in thousands (e.g. 900 = 900k).
+ * @param  kilo_iters   [10..4000] Iterations in thousands (e.g. 900 = 900k).
  */
 void tile_sense_tof_set_kilo_iters(tile_t *tile, uint16_t kilo_iters);
 
 /**
  * @brief  Change the detection threshold on the fly.
  * @studio expose category=tile name=set_threshold section=runtime
+ * @studio control threshold label="Detection threshold" tier=advanced default=6
  *
  * Sets cmd_data3[5:0] — the minimum confidence for a reported target.
  * Higher values reject weak/spurious returns; 0 reports everything.
  * Stops any active measurement, updates the cached value, and restarts.
  *
  * @param  tile       Initialised tile handle.
- * @param  threshold  Detection threshold, 0-63.
+ * @param  threshold  [0..63] Detection threshold, 0-63.
  */
 void tile_sense_tof_set_threshold(tile_t *tile, uint8_t threshold);
 

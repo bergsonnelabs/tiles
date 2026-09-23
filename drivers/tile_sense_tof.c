@@ -603,7 +603,7 @@ void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mo
         tile_sense_tof_start(tile);
 }
 
-void tile_sense_tof_set_period(tile_t *tile, uint8_t period_ms)
+void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period)
 {
     tof_state_t *s = state_for(tile);
     uint8_t was_measuring = s->measuring;
@@ -611,7 +611,7 @@ void tile_sense_tof_set_period(tile_t *tile, uint8_t period_ms)
     if (was_measuring)
         tile_sense_tof_stop(tile);
 
-    s->cfg.period_ms = period_ms;
+    s->cfg.period_ms = (uint8_t)period;
 
     if (was_measuring)
         tile_sense_tof_start(tile);
