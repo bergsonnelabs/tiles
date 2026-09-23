@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@83c9540",
+  "source": "tiles@e95f3f8",
   "category": "scope",
   "label": "Core.Scope",
   "icon": "📈",
@@ -130,7 +130,7 @@
       "name": "core_scope_declare_rate_millihertz",
       "signature": "core_scope_declare_rate_millihertz(uint32_t millihertz)",
       "returns": "void",
-      "brief": "As core_scope_declare_rate_hz(), in millihertz — for rates that",
+      "brief": "As core_scope_declare_rate_hz(), in millihertz — for rates that are not a whole number of hertz (an IMU at 416.667 Hz = 416667).",
       "params": [
         {
           "name": "millihertz",
@@ -163,7 +163,7 @@
       "name": "core_scope_update",
       "signature": "core_scope_update(void)",
       "returns": "void",
-      "brief": "core_scope_sample() + core_scope_pump(), honoring the interval",
+      "brief": "core_scope_sample() + core_scope_pump(), honoring the interval gate. The one call a simple main loop needs.",
       "params": [],
       "studio_exposed": false,
       "layer": "core"

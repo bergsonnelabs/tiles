@@ -319,16 +319,26 @@ def parse_params(lines):
 
 
 def first_brief(lines):
+    # A brief runs until a blank line or the next @command, as Doxygen reads
+    # it — so a @brief wrapped onto a second line keeps its ending instead of
+    # stopping mid-sentence ("…so they survive a").
     parts = []
     capturing = True
+    in_brief = False
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("@"):
+            if in_brief:
+                break
             if stripped.startswith("@brief"):
                 parts.append(stripped[len("@brief"):].strip())
-                capturing = False
+                in_brief = True
                 continue
             capturing = False
+        elif in_brief:
+            if not stripped:
+                break
+            parts.append(stripped)
         elif capturing and stripped:
             parts.append(stripped)
     return " ".join(parts).strip() or None
