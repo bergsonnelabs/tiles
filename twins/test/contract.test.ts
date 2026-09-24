@@ -152,6 +152,33 @@ describe('every driver twin', () => {
         expect([...new Set(reads)]).toEqual([]);
       });
 
+      it('rail chains name real output rails and sane efficiencies', () => {
+        if (!twin.power) return;
+        const rails = twin.power({ ...state }, { padVoltage: {} }).rails ?? [];
+        const outputs = new Map(rails.filter((r) => r.role === 'output').map((r) => [r.name, r]));
+        const problems: string[] = [];
+        for (const r of rails) {
+          if (r.role !== 'output' && (r.from || r.conversion || r.efficiency != null))
+            problems.push(`${r.name}: from / conversion / efficiency are for output rails`);
+          if (r.from && !outputs.has(r.from))
+            problems.push(`${r.name}: from '${r.from}' is not an output rail of this tile`);
+          if (r.efficiency != null && !(r.efficiency > 0 && r.efficiency <= 1))
+            problems.push(`${r.name}: efficiency ${r.efficiency} is not in (0, 1]`);
+          if (r.efficiency != null && r.conversion === 'linear')
+            problems.push(`${r.name}: a linear rail has no efficiency`);
+          // a chain must end at the input
+          const seen = new Set<string>();
+          for (let at = r; at?.from; at = outputs.get(at.from)!) {
+            if (seen.has(at.name)) {
+              problems.push(`${r.name}: from-chain loops`);
+              break;
+            }
+            seen.add(at.name);
+          }
+        }
+        expect(problems).toEqual([]);
+      });
+
       it('ticks change only fields it has', () => {
         const next = twin.deriveState?.({ ...state }, { t: 1000 }) ?? {};
         expect(Object.keys(next).filter((k) => !fields.has(k))).toEqual([]);
