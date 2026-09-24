@@ -15,8 +15,10 @@
 //   - raw reads are big-endian int16 at the selected full scale; a sensor that
 //     is powered off reads -32768 (the data registers' reset value, 0x8000).
 //   - INT_STATUS / INT_STATUS2 / INT_STATUS3 clear on read.
-//   - FIFO_COUNT / watermark are in BYTES: INTF_CONFIG0 resets to 0x30
-//     (FIFO_COUNT_REC = 0) and the driver never changes it.
+//   - FIFO_COUNT / watermark are in RECORDS (packets): init sets
+//     INTF_CONFIG0.FIFO_COUNT_REC (driver 1.3.0+; bytes before).
+//   - INT_STATUS3 bits per DS-000639 §14.32: TAP_DET bit0, TILT_DET bit3,
+//     STEP_CNT_OVF bit4, STEP_DET bit5.
 //   - OFFSET_USER: accel 1 mg/LSB, gyro 1/16 dps/LSB, 12-bit signed; the chip
 //     adds them to its output.
 //
@@ -95,7 +97,7 @@ interface State {
 
   // ── FIFO ──
   fifo_mode: number; // 0 bypass, 1 stream, 2 stop-on-full
-  fifo_watermark: number; // FIFO_WM, in bytes (see header)
+  fifo_watermark: number; // FIFO_WM, in records (FIFO_COUNT_REC = 1, see header)
   fifo_accel_en: number;
   fifo_gyro_en: number;
   fifo_temp_en: number;
@@ -149,9 +151,9 @@ const WOM_X = 1 << 0;
 const WOM_Y = 1 << 1;
 const WOM_Z = 1 << 2;
 const WOM_ANY = WOM_X | WOM_Y | WOM_Z;
-const S3_TAP = 1 << 5;
+const S3_TAP = 1 << 0;
 const S3_TILT = 1 << 3;
-const S3_STEP = 1 << 1;
+const S3_STEP = 1 << 5;
 const WHO_AM_I = 0x44;
 const RAW_OFF = -32768; // data registers read 0x8000 while the sensor is off
 
@@ -230,9 +232,55 @@ const producing = (s: State) => dataHz(s) > 0;
 const motionMg = (s: State) =>
   Math.abs(Math.hypot(s.accel_x_mg, s.accel_y_mg, s.accel_z_mg) - 1000);
 
-/** WOM_THR register quantisation: (mg·256 + 500) / 1000, truncated to 8 bits. */
+/** WOM_THR register quantisation: (mg·256 + 500) / 1000, clamped to 255. */
 const womThrMg = (mg: number) =>
-  ((Math.trunc((Math.trunc(mg) * 256 + 500) / 1000) & 0xff) * 1000) / 256;
+  (Math.min(0xff, Math.trunc((Math.trunc(mg) * 256 + 500) / 1000)) * 1000) / 256;
+
+// ── the driver's integer tilt math (tile_sense_i_6p6.c atan2_cdeg / Newton sqrt) ──
+
+/** atan(k/16) in centi-degrees, k = 0..16. */
+const ATAN_LUT_CDEG = [
+  0, 358, 712, 1062, 1404, 1735, 2056, 2363, 2657, 2936, 3200, 3451, 3687, 3909, 4119, 4315, 4500,
+];
+function atan2Cdeg(y: number, x: number): number {
+  const ay = Math.abs(y);
+  const ax = Math.abs(x);
+  if (ax === 0 && ay === 0) return 0;
+  const lut = (num: number, den: number) => {
+    const scaled = num * 16;
+    const idx = Math.trunc(scaled / den);
+    const rem = scaled - idx * den;
+    if (idx >= 16) return ATAN_LUT_CDEG[16];
+    return (
+      ATAN_LUT_CDEG[idx] + Math.trunc(((ATAN_LUT_CDEG[idx + 1] - ATAN_LUT_CDEG[idx]) * rem) / den)
+    );
+  };
+  let r = ay <= ax ? lut(ay, ax) : 9000 - lut(ax, ay);
+  if (x < 0) r = 18000 - r;
+  if (y < 0) r = -r;
+  return r;
+}
+/** Newton integer sqrt exactly as the driver runs it (guess = r >> 8, ≤16 steps). */
+function isqrtDriver(r: number): number {
+  if (r <= 0) return r;
+  let g = r >> 8 || 1;
+  for (let i = 0; i < 16; i++) {
+    const next = (g + Math.trunc(r / g)) >> 1;
+    if (next === g) break;
+    g = next;
+  }
+  return g;
+}
+/** read_tilt_centi_degrees: elevation of `axis` above horizontal, 0.01°. */
+function tiltCdeg(a: number[], axis: number): number | null {
+  const target = a[axis];
+  const o0 = a[(axis + 1) % 3];
+  const o1 = a[(axis + 2) % 3];
+  const perpSq = o0 * o0 + o1 * o1;
+  if (perpSq === 0 && target === 0) return null;
+  const c = atan2Cdeg(target, isqrtDriver(perpSq));
+  return Math.max(-18000, Math.min(18000, c));
+}
 
 /** FIFO packet size for the enabled sources (DS-000639 §6.1). */
 const fifoPacketBytes = (s: State) =>
@@ -609,7 +657,7 @@ const sim: TileSim<State> = {
       },
     }),
     // APEX (0) resets the DMP memory → step/activity/APEX status cleared.
-    // TEMP (1) resets the temperature path: nothing the twin holds.
+    // TEMP (1) is a no-op: the ICM-42686-P has no temperature-path reset bit.
     tile_sense_i_6p6_subsystem_reset: ({ args }) =>
       (args[0] ?? 0) === 0
         ? {
@@ -698,14 +746,15 @@ const sim: TileSim<State> = {
       const lo = Math.max(0, lsb - thr);
       return { scalar: mag2 > hi * hi || mag2 < lo * lo ? 1 : 0 };
     },
-    // Returns 1 once the angle is written through `out_centi_deg`. The manifest
-    // declares no out-scalar for that pointer, so the twin can't fill it.
-    tile_sense_i_6p6_read_tilt_centi_degrees: ({ state, args }) => {
+    // Elevation of the axis above horizontal (driver integer math), written
+    // through `out_centi_deg`; bad axis leaves it untouched, a zero vector
+    // writes 0 and returns 0.
+    tile_sense_i_6p6_read_tilt_centi_degrees_flat: ({ state, args }) => {
       const axis = args[0] ?? 0;
-      if (axis > 2) return { scalar: 0 };
-      const a = accelRaw(state);
-      const all0 = a[(axis + 1) % 3] === 0 && a[(axis + 2) % 3] === 0 && a[axis] === 0;
-      return { scalar: all0 ? 0 : 1 };
+      if (axis < 0 || axis > 2) return { scalar: 0 };
+      const c = tiltCdeg(accelRaw(state), axis);
+      if (c === null) return { scalar: 0, outScalars: { out_centi_deg: 0 } };
+      return { scalar: 1, outScalars: { out_centi_deg: c } };
     },
     // Polls INT_STATUS3 (clear-on-read). Time can't pass inside one host call,
     // so this is the first poll's answer.
@@ -736,11 +785,13 @@ const sim: TileSim<State> = {
     tile_sense_i_6p6_fifo_flush: () => ({
       nextState: { fifo_packets: 0, last_fifo_ms: -1 },
     }),
-    // FIFO_COUNT in bytes (INTF_CONFIG0.FIFO_COUNT_REC = 0 at reset).
+    // FIFO_COUNT in records (init sets INTF_CONFIG0.FIFO_COUNT_REC).
     tile_sense_i_6p6_fifo_count: ({ state }) => ({
-      scalar: state.fifo_packets * fifoPacketBytes(state),
+      scalar: state.fifo_packets & 0xffff,
     }),
-    tile_sense_i_6p6_fifo_lost_count: ({ state }) => ({ scalar: state.fifo_lost & 0xffff }),
+    tile_sense_i_6p6_fifo_lost_count: ({ state }) => ({
+      scalar: state.fifo_lost & 0xffff,
+    }),
     // One packet [ax ay az gx gy gz temp8 timestamp]; an empty FIFO leaves the
     // caller's array untouched (driver .c:490).
     tile_sense_i_6p6_fifo_read_packet_flat: ({ state }) =>
@@ -804,13 +855,12 @@ const sim: TileSim<State> = {
         wom_mode: (args[3] ?? 0) & 0x01,
       },
     }),
-    // SMD_CONFIG = 0x05: WOM_MODE = previous-sample, SMD_MODE = WOM. It
-    // overwrites the compare mode wom_config chose.
+    // SMD_MODE = 01 turns WOM on; WOM_MODE stays as wom_config set it, and an
+    // SMD mode already chosen (10/11) is kept.
     tile_sense_i_6p6_wom_enable: ({ state }) => ({
       nextState: {
         wom_global_en: 1,
-        smd_mode: 1,
-        wom_mode: 1,
+        smd_mode: state.smd_mode !== 0 ? state.smd_mode : 1,
         wom_ref_x_mg: state.accel_x_mg,
         wom_ref_y_mg: state.accel_y_mg,
         wom_ref_z_mg: state.accel_z_mg,
@@ -819,10 +869,15 @@ const sim: TileSim<State> = {
         prev_wom_z: 0,
       },
     }),
-    // The driver only zeroes the thresholds; SMD_CONFIG keeps WOM running. A
-    // zero threshold never fires here (see deriveState).
+    // SMD_CONFIG.SMD_MODE = 00: WOM (and SMD, built on it) off; thresholds kept.
     tile_sense_i_6p6_wom_disable: () => ({
-      nextState: { wom_x_th_mg: 0, wom_y_th_mg: 0, wom_z_th_mg: 0 },
+      nextState: {
+        wom_global_en: 0,
+        smd_mode: 0,
+        prev_wom_x: 0,
+        prev_wom_y: 0,
+        prev_wom_z: 0,
+      },
     }),
     tile_sense_i_6p6_smd_config: ({ args }) => {
       const mode = (args[0] ?? 0) & 0x03;
@@ -831,12 +886,23 @@ const sim: TileSim<State> = {
 
     // ── APEX: pedometer ──
     tile_sense_i_6p6_pedometer_enable: ({ args }) => ({
-      nextState: { pedometer_enabled: 1, pedometer_dmp_odr: (args[0] ?? 0) & 0x03 },
+      nextState: {
+        pedometer_enabled: 1,
+        pedometer_dmp_odr: (args[0] ?? 0) & 0x03,
+      },
     }),
-    tile_sense_i_6p6_pedometer_disable: () => ({ nextState: { pedometer_enabled: 0 } }),
-    tile_sense_i_6p6_get_step_count: ({ state }) => ({ scalar: state.step_count & 0xffff }),
-    tile_sense_i_6p6_get_step_cadence: ({ state }) => ({ scalar: state.step_cadence & 0xff }),
-    tile_sense_i_6p6_get_activity: ({ state }) => ({ scalar: state.activity & 0x03 }),
+    tile_sense_i_6p6_pedometer_disable: () => ({
+      nextState: { pedometer_enabled: 0 },
+    }),
+    tile_sense_i_6p6_get_step_count: ({ state }) => ({
+      scalar: state.step_count & 0xffff,
+    }),
+    tile_sense_i_6p6_get_step_cadence: ({ state }) => ({
+      scalar: state.step_cadence & 0xff,
+    }),
+    tile_sense_i_6p6_get_activity: ({ state }) => ({
+      scalar: state.activity & 0x03,
+    }),
 
     // ── APEX: tilt / tap ──
     // TILT_WAIT_TIME_SEL: ≤0 → 0 s, ≤2 → 2 s, ≤4 → 4 s, else 6 s.
@@ -926,15 +992,16 @@ const sim: TileSim<State> = {
     tile_sense_i_6p6_int2_fifo_ths: 'canonical',
     tile_sense_i_6p6_int2_wom: 'canonical',
     tile_sense_i_6p6_wom_config: 'canonical', // thr = (mg·256 + 500)/1000
-    tile_sense_i_6p6_wom_enable: 'canonical', // SMD_CONFIG = 0x05
+    tile_sense_i_6p6_wom_enable: 'canonical', // SMD_MODE = 01, WOM_MODE kept
     tile_sense_i_6p6_set_accel_offset: 'canonical', // 1 mg/LSB, 12-bit
     tile_sense_i_6p6_set_gyro_offset: 'canonical', // 1/16 dps/LSB, 12-bit
-    tile_sense_i_6p6_fifo_count: 'canonical', // bytes
+    tile_sense_i_6p6_fifo_count: 'canonical', // records (FIFO_COUNT_REC = 1)
+    tile_sense_i_6p6_wom_disable: 'canonical', // SMD_MODE = 00 (untested on hardware)
     tile_sense_i_6p6_self_test: 'inferred', // pass is assumed; side effects canonical
     tile_sense_i_6p6_data_ready: 'inferred', // "always fresh" at 10 Hz tick
     tile_sense_i_6p6_fifo_read_packet_flat: 'inferred', // timestamp not modeled
     tile_sense_i_6p6_fifo_read_packets_flat: 'inferred',
-    tile_sense_i_6p6_read_tilt_centi_degrees: 'inferred', // angle not deliverable
+    tile_sense_i_6p6_read_tilt_centi_degrees_flat: 'canonical', // driver's integer atan2
     tile_sense_i_6p6_get_step_count: 'hallucinated', // step model is a placeholder
     tile_sense_i_6p6_get_step_cadence: 'hallucinated',
     tile_sense_i_6p6_get_activity: 'hallucinated',
@@ -976,8 +1043,7 @@ const sim: TileSim<State> = {
         }
       }
       const packets = u.fifo_packets ?? state.fifo_packets;
-      const bytes = packets * fifoPacketBytes(state);
-      if (state.fifo_watermark > 0 && bytes >= state.fifo_watermark) s1 |= INT_FIFO_THS;
+      if (state.fifo_watermark > 0 && packets >= state.fifo_watermark) s1 |= INT_FIFO_THS;
       if (packets >= Math.floor(FIFO_BYTES / fifoPacketBytes(state))) s1 |= INT_FIFO_FULL;
     }
     if (s1 !== state.int_status) u.int_status = s1;

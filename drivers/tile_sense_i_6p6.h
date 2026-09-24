@@ -2,7 +2,7 @@
  * @file   tile_sense_i_6p6.h
  * @brief  Complete driver for the Sense.I.6P6 tile (ICM-42686-P).
  *         Supports both I2C and SPI bus access via tiles_pal_t.
- * @version 1.2.0
+ * @version 1.3.0
  *
  * 6-axis IMU with extended measurement range:
  *   - Accelerometer:  16-bit, ±2/4/8/16/32 G, up to 32 kHz ODR
@@ -108,7 +108,7 @@
  * ================================================================ */
 
 #define TILE_SENSE_I_6P6_VERSION_MAJOR  1
-#define TILE_SENSE_I_6P6_VERSION_MINOR  2
+#define TILE_SENSE_I_6P6_VERSION_MINOR  3
 #define TILE_SENSE_I_6P6_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -302,12 +302,13 @@ TILES_CHECK_VERSION(1, 0);
 #define ICM42686P_INT_STATUS2_WOM_ANY \
     (ICM42686P_INT_STATUS2_WOM_X | ICM42686P_INT_STATUS2_WOM_Y | ICM42686P_INT_STATUS2_WOM_Z)
 
-/* INT_STATUS3 (0x38) — APEX (DMP) flags */
-#define ICM42686P_INT_STATUS3_TAP_DET     (1 << 5)
-#define ICM42686P_INT_STATUS3_WAKE        (1 << 4)
-#define ICM42686P_INT_STATUS3_TILT_DET    (1 << 3)
-#define ICM42686P_INT_STATUS3_STEP_CNT_OVF (1 << 2)
-#define ICM42686P_INT_STATUS3_STEP_DET    (1 << 1)
+/* INT_STATUS3 (0x38) — APEX (DMP) flags, DS-000639 §14.32.
+ * Bits 7:6 and 2:1 are reserved on the ICM-42686-P (no raise-to-wake /
+ * raise-to-sleep status bits, unlike the ICM-42688-P). */
+#define ICM42686P_INT_STATUS3_STEP_DET    (1 << 5)  /**< Step detected */
+#define ICM42686P_INT_STATUS3_STEP_CNT_OVF (1 << 4) /**< Step count wrapped past 65535 */
+#define ICM42686P_INT_STATUS3_TILT_DET    (1 << 3)  /**< Tilt detected */
+#define ICM42686P_INT_STATUS3_TAP_DET     (1 << 0)  /**< Tap detected */
 
 /* ================================================================
  * SIGNAL_PATH_RESET bits
@@ -816,19 +817,37 @@ uint8_t tile_sense_i_6p6_is_moving(tile_t *tile, uint16_t threshold_mg);
  * @brief  Tilt angle of one axis vs gravity, in 0.01°.
  *
  * Computes `atan2(axis, sqrt(other_a^2 + other_b^2))` for the requested
- * axis using a small integer atan2 approximation. Output range:
- * −18000..+18000 (i.e. −180.00°..+180.00°). Returns 0 and writes
- * 0 to `*out_centi_deg` if the device is in free-fall or the
- * accelerometer is off. Range-aware.
+ * axis using a small integer atan2 approximation: the elevation of that
+ * axis above the horizontal plane. Output range: −9000..+9000
+ * (−90.00°..+90.00°; +9000 = axis pointing straight up, e.g. Z when the
+ * tile lies face up). Returns 0 and writes 0 to `*out_centi_deg` if the
+ * device is in free-fall (all-zero vector). Range-independent (a ratio).
  *
- * @studio expose category=tile name=read_tilt_centi_degrees returns=bool section=runtime
  * @param  axis           0 = X, 1 = Y, 2 = Z.
- * @param  out_centi_deg  Output tilt in 0.01° (signed, −18000..+18000).
+ * @param  out_centi_deg  Output tilt in 0.01° (signed, −9000..+9000).
  * @return 1 on success, 0 on bad axis or zero vector.
  */
 uint8_t tile_sense_i_6p6_read_tilt_centi_degrees(tile_t *tile,
                                                   uint8_t axis,
                                                   int16_t *out_centi_deg);
+
+/**
+ * @brief  Elevation of one axis above horizontal, in 0.01° (int32 out).
+ *
+ * Flat-output variant of read_tilt_centi_degrees(): same computation, but
+ * the angle is written through an int32_t so Studio's 32-bit out-scalar
+ * locals receive it without a width mismatch.
+ *
+ * @studio expose category=tile name=read_tilt_centi_degrees returns=bool section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ * @param  tile           Initialised tile handle.
+ * @param  axis           [0..2] 0 = X, 1 = Y, 2 = Z.
+ * @param  out_centi_deg  Output: elevation of the axis in 0.01° (−9000..+9000).
+ * @return 1 on success, 0 on bad axis or zero vector.
+ */
+uint8_t tile_sense_i_6p6_read_tilt_centi_degrees_flat(tile_t *tile,
+                                                       uint8_t axis,
+                                                       int32_t *out_centi_deg);
 
 /**
  * @brief  Block until a tap interrupt fires or the timeout expires.
@@ -956,7 +975,9 @@ uint16_t tile_sense_i_6p6_fifo_read_packets_flat(tile_t *tile,
                                                   uint16_t cap_ints);
 
 /**
- * @brief  Read the FIFO record count.
+ * @brief  Read the FIFO record (packet) count.
+ *
+ * init() sets INTF_CONFIG0.FIFO_COUNT_REC, so FIFO_COUNT is in records.
  *
  * @studio expose category=tile name=fifo_count returns=int section=fifo
  */
@@ -1066,7 +1087,7 @@ void tile_sense_i_6p6_set_int_pulse_duration(tile_t *tile,
 /** Subsystem selector for scoped resets. */
 typedef enum {
     SENSE_I_6P6_RESET_APEX = 0,  /**< APEX (DMP) memory + state */
-    SENSE_I_6P6_RESET_TEMP = 1,  /**< Temperature signal path */
+    SENSE_I_6P6_RESET_TEMP = 1,  /**< No-op: the ICM-42686-P has no temperature-path reset */
 } sense_i_6p6_subsystem_t;
 
 /**
@@ -1074,15 +1095,16 @@ typedef enum {
  *
  * @studio expose category=tile name=subsystem_reset section=advanced
  *
- * Issues the relevant SIGNAL_PATH_RESET bit. Distinct from the
+ * Issues the relevant SIGNAL_PATH_RESET bits. Distinct from the
  * driver's full `reset()` (which re-initialises the whole chip) and
  * from `fifo_flush()` (which targets just the FIFO, also a
  * subsystem reset but already exposed).
  *
- *   - APEX: clears DMP memory and re-runs the DMP init sequence.
+ *   - APEX: DMP_MEM_RESET_EN, 1 ms, then DMP_INIT_EN (DS-000639
+ *           §8.3/§14.33); blocks ~51 ms. Clears the step count.
  *           Use after reconfiguring pedometer / tilt / tap features.
- *   - TEMP: resets the temperature signal path. Useful if temp
- *           readings appear stuck after a power glitch.
+ *   - TEMP: does nothing. SIGNAL_PATH_RESET has no temperature bit on
+ *           this part; kept only for source compatibility.
  *
  * @param  tile   Initialised tile handle
  * @param  which  Subsystem to reset
@@ -1122,8 +1144,9 @@ uint8_t tile_sense_i_6p6_get_int_status3(tile_t *tile);
  * @studio control x_mg label="Wake threshold X" tier=advanced scope=usage
  * @studio control y_mg label="Wake threshold Y" tier=advanced scope=usage
  * @studio control z_mg label="Wake threshold Z" tier=advanced scope=usage
- * @studio control mode label="Wake compare" tier=advanced default=SENSE_I_6P6_WOM_INITIAL scope=usage
- * @param  x_mg [0..1000] X-axis threshold in mg (resolution ~3.9 mg)
+ * @studio control mode label="Wake compare" tier=advanced default=SENSE_I_6P6_WOM_PREVIOUS scope=usage
+ * @param  x_mg [0..1000] X-axis threshold in mg (resolution ~3.9 mg; values
+ *               above ~996 mg clamp to the register maximum 255)
  * @param  y_mg [0..1000] Y-axis threshold in mg
  * @param  z_mg [0..1000] Z-axis threshold in mg
  * @param  mode  Compare against initial or previous sample
@@ -1137,12 +1160,16 @@ void tile_sense_i_6p6_wom_config(tile_t *tile,
 /**
  * @brief  Enable WOM. Must configure thresholds first.
  *
+ * Keeps the compare mode set by wom_config() and any SMD mode already set.
+ *
  * @studio expose category=tile name=wom_enable section=wom
  */
 void tile_sense_i_6p6_wom_enable(tile_t *tile);
 
 /**
- * @brief  Disable WOM.
+ * @brief  Disable WOM (SMD_CONFIG.SMD_MODE = 00). Also stops SMD.
+ *
+ * Thresholds are kept, so wom_enable() re-arms with the last config.
  *
  * @studio expose category=tile name=wom_disable section=wom
  */
@@ -1168,6 +1195,10 @@ void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode);
  * @brief  Enable the pedometer (step counter + step detector).
  *
  * Requires accel at ≥25 Hz. Initializes the DMP if not already running.
+ *
+ * @note  APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it
+ *        set. Per DS-000639 §8.2 the APEX features then run only after a
+ *        WOM event (WOM must be enabled). Not yet bench-verified.
  *
  * @studio expose category=tile name=pedometer_enable section=pedometer
  * @studio control dmp_odr label="Pedometer rate" tier=advanced scope=usage
@@ -1216,6 +1247,10 @@ sense_i_6p6_activity_t tile_sense_i_6p6_get_activity(tile_t *tile);
  * Triggers when device tilts >35° for the configured wait time.
  * Requires accel at ≥25 Hz. Initializes DMP if needed.
  *
+ * @note  APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it
+ *        set. Per DS-000639 §8.2 the APEX features then run only after a
+ *        WOM event (WOM must be enabled). Not yet bench-verified.
+ *
  * @studio expose category=tile name=enable_tilt section=tilt
  * @studio control wait_seconds label="Tilt delay" tier=advanced scope=usage
  * @param wait_seconds [0..6] s Time the tilt must be sustained (0, 2, 4, or 6).
@@ -1238,6 +1273,10 @@ void tile_sense_i_6p6_tilt_disable(tile_t *tile);
  *
  * Requires accel in LN mode at 200 Hz, 500 Hz, or 1 kHz.
  * Initializes DMP if needed.
+ *
+ * @note  APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it
+ *        set. Per DS-000639 §8.2 the APEX features then run only after a
+ *        WOM event (WOM must be enabled). Not yet bench-verified.
  *
  * @studio expose category=tile name=enable_tap section=tap
  */

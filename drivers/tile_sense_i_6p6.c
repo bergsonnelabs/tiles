@@ -198,6 +198,12 @@ void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
     /* INT_CONFIG1: clear INT_ASYNC_RESET (bit 4) for proper INT operation */
     icm_modify(tile, ICM42686P_REG_INT_CONFIG1, 0x10, 0x00);
 
+    /* INTF_CONFIG0.FIFO_COUNT_REC (bit 6) = 1: FIFO_COUNT and FIFO_WM are in
+     * records (packets), not bytes (DS-000639 §14.34, §14.46). The FIFO API
+     * (fifo_count, fifo_set_watermark, fifo_read_packets) is documented and
+     * used in records; the reset value 0 would make them bytes. */
+    icm_modify(tile, ICM42686P_REG_INTF_CONFIG0, 0x40, 0x40);
+
     /* Apply config or defaults */
     uint8_t accel_range = (cfg && cfg->accel_range) ? cfg->accel_range : SENSE_I_6P6_ACCEL_8G;
     uint8_t gyro_range  = (cfg && cfg->gyro_range)  ? cfg->gyro_range  : SENSE_I_6P6_GYRO_1000DPS;
@@ -633,18 +639,26 @@ void tile_sense_i_6p6_set_int_pulse_duration(tile_t *tile,
 void tile_sense_i_6p6_subsystem_reset(tile_t *tile,
                                       sense_i_6p6_subsystem_t which)
 {
-    /* SIGNAL_PATH_RESET bits:
-     *   bit 5 DMP_INIT_EN     — re-init APEX (DMP) algorithms
-     *   bit 4 DMP_MEM_RESET_EN — clear APEX (DMP) state RAM
-     *   bit 0 TEMP_RST         — reset temperature signal path
-     * Each bit auto-clears after the chip processes it. */
-    uint8_t mask;
+    /* SIGNAL_PATH_RESET (0x4B) bits, DS-000639 §14.33:
+     *   bit 6 DMP_INIT_EN      — (re)start the DMP
+     *   bit 5 DMP_MEM_RESET_EN — clear DMP memory
+     *   bit 0                  — reserved (there is NO temperature-path
+     *                            reset bit on the ICM-42686-P)
+     * APEX: follow the §8.3/8.4 sequence — memory reset, wait 1 ms, then
+     * DMP init (same as dmp_init_if_needed()).
+     * TEMP: no hardware reset exists; deliberately a no-op (the previous
+     * implementation wrote a reserved bit). */
     switch (which) {
-        case SENSE_I_6P6_RESET_APEX: mask = 0x30; break;  /* DMP_INIT + DMP_MEM_RESET */
-        case SENSE_I_6P6_RESET_TEMP: mask = 0x01; break;
-        default: return;
+        case SENSE_I_6P6_RESET_APEX:
+            icm_write(tile, ICM42686P_REG_SIGNAL_PATH_RESET, ICM42686P_DMP_MEM_RESET);
+            tile->hal->delay_ms(1);
+            icm_write(tile, ICM42686P_REG_SIGNAL_PATH_RESET, ICM42686P_DMP_INIT_EN);
+            tile->hal->delay_ms(50);  /* DMP boot, as in dmp_init_if_needed() */
+            break;
+        case SENSE_I_6P6_RESET_TEMP:
+        default:
+            return;
     }
-    icm_write(tile, ICM42686P_REG_SIGNAL_PATH_RESET, mask);
 }
 
 /** @brief Read and clear INT_STATUS register. */
@@ -674,16 +688,21 @@ void tile_sense_i_6p6_wom_config(tile_t *tile,
                                   uint16_t x_mg, uint16_t y_mg, uint16_t z_mg,
                                   sense_i_6p6_wom_mode_t mode)
 {
-    /* Threshold resolution: 1g/256 ≈ 3.9 mg. Register = mg * 256 / 1000 */
-    uint8_t x_thr = (uint8_t)((x_mg * 256 + 500) / 1000);
-    uint8_t y_thr = (uint8_t)((y_mg * 256 + 500) / 1000);
-    uint8_t z_thr = (uint8_t)((z_mg * 256 + 500) / 1000);
+    /* Threshold resolution: 1g/256 ≈ 3.9 mg. Register = mg * 256 / 1000,
+     * clamped to the 8-bit register (255 ≈ 996 mg; 1000 mg would
+     * otherwise wrap to 0 = "any motion"). */
+    uint32_t x_thr = ((uint32_t)x_mg * 256 + 500) / 1000;
+    uint32_t y_thr = ((uint32_t)y_mg * 256 + 500) / 1000;
+    uint32_t z_thr = ((uint32_t)z_mg * 256 + 500) / 1000;
+    if (x_thr > 0xFF) x_thr = 0xFF;
+    if (y_thr > 0xFF) y_thr = 0xFF;
+    if (z_thr > 0xFF) z_thr = 0xFF;
 
     /* Thresholds are in Bank 4 */
     icm_set_bank(tile, ICM42686P_BANK_4);
-    icm_write(tile, ICM42686P_B4_WOM_X_THR, x_thr);
-    icm_write(tile, ICM42686P_B4_WOM_Y_THR, y_thr);
-    icm_write(tile, ICM42686P_B4_WOM_Z_THR, z_thr);
+    icm_write(tile, ICM42686P_B4_WOM_X_THR, (uint8_t)x_thr);
+    icm_write(tile, ICM42686P_B4_WOM_Y_THR, (uint8_t)y_thr);
+    icm_write(tile, ICM42686P_B4_WOM_Z_THR, (uint8_t)z_thr);
     icm_set_bank(tile, ICM42686P_BANK_0);
 
     /* SMD_CONFIG: set WOM_MODE, keep SMD bits */
@@ -693,22 +712,26 @@ void tile_sense_i_6p6_wom_config(tile_t *tile,
 /** @brief Enable WOM. */
 void tile_sense_i_6p6_wom_enable(tile_t *tile)
 {
-    /* Per datasheet Section 8.6: WOM_INT_MODE=0, WOM_MODE=1, SMD_MODE=1
-     * SMD_CONFIG = 0b00000101 = 0x05
-     * This enables WOM with previous-sample comparison. */
-    icm_write(tile, ICM42686P_REG_SMD_CONFIG, 0x05);
+    /* DS-000639 §8.6: WOM_INT_MODE = 0 (OR of axes), SMD_MODE = 01 turns
+     * WOM on. WOM_MODE (bit 2) is left as wom_config() set it, and an SMD
+     * mode already chosen (10/11, which also runs WOM) is kept. */
+    uint8_t smd = icm_read(tile, ICM42686P_REG_SMD_CONFIG);
+    smd &= (uint8_t)~0x08;
+    if ((smd & 0x03) == 0) smd |= 0x01;
+    icm_write(tile, ICM42686P_REG_SMD_CONFIG, smd);
     tile->hal->delay_ms(50);  /* Datasheet: wait 50ms after enabling */
 }
 
 /** @brief Disable WOM. */
 void tile_sense_i_6p6_wom_disable(tile_t *tile)
 {
-    /* Clear WOM threshold registers (set to 0 = disabled) */
-    icm_set_bank(tile, ICM42686P_BANK_4);
-    icm_write(tile, ICM42686P_B4_WOM_X_THR, 0);
-    icm_write(tile, ICM42686P_B4_WOM_Y_THR, 0);
-    icm_write(tile, ICM42686P_B4_WOM_Z_THR, 0);
-    icm_set_bank(tile, ICM42686P_BANK_0);
+    /* WOM is switched on by SMD_CONFIG.SMD_MODE != 00 (wom_enable writes
+     * 01, DS-000639 §8.6); SMD_MODE = 00 turns it off (§14.44). This also
+     * stops SMD, which is built on WOM. Thresholds are left as configured
+     * so wom_enable() can re-arm without another wom_config().
+     * (The previous implementation zeroed the thresholds and left
+     * SMD_MODE set: a zero threshold makes WOM fire on any motion.) */
+    icm_modify(tile, ICM42686P_REG_SMD_CONFIG, 0x03, 0x00);
 }
 
 /* ================================================================
@@ -1055,7 +1078,6 @@ uint8_t tile_sense_i_6p6_is_moving(tile_t *tile, uint16_t threshold_mg)
     int32_t mag2 = (int32_t)a[0]*a[0] + (int32_t)a[1]*a[1] + (int32_t)a[2]*a[2];
     /* Squared 1-g reference, also LSB^2. */
     int32_t one_g_lsb = lsb;
-    int32_t one_g_sq = one_g_lsb * one_g_lsb;
     /* Squared bands: (1g + thr)^2 and (1g - thr)^2 for symmetric trigger.
      * thr_lsb = lsb * threshold_mg / 1000 */
     int32_t thr_lsb = ((int32_t)lsb * (int32_t)threshold_mg) / 1000;
@@ -1143,6 +1165,17 @@ uint8_t tile_sense_i_6p6_read_tilt_centi_degrees(tile_t *tile,
     if (cdeg < -18000) cdeg = -18000;
     *out_centi_deg = (int16_t)cdeg;
     return 1;
+}
+
+/** @brief Flat-output variant of read_tilt_centi_degrees (int32 out). */
+uint8_t tile_sense_i_6p6_read_tilt_centi_degrees_flat(tile_t *tile,
+                                                       uint8_t axis,
+                                                       int32_t *out_centi_deg)
+{
+    int16_t v = 0;
+    uint8_t ok = tile_sense_i_6p6_read_tilt_centi_degrees(tile, axis, &v);
+    if (out_centi_deg) *out_centi_deg = (int32_t)v;
+    return ok;
 }
 
 /** @brief Block until a tap interrupt fires or timeout. Polls at ~1 ms. */
