@@ -1,0 +1,463 @@
+{
+  "rev": "a",
+  "name": "O.128",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.IO0",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.CS",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.CLK",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "",
+          "interface": "SPI"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.IO1",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "WP",
+          "direction": "input"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.IO2",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "HOLD",
+          "direction": ""
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "QSPI.IO3",
+          "direction": "",
+          "interface": "QSPI"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.71-2.0V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 2,
+      "min": 1.71,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "hold": {
+      "kind": "boolean",
+      "when": {
+        "interfaceMode": "spi"
+      },
+      "group": "Sidebands",
+      "label": "HOLD active",
+      "binding": {
+        "pad": "9",
+        "kind": "strap",
+        "states": {
+          "low": "held",
+          "high": "running (forced)",
+          "open": "running (default, via internal PU)"
+        }
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "states": {
+            "9": "open"
+          }
+        },
+        {
+          "value": true,
+          "states": {
+            "9": "low"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "hold.active.connection",
+                "from": {
+                  "pad": "9",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          }
+        }
+      ],
+      "description": "When true, pad 9 (HOLD) is tied to GND, pausing all SPI transactions on the bus (without resetting state). When false (default), pad 9 floats and the chip's internal pull-up keeps it deasserted. Only meaningful in SPI mode (in QSPI mode pad 9 is IO3)."
+    },
+    "writeProtect": {
+      "kind": "boolean",
+      "when": {
+        "interfaceMode": "spi"
+      },
+      "group": "Sidebands",
+      "label": "Write-protect",
+      "binding": {
+        "pad": "6",
+        "kind": "strap",
+        "states": {
+          "low": "write-protected",
+          "high": "unprotected (forced)",
+          "open": "unprotected (default, via internal PU)"
+        }
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "states": {
+            "6": "open"
+          }
+        },
+        {
+          "value": true,
+          "states": {
+            "6": "low"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "writeProtect.enabled.connection",
+                "from": {
+                  "pad": "6",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          }
+        }
+      ],
+      "description": "When true, pad 6 (WP) is tied to GND, write-protecting the lower portion of memory per the chip's status register. When false (default), pad 6 floats and the chip's internal pull-up keeps it deasserted (writes allowed). Only meaningful in SPI mode (in QSPI mode pad 6 is IO2)."
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "default": "spi",
+      "options": [
+        {
+          "label": "SPI (single-data)",
+          "value": "spi",
+          "activates": {
+            "interface": "SPI"
+          }
+        },
+        {
+          "label": "QSPI (quad-data)",
+          "value": "qspi",
+          "activates": {
+            "interface": "QSPI"
+          }
+        }
+      ]
+    }
+  },
+  "family": "Store",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 15,
+  "headline": "128Mbit NOR flash",
+  "components": [
+    {
+      "url": "https://www.renesas.com/en/products/at25ql128a",
+      "part": "AT25QL128A",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/15/Renesas-AT25QL128A.pdf",
+      "manufacturer": "Renesas"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "104MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MOSI",
+          "is_required": true
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI.CS",
+          "is_required": true
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.MISO",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "QSPI"
+      ]
+    },
+    {
+      "name": "QSPI",
+      "type": "QSPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "104MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "QSPI.IO0"
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "QSPI.CS"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "QSPI.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "QSPI.IO1"
+        },
+        {
+          "pad": "6",
+          "role": "bus",
+          "function": "QSPI.IO2"
+        },
+        {
+          "pad": "9",
+          "role": "bus",
+          "function": "QSPI.IO3"
+        }
+      ],
+      "mutually_exclusive": [
+        "SPI"
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:45:31.344Z",
+  "description": "The Store.M contains 128Mbits of NOR flash memory for non-volatile code and data storage with support for single, dual, or quad SPI communications at bus-clock rates of up to 104MHz.",
+  "json_version": "0.10",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "",
+      "heading": "",
+      "image_url": ""
+    }
+  ]
+}

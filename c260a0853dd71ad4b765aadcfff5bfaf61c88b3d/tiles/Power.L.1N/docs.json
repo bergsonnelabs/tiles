@@ -1,0 +1,448 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@afd63a3",
+  "file": "tile_power_l_1n.h",
+  "brief": "Power.L.1N tile driver — Nordic nPM1300 PMIC.",
+  "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nDriver mode assignment made by init():\n  LED0 → HOST mode     (firmware \"ready\"/status)\n  LED1 → CHARGING mode (auto, on while charging)\n  LED2 → ERROR mode    (auto, on for charger faults)\n\n@warning The LED index → colour mapping is taken from the schematic and is\nNOT verified on hardware. All three LEDDRV channels are confirmed working\n(bench, 2026-08-10), but the only tile available was misstuffed with three\nidentical red parts, so colour could not be checked. The BOM refdes order\n(U3 red, U4 orange, U5 green) runs opposite to the LED0/1/2 order assumed\nhere. This matters: init() puts ERROR on LED2, so if LED2 is in fact the\ngreen part, a charger fault lights GREEN. Verify against a correctly\nstuffed tile before relying on colour to convey meaning.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship/hibernate modes\n  (battery disconnect for storage). Not yet exposed — the ship-mode task\n  register address needs datasheet confirmation before wiring.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.\n\n@studio unsupported severity=advanced category=\"USB-C source detection (CC1 / CC2)\"\n  Driver-deferred. The nPM1300 reports what the attached source can supply\n  (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to\n  pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore\n  takes the caller's word for what the source can give: 500 mA is safe for\n  any USB port, more is only safe for a supply known to deliver it.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core_tiles.h\"\n\n  tile_t pmic;\n  tile_power_l_1n_init(core_tiles_pal(&core_i2c1), 0, &pmic, NULL);\n  if (tile_is_ready(&pmic)) {\n      tile_power_l_1n_set_charge_current_ma(&pmic, 200);\n      tile_power_l_1n_charger_enable(&pmic, 1);\n      uint16_t vbat = tile_power_l_1n_get_vbat_mv(&pmic);\n      (void)vbat;\n  }"
+    }
+  ],
+  "studio_ready": true,
+  "studio_events": [
+    {
+      "name": "charge_complete"
+    },
+    {
+      "name": "charging"
+    }
+  ],
+  "studio_unsupported": [
+    {
+      "severity": "advanced",
+      "category": "NTC battery thermistor",
+      "brief": "Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision."
+    },
+    {
+      "severity": "niche",
+      "category": "Load switches / LDOs (LSIN/LSOUT)",
+      "brief": "Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing to control."
+    },
+    {
+      "severity": "niche",
+      "category": "GPIO0-3",
+      "brief": "Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile pads on Power-L-1N-a, so there's no externally useful GPIO function."
+    },
+    {
+      "severity": "advanced",
+      "category": "Ship / hibernate mode",
+      "brief": "Driver-deferred. The chip supports ultra-low-power ship/hibernate modes (battery disconnect for storage). Not yet exposed — the ship-mode task register address needs datasheet confirmation before wiring."
+    },
+    {
+      "severity": "niche",
+      "category": "POF warning + buck retention / forced-PWM",
+      "brief": "Driver-deferred. Power-fail early-warning (via GPIO) and buck retention-voltage / forced-PWM modes aren't exposed yet."
+    },
+    {
+      "severity": "advanced",
+      "category": "USB-C source detection (CC1 / CC2)",
+      "brief": "Driver-deferred. The nPM1300 reports what the attached source can supply (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore takes the caller's word for what the source can give: 500 mA is safe for any USB port, more is only safe for a supply known to deliver it."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_POWER_L_1N_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_POWER_L_1N_VERSION_MINOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_POWER_L_1N_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "NPM1300_I2C_ADDR",
+      "value": "0x6B",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "power_l_1n_led_mode_t",
+      "brief": "LED indicator mode (LEDDRVxMODESEL).",
+      "description": "",
+      "members": [
+        {
+          "name": "NPM1300_LED_ERROR",
+          "value": "0",
+          "description": "auto: on for charger error"
+        },
+        {
+          "name": "NPM1300_LED_CHARGING",
+          "value": "1",
+          "description": "auto: on while charging"
+        },
+        {
+          "name": "NPM1300_LED_HOST",
+          "value": "2",
+          "description": "software-controlled via led_set()"
+        },
+        {
+          "name": "NPM1300_LED_NOTUSED",
+          "value": "3",
+          "description": "disabled"
+        }
+      ]
+    }
+  ],
+  "structs": [],
+  "functions": [
+    {
+      "signature": "uint8_t tile_power_l_1n_find(tiles_pal_t* hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        }
+      ],
+      "notes": [],
+      "return": "1 if the device ACKs, 0 otherwise",
+      "brief": "Check whether an nPM1300 is present on the I2C bus.",
+      "description": "",
+      "name": "tile_power_l_1n_find"
+    },
+    {
+      "signature": "void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile, const power_l_1n_cfg_t* cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        },
+        {
+          "name": "tile",
+          "description": "Pointer to tile handle (populated by this function)"
+        },
+        {
+          "name": "cfg",
+          "description": "Optional config, or NULL for defaults"
+        }
+      ],
+      "notes": [],
+      "brief": "Initialize the nPM1300 PMIC.",
+      "description": "Sets the indicator LED modes (LED0=HOST, LED1=CHARGING, LED2=ERROR),\ndisables NTC monitoring (no thermistor on this tile), and applies the\ncharger settings. The buck regulators are left at their boot voltages\n(1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.\nPass cfg=NULL for defaults (100 mA, 4.20 V, charging enabled).",
+      "name": "tile_power_l_1n_init"
+    },
+    {
+      "signature": "void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on)",
+      "params": [
+        {
+          "name": "on",
+          "description": "1 = enable charging, 0 = disable."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable battery charging.",
+      "description": "",
+      "name": "tile_power_l_1n_charger_enable"
+    },
+    {
+      "signature": "void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma)",
+      "params": [
+        {
+          "name": "ma",
+          "description": "[100..1500] mA Input current limit, in milliamps."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the VBUS (USB) input current limit.",
+      "description": "The nPM1300 powers up with a 100 mA input limit; init() raises it to 500 mA\n(what any USB port gives) unless the config says otherwise. The limit caps\nwhat is drawn from USB for the system AND the charger together. It does not\nregulate VSYS: with a battery attached, asking for more than the limit gives\ncuts the charge back and lets VSYS fall to just above the battery voltage\n(measured: a 100 mA charge on the 100 mA limit took VSYS from 5.15 V to\n~3.65 V; both bucks held, but with only ~350 mV of headroom on 3.3 V, which a\nload with a start-up surge can dip). With no battery, VSYS simply sags.\n\nThe chip falls back to its START-UP limit whenever VBUS is removed, which\nmatters for exactly the system that charges: one with a battery keeps running\nthrough an unplug, and would otherwise be back at 100 mA on re-plug. So this\nwrites the start-up limit too, and the value holds until the chip is RESET\n(when it returns to 100 mA, and init() sets it again).\n\nSettable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step\n(never more than asked) and clamped to that range. 100 and 500 mA are the\nUSB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.",
+      "name": "tile_power_l_1n_set_vbus_limit_ma"
+    },
+    {
+      "signature": "void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma)",
+      "params": [
+        {
+          "name": "ma",
+          "description": "[32..800] mA Charge current in milliamps."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the constant-current charge level.",
+      "description": "Programmable 32-800 mA in 2 mA steps; out-of-range values clamp.",
+      "name": "tile_power_l_1n_set_charge_current_ma"
+    },
+    {
+      "signature": "void tile_power_l_1n_set_term_mv(tile_t* tile, uint16_t mv)",
+      "params": [
+        {
+          "name": "mv",
+          "description": "[3500..4450] mV Termination voltage in millivolts (e.g. 4200)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the charge-termination (full) voltage.",
+      "description": "Selectable 3.50-3.65 V or 4.00-4.45 V in 50 mV steps; the 3.70-3.95 V\ngap is not supported and clamps to 3.65 V.",
+      "name": "tile_power_l_1n_set_term_mv"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_get_charge_status(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "BCHGCHARGESTATUS bits (NPM1300_CHG_* mask).",
+      "brief": "Read the raw charge-status register.",
+      "description": "",
+      "name": "tile_power_l_1n_get_charge_status"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_get_charge_error(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "BCHGERRREASON bits (0 = no error).",
+      "brief": "Read the charger error-reason register.",
+      "description": "",
+      "name": "tile_power_l_1n_get_charge_error"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_is_charging(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if charging, 0 otherwise.",
+      "brief": "Whether the charger is actively charging (trickle / CC / CV).",
+      "description": "",
+      "name": "tile_power_l_1n_is_charging"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_is_charge_complete(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if charge complete, 0 otherwise.",
+      "brief": "Whether charging has completed (battery full).",
+      "description": "",
+      "name": "tile_power_l_1n_is_charge_complete"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_battery_present(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a battery is present, 0 otherwise.",
+      "brief": "Whether a battery is detected.",
+      "description": "BATTERYDETECTED in BCHGCHARGESTATUS, a charger-domain bit: the datasheet\nstates \"CHARGER waits until a battery is detected before charging\", i.e.\ndetection runs as part of the charge cycle. With the charger disabled the\nbit reads 0 whether or not a cell is fitted — measured on the bench with a\nbattery physically attached (0 before enable, 1 after).\n\nDo NOT gate a charge-enable decision on this; that deadlocks. Enable\ncharging first, poll this for a second or two, and disable again if nothing\nappears. Note also that get_vbat_mv() cannot substitute: an open battery\nterminal reads a plausible ~3 V once charger current has pushed the VBAT\ndecoupling cap up.",
+      "name": "tile_power_l_1n_battery_present"
+    },
+    {
+      "signature": "uint16_t tile_power_l_1n_get_vbat_mv(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "VBAT in millivolts (0-5000).",
+      "brief": "Measure the battery voltage.",
+      "description": "",
+      "name": "tile_power_l_1n_get_vbat_mv"
+    },
+    {
+      "signature": "uint16_t tile_power_l_1n_get_vsys_mv(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "VSYS in millivolts (0-6375).",
+      "brief": "Measure the system (VSYS) voltage.",
+      "description": "",
+      "name": "tile_power_l_1n_get_vsys_mv"
+    },
+    {
+      "signature": "int16_t tile_power_l_1n_get_die_temp_c(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Die temperature in degrees Celsius.",
+      "brief": "Measure the PMIC die temperature.",
+      "description": "",
+      "name": "tile_power_l_1n_get_die_temp_c"
+    },
+    {
+      "signature": "void tile_power_l_1n_buck_enable(tile_t* tile, uint8_t buck, uint8_t on)",
+      "params": [
+        {
+          "name": "buck",
+          "description": "1 (VOUT1) or 2 (VOUT2)."
+        },
+        {
+          "name": "on",
+          "description": "1 = enable, 0 = disable."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable a buck regulator.",
+      "description": "",
+      "name": "tile_power_l_1n_buck_enable"
+    },
+    {
+      "signature": "void tile_power_l_1n_buck_set_mv(tile_t* tile, uint8_t buck, uint16_t mv)",
+      "params": [
+        {
+          "name": "buck",
+          "description": "1 (VOUT1) or 2 (VOUT2)."
+        },
+        {
+          "name": "mv",
+          "description": "[1000..3300] Output voltage in mV, 100 mV steps."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a buck regulator's output voltage.",
+      "description": "Selects software voltage control for that buck (overriding its VSET\nresistor) and applies the new target.",
+      "name": "tile_power_l_1n_buck_set_mv"
+    },
+    {
+      "signature": "void tile_power_l_1n_led_set_mode(tile_t* tile, uint8_t led, power_l_1n_led_mode_t mode)",
+      "params": [
+        {
+          "name": "led",
+          "description": "0, 1 or 2."
+        },
+        {
+          "name": "mode",
+          "description": "power_l_1n_led_mode_t."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set an indicator LED's drive mode.",
+      "description": "LED0 is green, LED1 yellow, LED2 red. In auto modes (ERROR/CHARGING)\nthe charger drives the LED directly; HOST mode hands control to led_set().",
+      "name": "tile_power_l_1n_led_set_mode"
+    },
+    {
+      "signature": "void tile_power_l_1n_led_set(tile_t* tile, uint8_t led, uint8_t on)",
+      "params": [
+        {
+          "name": "led",
+          "description": "0, 1 or 2."
+        },
+        {
+          "name": "on",
+          "description": "1 = on, 0 = off."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Turn a host-controlled LED on or off.",
+      "description": "Only effective when the LED is in HOST mode (see led_set_mode).",
+      "name": "tile_power_l_1n_led_set"
+    },
+    {
+      "signature": "uint8_t tile_power_l_1n_get_reset_cause(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "RSTCAUSE bits.",
+      "brief": "Read the reset-cause register (why the PMIC last reset).",
+      "description": "",
+      "name": "tile_power_l_1n_get_reset_cause"
+    }
+  ],
+  "source_file": "tile_power_l_1n.h",
+  "version": "1.1.0",
+  "tile_family": "Power",
+  "tile_name": "L.1N",
+  "display_name": "Power.L.1N",
+  "vibe_settings": [
+    {
+      "label": "Charge the battery",
+      "tier": "basic",
+      "scope": "config",
+      "function": "charger_enable",
+      "param": "on",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "USB input limit",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_vbus_limit_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        100,
+        1500
+      ],
+      "unit": "mA",
+      "default": 500
+    },
+    {
+      "label": "Charge current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_charge_current_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        32,
+        800
+      ],
+      "unit": "mA",
+      "default": 100
+    },
+    {
+      "label": "Charge to",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_term_mv",
+      "param": "mv",
+      "kind": "number",
+      "range": [
+        3.5,
+        4.45
+      ],
+      "unit": "V",
+      "default": 4200
+    }
+  ]
+}

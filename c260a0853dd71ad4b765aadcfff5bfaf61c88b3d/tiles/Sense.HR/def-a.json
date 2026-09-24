@@ -1,0 +1,493 @@
+{
+  "rev": "a",
+  "name": "HR",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "internal pull-up sets the default I2C address to 0xD6; connect to GND to switch to 0xD5; do not connect > 2.0V",
+          "type": "digital",
+          "function": "I2C.AD0",
+          "direction": "input",
+          "interface": "I2C"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "internal pull-up enables I2C by default; connect to GND to switch to SPI; do not connect > 2.0V",
+          "type": "digital",
+          "function": "I2C.EN",
+          "direction": "input",
+          "interface": "I2C"
+        },
+        {
+          "note": "6V tolerant",
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "6V tolerant",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        },
+        {
+          "note": "6V tolerant",
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "6V tolerant",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "6V tolerant",
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "configurable interrupt output",
+          "type": "digital",
+          "function": "INTB",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "2.7-5.5V",
+          "type": "power",
+          "function": "VLED",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 1.8,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 5.5,
+      "min": 2.7,
+      "type": "system",
+      "notes": "LED drive voltage",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "intb": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use INTB line",
+      "binding": {
+        "pad": "8",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "INT_CONFIG.INTB"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "intb.attached",
+                "from": {
+                  "pad": "8",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "INT_CONFIG.INTB"
+            }
+          ]
+        }
+      ]
+    },
+    "i2cAddress": {
+      "kind": "select",
+      "when": {
+        "interfaceMode": "i2c"
+      },
+      "group": "Interfaces",
+      "label": "I2C address",
+      "binding": {
+        "pad": "2",
+        "kind": "strap",
+        "states": {
+          "low": "0xD6",
+          "high": "0xD5 (forced)",
+          "open": "0xD5 (default, via internal PU)"
+        }
+      },
+      "default": "default",
+      "options": [
+        {
+          "label": "0xD5 (default)",
+          "value": "default",
+          "states": {
+            "2": "open"
+          },
+          "derived": {
+            "i2c_address": "0xD5"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0xD5"
+            }
+          }
+        },
+        {
+          "label": "0xD6 (alternate)",
+          "value": "alternate",
+          "states": {
+            "2": "low"
+          },
+          "derived": {
+            "i2c_address": "0xD6"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "i2cAddress.alternate.connection",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0xD6"
+            }
+          }
+        }
+      ]
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "binding": {
+        "pad": "3",
+        "kind": "strap",
+        "states": {
+          "low": "SPI/SPI3",
+          "high": "I2C/I3C (forced)",
+          "open": "I2C/I3C (default, via internal PU)"
+        }
+      },
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "states": {
+            "3": "open"
+          },
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "SPI (4-wire)",
+          "value": "spi",
+          "states": {
+            "3": "low"
+          },
+          "activates": {
+            "interface": "SPI"
+          }
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 21,
+  "headline": "heart rate, pulse oximetry, and hydration",
+  "components": [
+    {
+      "url": "https://www.analog.com/en/products/max86174a.html",
+      "part": "MAX86174A",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/21/Analog_Device-MAX86174A.pdf",
+      "manufacturer": "Analog Device"
+    },
+    {
+      "url": "https://www.vishay.com/en/product/84295/",
+      "part": "VEMD1060X01",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/21/unknown-VEMD1060X01.pdf",
+      "manufacturer": "Vishay Semiconductors"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0xD5",
+            "is_default": true
+          },
+          {
+            "address": "0xD6"
+          }
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "400kHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "SPI"
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "20MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MISO"
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI.CS"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.MOSI"
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C"
+      ]
+    }
+  ],
+  "updated_at": "2026-08-11T04:01:16.794Z",
+  "description": "The fully-integrated Sense.HR optical heart-rate and SpO₂ sensor combines the advanced Analog Devices MAX86174A photoplethysmography (PPG) front end with dual Vishay VEMD1060X01 silicon PIN photodiodes and four LEDs (two green, one red, one IR) for multi-wavelength reflective optical sensing.  The 20-bit ADC with a 256-word FIFO provides data at configurable rates from 1 to 2048 frames per second for external processing.",
+  "json_version": "0.10",
+  "application_notes": []
+}

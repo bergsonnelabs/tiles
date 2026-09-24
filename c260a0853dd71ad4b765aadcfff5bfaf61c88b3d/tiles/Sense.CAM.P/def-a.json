@@ -1,0 +1,311 @@
+{
+  "rev": "a",
+  "name": "CAM.P",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "GPIO1",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "GPIO2",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "output",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8-3.3V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.3,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 78,
+  "headline": "monochrome QVGA camera",
+  "components": [
+    {
+      "url": "",
+      "part": "PAG7920J3",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/78/PixArt-PAG7920J3.pdf",
+      "manufacturer": "PixArt"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x35",
+            "is_default": true
+          },
+          {
+            "address": "0x25"
+          },
+          {
+            "address": "0x40"
+          }
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        },
+        {
+          "pad": "3",
+          "role": "strap",
+          "function": "GPIO2"
+        }
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "25MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "6",
+          "role": "bus",
+          "function": "SPI.MISO",
+          "is_required": true
+        },
+        {
+          "pad": "7",
+          "role": "bus",
+          "function": "SPI.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "8",
+          "role": "bus",
+          "function": "SPI.CS",
+          "is_required": true
+        },
+        {
+          "pad": "9",
+          "role": "bus",
+          "function": "SPI.MOSI",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-08-10T08:53:21.990Z",
+  "description": "An ultra-low-power machine-vision tile built around the PixArt PAG7920J3, a 320 × 240 monochrome global-shutter camera module with an integrated lens. It captures 8-bit RAW frames at up to 180 fps over SPI, with 3.0 µm pixels, a 71.3° × 53.7° field of view, and 64 dB of dynamic range. Configuration is over I2C. A proprietary on-chip motion-detection mode draws under 100 µW (compared to 760 µW for QVGA output at 15 fps) making the tile practical to leave always-on in a battery-powered system, with auto exposure and gain control, auto black cancellation, mirror/flip, windowing, LED strobe, and multi-sensor frame sync built in.\n\n",
+  "json_version": "0.7",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "when GPIO2 (pad 3) is left floating, the I2C address will default to 0x35.  Pulling GPIO2 (pad 3) high will change the address to 0x25, while grounding pad 3 will set it to 0x40.  The camera will also respond to general broadcasts on 0x60.",
+      "heading": "I2C address",
+      "image_url": ""
+    }
+  ]
+}
