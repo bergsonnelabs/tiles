@@ -1,0 +1,907 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@6897677",
+  "tile": "Sense.I.9",
+  "palette": {
+    "label": "Sense.I.9",
+    "icon": "⊙"
+  },
+  "driver": {
+    "prefix": "tile_sense_i_9",
+    "header": "tile_sense_i_9.h",
+    "version": "3.1.1"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_i_9_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "data_ready"
+      ],
+      "symbol": "tile_sense_i_9_data_ready",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Check if new IMU data is available.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_accel_range"
+      ],
+      "symbol": "tile_sense_i_9_set_accel_range",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Set the accelerometer full-scale range.",
+      "params": [
+        {
+          "name": "range",
+          "type": "int",
+          "description": "One of the sense_i_9_accel_range_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_ACCEL_2G",
+              "value": 0,
+              "label": "±2 g"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_4G",
+              "value": 2,
+              "label": "bits [2:1] of ACCEL_CONFIG"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_8G",
+              "value": 4,
+              "label": "±8 g"
+            },
+            {
+              "name": "SENSE_I_9_ACCEL_16G",
+              "value": 6,
+              "label": "±16 g"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gyro_range"
+      ],
+      "symbol": "tile_sense_i_9_set_gyro_range",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Set the gyroscope full-scale range.",
+      "params": [
+        {
+          "name": "range",
+          "type": "int",
+          "description": "One of the sense_i_9_gyro_range_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_GYRO_250DPS",
+              "value": 0,
+              "label": "±250 deg/s"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_500DPS",
+              "value": 2,
+              "label": "bits [2:1] of GYRO_CONFIG"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_1000DPS",
+              "value": 4,
+              "label": "±1000 deg/s"
+            },
+            {
+              "name": "SENSE_I_9_GYRO_2000DPS",
+              "value": 6,
+              "label": "±2000 deg/s"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_mag_mode"
+      ],
+      "symbol": "tile_sense_i_9_set_mag_mode",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Set the magnetometer operating mode.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "One of the sense_i_9_mag_mode_t values",
+          "choices": [
+            {
+              "name": "SENSE_I_9_MAG_POWER_DOWN",
+              "value": 0,
+              "label": "Power-down"
+            },
+            {
+              "name": "SENSE_I_9_MAG_SINGLE",
+              "value": 1,
+              "label": "Single measurement"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_10HZ",
+              "value": 2,
+              "label": "Continuous at 10 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_20HZ",
+              "value": 4,
+              "label": "Continuous at 20 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_50HZ",
+              "value": 6,
+              "label": "Continuous at 50 Hz"
+            },
+            {
+              "name": "SENSE_I_9_MAG_CONTINUOUS_100HZ",
+              "value": 8,
+              "label": "Continuous at 100 Hz"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_accel_odr"
+      ],
+      "symbol": "tile_sense_i_9_set_accel_odr",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Set the accelerometer output data rate.",
+      "params": [
+        {
+          "name": "divider",
+          "type": "int",
+          "description": "11-bit sample rate divider (0–4095)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gyro_odr"
+      ],
+      "symbol": "tile_sense_i_9_set_gyro_odr",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Set the gyroscope output data rate.",
+      "params": [
+        {
+          "name": "divider",
+          "type": "int",
+          "description": "8-bit sample rate divider (0–255)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_accels"
+      ],
+      "symbol": "tile_sense_i_9_get_raw_accels",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read raw accelerometer data (3-axis).",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[3]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 3
+      },
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_gyros"
+      ],
+      "symbol": "tile_sense_i_9_get_raw_gyros",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read raw gyroscope data (3-axis).",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[3]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 3
+      },
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_6dof"
+      ],
+      "symbol": "tile_sense_i_9_get_raw_6dof",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read raw accelerometer + gyroscope data in a single burst.",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[6]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 6
+      },
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw_mags"
+      ],
+      "symbol": "tile_sense_i_9_get_raw_mags",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read raw magnetometer data (3-axis).",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[3]",
+      "c_out_buffer": {
+        "type": "int16_t",
+        "length": 3
+      },
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "mag_overflowed"
+      ],
+      "symbol": "tile_sense_i_9_mag_overflowed",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Check whether the most recent magnetometer reading overflowed.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_temperature"
+      ],
+      "symbol": "tile_sense_i_9_get_temperature",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read the on-chip temperature sensor.",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_i_9_sleep",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Enter low-power sleep mode.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_i_9_wake",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Wake from sleep mode and resume sampling.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_i_9_reset",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Perform a software reset.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int_config"
+      ],
+      "symbol": "tile_sense_i_9_int_config",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Configure the INT pin electrical behaviour.",
+      "params": [
+        {
+          "name": "flags",
+          "type": "int",
+          "description": "OR of SENSE_I_9_INT_* flags"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int_data_ready"
+      ],
+      "symbol": "tile_sense_i_9_int_data_ready",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Route the data-ready interrupt to the INT pin.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int_wom"
+      ],
+      "symbol": "tile_sense_i_9_int_wom",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Route the wake-on-motion interrupt to the INT pin.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int_fifo_overflow"
+      ],
+      "symbol": "tile_sense_i_9_int_fifo_overflow",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Route the FIFO overflow interrupt to the INT pin.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable for any sensor, 0 to disable all"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "int_fifo_watermark"
+      ],
+      "symbol": "tile_sense_i_9_int_fifo_watermark",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Route the FIFO watermark interrupt to the INT pin.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 to enable for any sensor, 0 to disable all"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status"
+      ],
+      "symbol": "tile_sense_i_9_get_int_status",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read INT_STATUS (WoM / DMP / I2C-master / PLL-ready) and clear it.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status_fifo_ovf"
+      ],
+      "symbol": "tile_sense_i_9_get_int_status_fifo_overflow",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read INT_STATUS_2 (FIFO overflow per sensor) and clear it.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_int_status_fifo_wm"
+      ],
+      "symbol": "tile_sense_i_9_get_int_status_fifo_watermark",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read INT_STATUS_3 (FIFO watermark per sensor) and clear it.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_config"
+      ],
+      "symbol": "tile_sense_i_9_wom_config",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Configure Wake-on-Motion threshold and compare mode.",
+      "params": [
+        {
+          "name": "thr_mg",
+          "type": "int",
+          "description": "Threshold in mg (clamped to 1020 mg / 0xFF LSB)"
+        },
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Compare against initial sample or previous sample",
+          "choices": [
+            {
+              "name": "SENSE_I_9_WOM_VS_INITIAL",
+              "value": 0,
+              "label": "Compare against first sample"
+            },
+            {
+              "name": "SENSE_I_9_WOM_VS_PREVIOUS",
+              "value": 1,
+              "label": "Compare against previous sample"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_enable"
+      ],
+      "symbol": "tile_sense_i_9_wom_enable",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Enable Wake-on-Motion logic.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wom_disable"
+      ],
+      "symbol": "tile_sense_i_9_wom_disable",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Disable Wake-on-Motion logic.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_config"
+      ],
+      "symbol": "tile_sense_i_9_fifo_config",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Configure which sensor streams write into the FIFO.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "FIFO operating mode (stream or snapshot)",
+          "choices": [
+            {
+              "name": "SENSE_I_9_FIFO_STREAM",
+              "value": 0,
+              "label": "Overwrite oldest data when full"
+            },
+            {
+              "name": "SENSE_I_9_FIFO_SNAPSHOT",
+              "value": 31,
+              "label": "Stop accepting writes when full"
+            }
+          ]
+        },
+        {
+          "name": "accel",
+          "type": "int",
+          "description": "1 to write all 3 accel axes"
+        },
+        {
+          "name": "gyro",
+          "type": "int",
+          "description": "1 to write all 3 gyro axes"
+        },
+        {
+          "name": "temp",
+          "type": "int",
+          "description": "1 to write the temperature sample"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_flush"
+      ],
+      "symbol": "tile_sense_i_9_fifo_flush",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Reset the FIFO contents (clears all queued samples).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_count"
+      ],
+      "symbol": "tile_sense_i_9_fifo_count",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read the current FIFO byte count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fifo_read_packet"
+      ],
+      "symbol": "tile_sense_i_9_fifo_read_packet_flat",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "DSL-friendly flat-output variant of fifo_read_packet().",
+      "params": [],
+      "returns": "void",
+      "dsl_returns": "int[6]",
+      "c_out_buffer": {
+        "type": "int32_t",
+        "length": 6
+      },
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "self_test"
+      ],
+      "symbol": "tile_sense_i_9_self_test",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Run the built-in mechanical self-test for accel and gyro.",
+      "params": [
+        {
+          "name": "accel_pass",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: bit 0/1/2 = X/Y/Z accel pass (1 = pass)"
+        },
+        {
+          "name": "gyro_pass",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: bit 0/1/2 = X/Y/Z gyro pass (1 = pass)"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "c_out_scalars": [
+        {
+          "name": "accel_pass",
+          "type": "uint8_t"
+        },
+        {
+          "name": "gyro_pass",
+          "type": "uint8_t"
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "mag_self_test"
+      ],
+      "symbol": "tile_sense_i_9_mag_self_test",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Run the AK09916 self-test (mag).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_face_up"
+      ],
+      "symbol": "tile_sense_i_9_is_face_up",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Check whether the tile is lying flat, face up.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_face_down"
+      ],
+      "symbol": "tile_sense_i_9_is_face_down",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Check whether the tile is lying flat, face down.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_moving"
+      ],
+      "symbol": "tile_sense_i_9_is_moving",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Check whether the tile is currently moving.",
+      "params": [
+        {
+          "name": "threshold_mg",
+          "type": "int",
+          "description": "Deviation from 1 g, in milli-g"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_tilt_centi_degrees"
+      ],
+      "symbol": "tile_sense_i_9_read_tilt_centi_degrees",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read the tilt of one accel axis vs gravity, in centi-degrees.",
+      "params": [
+        {
+          "name": "axis",
+          "type": "int",
+          "description": "0/1/2 selecting X, Y, or Z"
+        },
+        {
+          "name": "out_centi_deg",
+          "type": "?int16_t*",
+          "description": "Output tilt in 0.01° units (signed)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_heading_centi_degrees"
+      ],
+      "symbol": "tile_sense_i_9_read_heading_centi_degrees",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read a compass heading from the magnetometer, in centi-degrees.",
+      "params": [
+        {
+          "name": "out_centi_deg",
+          "type": "?uint16_t*",
+          "description": "Output heading in 0.01° units (0..35999)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_motion"
+      ],
+      "symbol": "tile_sense_i_9_wait_for_motion",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Block until a Wake-on-Motion event fires, or timeout.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "description": "Maximum time to wait, in milliseconds"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "dmp_start_quat9"
+      ],
+      "symbol": "tile_sense_i_9_dmp_start_quat9",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Configure the DMP for 9-axis quaternion output and start it.",
+      "params": [
+        {
+          "name": "output_period_ms",
+          "type": "int",
+          "description": "DMP output period, in ms (clamped to 10–1000 ms)."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "dmp_stop"
+      ],
+      "symbol": "tile_sense_i_9_dmp_stop",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Stop the DMP and revert to direct-bus mag access.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "dmp_data_ready"
+      ],
+      "symbol": "tile_sense_i_9_dmp_data_ready",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Non-blocking check for a queued DMP quat9 packet.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "dmp_read_quat9"
+      ],
+      "symbol": "tile_sense_i_9_dmp_read_quat9",
+      "header": "tile_sense_i_9.h",
+      "category": "tile",
+      "description": "Read one 9-axis quaternion packet from the DMP FIFO.",
+      "params": [
+        {
+          "name": "out_accuracy",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: DMP heading-accuracy estimate."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int[4]",
+      "c_out_buffer": {
+        "type": "int32_t",
+        "length": 4
+      },
+      "c_out_scalars": [
+        {
+          "name": "out_accuracy",
+          "type": "uint16_t"
+        }
+      ],
+      "receiver": "tile_t*"
+    }
+  ],
+  "events": [
+    {
+      "name": "data_ready",
+      "payload": [],
+      "mask": "ICM20948_INT_RAW_DATA_RDY"
+    },
+    {
+      "name": "fifo_watermark",
+      "payload": [],
+      "mask": "ICM20948_INT_FIFO_WM"
+    },
+    {
+      "name": "fifo_overflow",
+      "payload": [],
+      "mask": "ICM20948_INT_FIFO_OVF"
+    },
+    {
+      "name": "wake_on_motion",
+      "payload": [],
+      "mask": "ICM20948_INT_WOM"
+    }
+  ],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x68"
+      },
+      {
+        "address": "0x69",
+        "is_default": true
+      }
+    ]
+  }
+}

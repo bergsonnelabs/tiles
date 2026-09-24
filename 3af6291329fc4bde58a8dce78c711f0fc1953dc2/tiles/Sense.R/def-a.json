@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "R",
+  "pads": [],
+  "power": [],
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 54,
+  "headline": "Radar",
+  "components": [
+    {
+      "url": "",
+      "part": "BGT60UTR11AIP",
+      "datasheet": "",
+      "manufacturer": "Infineon"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-03-02T09:48:48.300Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}
