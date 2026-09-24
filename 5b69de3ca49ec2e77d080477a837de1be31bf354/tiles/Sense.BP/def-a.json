@@ -1,0 +1,516 @@
+{
+  "rev": "a",
+  "name": "BP",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "internal pull-up resistor sets the I2C address to 0x5D; connect to GND to switch to 0x5C",
+          "type": "digital",
+          "function": "I2C.AD0",
+          "direction": "input",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "internal pull-up resistor enabled I2C by default; connect to GND to switch to SPI",
+          "type": "digital",
+          "function": "I2C.EN",
+          "direction": "input",
+          "interface": "I2C"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "configurable interrupt output",
+          "type": "digital",
+          "function": "INT",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8-3.6V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.6,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "interrupt": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use INT line",
+      "binding": {
+        "pad": "9",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "INT_CFG"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "interrupt.attached",
+                "from": {
+                  "pad": "9",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "DRDY-on-pad-9",
+              "register": "INT_CFG"
+            }
+          ]
+        }
+      ]
+    },
+    "i2cAddress": {
+      "kind": "select",
+      "when": {
+        "interfaceMode": "i2c"
+      },
+      "group": "Interfaces",
+      "label": "I2C address",
+      "binding": {
+        "pad": "2",
+        "kind": "strap",
+        "states": {
+          "low": "0x5C",
+          "high": "0x5D (forced)",
+          "open": "0x5D (default, via internal PU)"
+        }
+      },
+      "default": "default",
+      "options": [
+        {
+          "label": "0x5D (default)",
+          "value": "default",
+          "states": {
+            "2": "open"
+          },
+          "derived": {
+            "i2c_address": "0x5D"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x5D"
+            }
+          }
+        },
+        {
+          "label": "0x5C (alternate)",
+          "value": "alternate",
+          "states": {
+            "2": "low"
+          },
+          "derived": {
+            "i2c_address": "0x5C"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "i2cAddress.alternate.connection",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x5C"
+            }
+          }
+        }
+      ]
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "binding": {
+        "pad": "3",
+        "kind": "strap",
+        "states": {
+          "low": "SPI",
+          "high": "I2C/I3C (forced)",
+          "open": "I2C/I3C (default, via internal PU)"
+        }
+      },
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "states": {
+            "3": "open"
+          },
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "SPI",
+          "value": "spi",
+          "states": {
+            "3": "low"
+          },
+          "activates": {
+            "interface": "SPI"
+          }
+        },
+        {
+          "label": "I3C",
+          "value": "i3c",
+          "states": {
+            "3": "open"
+          },
+          "netlist": {
+            "assumes": [
+              "I3C uses 2-wire bus, I2C-compatible startup"
+            ]
+          },
+          "activates": {
+            "interface": "I3C"
+          }
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 20,
+  "headline": "dual-range absolute pressure",
+  "components": [
+    {
+      "url": "https://www.st.com/en/mems-and-sensors/ilps22qs.html",
+      "part": "ILPS22QS",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/20/ST_Microelectronics-ILPS22QS.pdf",
+      "manufacturer": "ST Microelectronics"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x5D"
+          },
+          {
+            "address": "0x5C"
+          }
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT"
+        },
+        {
+          "pad": "2",
+          "role": "strap",
+          "function": "I2C.AD0"
+        },
+        {
+          "pad": "3",
+          "role": "strap",
+          "function": "I2C.EN"
+        }
+      ],
+      "mutually_exclusive": [
+        "I3C",
+        "SPI"
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "10MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MISO"
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI.CS"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.MOSI"
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C",
+        "I3C"
+      ]
+    },
+    {
+      "name": "I3C",
+      "type": "I3C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "12.5MHz (SDR)"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I3C.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I3C.DAT"
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C",
+        "SPI"
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:16:44.129Z",
+  "description": "Barometric pressure and temperature sensor based on the ST ILPS22QS. Dual full-scale modes cover up to 1260 hPa or 4060 hPa, with 24-bit pressure output and 0.5 hPa accuracy. Integrated Qvar electrostatic sensing supports touch and gesture detection. Communicates over I²C (up to 1 MHz), SPI (up to 10 MHz), or I3C (up to 12.5 MHz) to provide data at output rates of up to 200Hz with a 128-sample deep FIFO buffer.",
+  "json_version": "0.7",
+  "application_notes": []
+}
