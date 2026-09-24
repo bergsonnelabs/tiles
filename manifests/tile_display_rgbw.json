@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f5a0d22",
+  "source": "tiles@98aac17",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_display_rgbw",
     "header": "tile_display_rgbw.h",
-    "version": "2.4.1"
+    "version": "2.5.0"
   },
   "handle": {
     "type": "tile_t",
@@ -653,7 +653,7 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "0-3 (R, B, G, W)."
+          "description": "0-3 (R, W, G, B)."
         },
         {
           "name": "enabled",
@@ -858,7 +858,7 @@
         {
           "name": "channel",
           "type": "int",
-          "description": "0-3."
+          "description": "0-3 (R, W, G, B)."
         },
         {
           "name": "peak",

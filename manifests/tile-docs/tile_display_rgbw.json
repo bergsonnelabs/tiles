@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@f5a0d22",
+  "source": "tiles@98aac17",
   "file": "tile_display_rgbw.h",
   "brief": "RGBW LED driver for the Display.RGBW tile (LP5811).",
-  "description": "@version 2.4.1\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), G (LED2), B (LED1), W (LED3).\n\n\nVersion history:\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
+  "description": "@version 2.5.0\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives\nwhite and OUT3 (ball D2) blue (tile schematic; confirmed on the board\n2026-09-24). Before 2.5.0 the driver had blue and white swapped.\n\n\nVersion history:\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -27,13 +27,13 @@
     },
     {
       "name": "TILE_DISP_RGBW_VERSION_MINOR",
-      "value": "4",
+      "value": "5",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_DISP_RGBW_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -130,7 +130,7 @@
     {
       "name": "disp_rgbw_faults_t",
       "brief": "LED open / short fault snapshot.",
-      "description": "Bit N of each mask corresponds to LED channel N. Mapping:\n  bit0 = R, bit1 = B, bit2 = G, bit3 = W (matches `set()` order\n  inside the chip). Faults are sticky in the chip — read once,\n  then call `clear_faults()` to reset the latches.",
+      "description": "Bit N of each mask corresponds to LED channel N. Mapping:\n  bit0 = R, bit1 = W, bit2 = G, bit3 = B (the chip's LED order). Faults are sticky in the chip — read once,\n  then call `clear_faults()` to reset the latches.",
       "fields": [
         {
           "type": "uint8_t",
@@ -286,7 +286,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Set per-channel current limit.",
-      "description": "",
+      "description": "Peak sink current = full_scale * code / 255 (datasheet Eq. 4), where\nfull_scale is 51 mA after init (see set_max_current()). The same code\nis written to Manual_DC (manual mode) and Auto_DC (autonomous\nanimation mode, registers 0x50-0x53, reset 0), so animations run at\nthe same current as set() / set_color().\n\n         continuous per die, 20 mA pulsed at 1/10 duty (LED\n         datasheet, Absolute Maximum Ratings). At the 51 mA full\n         scale that is code 25; at 25.5 mA it is code 50. Codes\n         above that, with PWM near 255, exceed the LED's rating.",
       "name": "tile_display_rgbw_set_current"
     },
     {
@@ -518,7 +518,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Continuous fade in/out (one breath cycle).",
-      "description": "The \"thinking\" indicator. Plays a single up-and-down PWM ramp over\n`period_ms` (i.e., dark → peak → dark = one full breath). Loop in\nthe caller for sustained breathing. Implementation is a software\nloop — the LP5811 has on-chip animation engines (AEU) that could\nrun this autonomously, but the AEU bytecode/timing semantics aren't\nfully documented in the public datasheet (see @ref tile_display_rgbw.h\n\"unsupported AEU\" annotation). The software loop is fine for\nindicator-grade breathing at v2.1; revisit when AEU lands.",
+      "description": "The \"thinking\" indicator. Plays a single up-and-down PWM ramp over\n`period_ms` (i.e., dark → peak → dark = one full breath). Loop in\nthe caller for sustained breathing. Implementation is a software\nloop; for a breathe that runs without the MCU, use\ntile_display_rgbw_breathe_auto(), which programs the on-chip\nanimation engine (AEU).",
       "name": "tile_display_rgbw_breathe"
     },
     {
@@ -591,7 +591,7 @@
       "params": [
         {
           "name": "channel",
-          "description": "0-3 (R, B, G, W)."
+          "description": "0-3 (R, W, G, B)."
         },
         {
           "name": "enabled",
@@ -752,7 +752,7 @@
       "params": [
         {
           "name": "channel",
-          "description": "0-3."
+          "description": "0-3 (R, W, G, B)."
         },
         {
           "name": "peak",
@@ -776,7 +776,7 @@
     }
   ],
   "source_file": "tile_display_rgbw.h",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "tile_family": "Display",
   "tile_name": "RGBW",
   "display_name": "Display.RGBW",
