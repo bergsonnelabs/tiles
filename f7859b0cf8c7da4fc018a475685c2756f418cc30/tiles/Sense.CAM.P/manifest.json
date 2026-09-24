@@ -1,0 +1,138 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@e3a9c64",
+  "tile": "Sense.CAM.P",
+  "palette": {
+    "label": "Sense.CAM.P",
+    "icon": "◉"
+  },
+  "driver": {
+    "prefix": "tile_sense_cam_p",
+    "header": "tile_sense_cam_p.h",
+    "version": "0.1.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_cam_p_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "part_id"
+      ],
+      "symbol": "tile_sense_cam_p_part_id",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Read the 16-bit part identifier over I2C.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "spi_id"
+      ],
+      "symbol": "tile_sense_cam_p_spi_id",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Read the SPI-side identifier, confirming the SPI link is usable.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "width"
+      ],
+      "symbol": "tile_sense_cam_p_width",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Frame width in pixels for the configured resolution.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "height"
+      ],
+      "symbol": "tile_sense_cam_p_height",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Frame height in pixels for the configured resolution.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "frame_bytes"
+      ],
+      "symbol": "tile_sense_cam_p_frame_bytes",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Number of bytes one frame occupies (width x height, 8-bit RAW).",
+      "params": [],
+      "returns": "uint32_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "capture"
+      ],
+      "symbol": "tile_sense_cam_p_capture",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Capture one frame into a caller-supplied buffer.",
+      "params": [
+        {
+          "name": "dst",
+          "type": "?uint8_t*",
+          "description": "Destination buffer."
+        },
+        {
+          "name": "len",
+          "type": "int",
+          "description": "Size of dst; must be >= tile_sense_cam_p_frame_bytes()."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_cam_p_reset",
+      "header": "tile_sense_cam_p.h",
+      "category": "tile",
+      "description": "Trigger a software reset (section 5.6.2) and return to defaults.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x35",
+        "is_default": true
+      },
+      {
+        "address": "0x25"
+      },
+      {
+        "address": "0x40"
+      }
+    ]
+  }
+}

@@ -1,0 +1,887 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@98aac17",
+  "file": "tile_display_rgbw.h",
+  "brief": "RGBW LED driver for the Display.RGBW tile (LP5811).",
+  "description": "@version 2.5.0\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives\nwhite and OUT3 (ball D2) blue (tile schematic; confirmed on the board\n2026-09-24). Before 2.5.0 the driver had blue and white swapped.\n\n\nVersion history:\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  tile_t led;\n  tile_display_rgbw_init(&hal, 0, &led, NULL);\n  tile_display_rgbw_set_color(&led, 255, 0, 0);    // red\n  tile_display_rgbw_pulse(&led, 0, 255, 0, 200);   // 200ms green flash\n  tile_display_rgbw_off(&led);                     // all off"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "niche",
+      "category": "Multi-address support (0x50/0x54/0x58/0x5C)",
+      "brief": "Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the chip address AND the top two bits of the 10-bit register address, so the 7-bit address a bus scan sees is:"
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_DISP_RGBW_VERSION_MAJOR",
+      "value": "2",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_DISP_RGBW_VERSION_MINOR",
+      "value": "5",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_DISP_RGBW_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_I2C_ADDR_DEFAULT",
+      "value": "0x50",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_CONFIG_2_DEFAULT",
+      "value": "0xE4",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_BOOST_VOUT_CODE_4V5",
+      "value": "15",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_CONFIG_0_MC_51MA",
+      "value": "0x01",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_BOOST_RAMP_STEP_MS",
+      "value": "100",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_DC_DEFAULT",
+      "value": "0x05",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_PWM_FAULT_DETECT_MIN",
+      "value": "25",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "disp_rgbw_max_current_t",
+      "brief": "Per-channel maximum-current selector (LP5811 MC bit).",
+      "description": "The LP5811 has one global \"max current\" bit that gates the upper\nlimit for every channel's current sink. Switching the bit also\nrescales the 8-bit DC code (`tile_display_rgbw_set_current`) over\nthe new range — DC=255 always means full-scale. Default at init: 51 mA.",
+      "members": [
+        {
+          "name": "DISP_RGBW_MAX_CURRENT_25_5_MA",
+          "value": "0",
+          "description": "25.5 mA full scale per channel @studio value=25.5"
+        },
+        {
+          "name": "DISP_RGBW_MAX_CURRENT_51_MA",
+          "value": "1",
+          "description": "51 mA full scale per channel @studio value=51"
+        }
+      ]
+    },
+    {
+      "name": "disp_rgbw_lsd_threshold_t",
+      "brief": "Short-circuit detection threshold (fraction of VOUT).",
+      "description": "",
+      "members": [
+        {
+          "name": "DISP_RGBW_LSD_TH_0_35",
+          "value": "0",
+          "description": "0.35 × VOUT (most sensitive)"
+        },
+        {
+          "name": "DISP_RGBW_LSD_TH_0_45",
+          "value": "1",
+          "description": "0.45 × VOUT"
+        },
+        {
+          "name": "DISP_RGBW_LSD_TH_0_55",
+          "value": "2",
+          "description": "0.55 × VOUT"
+        },
+        {
+          "name": "DISP_RGBW_LSD_TH_0_65",
+          "value": "3",
+          "description": "0.65 × VOUT (least sensitive — driver default)"
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "disp_rgbw_faults_t",
+      "brief": "LED open / short fault snapshot.",
+      "description": "Bit N of each mask corresponds to LED channel N. Mapping:\n  bit0 = R, bit1 = W, bit2 = G, bit3 = B (the chip's LED order). Faults are sticky in the chip — read once,\n  then call `clear_faults()` to reset the latches.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "open_mask",
+          "description": "Bits 3:0 — channels with open-circuit fault."
+        },
+        {
+          "type": "uint8_t",
+          "name": "short_mask",
+          "description": "Bits 3:0 — channels with short-circuit fault."
+        },
+        {
+          "type": "uint8_t",
+          "name": "thermal_shutdown",
+          "description": "1 = chip in thermal shutdown (TSD)."
+        },
+        {
+          "type": "uint8_t",
+          "name": "config_error",
+          "description": "1 = configuration error reported by chip."
+        }
+      ]
+    },
+    {
+      "name": "disp_rgbw_cfg_t",
+      "brief": "",
+      "description": "Optional init config. Pass NULL for defaults.\nReserved for future use (e.g., initial brightness, current limits).",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "reserved",
+          "description": "Placeholder — no options yet."
+        }
+      ]
+    },
+    {
+      "name": "display_rgbw_aeu_t",
+      "brief": "One animation sub-engine (AEU) program for a channel.",
+      "description": "An AEU plays a 5-keyframe ramp PWM1→PWM2→PWM3→PWM4→PWM5 with four\nslope times between the keyframes, repeated `repeats` times. Three\nAEUs (1..3) can be chained per channel (see set_animation).",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "repeats",
+          "description": "AEU pattern repeat: 0-2, 3 = infinite."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_display_rgbw_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform abstraction handle"
+        },
+        {
+          "name": "instance",
+          "description": "Device instance (0 = default address 0x50)"
+        }
+      ],
+      "notes": [
+        "A healthy Display.RGBW ACKs on EIGHT addresses, and all eight are the same chip. Per datasheet Table 7-4 the 7-bit address carries the chip address AND the top two bits of the 10-bit register address:"
+      ],
+      "return": "1 if the device ACKs, 0 otherwise",
+      "brief": "Check if a Disp.RGBW is present on the bus.",
+      "description": "Probes the instance's independent-mode base address only (0x50 for\ninstance 0).\n\n        independent:  1 0 1 Bit4 Bit3 RA9 RA8   -> 0x50-0x53\n        broadcast:    1 1 0  1    1   RA9 RA8   -> 0x6C-0x6F\n\n      So 0x50-0x53 are the four register pages in independent mode\n      and 0x6C-0x6F are the same pages under the broadcast address.\n      A bus scan showing all eight is one part behaving correctly —\n      not a second device, and not a board fault. Do not go hunting\n      for it; it has cost bring-up time before.",
+      "name": "tile_display_rgbw_find"
+    },
+    {
+      "signature": "void tile_display_rgbw_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const disp_rgbw_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform abstraction handle"
+        },
+        {
+          "name": "instance",
+          "description": "Device instance (0 = default address 0x50)"
+        },
+        {
+          "name": "tile",
+          "description": "Tile handle to populate"
+        },
+        {
+          "name": "cfg",
+          "description": "Optional config, or NULL for defaults"
+        }
+      ],
+      "notes": [],
+      "brief": "Initialize the LP5811 LED driver.",
+      "description": "Enables the chip, ramps the boost to 4.5 V in 0.1 V committed\nsteps (~1.6 s — avoids the single-step inrush that can brown-out\na marginal supply; see version history v2.3.0), sets max current\nfull scale to 51 mA, enables all 4 LED channels, and sets the\nper-channel current limit to LP5811_DC_DEFAULT — ~1 mA at full\nPWM, NOT half scale. See that constant for why it is deliberately\nlow and how to raise it. LSD action is left at \"no shutdown\"\n(driver-level choice) so\na transient short doesn't latch the device into OFAF state without\nfirmware seeing it. Pass cfg=NULL for defaults.",
+      "name": "tile_display_rgbw_init"
+    },
+    {
+      "signature": "void tile_display_rgbw_set(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)",
+      "params": [
+        {
+          "name": "r",
+          "description": "[0..255] Red PWM."
+        },
+        {
+          "name": "g",
+          "description": "[0..255] Green PWM."
+        },
+        {
+          "name": "b",
+          "description": "[0..255] Blue PWM."
+        },
+        {
+          "name": "w",
+          "description": "[0..255] White PWM."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set RGBW output levels.",
+      "description": "",
+      "name": "tile_display_rgbw_set"
+    },
+    {
+      "signature": "void tile_display_rgbw_off(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Turn all LEDs off (PWM = 0).",
+      "description": "",
+      "name": "tile_display_rgbw_off"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)",
+      "params": [
+        {
+          "name": "r",
+          "description": "[0..255] Red current (fraction of full-scale max)."
+        },
+        {
+          "name": "g",
+          "description": "[0..255] Green current."
+        },
+        {
+          "name": "b",
+          "description": "[0..255] Blue current."
+        },
+        {
+          "name": "w",
+          "description": "[0..255] White current."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set per-channel current limit.",
+      "description": "Peak sink current = full_scale * code / 255 (datasheet Eq. 4), where\nfull_scale is 51 mA after init (see set_max_current()). The same code\nis written to Manual_DC (manual mode) and Auto_DC (autonomous\nanimation mode, registers 0x50-0x53, reset 0), so animations run at\nthe same current as set() / set_color().\n\n         continuous per die, 20 mA pulsed at 1/10 duty (LED\n         datasheet, Absolute Maximum Ratings). At the 51 mA full\n         scale that is code 25; at 25.5 mA it is code 50. Codes\n         above that, with PWM near 255, exceed the LED's rating.",
+      "name": "tile_display_rgbw_set_current"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mode)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "mode",
+          "description": "25.5 mA (0) or 51 mA (1)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the global maximum-current range (MC bit).",
+      "description": "Selects 25.5 mA or 51 mA full-scale per channel. After changing,\nthe 8-bit per-channel DC codes (set via `set_current()`) re-scale\nautomatically — DC=255 always means full-scale current. Useful\nwhen wiring lower-rated LEDs (drop to 25.5 mA to keep DC resolution\nfine) or when running cooler / saving power.\n\nThe driver writes `Dev_Config_0` and re-issues the `CMD_Update`\nlatch (0x55) the chip requires for config-register writes to\nactually take effect.",
+      "name": "tile_display_rgbw_set_max_current"
+    },
+    {
+      "signature": "void tile_display_rgbw_read_faults(tile_t *tile, disp_rgbw_faults_t *out)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "out",
+          "description": "Caller-allocated fault snapshot (zeroed on entry)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read the per-channel open / short / thermal fault state.",
+      "description": "Pulls TSD_Config_Status, LOD_Status_0, and LSD_Status_0 from the\nchip's page-3 register space (the LP5811 multiplexes register\npages onto two extra address bits — the driver handles this\ntransparently). Faults latch in the chip until cleared via\n`clear_faults()`.\n\nOpen-circuit threshold (VLOD_TH) is fixed by the chip at ~70 mV\n(25.5 mA mode) or ~180 mV (51 mA mode). Short-circuit threshold\n(VLSD_TH) is configurable via `set_short_threshold()`.\n\n         LP5811_PWM_FAULT_DETECT_MIN (25) — datasheet §7.3.5.3 and\n         §7.3.5.4. A channel that is dark, or driven at a very low\n         duty, reports NO fault whether or not one exists. Light the\n         channel you care about, give it a moment to settle, and read\n         faults while it is still lit. Reading them on an idle part\n         returns a clean bill of health that means nothing.",
+      "name": "tile_display_rgbw_read_faults"
+    },
+    {
+      "signature": "void tile_display_rgbw_clear_faults(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Clear all latched LED open / short / TSD fault flags.",
+      "description": "Writes 0x07 to Fault_Clear (W1C — write 1 to clear). After this\ncall, `read_faults()` reflects only currently-active faults.",
+      "name": "tile_display_rgbw_clear_faults"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_short_threshold(tile_t *tile, disp_rgbw_lsd_threshold_t threshold)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "threshold",
+          "description": "One of DISP_RGBW_LSD_TH_*"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the short-circuit detection threshold (fraction of VOUT).",
+      "description": "Lower thresholds catch milder partial-shorts; higher thresholds\ntolerate more LED forward-voltage variation without false alarms.\nDriver default (init) is 0.65 × VOUT — most permissive, least\nlikely to mis-fire on cold LEDs whose Vf hasn't settled.",
+      "name": "tile_display_rgbw_set_short_threshold"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_short_shutdown(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "enabled",
+          "description": "1 = chip auto-shuts-down on LSD, 0 = report only"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Configure whether a short-circuit fault auto-disables outputs.",
+      "description": "When enabled, an LSD fault sends the chip into OFAF (one-fail-all-\nfail) state — every channel turns off until LSD_Clear is written.\nWhen disabled (driver default), the chip flags the fault but keeps\ndriving — firmware decides what to do.",
+      "name": "tile_display_rgbw_set_short_shutdown"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_open_shutdown(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "enabled",
+          "description": "1 = chip auto-shuts-down a single sink, 0 = report only"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Configure whether an open-circuit fault auto-disables a sink.",
+      "description": "When enabled (chip default), a per-channel LOD fault turns off\nthat single current sink. When disabled, the chip flags the fault\nvia `read_faults()` but keeps driving the channel — useful when\nthe open is intermittent (e.g., a flexing wire) and firmware\nwants to retry rather than relying on the chip to recover.",
+      "name": "tile_display_rgbw_set_open_shutdown"
+    },
+    {
+      "signature": "void tile_display_rgbw_sleep(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Enter sleep (disable chip).",
+      "description": "",
+      "name": "tile_display_rgbw_sleep"
+    },
+    {
+      "signature": "void tile_display_rgbw_wake(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Wake (re-enable chip, LEDs retain previous state).",
+      "description": "",
+      "name": "tile_display_rgbw_wake"
+    },
+    {
+      "signature": "void tile_display_rgbw_reset(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Software reset. Must call init() again after.",
+      "description": "",
+      "name": "tile_display_rgbw_reset"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_color(tile_t *tile, uint8_t r, uint8_t g, uint8_t b)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "r",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "description": "Blue PWM  [0..255]"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set a solid RGB colour (W channel forced off).",
+      "description": "Convenience wrapper around @ref tile_display_rgbw_set for the\ncommon case where only the RGB channels matter. White is held at\nzero — drop to `set()` directly if you want to mix white in.",
+      "name": "tile_display_rgbw_set_color"
+    },
+    {
+      "signature": "void tile_display_rgbw_pulse(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint16_t ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "r",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "description": "Blue PWM  [0..255]"
+        },
+        {
+          "name": "ms",
+          "description": "Duration in milliseconds"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Show a colour for `ms` milliseconds, then turn off.",
+      "description": "Simple alert / acknowledgement idiom. Blocking — the call returns\nafter `ms` has elapsed and the LEDs have been turned back off. White\nis forced off (RGB-only); use @ref tile_display_rgbw_set + manual\ndelay if you need full RGBW pulse control.",
+      "name": "tile_display_rgbw_pulse"
+    },
+    {
+      "signature": "void tile_display_rgbw_breathe(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint16_t period_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "r",
+          "description": "Peak red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "description": "Peak green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "description": "Peak blue PWM  [0..255]"
+        },
+        {
+          "name": "period_ms",
+          "description": "One full breath duration in milliseconds (>= 64 recommended)"
+        }
+      ],
+      "notes": [
+        "Blocking. Spends `period_ms` in `delay_ms()`. Call from a dedicated task or accept the stall — the function does not yield to other peripherals.",
+        "White is forced off (RGB-only). Step granularity is fixed at 32 PWM levels per half-cycle; with `period_ms < 64` the delay-per-step rounds to 1 ms and the breath becomes choppy."
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Continuous fade in/out (one breath cycle).",
+      "description": "The \"thinking\" indicator. Plays a single up-and-down PWM ramp over\n`period_ms` (i.e., dark → peak → dark = one full breath). Loop in\nthe caller for sustained breathing. Implementation is a software\nloop; for a breathe that runs without the MCU, use\ntile_display_rgbw_breathe_auto(), which programs the on-chip\nanimation engine (AEU).",
+      "name": "tile_display_rgbw_breathe"
+    },
+    {
+      "signature": "void tile_display_rgbw_flash(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t count)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "r",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "description": "Blue PWM  [0..255]"
+        },
+        {
+          "name": "count",
+          "description": "Number of on/off cycles (1..255)"
+        }
+      ],
+      "notes": [
+        "Blocking. Total runtime is approximately `count * 200` ms. Call from a dedicated task or accept the stall."
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "N quick on/off blinks at the given colour.",
+      "description": "Notification idiom — alarm, error indication, \"got it\" ack. Each\nblink is 100 ms on, 100 ms off (200 ms per cycle). White is forced\noff (RGB-only). Leaves the LEDs off after the final blink.",
+      "name": "tile_display_rgbw_flash"
+    },
+    {
+      "signature": "uint8_t tile_display_rgbw_is_faulted(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if any fault bit is set, 0 if healthy",
+      "brief": "Quick yes/no on whether any LP5811 fault is currently latched.",
+      "description": "Wraps @ref tile_display_rgbw_read_faults and returns 1 if any fault\nbit is set — open-circuit (LOD), short-circuit (LSD), thermal\nshutdown (TSD), or configuration error. For per-channel detail\n(which LED is open / shorted), use `read_faults()` directly. Faults\nstay latched until cleared via @ref tile_display_rgbw_clear_faults.",
+      "name": "tile_display_rgbw_is_faulted"
+    },
+    {
+      "signature": "uint8_t tile_display_rgbw_ms_to_slope(uint16_t ms)",
+      "params": [
+        {
+          "name": "ms",
+          "description": "Duration in milliseconds (0-8050)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "4-bit time code (0-15) for an AEU T-field or Auto_Pause field.",
+      "brief": "Convert a duration in milliseconds to the nearest AEU slope/pause code.",
+      "description": "",
+      "name": "tile_display_rgbw_ms_to_slope"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_autonomous(tile_t *tile, uint8_t channel, uint8_t enabled)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3 (R, W, G, B)."
+        },
+        {
+          "name": "enabled",
+          "description": "1 = autonomous, 0 = manual."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Put a channel into (or out of) autonomous animation mode.",
+      "description": "In autonomous mode the on-chip engine runs the channel's AEU program\nwith no MCU intervention; in manual mode the channel follows the PWM\nregisters (set / set_color). Call update() after configuring.",
+      "name": "tile_display_rgbw_set_autonomous"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_aeu(tile_t *tile, uint8_t channel, uint8_t aeu, const display_rgbw_aeu_t *prog)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3."
+        },
+        {
+          "name": "aeu",
+          "description": "Sub-engine index 1-3."
+        },
+        {
+          "name": "prog",
+          "description": "5-keyframe ramp + slope times + repeat."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Program one AEU sub-engine of a channel.",
+      "description": "",
+      "name": "tile_display_rgbw_set_aeu"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_animation(tile_t *tile, uint8_t channel, uint8_t num_aeu, uint8_t pause_start, uint8_t pause_end, uint8_t repeats)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3."
+        },
+        {
+          "name": "num_aeu",
+          "description": "How many AEUs to chain, 1-3."
+        },
+        {
+          "name": "pause_start",
+          "description": "Start-of-pattern pause code (0-15, see ms_to_slope)."
+        },
+        {
+          "name": "pause_end",
+          "description": "End-of-pattern pause code (0-15)."
+        },
+        {
+          "name": "repeats",
+          "description": "Whole-pattern repeat: 0-14, 15 = infinite."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a channel's overall autonomous playback.",
+      "description": "",
+      "name": "tile_display_rgbw_set_animation"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_exp_dimming(tile_t *tile, uint8_t channel, uint8_t enabled)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3."
+        },
+        {
+          "name": "enabled",
+          "description": "1 = exponential curve, 0 = linear."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable/disable exponential PWM dimming for a channel (Dev_Config_5).",
+      "description": "",
+      "name": "tile_display_rgbw_set_exp_dimming"
+    },
+    {
+      "signature": "void tile_display_rgbw_set_phase_align(tile_t *tile, uint8_t channel, uint8_t mode)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3."
+        },
+        {
+          "name": "mode",
+          "description": "0/1 = forward, 2 = middle, 3 = backward align."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a channel's PWM phase-align method (Dev_Config_7).",
+      "description": "",
+      "name": "tile_display_rgbw_set_phase_align"
+    },
+    {
+      "signature": "void tile_display_rgbw_update(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Latch pending config/animation register writes (CMD_Update = 0x55).",
+      "description": "The LP5811 only acts on Dev_Config / animation writes once this is\nissued. Call after set_aeu / set_animation / set_autonomous and\nbefore animate_start.",
+      "name": "tile_display_rgbw_update"
+    },
+    {
+      "signature": "void tile_display_rgbw_animate_start(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Start (or restart) autonomous animation on all enabled channels.",
+      "description": "",
+      "name": "tile_display_rgbw_animate_start"
+    },
+    {
+      "signature": "void tile_display_rgbw_animate_stop(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Stop autonomous animation and return to the INITIAL state.",
+      "description": "",
+      "name": "tile_display_rgbw_animate_stop"
+    },
+    {
+      "signature": "void tile_display_rgbw_animate_pause(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Pause autonomous animation, holding the current output.",
+      "description": "",
+      "name": "tile_display_rgbw_animate_pause"
+    },
+    {
+      "signature": "void tile_display_rgbw_animate_continue(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Resume autonomous animation after a pause.",
+      "description": "",
+      "name": "tile_display_rgbw_animate_continue"
+    },
+    {
+      "signature": "void tile_display_rgbw_breathe_auto(tile_t *tile, uint8_t channel, uint8_t peak, uint16_t period_ms, uint8_t repeats)",
+      "params": [
+        {
+          "name": "channel",
+          "description": "0-3 (R, W, G, B)."
+        },
+        {
+          "name": "peak",
+          "description": "Peak brightness 0-255."
+        },
+        {
+          "name": "period_ms",
+          "description": "Full breathe period (up+down) in ms."
+        },
+        {
+          "name": "repeats",
+          "description": "Whole-pattern repeat: 0-14, 15 = infinite."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Configure + start an autonomous breathe on one channel.",
+      "description": "Builds a single-AEU symmetric ramp (0 → peak → 0) on the channel,\nenables autonomous mode, latches, and starts. Convenience wrapper\nover the AEU API for the common case.",
+      "name": "tile_display_rgbw_breathe_auto"
+    }
+  ],
+  "source_file": "tile_display_rgbw.h",
+  "version": "2.5.0",
+  "tile_family": "Display",
+  "tile_name": "RGBW",
+  "display_name": "Display.RGBW",
+  "vibe_settings": [
+    {
+      "label": "Red current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_current",
+      "param": "r",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 5,
+      "computed_unit": "mA"
+    },
+    {
+      "label": "Green current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_current",
+      "param": "g",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 5,
+      "computed_unit": "mA"
+    },
+    {
+      "label": "Blue current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_current",
+      "param": "b",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 5,
+      "computed_unit": "mA"
+    },
+    {
+      "label": "White current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_current",
+      "param": "w",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 5,
+      "computed_unit": "mA"
+    },
+    {
+      "label": "Full-scale current",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_max_current",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "25.5 mA full scale per channel",
+        "51 mA full scale per channel"
+      ],
+      "default": "51 mA full scale per channel"
+    },
+    {
+      "label": "Short detection threshold",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_short_threshold",
+      "param": "threshold",
+      "kind": "choice",
+      "choices": [
+        "0.35 × VOUT (most sensitive)",
+        "0.45 × VOUT",
+        "0.55 × VOUT",
+        "0.65 × VOUT (least sensitive — driver default)"
+      ],
+      "default": "0.65 × VOUT (least sensitive — driver default)"
+    },
+    {
+      "label": "Shut down on a short",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_short_shutdown",
+      "param": "enabled",
+      "kind": "bool",
+      "default": 0
+    },
+    {
+      "label": "Shut down an open channel",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_open_shutdown",
+      "param": "enabled",
+      "kind": "bool",
+      "default": 1
+    }
+  ]
+}
