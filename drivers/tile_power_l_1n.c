@@ -105,18 +105,24 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
         return;
     }
 
-    /* Indicator LEDs (physical colours per the tile schematic):
-     *   LED0 green  → HOST    (firmware-driven status)
-     *   LED1 yellow → CHARGING (auto: on while charging)
-     *   LED2 red    → ERROR    (auto: on for charger faults) */
-    pmic_write(tile, NPM1300_REG_LEDDRV0MODESEL, NPM1300_LED_HOST);
+    /* Indicator LEDs (A1/A2/A3 = LED0/1/2 = red / orange / green), in the
+     * chip's own reset assignment:
+     *   LED0 red    → ERROR    (auto: on for charger faults)
+     *   LED1 orange → CHARGING (auto: on while charging)
+     *   LED2 green  → HOST     (firmware-driven status) */
+    pmic_write(tile, NPM1300_REG_LEDDRV0MODESEL, NPM1300_LED_ERROR);
     pmic_write(tile, NPM1300_REG_LEDDRV1MODESEL, NPM1300_LED_CHARGING);
-    pmic_write(tile, NPM1300_REG_LEDDRV2MODESEL, NPM1300_LED_ERROR);
+    pmic_write(tile, NPM1300_REG_LEDDRV2MODESEL, NPM1300_LED_HOST);
 
     /* No NTC thermistor is fitted on this tile (NTC pin tied to GND), so
      * disable NTC monitoring — otherwise the charger would fault on an
-     * out-of-range thermistor reading. */
+     * out-of-range thermistor reading. Both halves are needed: ADCNTCRSEL=0
+     * (Hi-Z, "no thermistor") stops the measurement, and the datasheet
+     * (§6.2.5) says the charger's use of it "must be disabled in register
+     * BCHGDISABLESET" (bit1 DISABLENTC, write-1-to-set; bit0 untouched). Die
+     * thermal regulation (§6.2.6) is unaffected. */
     pmic_write(tile, NPM1300_REG_ADCNTCRSEL, 0x00);
+    pmic_write(tile, NPM1300_REG_BCHGDISABLESET, 0x02);
 
     /* Defaults: 500 mA USB input limit, 100 mA charge, 4.20 V, charging on. */
     uint16_t vbus_ma   = 500;
@@ -184,8 +190,17 @@ void tile_power_l_1n_set_charge_current_ma(tile_t* tile, uint16_t ma)
     if (ma < 32)  ma = 32;
     if (ma > 800) ma = 800;
     uint16_t idx = (uint16_t)(ma / 2);
+
+    /* Datasheet §6.2.4: "CHARGER must be disabled before changing the current
+     * setting ... The setting takes effect when charging is enabled." So a
+     * change made while charging would silently not apply. If the charger is
+     * on (BCHGENABLESET reads back ENABLECHARGING in bit0), pause it around
+     * the write and re-enable it so the new current takes effect now. */
+    uint8_t was_on = (uint8_t)(pmic_read(tile, NPM1300_REG_BCHGENABLESET) & 0x01);
+    if (was_on) pmic_write(tile, NPM1300_REG_BCHGENABLECLR, 0x01);
     pmic_write(tile, NPM1300_REG_BCHGISETMSB, (uint8_t)(idx >> 1));
     pmic_write(tile, NPM1300_REG_BCHGISETLSB, (uint8_t)(idx & 0x01));
+    if (was_on) pmic_write(tile, NPM1300_REG_BCHGENABLESET, 0x01);
 }
 
 void tile_power_l_1n_set_term_mv(tile_t* tile, uint16_t mv)

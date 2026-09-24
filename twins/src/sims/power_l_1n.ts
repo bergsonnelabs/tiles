@@ -5,8 +5,8 @@
 // normally-on 1.8 V buck (pad 10), and the VSYS passthrough (pad 8, ≈ the higher
 // of CHG/BATT). The two bucks come up at fixed voltages set by the tile's VSET
 // pulldowns (VSET1 47 kΩ → 1.8 V, VSET2 330 kΩ → 3.3 V); firmware can override
-// them. Three on-board indicator LEDs (LED0 green, LED1 yellow, LED2 red) show
-// host / charging / error status.
+// them. Three on-board indicator LEDs (LED0 red, LED1 orange, LED2 green) show
+// error / charging / host status.
 //
 // Topology, pad map, voltages and charge ranges are datasheet- and
 // tile-JSON-accurate (canonical). The current split between the CHG and BATT
@@ -24,6 +24,11 @@ const UVLO_MV = 2300; // below this on every input the PMIC can't hold its rails
 const BUCK_DROPOUT_MV = 100;
 // Each buck is rated 200 mA (the tile definition's `max_current` for 3V3 and 1V8).
 const BUCK_LIMIT_UA = 200_000;
+// Buck efficiency (nPM1300 PS v1.1): 3.3 V ~94 % from 100 µA to 100 mA (Fig. 3,
+// AUTO, VSYS 3.8 V; EFFBUCK 93 % typ at 200 mA); 1.8 V ~88 % in PWM (Fig. 24).
+// Load-independent here: the light-load fall-off in PWM is not modelled.
+const BUCK_EFF_3V3 = 0.94;
+const BUCK_EFF_1V8 = 0.88;
 
 interface State {
   // ── inputs (exercised via controls) ──
@@ -193,9 +198,9 @@ const sim: TileSim<State> = {
     buck1_mv: 1800,
     buck2_mv: 3300,
 
-    led0_mode: LED_HOST,
+    led0_mode: LED_ERROR,
     led1_mode: LED_CHARGING,
-    led2_mode: LED_ERROR,
+    led2_mode: LED_HOST,
     led0_host: 0,
     led1_host: 0,
     led2_host: 0,
@@ -225,7 +230,7 @@ const sim: TileSim<State> = {
       step: 1,
       unit: '°C',
     },
-    { type: 'toggle', field: 'led0_host', label: 'LED0 green (host)' },
+    { type: 'toggle', field: 'led2_host', label: 'LED2 green (host)' },
   ],
 
   // The one thing a person makes HAPPEN to a charger: a fault (a shorted cell, a
@@ -246,9 +251,9 @@ const sim: TileSim<State> = {
     // 100 mA charge, 4.20 V termination, charging on.
     tile_power_l_1n_init: () => ({
       nextState: {
-        led0_mode: LED_HOST,
+        led0_mode: LED_ERROR,
         led1_mode: LED_CHARGING,
-        led2_mode: LED_ERROR,
+        led2_mode: LED_HOST,
         vbus_ilim_ma: 500,
         charge_current_ma: 100,
         term_mv: 4200,
@@ -363,28 +368,29 @@ const sim: TileSim<State> = {
     power: 'inferred', // voltages/topology canonical; current split is a modeling choice
   },
 
-  // On-board status LEDs (LED0 green / host, LED1 yellow / charging, LED2 red /
-  // error) — declared as indicators so the canvas renders them generically.
+  // On-board status LEDs (LED0 red / error, LED1 orange / charging, LED2 green /
+  // host; nPM1300 balls A1-A3) — declared as indicators so the canvas renders
+  // them generically.
   indicators(state, ctx) {
     const isChg = charging(state, resolveInputs(state, ctx));
     const isFault = state.fault === 1;
     return [
       {
         id: 'led0',
-        label: 'Host (green)',
-        color: '#22c55e',
+        label: 'Error (red)',
+        color: '#ef4444',
         level: ledOn(state.led0_mode, state.led0_host, isChg, isFault),
       },
       {
         id: 'led1',
-        label: 'Charging (yellow)',
-        color: '#eab308',
+        label: 'Charging (orange)',
+        color: '#f97316',
         level: ledOn(state.led1_mode, state.led1_host, isChg, isFault),
       },
       {
         id: 'led2',
-        label: 'Error (red)',
-        color: '#ef4444',
+        label: 'Host (green)',
+        color: '#22c55e',
         level: ledOn(state.led2_mode, state.led2_host, isChg, isFault),
       },
     ];
@@ -456,11 +462,16 @@ const sim: TileSim<State> = {
     // 1V8 rails below their nominal — they don't stay magically pegged.
     const buckOut = (en: number, setMv: number) =>
       inputOk && en ? Math.min(setMv, Math.max(0, vinMv - BUCK_DROPOUT_MV)) : 0;
+    // VSYS passes the input's current straight through (the power path is a
+    // switch, not a converter), and both bucks run from it: the solver then
+    // charges USB / the battery for VSYS loads 1:1 and for each buck's load at
+    // its efficiency (datasheet EFFBUCK / Fig. 3 / Fig. 24).
     rails!.push({
       name: 'VSYS',
       role: 'output',
       v_mv: inputOk ? vinMv : 0,
       pads: ['8'],
+      conversion: 'linear',
       note: 'system (≈ higher of CHG/BATT)',
     });
     rails!.push({
@@ -469,6 +480,9 @@ const sim: TileSim<State> = {
       v_mv: buckOut(state.buck2_en, state.buck2_mv),
       pads: ['9'],
       limit_ua: BUCK_LIMIT_UA,
+      from: 'VSYS',
+      conversion: 'switching',
+      efficiency: BUCK_EFF_3V3,
       note: 'buck2 (3.3 V; follows VSYS down in dropout)',
     });
     rails!.push({
@@ -477,6 +491,9 @@ const sim: TileSim<State> = {
       v_mv: buckOut(state.buck1_en, state.buck1_mv),
       pads: ['10'],
       limit_ua: BUCK_LIMIT_UA,
+      from: 'VSYS',
+      conversion: 'switching',
+      efficiency: BUCK_EFF_1V8,
       note: 'buck1 (1.8 V; follows VSYS down in dropout)',
     });
 

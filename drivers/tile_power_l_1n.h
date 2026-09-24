@@ -15,19 +15,18 @@
  *   U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as "yellow")
  *   U5 = APG015CGKKC-TT   571 nm green
  *
- * Driver mode assignment made by init():
- *   LED0 → HOST mode     (firmware "ready"/status)
- *   LED1 → CHARGING mode (auto, on while charging)
- *   LED2 → ERROR mode    (auto, on for charger faults)
+ * Which LED is which (confirmed 2026-09-24): red, orange, green sit left to
+ * right on the nPM1300's A1, A2, A3 balls, which are LED0, LED1, LED2 (WLCSP
+ * pin table). So LED0 = red (U3), LED1 = orange (U4), LED2 = green (U5).
  *
- * @warning The LED index → colour mapping is taken from the schematic and is
- * NOT verified on hardware. All three LEDDRV channels are confirmed working
- * (bench, 2026-08-10), but the only tile available was misstuffed with three
- * identical red parts, so colour could not be checked. The BOM refdes order
- * (U3 red, U4 orange, U5 green) runs opposite to the LED0/1/2 order assumed
- * here. This matters: init() puts ERROR on LED2, so if LED2 is in fact the
- * green part, a charger fault lights GREEN. Verify against a correctly
- * stuffed tile before relying on colour to convey meaning.
+ * Driver mode assignment made by init() (the chip's own reset assignment):
+ *   LED0 red    → ERROR mode    (auto, on for charger faults)
+ *   LED1 orange → CHARGING mode (auto, on while charging)
+ *   LED2 green  → HOST mode     (firmware "ready"/status, via led_set())
+ *
+ * Before 1.2.0 init() had this backwards (LED0 HOST, LED2 ERROR, from a
+ * misread schematic), so a charger fault lit the green LED and firmware
+ * status the red one.
  *
  * @note Prefer conveying state by blink PATTERN rather than by colour. A
  * misstuffed or single-colour tile still communicates correctly that way.
@@ -71,9 +70,12 @@
  *   pads on Power-L-1N-a, so there's no externally useful GPIO function.
  *
  * @studio unsupported severity=advanced category="Ship / hibernate mode"
- *   Driver-deferred. The chip supports ultra-low-power ship/hibernate modes
- *   (battery disconnect for storage). Not yet exposed — the ship-mode task
- *   register address needs datasheet confirmation before wiring.
+ *   Driver-deferred. The chip supports ultra-low-power ship (370 nA) and
+ *   hibernate modes that isolate the battery for storage (datasheet §7.4:
+ *   TASKENTERSHIPMODE 0x0B02, TASKENTERHIBERNATE 0x0B00). Not yet exposed. The
+ *   SHPHLD wake button is not routed to a pad on Power-L-1N-a, so the only way
+ *   back out of ship mode on this tile is applying CHG (VBUS), which needs a
+ *   bench check before it is offered as a Studio call.
  *
  * @studio unsupported severity=niche category="POF warning + buck retention / forced-PWM"
  *   Driver-deferred. Power-fail early-warning (via GPIO) and buck
@@ -98,7 +100,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_POWER_L_1N_VERSION_MAJOR  1
-#define TILE_POWER_L_1N_VERSION_MINOR  1
+#define TILE_POWER_L_1N_VERSION_MINOR  2
 #define TILE_POWER_L_1N_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -195,11 +197,20 @@ uint8_t tile_power_l_1n_find(tiles_pal_t* hal, uint8_t instance);
 /**
  * @brief  Initialize the nPM1300 PMIC.
  *
- * Sets the indicator LED modes (LED0=HOST, LED1=CHARGING, LED2=ERROR),
+ * Sets the indicator LED modes (LED0 red = ERROR, LED1 orange = CHARGING,
+ * LED2 green = HOST),
  * disables NTC monitoring (no thermistor on this tile), and applies the
  * charger settings. The buck regulators are left at their boot voltages
  * (1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.
- * Pass cfg=NULL for defaults (100 mA, 4.20 V, charging enabled).
+ * Pass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging
+ * enabled). A zero-initialised cfg is NOT the same as NULL: it leaves
+ * charging OFF (enable_charging = 0).
+ *
+ * @warning The NULL defaults suit a single Li-ion / Li-poly cell rated
+ * 4.20 V and at least ~100 mAh (100 mA is 1C for a 100 mAh cell). They are
+ * NOT safe for a LiFePO4 cell (charge to 3.60 V: pass term_mv = 3600) or for
+ * a smaller cell (lower charge_current_ma to <= 1C). The chip itself powers
+ * up with charging disabled at 3.60 V / 32 mA; init() is what raises it.
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0 = default, see mapping table)
@@ -250,7 +261,10 @@ void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma);
 /**
  * @brief  Set the constant-current charge level.
  *
- * Programmable 32-800 mA in 2 mA steps; out-of-range values clamp.
+ * Programmable 32-800 mA in 2 mA steps (rounded down); out-of-range values
+ * clamp. The chip only accepts a new current while the charger is disabled
+ * (datasheet §6.2.4), so if charging is on this pauses it for the write and
+ * re-enables it. Keep it at or below 1C for the cell fitted.
  *
  * @studio expose category=tile name=set_charge_current_ma section=config
  * @studio control ma label="Charge current" tier=basic default=100
@@ -369,8 +383,11 @@ void tile_power_l_1n_buck_set_mv(tile_t* tile, uint8_t buck, uint16_t mv);
 /**
  * @brief  Set an indicator LED's drive mode.
  *
- * LED0 is green, LED1 yellow, LED2 red. In auto modes (ERROR/CHARGING)
- * the charger drives the LED directly; HOST mode hands control to led_set().
+ * In auto modes (ERROR/CHARGING) the charger drives the LED directly; HOST
+ * mode hands control to led_set().
+ *
+ * LED0 is red, LED1 orange, LED2 green (see the file header). init() leaves
+ * LED2 in HOST mode for firmware status.
  *
  * @studio expose category=tile name=led_set_mode section=config
  * @param  led   0, 1 or 2.
