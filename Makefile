@@ -839,6 +839,16 @@ endif
 flash-rom: $(TARGET).bin
 	dfu-util -a 0 -s 0x08000000:leave -D $<
 
+# ---- Flash over USB serial (no bootloader, no driver) ----
+# Hands the running Core to its SRAM flasher over the CDC port (Core.ST.L4.x,
+# ROM-DFU layout). No dfu-util, and on Windows no Zadig / WinUSB. Needs the
+# firmware on the Core to be built with serial update; if it predates it, this
+# says so — run `make flash-dfu` once. SERIAL_PORT picks a port when more than
+# one Core is plugged in. Protocol: docs/serial-update-protocol.md.
+.PHONY: flash-serial
+flash-serial: $(TARGET).bin
+	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)") "$<"
+
 # ---- Flash the DFU bootloader itself ----
 
 flash-bootloader:

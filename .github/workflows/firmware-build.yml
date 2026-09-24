@@ -23,6 +23,10 @@ on:
       - 'tools/test_core_scope*'
       - 'tools/scope_decode.py'
       - 'docs/scope-protocol.md'
+      - 'tools/serial_update.py'
+      - 'tools/test_serial_update.py'
+      - 'tools/gen_serial_update_blob.py'
+      - 'docs/serial-update-protocol.md'
       - 'tests/ble-*/**'
       - 'tests/val-ble*/**'
       - 'tests/val-guard-ble/**'
@@ -110,6 +114,18 @@ jobs:
       # the example frames printed in docs/scope-protocol.md.
       - name: Scope protocol tests
         run: python3 tools/test_core_scope.py
+
+      # Serial update: the protocol core (su_core.c, host cc) on a simulated L4
+      # flash, driven by the real host client — including a power cut after
+      # every frame. Then: the flasher still links with -nostdlib on this
+      # toolchain (nothing it runs may live in flash), and the committed blob
+      # header was regenerated after the last source change.
+      - name: Serial update protocol tests
+        run: make -C sdk/serial_update test
+      - name: Serial update flasher links standalone
+        run: make -C sdk/serial_update build/flasher_l4.elf
+      - name: Serial update blob header is current
+        run: make -C sdk/serial_update check
 
       # These take BLE_ENABLED from their config.json "ble" block, so they also
       # exercise the config-driven path Studio and the build service rely on.

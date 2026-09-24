@@ -47,6 +47,18 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Serial update (docs/serial-update-protocol.md): opening the port at
+ * SU_TRIGGER_BAUD hands the Core to a flasher that runs from SRAM. Only in the
+ * layout it rewrites — app at 0x08000000 — so not under the parked custom
+ * bootloader (APP_OFFSET). */
+#if !defined(APP_OFFSET) && !defined(HAL_SERIAL_UPDATE_DISABLE)
+#  define HAL_SERIAL_UPDATE 1
+#  include "../serial_update/su_protocol.h"
+#  include "hal_serial_update_blob_l4.h"
+#else
+#  define HAL_SERIAL_UPDATE 0
+#endif
+
 /* ============================================================
  * PMA buffer layout (1024 bytes total, BTABLE=0, PMA_ACCESS=1)
  *
@@ -689,6 +701,70 @@ static void _handle_reset(void)
     USB_CNTR = USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM | USB_CNTR_WKUPM;
 }
 
+#if HAL_SERIAL_UPDATE
+/* ============================================================
+ * Serial update handoff
+ *
+ * Called from the USB interrupt once the host has set the trigger line coding
+ * and the status stage is armed. Stops everything else that could touch SRAM,
+ * leaves the USB peripheral exactly as it is, copies the flasher to
+ * SU_FLASHER_BASE and jumps to it. The app does not come back: the flasher
+ * resets into the new image (or the old one, if nothing was written).
+ * ============================================================ */
+
+static void _serial_update_enter(void)
+{
+    /* The handoff block and flasher overwrite low SRAM. Refuse (and stay in
+     * the app) if this interrupt's stack has grown down into that range. */
+    uint32_t msp;
+    __asm volatile ("mrs %0, msp" : "=r" (msp));
+    if (msp < SU_HANDOFF_ADDR + 0x400UL) return;
+
+    __asm volatile ("cpsid i" ::: "memory");
+    REG32(0xE000E010UL) = 0;                  /* SysTick off */
+    REG32(0xE000ED94UL) = 0;                  /* MPU off */
+    REG32(0x40021028UL) |= 0x3UL;             /* RCC_AHB1RSTR: reset DMA1 + DMA2 so */
+    REG32(0x40021028UL) &= ~0x3UL;            /* no transfer lands in the flasher */
+    REG32(0x40003000UL) = 0xAAAAUL;           /* feed the IWDG */
+
+    /* Read our own state before anything is overwritten: _cdc lives in SRAM. */
+    uint8_t lc[7];
+    memcpy(lc, &_cdc.line_coding, 7);
+    uint8_t configured = _cdc.configured;
+
+    su_handoff_t *h = (su_handoff_t *)SU_HANDOFF_ADDR;
+    h->magic               = SU_HANDOFF_MAGIC;
+    h->dev_desc            = dev_desc;
+    h->cfg_desc            = cfg_desc;
+    h->hid_report_desc     = hid_report_desc;
+    h->strings[0]          = CORE_USB_MANUFACTURER;
+    h->strings[1]          = CORE_USB_PRODUCT;
+    h->strings[2]          = CORE_USB_SERIAL;
+    h->dev_desc_len        = sizeof(dev_desc);
+    h->cfg_desc_len        = sizeof(cfg_desc);
+    h->cfg_hid_offset      = CFG_DESC_HID_OFFSET;
+    h->hid_report_desc_len = sizeof(hid_report_desc);
+    for (int i = 0; i < 7; i++) h->line_coding[i] = lc[i];
+    h->configured          = configured;
+
+    const uint32_t *src = (const uint32_t *)(const void *)su_flasher_l4_bytes;
+    uint32_t       *dst = (uint32_t *)SU_FLASHER_BASE;
+    for (uint32_t i = 0; i < (SU_FLASHER_L4_LEN + 3u) / 4u; i++) dst[i] = src[i];
+
+    __asm volatile ("dsb\n isb" ::: "memory");
+    uint32_t sp = ((const uint32_t *)SU_FLASHER_BASE)[0];
+    uint32_t pc = ((const uint32_t *)SU_FLASHER_BASE)[1];
+    __asm volatile (
+        "msr msp, %0 \n"
+        "bx  %1      \n"
+        :
+        : "r" (sp), "r" (pc)
+        : "memory"
+    );
+    __builtin_unreachable();
+}
+#endif /* HAL_SERIAL_UPDATE */
+
 /* ============================================================
  * Correct Transfer (CTR) handler
  * ============================================================ */
@@ -723,6 +799,13 @@ static void _handle_ctr(void)
                     } else if (count == 7) {
                         /* CDC SET_LINE_CODING — copy the 7 bytes */
                         memcpy(&_cdc.line_coding, _cdc.ep0_rx_buf, 7);
+#if HAL_SERIAL_UPDATE
+                        if (_cdc.line_coding.dwDTERate == SU_TRIGGER_BAUD) {
+                            _ep0_send_status();   /* the flasher completes this stage */
+                            _serial_update_enter();
+                            return;               /* only if the handoff was refused */
+                        }
+#endif
                     }
                     _ep0_send_status();
                 } else if (_cdc.ep0_state == EP0_STATUS_OUT) {
