@@ -1,0 +1,1186 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@c2cc2d1",
+  "file": "tile_sense_tof.h",
+  "brief": "TMF8806 time-of-flight distance sensor.",
+  "description": "Platform-agnostic driver for the AMS/Sciosense TMF8806 direct time-of-flight\n(dToF) sensor with integrated VCSEL emitter and SPAD detector array.\n\nKey specifications:\n - Distance measurement up to 5000 mm (short-range, 2.5 m, and 5 m modes)\n - 16-bit distance output in millimeters\n - Configurable measurement period (30 ms to 2000 ms, or single-shot)\n - Configurable iteration count for accuracy vs. speed trade-off\n - 6-bit reliability indicator (0 = no object, 63 = highest confidence)\n - On-chip factory calibration with host-side storage and reload\n - Algorithm state save/restore for ultra-low-power resume\n - Embedded 8-bit temperature sensor\n\n\nDatasheet: https://ams.com/tmf8806\n\n@studio tile label=Sense.TOF icon=◊\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"10 m extended-range mode\" section=advanced\n  Deferred to a dedicated session. TMF8806 App0 firmware supports\n  up to 5 m range out of ROM; 10 m mode requires downloading a\n  binary RAM patch from AMS via the bootloader's W_RAM +\n  RAMREMAP_RESET protocol — non-trivial firmware-loading flow not\n  in scope for this driver-coverage pass.\n\n@studio unsupported severity=niche category=\"GPIO0 / GPIO1 runtime control\"\n  GPIO0 is routed to tile pad 3 but is consumed as a hardware\n  strap: a 100 k on-board pull-up to V+ holds GPIO0 high at\n  startup, selecting the 1.8-3.3 V digital-I/O level required by\n  this tile's 2.7-3.6 V rail (TMF8806 datasheet §6.7). It is NOT\n  an I2C-address strap (the address is fixed at 0x41, changed only\n  via command 0x49). Because the strap fixes GPIO0 high, runtime\n  GPIO0 output modes (object-detect / VCSEL-sync, command 0x0F)\n  are not exposed — driving the pad would fight the pull-up and\n  risk changing the I/O level. GPIO1 is not routed to a pad.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core.h\"\n  #include \"core_tiles.h\"\n  #include \"tile_sense_tof.h\"\n\n  tile_t tof;\n  sense_tof_cfg_t cfg = { .mode = SENSE_TOF_RANGE_2500MM };\n  tile_sense_tof_init(core_tiles_pal(&core_i2c1), 0, &tof, &cfg);\n\n  tile_sense_tof_start(&tof);\n  // ... poll or wait for interrupt ...\n  uint16_t dist = tile_sense_tof_get_distance_mm(&tof);\n\n  // Single-shot convenience:\n  sense_tof_result_t res;\n  tile_sense_tof_measure_single(&tof, &res, 500);"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "common",
+      "category": "10 m extended-range mode",
+      "brief": "Deferred to a dedicated session. TMF8806 App0 firmware supports up to 5 m range out of ROM; 10 m mode requires downloading a binary RAM patch from AMS via the bootloader's W_RAM + RAMREMAP_RESET protocol — non-trivial firmware-loading flow not in scope for this driver-coverage pass.",
+      "section": "advanced"
+    },
+    {
+      "severity": "niche",
+      "category": "GPIO0 / GPIO1 runtime control",
+      "brief": "GPIO0 is routed to tile pad 3 but is consumed as a hardware strap: a 100 k on-board pull-up to V+ holds GPIO0 high at startup, selecting the 1.8-3.3 V digital-I/O level required by this tile's 2.7-3.6 V rail (TMF8806 datasheet §6.7). It is NOT an I2C-address strap (the address is fixed at 0x41, changed only via command 0x49). Because the strap fixes GPIO0 high, runtime GPIO0 output modes (object-detect / VCSEL-sync, command 0x0F) are not exposed — driving the pad would fight the pull-up and risk changing the I/O level. GPIO1 is not routed to a pad."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_TOF_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_TOF_VERSION_MINOR",
+      "value": "5",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_TOF_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_I2C_ADDR",
+      "value": "0x41",
+      "description": "Fixed 7-bit I2C address",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_DEVICE_ID",
+      "value": "0x09",
+      "description": "Expected ID value (bits 5:0 only)",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_ID_MASK",
+      "value": "0x3F",
+      "description": "Mask for valid ID bits",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_ENABLE_PON",
+      "value": "0x01",
+      "description": "Power-on bit",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_ENABLE_CPU_READY",
+      "value": "0x41",
+      "description": "CPU ready + PON",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_ENABLE_CPU_RESET",
+      "value": "0x80",
+      "description": "CPU reset bit",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_APPID_BOOTLOADER",
+      "value": "0x80",
+      "description": "Bootloader is running",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_APPID_APP0",
+      "value": "0xC0",
+      "description": "Measurement application running",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CMD_MEASURE",
+      "value": "0x02",
+      "description": "Start measurement",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CMD_FACTORY_CAL",
+      "value": "0x0A",
+      "description": "Run factory calibration",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CMD_STOP",
+      "value": "0xFF",
+      "description": "Stop measurement",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CMD_SERIAL",
+      "value": "0x47",
+      "description": "Read serial number",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_FACTORY_CAL_KITERS",
+      "value": "0xA000",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_INT_RESULT",
+      "value": "0x01",
+      "description": "Result interrupt flag",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_INT_HISTOGRAM",
+      "value": "0x02",
+      "description": "Histogram interrupt flag",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CONTENTS_RESULT",
+      "value": "0x55",
+      "description": "Result data available",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CONTENTS_CALIB",
+      "value": "0x0A",
+      "description": "Calibration data available",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CONTENTS_SERIAL",
+      "value": "0x47",
+      "description": "Serial number available",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CALIB_DATA_LEN",
+      "value": "14",
+      "description": "Factory calibration data length",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_STATE_DATA_LEN",
+      "value": "11",
+      "description": "Algorithm state data length",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_BOOT_TIMEOUT_MS",
+      "value": "500",
+      "description": "Maximum boot sequence wait",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_CMD_TIMEOUT_MS",
+      "value": "1000",
+      "description": "Maximum command completion wait",
+      "section": ""
+    },
+    {
+      "name": "TMF8806_POLL_INTERVAL_MS",
+      "value": "2",
+      "description": "Polling interval during boot",
+      "section": ""
+    },
+    {
+      "name": "SENSE_TOF_PRESENCE_RELIABILITY_MIN",
+      "value": "32",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_TOF_WAIT_POLL_INTERVAL_MS",
+      "value": "10",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_tof_distance_mode_t",
+      "brief": "Distance mode selection.",
+      "description": "Controls the maximum detection range and power consumption.\nConfigured via algorithm selection bits in the measurement command.",
+      "members": [
+        {
+          "name": "SENSE_TOF_SHORT_RANGE",
+          "value": "0",
+          "description": "Short range, ~200 mm max, lowest power"
+        },
+        {
+          "name": "SENSE_TOF_RANGE_2500MM",
+          "value": "1",
+          "description": "Medium range up to 2500 mm (default)"
+        },
+        {
+          "name": "SENSE_TOF_RANGE_5000MM",
+          "value": "2",
+          "description": "Long range up to 5000 mm"
+        }
+      ]
+    },
+    {
+      "name": "sense_tof_period_t",
+      "brief": "Measurement repetition period (cmd_data2, `repetitionPeriodMs`).",
+      "description": "1-253 is the period in milliseconds; 0xFE and 0xFF are the chip's codes\nfor 1 s and 2 s (datasheet cmd 0x02). 0x00 (single shot) is what\nmeasure_single() uses internally and is not a rate, so it is not listed.\nAny other 1-253 value is accepted too. If one ranging takes longer than\nthe period (many iterations), the chip ranges back-to-back and the period\nis ignored.",
+      "members": [
+        {
+          "name": "SENSE_TOF_PERIOD_30MS",
+          "value": "0x1E",
+          "description": "Every 30 ms, ~33 per second (default) @studio value=33.3"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_50MS",
+          "value": "0x32",
+          "description": "Every 50 ms, 20 per second @studio value=20"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_100MS",
+          "value": "0x64",
+          "description": "Every 100 ms, 10 per second @studio value=10"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_250MS",
+          "value": "0xFA",
+          "description": "Every 250 ms, 4 per second @studio value=4"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_1S",
+          "value": "0xFE",
+          "description": "Every second @studio value=1"
+        },
+        {
+          "name": "SENSE_TOF_PERIOD_2S",
+          "value": "0xFF",
+          "description": "Every 2 seconds @studio value=0.5"
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_tof_cfg_t",
+      "brief": "Optional init-time configuration for Sense.TOF.",
+      "description": "Pass NULL to tile_sense_tof_init() for defaults:\nmode = 2.5 m, period = 30 ms continuous, kilo_iters = 900, threshold = 6.\nThe configuration takes effect when tile_sense_tof_start() is called.\nValues can be changed between start/stop cycles.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "mode",
+          "description": "sense_tof_distance_mode_t (default: RANGE_2500MM)."
+        },
+        {
+          "type": "uint8_t",
+          "name": "period_ms",
+          "description": "Repetition period code (default: 0x1E = 30 ms). 0x00 = single shot, 0xFE = 1 s, 0xFF = 2 s."
+        },
+        {
+          "type": "uint16_t",
+          "name": "kilo_iters",
+          "description": "Iterations in thousands (default: 900). Higher values improve SNR at the cost of power."
+        },
+        {
+          "type": "uint8_t",
+          "name": "threshold",
+          "description": "Detection threshold, 0-63 (default: 6). Lower values increase sensitivity."
+        }
+      ]
+    },
+    {
+      "name": "sense_tof_result_t",
+      "brief": "Measurement result from a single ToF capture.",
+      "description": "Populated by tile_sense_tof_get_result() or tile_sense_tof_measure_single().",
+      "fields": [
+        {
+          "type": "uint16_t",
+          "name": "distance_mm",
+          "description": "Peak distance in millimeters. 0 if no target."
+        },
+        {
+          "type": "uint8_t",
+          "name": "status",
+          "description": "Result status. 0x00-0x0F = valid, 0x10+ = error."
+        },
+        {
+          "type": "uint8_t",
+          "name": "reliability",
+          "description": "Confidence indicator, 0-63. 0 = no object, 63 = highest confidence."
+        },
+        {
+          "type": "int8_t",
+          "name": "temperature",
+          "description": "Die temperature in degrees Celsius."
+        },
+        {
+          "type": "uint8_t",
+          "name": "result_number",
+          "description": "Monotonically incrementing result counter."
+        }
+      ]
+    },
+    {
+      "name": "sense_tof_version_t",
+      "brief": "Application firmware version reported by the TMF8806.",
+      "description": "",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "major",
+          "description": "Major version number."
+        },
+        {
+          "type": "uint8_t",
+          "name": "minor",
+          "description": "Minor version number."
+        },
+        {
+          "type": "uint8_t",
+          "name": "patch",
+          "description": "Patch version number."
+        }
+      ]
+    },
+    {
+      "name": "sense_tof_signal_t",
+      "brief": "Per-measurement signal-quality diagnostics from the TMF8806.",
+      "description": "Populated from the result block (registers 0x34-0x3D). Higher hit\ncounts mean a stronger return; crosstalk is the internal optical\nleakage the factory calibration measures and subtracts.",
+      "fields": [
+        {
+          "type": "uint32_t",
+          "name": "reference_hits",
+          "description": "Reference-channel photon hits (regs 0x34-0x37)."
+        },
+        {
+          "type": "uint32_t",
+          "name": "object_hits",
+          "description": "Object-channel photon hits (regs 0x38-0x3B)."
+        },
+        {
+          "type": "uint16_t",
+          "name": "crosstalk",
+          "description": "Cross-talk count (regs 0x3C-0x3D)."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_tof_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "Must be 0 (single-address device)."
+        }
+      ],
+      "notes": [],
+      "return": "1 if device ACKs and ID matches (0x09), 0 otherwise.",
+      "brief": "Check if a Sense.TOF tile is present on the bus.",
+      "description": "Probes the I2C address and reads the ID register. The TMF8806 has a\nsingle fixed address (0x41), so only instance 0 is valid.",
+      "name": "tile_sense_tof_find"
+    },
+    {
+      "signature": "void tile_sense_tof_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_tof_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "Must be 0 (single-address device)."
+        },
+        {
+          "name": "tile",
+          "description": "Tile handle to initialise."
+        },
+        {
+          "name": "cfg",
+          "description": "Configuration (NULL for defaults: 2.5 m, 30 ms, 900k iters)."
+        }
+      ],
+      "notes": [],
+      "brief": "Initialise a Sense.TOF tile.",
+      "description": "Performs the full TMF8806 boot sequence:\n 1. Waits for bootloader to enter sleep (ENABLE == 0x00)\n 2. Wakes the bootloader (PON = 1)\n 3. Waits for CPU ready (ENABLE == 0x41)\n 4. Requests App0 measurement application\n 5. Waits for App0 to start (APPID == 0xC0)\n 6. Enables result interrupt\n\nDoes NOT start measurements — call tile_sense_tof_start() after init.\nDoes NOT software-reset to preserve any existing calibration data.",
+      "name": "tile_sense_tof_init"
+    },
+    {
+      "signature": "void tile_sense_tof_sleep(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Enter standby mode (ENABLE = 0x00).",
+      "description": "Stops any active measurement and powers down the sensor. Use\ntile_sense_tof_wake() to resume without full re-initialisation.",
+      "name": "tile_sense_tof_sleep"
+    },
+    {
+      "signature": "void tile_sense_tof_wake(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Sleeping tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Resume from standby mode.",
+      "description": "Re-executes the bootloader wake and App0 request sequence. Does not\nrestart measurements — call tile_sense_tof_start() after waking.",
+      "name": "tile_sense_tof_wake"
+    },
+    {
+      "signature": "void tile_sense_tof_reset(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Reset the device via the CPU reset bit in ENABLE.",
+      "description": "Performs a full CPU reset and re-runs the boot sequence. All runtime\nstate including calibration is lost. Call init() again after reset.",
+      "name": "tile_sense_tof_reset"
+    },
+    {
+      "signature": "void tile_sense_tof_start(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Start continuous or single-shot measurement.",
+      "description": "Writes the factory calibration data (if loaded), configures the\nmeasurement command payload from the current cfg, and issues the\nmeasurement command. Results are signaled via the result interrupt.\n\nIf period_ms == 0x00 in the config, a single measurement is taken.\nOtherwise measurements repeat at the configured period.",
+      "name": "tile_sense_tof_start"
+    },
+    {
+      "signature": "void tile_sense_tof_stop(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Stop an active measurement.",
+      "description": "Sends the stop command and waits for the sensor to acknowledge.\nNo-op if no measurement is active.",
+      "name": "tile_sense_tof_stop"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "result",
+          "description": "Output: measurement result (may be NULL to discard)."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait time in milliseconds."
+        }
+      ],
+      "notes": [],
+      "return": "1 if a valid result was obtained, 0 on timeout or error.",
+      "brief": "Perform a blocking single-shot measurement.",
+      "description": "Temporarily overrides the repetition period to single-shot mode,\nstarts a measurement, polls for the result interrupt, reads the\nresult, and restores the original period setting.",
+      "name": "tile_sense_tof_measure_single"
+    },
+    {
+      "signature": "uint16_t tile_sense_tof_get_distance_mm(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Distance in millimeters, saturating at the configured max range.",
+      "brief": "Read the distance from the most recent result.",
+      "description": "Returns the peak distance in millimeters. Does not check whether\nnew data is available — call tile_sense_tof_result_ready() first\nor use tile_sense_tof_get_result() for full status.\n\nWhen nothing is in range the sensor reports 0; this SATURATES that to\ntile_sense_tof_max_range_mm()\nrather than returning 0, so `if (distance < threshold)` behaves correctly\nwith no special case — \"out of range\" reads as \"very far away\", which is\nwhat it physically means. Use tile_sense_tof_get_result() when you need to\ntell \"no target\" from \"target at max range\"; that reports the raw value.",
+      "name": "tile_sense_tof_get_distance_mm"
+    },
+    {
+      "signature": "uint16_t tile_sense_tof_max_range_mm(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Maximum range in millimeters.",
+      "brief": "Maximum measurable distance for the configured range mode.",
+      "description": "200 mm (short range), 2500 mm, or 5000 mm. This is the value\ntile_sense_tof_get_distance_mm() saturates to when no object is detected,\nso `distance >= max_range_mm()` is the explicit \"nothing in range\" test.",
+      "name": "tile_sense_tof_max_range_mm"
+    },
+    {
+      "signature": "void tile_sense_tof_get_result(tile_t *tile, sense_tof_result_t *result)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "result",
+          "description": "Output struct to populate."
+        }
+      ],
+      "notes": [],
+      "brief": "Read the full measurement result.",
+      "description": "Reads distance, status, reliability, temperature, and result number\nfrom the sensor in a single bus transaction. Clears the result\ninterrupt flag after reading.",
+      "name": "tile_sense_tof_get_result"
+    },
+    {
+      "signature": "void tile_sense_tof_get_result_flat(tile_t *tile, int32_t *out)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "out",
+          "description": "Output buffer (5 int32_t slots)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "DSL-friendly flat-output variant of get_result().",
+      "description": "Drops the struct in favor of a positional int[5] array — the DSL\ndoesn't have a struct ABI yet, so the per-field outputs come back\nindexed. Layout: out[0]=distance_mm, out[1]=status,\nout[2]=reliability, out[3]=temperature_c, out[4]=result_number.\nThe temperature is widened from int8_t to int32_t so negative\nvalues sign-extend correctly.",
+      "name": "tile_sense_tof_get_result_flat"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_measure_single_flat(tile_t *tile, int32_t *mm, int32_t *status, int32_t *reliability, int32_t *temp_c, int32_t *seq, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "mm",
+          "description": "Output: distance in millimetres."
+        },
+        {
+          "name": "status",
+          "description": "Output: result status code."
+        },
+        {
+          "name": "reliability",
+          "description": "Output: 0–63 reliability score."
+        },
+        {
+          "name": "temp_c",
+          "description": "Output: die temperature in degrees Celsius."
+        },
+        {
+          "name": "seq",
+          "description": "Output: monotonic result counter."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait for the measurement to complete."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 on a valid result, 0 on timeout / bus error.",
+      "brief": "DSL-friendly flat-output variant of measure_single().",
+      "description": "Combines a single-shot measurement with positional int outputs.\nSame layout convention as get_result_flat — the per-field values\nland in five out-scalar slots. Returns the chip's success flag.",
+      "name": "tile_sense_tof_measure_single_flat"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_result_ready(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a new result is pending, 0 otherwise.",
+      "brief": "Check if a new measurement result is available.",
+      "description": "Reads the INT_STATUS register and checks the result interrupt bit.\nDoes not clear the interrupt — that is done by get_result() or\nget_distance_mm().",
+      "name": "tile_sense_tof_result_ready"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait time in milliseconds."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "1 if calibration completed successfully, 0 on timeout or error.",
+      "brief": "Run the factory calibration procedure.",
+      "description": "Performs a calibration measurement using the current mode settings.\nThe sensor must be positioned with a known target or open field per\nthe TMF8806 calibration guidelines. Results are stored internally\nand can be retrieved with tile_sense_tof_get_calibration().\n\nThis is a blocking call that waits for the calibration to complete.",
+      "name": "tile_sense_tof_factory_calibrate"
+    },
+    {
+      "signature": "void tile_sense_tof_set_calibration(tile_t *tile, const uint8_t *data)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "data",
+          "description": "Pointer to 14-byte calibration data array."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Load factory calibration data into the driver.",
+      "description": "Stores a 14-byte calibration dataset that will be written to the\nsensor before each measurement start. Call this after init() to\nrestore calibration from non-volatile storage.",
+      "name": "tile_sense_tof_set_calibration"
+    },
+    {
+      "signature": "void tile_sense_tof_get_calibration(tile_t *tile, uint8_t *data)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "data",
+          "description": "Output buffer for 14 bytes of calibration data."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Read the current factory calibration data from the sensor.",
+      "description": "Reads 14 bytes of calibration data from the sensor's calibration\nregisters. Typically called after tile_sense_tof_factory_calibrate()\nto save the data for later reloading via set_calibration().",
+      "name": "tile_sense_tof_get_calibration"
+    },
+    {
+      "signature": "void tile_sense_tof_get_app_version(tile_t *tile, sense_tof_version_t *version)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "version",
+          "description": "Output struct to populate."
+        }
+      ],
+      "notes": [],
+      "brief": "Read the application firmware version.",
+      "description": "Returns the major, minor, and patch version of the App0 measurement\napplication running on the TMF8806.",
+      "name": "tile_sense_tof_get_app_version"
+    },
+    {
+      "signature": "void tile_sense_tof_get_app_version_flat(tile_t *tile, int32_t *major, int32_t *minor, int32_t *patch)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "major",
+          "description": "Output: major version number."
+        },
+        {
+          "name": "minor",
+          "description": "Output: minor version number."
+        },
+        {
+          "name": "patch",
+          "description": "Output: patch version number."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "DSL-friendly flat-output variant of get_app_version().",
+      "description": "Drops the struct in favor of three positional out-scalars.",
+      "name": "tile_sense_tof_get_app_version_flat"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_get_serial_number(tile_t *tile, uint8_t *serial)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "serial",
+          "description": "Output buffer for 4 bytes of serial data."
+        }
+      ],
+      "notes": [],
+      "return": "1 if serial number was read successfully, 0 on error.",
+      "brief": "Read the device serial number.",
+      "description": "Issues the serial number command (0x47) and reads back the response.\nThe serial number is a 4-byte unique device identifier.",
+      "name": "tile_sense_tof_get_serial_number"
+    },
+    {
+      "signature": "void tile_sense_tof_get_serial_number_flat(tile_t *tile, int32_t *out)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "out",
+          "description": "Output buffer (4 int32_t slots)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "DSL-friendly flat-output variant of get_serial_number().",
+      "description": "Drops the success bool — on bus error, the buffer comes back as\nall-zeros, which is invalid as a real serial number so callers can\ndetect failure by checking for a zero serial. Bytes widen to int32\nfor DSL int compatibility.",
+      "name": "tile_sense_tof_get_serial_number_flat"
+    },
+    {
+      "signature": "void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mode)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "mode",
+          "description": "New distance mode."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Change the distance mode on the fly.",
+      "description": "Stops any active measurement, updates the cached mode, and restarts.\nIf no measurement was running, only updates the config for the next start().",
+      "name": "tile_sense_tof_set_distance_mode"
+    },
+    {
+      "signature": "void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "period",
+          "description": "New repetition period (sense_tof_period_t, or 1-253 ms)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Change the measurement repetition period on the fly.",
+      "description": "Slower rates save most of the power: the laser only fires for the\nranging time (~24 ms at the default 900k iterations), and the chip\nidles at ~140 uA for the rest of each period.\n\nStops any active measurement, updates the cached period, and restarts.\nIf no measurement was running, only updates the config for the next start().",
+      "name": "tile_sense_tof_set_period"
+    },
+    {
+      "signature": "void tile_sense_tof_set_kilo_iters(tile_t *tile, uint16_t kilo_iters)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "kilo_iters",
+          "description": "[10..4000] Iterations in thousands (e.g. 900 = 900k)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Change the per-measurement iteration count on the fly.",
+      "description": "Iterations (in thousands) trade power for SNR/range: more iterations\ngive a stronger return and longer reach at higher current draw.\nTypical range 10-4000 (10k-4M); the ranging default is 900. Stops any\nactive measurement, updates the cached value, and restarts.",
+      "name": "tile_sense_tof_set_kilo_iters"
+    },
+    {
+      "signature": "void tile_sense_tof_set_threshold(tile_t *tile, uint8_t threshold)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "threshold",
+          "description": "[0..63] Detection threshold, 0-63."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Change the detection threshold on the fly.",
+      "description": "Sets cmd_data3[5:0] — the minimum confidence for a reported target.\nHigher values reject weak/spurious returns; 0 reports everything.\nStops any active measurement, updates the cached value, and restarts.",
+      "name": "tile_sense_tof_set_threshold"
+    },
+    {
+      "signature": "void tile_sense_tof_get_signal_quality(tile_t *tile, sense_tof_signal_t *sig)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "sig",
+          "description": "Caller-allocated struct, populated on return."
+        }
+      ],
+      "notes": [],
+      "brief": "Read per-measurement signal-quality diagnostics.",
+      "description": "Reads the reference/object hit counts and crosstalk from the most\nrecent result block. Useful for assessing return strength and\nreflectance beyond the reliability byte. Call after a result is ready.",
+      "name": "tile_sense_tof_get_signal_quality"
+    },
+    {
+      "signature": "void tile_sense_tof_get_signal_quality_flat(tile_t *tile, int32_t *reference_hits, int32_t *object_hits, int32_t *crosstalk)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "reference_hits",
+          "description": "Reference-channel hit count (or NULL)."
+        },
+        {
+          "name": "object_hits",
+          "description": "Object-channel hit count (or NULL)."
+        },
+        {
+          "name": "crosstalk",
+          "description": "Cross-talk count (or NULL)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read signal-quality diagnostics into flat out-params (Studio).",
+      "description": "",
+      "name": "tile_sense_tof_get_signal_quality_flat"
+    },
+    {
+      "signature": "void tile_sense_tof_save_state(tile_t *tile, uint8_t *data)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle (measurement should be stopped)."
+        },
+        {
+          "name": "data",
+          "description": "Output buffer for 11 bytes of state data."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Save the algorithm state from the sensor.",
+      "description": "Reads 11 bytes of algorithm state data from the sensor (registers\n0x28-0x32). This state should be saved before entering sleep in\nultra-low-power mode, and restored after wake via restore_state().\n\nPreserving algorithm state across power cycles avoids the ~8 ms\nre-initialisation penalty and maintains measurement accuracy.",
+      "name": "tile_sense_tof_save_state"
+    },
+    {
+      "signature": "void tile_sense_tof_restore_state(tile_t *tile, const uint8_t *data)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle (after wake, before start)."
+        },
+        {
+          "name": "data",
+          "description": "Pointer to 11 bytes of previously saved state data."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Restore algorithm state to the sensor.",
+      "description": "Writes 11 bytes of previously saved algorithm state to the sensor\n(registers 0x2E-0x38). Call this after wake() and before start()\nto resume from the saved algorithm state.\n\nThe calibration data bitmask in the measurement command (cmd_data7)\nis automatically updated to include algState when state data has\nbeen restored.",
+      "name": "tile_sense_tof_restore_state"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_set_threshold_interrupt(tile_t *tile, uint8_t persistence, uint16_t low_mm, uint16_t high_mm)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "persistence",
+          "description": "0–255; 0 = disabled (every-measurement INT)."
+        },
+        {
+          "name": "low_mm",
+          "description": "Lower bound (inclusive), millimetres."
+        },
+        {
+          "name": "high_mm",
+          "description": "Upper bound (inclusive), millimetres."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "1 on success, 0 on bus / command-execution timeout.",
+      "brief": "Configure threshold-based interrupt suppression.",
+      "description": "Without this configured, the chip fires INT on every measurement\ncompletion. With it: INT only fires when an object is detected in\nthe [low_mm, high_mm] range for `persistence` consecutive\nmeasurements. Lets a sleeping host stay asleep until something\ngets close.\n\nPer HostDriverCommunication §8.12 (cmd 0x08 = WR_ADD_CONFIG):\n  - persistence = 0  → interrupt every measurement (default)\n  - persistence = N  → require N consecutive in-range hits\n  - low_mm > high_mm → no interrupts (no valid range)",
+      "name": "tile_sense_tof_set_threshold_interrupt"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile, uint8_t *persistence, uint16_t *low_mm, uint16_t *high_mm)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "persistence",
+          "description": "Output (may be NULL)."
+        },
+        {
+          "name": "low_mm",
+          "description": "Output (may be NULL)."
+        },
+        {
+          "name": "high_mm",
+          "description": "Output (may be NULL)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "1 on success, 0 on timeout.",
+      "brief": "Read back the current threshold-interrupt configuration.",
+      "description": "Per HostDriverCommunication §8.12.2 (cmd 0x09 = RD_ADD_CONFIG).",
+      "name": "tile_sense_tof_get_threshold_interrupt"
+    },
+    {
+      "signature": "uint32_t tile_sense_tof_get_sys_clock_ticks(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "32-bit system-clock tick count (0 if not in App0 / no",
+      "brief": "Read the chip's 32-bit system-clock tick counter.",
+      "description": "The TMF8806's internal oscillator can drift ±5 % over temperature,\nwhich biases distance readings if the host's measurement period\ndoesn't compensate. Reading this register set after each\nmeasurement lets the host compute the actual elapsed chip-time\nvs. its own elapsed wall-time and apply a software correction\n(HostDriverCommunication §10).\n\nReads SYS_CLOCK_0..3 (0x24–0x27) as a single 4-byte burst.\n\n        measurement yet).",
+      "name": "tile_sense_tof_get_sys_clock_ticks"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_read_histogram(tile_t *tile, uint8_t hist_type, uint8_t *buf128, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "hist_type",
+          "description": "Histogram type byte (see HostDriverCommunication"
+        },
+        {
+          "name": "buf128",
+          "description": "Caller-supplied 128-byte buffer."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait for the histogram-ready interrupt."
+        }
+      ],
+      "notes": [],
+      "return": "1 on success (buf128 populated), 0 on timeout / bus error.",
+      "brief": "Capture and read a raw histogram from the SPAD/TDC array.",
+      "description": "Useful for custom multi-target detection, reflectance estimation,\nor peak-curvature analysis beyond what App0's distance API\nprovides. Per HostDriverCommunication §8.11.\n\nProcedure (handled internally): stop any running measurement,\nconfigure histogram-readout mode (cmd 0x30), start cyclic\nmeasurement, wait for INT_STATUS bit 1, issue 0x80 to start the\nhistogram block read, wait for TID to advance, then read 128\nbytes from the histogram register.\n\nAfter this returns, the chip stays in histogram mode. Call\n`tile_sense_tof_stop()` and re-issue the original measurement\nconfig to return to normal distance reads.\n\n                     §8.11 / TMF8806 datasheet for available types;\n                     0x10 = short-range example).",
+      "name": "tile_sense_tof_read_histogram"
+    },
+    {
+      "signature": "void tile_sense_tof_read_histogram_flat(tile_t *tile, uint8_t hist_type, uint32_t timeout_ms, int32_t *out)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "hist_type",
+          "description": "Histogram-type byte (see read_histogram() docs)."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait for the histogram-ready interrupt."
+        },
+        {
+          "name": "out",
+          "description": "Output buffer (128 int32_t slots)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "DSL-friendly flat-output variant of read_histogram().",
+      "description": "Drops the success bool — on timeout / bus error the buffer comes\nback zero-filled. Bytes widen to int32 for DSL int compatibility.\nCaller passes hist_type and timeout_ms as scalar args; the buffer\nis the function's output (collapsed into the int[128] return).",
+      "name": "tile_sense_tof_read_histogram_flat"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_is_object_within(tile_t *tile, uint16_t mm)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "mm",
+          "description": "Distance threshold in millimetres (inclusive)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if an object is within range with adequate confidence,",
+      "brief": "Single-shot measurement; true if an object is within `mm`.",
+      "description": "Performs one blocking single-shot measurement (up to 200 ms) and\nreturns 1 iff the reported distance is non-zero, less than or\nequal to `mm`, and the reliability is at least\nlow-confidence hit is treated as \"no object\".\n\nRestores the prior measurement period on the way out, so this\nmixes safely with continuous-mode use.\n\n        0 otherwise (no target, low reliability, or bus timeout).",
+      "name": "tile_sense_tof_is_object_within"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_wait_for_object(tile_t *tile, uint16_t mm, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "mm",
+          "description": "Distance threshold in millimetres (inclusive)."
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait time in milliseconds."
+        }
+      ],
+      "notes": [
+        "v1 implementation polls — keeps the helper self-contained and avoids the need to wire the chip's INT pin into the tile pad map. A future revision could swap to the chip's threshold-INT (see @ref tile_sense_tof_set_threshold_interrupt) to let a sleeping host stay asleep until proximity wakes it."
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if an object entered range before timeout, 0 otherwise.",
+      "brief": "Block until an object is detected within `mm`, or timeout.",
+      "description": "Polls single-shot measurements until one matches the\n`is_object_within` predicate or `timeout_ms` elapses. Polls every\nsingle-shot measurement adds ~30 ms of its own.",
+      "name": "tile_sense_tof_wait_for_object"
+    },
+    {
+      "signature": "uint8_t tile_sense_tof_read_distance_with_confidence(tile_t *tile, uint16_t *mm, uint8_t *confidence_pct)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "mm",
+          "description": "Output: distance in millimetres (NULL allowed)."
+        },
+        {
+          "name": "confidence_pct",
+          "description": "Output: 0–100 confidence (NULL allowed)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 on a successful measurement, 0 on timeout / bus error.",
+      "brief": "Read distance and confidence in one call.",
+      "description": "Performs a single-shot measurement and writes the distance (mm)\nand the confidence remapped from the chip's 0–63 reliability\nscale to a 0–100 percent value. Confidence is computed as\n`(reliability * 100) / 63` — integer math, no floats.",
+      "name": "tile_sense_tof_read_distance_with_confidence"
+    }
+  ],
+  "source_file": "tile_sense_tof.h",
+  "version": "1.5.0",
+  "tile_family": "Sense",
+  "tile_name": "TOF",
+  "display_name": "Sense.TOF",
+  "vibe_settings": [
+    {
+      "label": "Distance range",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_distance_mode",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Short range, ~200 mm max, lowest power",
+        "Medium range up to 2500 mm (default)",
+        "Long range up to 5000 mm"
+      ],
+      "default": "Medium range up to 2500 mm (default)"
+    },
+    {
+      "label": "Measurement rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_period",
+      "param": "period",
+      "kind": "choice",
+      "choices": [
+        "Every 30 ms, ~33 per second (default)",
+        "Every 50 ms, 20 per second",
+        "Every 100 ms, 10 per second",
+        "Every 250 ms, 4 per second",
+        "Every second",
+        "Every 2 seconds"
+      ],
+      "default": "Every 30 ms, ~33 per second (default)",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Iterations (thousands)",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_kilo_iters",
+      "param": "kilo_iters",
+      "kind": "number",
+      "range": [
+        10,
+        4000
+      ],
+      "default": 900
+    },
+    {
+      "label": "Detection threshold",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_threshold",
+      "param": "threshold",
+      "kind": "number",
+      "range": [
+        0,
+        63
+      ],
+      "default": 6
+    }
+  ]
+}
