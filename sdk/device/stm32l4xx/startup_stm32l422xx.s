@@ -31,6 +31,15 @@ Reset_Handler:
     ldr r0, =_estack
     mov sp, r0
 
+    /* Enable FPU (CP10 + CP11 full access). The build is -mfloat-abi=hard,
+       so without this the first float instruction is a NOCP UsageFault. */
+    ldr r0, =0xE000ED88    /* SCB->CPACR */
+    ldr r1, [r0]
+    orr r1, r1, #(0xF << 20)
+    str r1, [r0]
+    dsb
+    isb
+
     /* Copy .data section from FLASH to SRAM */
     ldr r0, =_sdata
     ldr r1, =_edata
