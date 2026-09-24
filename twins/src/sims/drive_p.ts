@@ -41,7 +41,10 @@ const UVLO_BIT = 0x0008;
 const SC_BIT = 0x0004;
 const PLAYST_BIT = 0x0001; // FIFO empty
 
-const SAMPLE_FS = 2047; // 12-bit signed full-scale
+const SAMPLE_FS = 2047; // 12-bit signed full-scale code
+// REFERENCE bound for the rated output (BOS1921 §6.10.1): ±1743 = ±95 V /
+// ±13.28 V. The driver scales 100 % intensity to it and clamps buffers to it.
+const REF_MAX = 1743;
 const UVLO_MV = 3000; // V_DRIVE minimum (Drive-P-a.json power[] min 3.0 V)
 const PRESS_MV = 3000; // what the "press" toggle applies to the sense pins
 
@@ -105,7 +108,9 @@ function sineQ12(phase: number): number {
   if (q === 2) return -lut(idx);
   return -lut(63 - idx);
 }
-const scale = (sample: number, pct: number) => Math.trunc((sample * Math.min(100, pct)) / 100);
+// scale_intensity(): 100 % of a ±2046 sine peaks at REF_MAX.
+const scale = (sample: number, pct: number) =>
+  Math.trunc((sample * Math.min(100, pct) * REF_MAX) / (100 * SAMPLE_FS));
 const pctArg = (v: number | undefined) => Math.min(100, (v ?? 0) & 0xff);
 
 // Drive envelope magnitude 0..1 on OUT±.
@@ -114,7 +119,8 @@ function driveStrength(s: State): number {
   return clamp(s.amplitude / SAMPLE_FS, 0, 1);
 }
 
-const outFsMv = (s: State) => (s.output_range === 1 ? 13_280 : 95_000);
+// Vpk at code 2047: 3.6 V × FBratio (31 high, 4.33 low), §6.10.1.
+const outFsMv = (s: State) => (s.output_range === 1 ? 15_588 : 111_600);
 
 // Applied piezo mV → signed 12-bit SENSE_VAL at the active LSB.
 function senseRaw(s: State): number {
@@ -260,6 +266,27 @@ const sim: TileSim<State> = {
       step: 1,
       unit: 'nF',
       description: 'Capacitance of the external piezo; the drive current scales with it.',
+    },
+  ],
+
+  // Pressing the piezo: it generates a voltage the sense channel reads.
+  stimuli: [
+    {
+      id: 'touch',
+      label: 'Touch',
+      controls: [
+        { kind: 'toggle', id: 'press', label: 'Press', fields: ['touch_detected'] },
+        {
+          kind: 'slider',
+          id: 'sense_mv',
+          label: 'piezo voltage',
+          field: 'sense_mv',
+          min: -3300,
+          max: 3300,
+          step: 10,
+          unit: 'mV',
+        },
+      ],
     },
   ],
 
@@ -476,22 +503,33 @@ const sim: TileSim<State> = {
         ),
       };
     },
-    // args = [samples pointer, count]: the manifest has no in-buffer for
-    // `samples`, so only the length is known — the envelope is assumed full scale.
-    tile_drive_p_play_samples: ({ state, args }) => {
-      const count = (args[1] ?? 0) & 0xffff;
+    // FIFO playback of the caller's samples at 8 ksps, each clamped to
+    // ±REF_MAX; the last one holds on the output (tile_drive_p.c).
+    tile_drive_p_play_samples: ({ state, bufferIn }) => {
+      const samples = (bufferIn?.samples ?? []).map((v) => clamp(Math.trunc(v), -REF_MAX, REF_MAX));
+      const count = samples.length;
       if (count === 0) return {};
+      const peak = samples.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
       return {
         nextState: {
-          ...play(state, `samples ×${count}`, SAMPLE_FS, 0, Math.ceil(count / 8), 0),
+          ...play(state, `samples ×${count}`, peak, 0, Math.ceil(count / 8), samples[count - 1]),
           last_samples_count: count,
         },
       };
     },
-    // No out-buffer in the manifest: only the mode switch is observable.
-    tile_drive_p_read_sense_samples: ({ state }) => ({
-      nextState: { ...setMode(state, MODE_SENSE_FINE), return_reg: REG_SENSE_VAL },
-    }),
+    // Fine sense mode, then `count` SENSE_VAL reads of the present piezo voltage.
+    tile_drive_p_read_sense_samples: ({ state, caps }) => {
+      const n = Math.max(0, caps?.buf ?? 0);
+      const sensing = { ...state, ...setMode(state, MODE_SENSE_FINE) };
+      return {
+        out: { buf: new Array<number>(n).fill(senseRaw(sensing)) },
+        nextState: {
+          ...setMode(state, MODE_SENSE_FINE),
+          return_reg: REG_SENSE_VAL,
+          read_counter: state.read_counter + n,
+        },
+      };
+    },
   },
 
   provenance: {
@@ -504,7 +542,7 @@ const sim: TileSim<State> = {
     tile_drive_p_set_sense_gain: 'canonical', // GAINS, clears OE
     tile_drive_p_write_fifo: 'canonical', // REFERENCE; last sample holds
     tile_drive_p_is_touched: 'canonical', // 7.6 mV/LSB threshold compare
-    tile_drive_p_play_click: 'canonical', // driver's 16-sample half-sine
+    tile_drive_p_play_click: 'canonical', // driver's 16-sample half-sine, 100 % = 1743
     tile_drive_p_play_sine: 'canonical', // driver's Q12 phase accumulator
     tile_drive_p_play_buzz: 'canonical',
     tile_drive_p_play_pulse_train: 'inferred',
@@ -515,8 +553,8 @@ const sim: TileSim<State> = {
     tile_drive_p_set_auto_sleep: 'inferred',
     tile_drive_p_set_upi: 'inferred',
     tile_drive_p_wfs_write: 'hallucinated', // RAM synthesis not modeled
-    tile_drive_p_play_samples: 'hallucinated', // sample values not visible
-    tile_drive_p_read_sense_samples: 'hallucinated', // buffer not filled
+    tile_drive_p_play_samples: 'inferred', // envelope = peak |sample|, clamped ±1743
+    tile_drive_p_read_sense_samples: 'inferred', // a constant press level, no waveform
     power: 'inferred', // CV²f + HV-hold fit to datasheet Table 7; loss factor inferred
   },
 
@@ -590,7 +628,7 @@ const sim: TileSim<State> = {
           role: 'output',
           v_mv: Math.round(s * outFsMv(state)),
           pads: ['7', '8'],
-          note: 'boosted differential piezo drive (190 Vpp full scale)',
+          note: 'boosted differential piezo drive (±95 V at code 1743)',
         },
       ],
     };
