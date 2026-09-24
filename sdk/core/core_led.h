@@ -82,10 +82,25 @@ static inline void core_led_toggle(void)
     LED_TOGGLE();
 }
 
+/*
+ * A short LED on-time, stretched for the supply voltage so a blip looks
+ * equally bright from 1.8 V to 3.6 V. on_ms is the on-time at 3.3 V; below
+ * ~50 ms the eye integrates the flash, so lower VDD (less LED current) gets
+ * a proportionally longer blip, up to 16x and capped at 50 ms. On-times of
+ * 50 ms and longer come back unchanged. Reads VDD through VREFINT at most
+ * once a minute (L0 / L4; other Cores return on_ms as is). Defined in
+ * core_led.c. Plain comment on purpose: internal, kept out of the manifest.
+ */
+uint32_t core_led_scaled_on_ms(uint32_t on_ms);
+
 /**
  * Blink the LED n times. Each cycle turns the LED on for on_ms
  * milliseconds and off for off_ms milliseconds. Blocking — returns
  * after the last off period.
+ *
+ * A short on_ms (under 50 ms) is the on-time at 3.3 V: at lower supply
+ * voltages it is lengthened so the blink looks as bright (the off-time
+ * shrinks to keep the rhythm). See core_led_heartbeat().
  *
  * @studio expose category=led name=blink
  * @studio twin full
@@ -95,9 +110,16 @@ static inline void core_led_toggle(void)
  */
 static inline void core_led_blink(int n, int on_ms, int off_ms)
 {
+    if (on_ms < 0) on_ms = 0;
+    if (off_ms < 0) off_ms = 0;
+    /* Stretch a short on-time for the supply (see core_led_scaled_on_ms)
+     * and take the difference out of the off-time, so the rhythm holds. */
+    int on = (int)core_led_scaled_on_ms((uint32_t)on_ms);
+    int off = off_ms - (on - on_ms);
+    if (off < 0) off = 0;
     for (int i = 0; i < n; i++) {
-        LED_ON();  ll_delay_ms(on_ms);
-        LED_OFF(); ll_delay_ms(off_ms);
+        LED_ON();  ll_delay_ms(on);
+        LED_OFF(); ll_delay_ms(off);
     }
 }
 
@@ -126,7 +148,15 @@ static inline void core_led_sos(void)
  * Call again at any time to change the rhythm; pass period_ms = 0 to stop
  * the heartbeat (the LED is left off). on_ms is clamped to period_ms.
  *
+ * Brightness holds across the supply: a short on_ms (under 50 ms, e.g. a
+ * 2 ms blip) is the on-time at 3.3 V, and is lengthened as VDD drops
+ * (about 32 ms at 1.8 V), because the LED carries far less current there
+ * and the eye adds up the light of a short flash. VDD is read through
+ * VREFINT when the heartbeat is set (at most once a minute) on the L0 and
+ * L4; other Cores use the on-time as given.
+ *
  * Examples:
+ *   heartbeat(1000, 2)    — a 1 Hz 2 ms blip, the same brightness at any VDD.
  *   heartbeat(1000, 100)  — a 1 Hz "blip": 100 ms on, 900 ms off.
  *   heartbeat(500, 250)   — a steady 1 Hz, 50%-duty pulse.
  *

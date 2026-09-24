@@ -581,6 +581,25 @@ uint16_t hal_adc_read(hal_adc_t *adc, uint8_t channel)
  * VREFINT / VDD / temperature
  * ============================================================ */
 
+void hal_adc_deinit(hal_adc_t *adc)
+{
+    ADC_TypeDef *instance = adc->instance;
+    if (instance == 0) return;
+    if (adc->dma_active) hal_adc_stop_dma(adc);
+
+    /* ADSTART must be clear before ADDIS; a single conversion has finished
+     * by now, so only ADEN needs taking down. */
+    if (instance->CR & LL_ADC_CR_ADEN) ll_adc_disable(instance);
+
+#if defined(STM32L011xx)
+    CLR_BITS(instance->CR, 1UL << 28);          /* ADVREGEN = 0 */
+#elif defined(STM32L422xx)
+    CLR_BITS(instance->CR, 1UL << 28);          /* ADVREGEN = 0 ... */
+    SET_BITS(instance->CR, 1UL << 29);          /* ... then DEEPPWD = 1 */
+#endif
+    adc->instance = 0;
+}
+
 uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
 {
     _enable_internal_channels();
