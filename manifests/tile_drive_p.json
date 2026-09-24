@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f5a0d22",
+  "source": "tiles@3af6291",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_p",
     "header": "tile_drive_p.h",
-    "version": "3.3.0"
+    "version": "3.4.0"
   },
   "handle": {
     "type": "tile_t",
@@ -122,7 +122,7 @@
         {
           "name": "sample",
           "type": "int",
-          "description": "Signed 16-bit waveform sample"
+          "description": "Signed 12-bit waveform sample (REFERENCE[11:0], two's complement)"
         }
       ],
       "returns": "void",
@@ -397,7 +397,11 @@
         {
           "name": "intensity_pct",
           "type": "int",
-          "description": "0–100 percent of full-scale output"
+          "range": [
+            0,
+            100
+          ],
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
         }
       ],
       "returns": "void",
@@ -416,12 +420,20 @@
         {
           "name": "freq_hz",
           "type": "int",
+          "range": [
+            1,
+            4000
+          ],
           "description": "Sine frequency in Hz (50–3000 useful range)"
         },
         {
           "name": "intensity_pct",
           "type": "int",
-          "description": "0–100 percent of full-scale output"
+          "range": [
+            0,
+            100
+          ],
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
         },
         {
           "name": "ms",
@@ -445,7 +457,11 @@
         {
           "name": "intensity_pct",
           "type": "int",
-          "description": "0–100 percent of full-scale output"
+          "range": [
+            0,
+            100
+          ],
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
         },
         {
           "name": "ms",
@@ -469,12 +485,20 @@
         {
           "name": "intensity_pct",
           "type": "int",
-          "description": "0–100 percent of full-scale output"
+          "range": [
+            0,
+            100
+          ],
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
         },
         {
           "name": "count",
           "type": "int",
-          "description": "Number of clicks (1–255)"
+          "range": [
+            1,
+            255
+          ],
+          "description": "Number of clicks"
         },
         {
           "name": "gap_ms",
@@ -518,7 +542,11 @@
         {
           "name": "intensity_pct",
           "type": "int",
-          "description": "0–100 percent of full-scale output"
+          "range": [
+            0,
+            100
+          ],
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
         },
         {
           "name": "threshold_mv",
@@ -546,16 +574,16 @@
       "params": [
         {
           "name": "samples",
-          "type": "?const int16_t*",
-          "description": "Pointer to buffer of int16_t samples"
-        },
-        {
-          "name": "count",
-          "type": "int",
-          "description": "Number of samples to write"
+          "type": "int[]",
+          "description": "Buffer of signed samples, within ±1743"
         }
       ],
       "returns": "void",
+      "c_in_buffer": {
+        "name": "samples",
+        "type": "int16_t",
+        "length_param": "count"
+      },
       "receiver": "tile_t*"
     },
     {
@@ -570,16 +598,16 @@
       "params": [
         {
           "name": "buf",
-          "type": "?int16_t*",
-          "description": "Output buffer for int16_t sense samples"
-        },
-        {
-          "name": "count",
-          "type": "int",
-          "description": "Number of samples to read"
+          "type": "int[]",
+          "description": "Output buffer for signed 12-bit sense samples (7.6 mV/LSB)"
         }
       ],
       "returns": "void",
+      "c_out_buffer": {
+        "name": "buf",
+        "type": "int16_t",
+        "cap_param": "count"
+      },
       "receiver": "tile_t*"
     }
   ],

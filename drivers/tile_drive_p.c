@@ -505,20 +505,23 @@ static int16_t sine_q12(uint16_t phase)
     return v;
 }
 
-/** Scale a Q12 sample (-2046..+2046) by intensity_pct (0..100).
- *  Output stays in 12-bit signed range. */
+/** Scale a Q12 sample (-2046..+2046) by intensity_pct (0..100) onto
+ *  the rated output: 100 % peaks at BOS1921_REFERENCE_MAX (1743 = ±95 V,
+ *  or ±13.28 V in the low range; §6.10.1). A 12-bit full-scale 2047
+ *  would ask for ±111.6 V, beyond the device's rated output. */
 static int16_t scale_intensity(int16_t sample, uint8_t intensity_pct)
 {
     if (intensity_pct > 100) intensity_pct = 100;
-    return (int16_t)(((int32_t)sample * intensity_pct) / 100);
+    return (int16_t)(((int32_t)sample * intensity_pct * BOS1921_REFERENCE_MAX)
+                     / (100 * 2047));
 }
 
-/** Clamp an int16 sample to the 12-bit signed range the chip uses
- *  (−2048..+2047). Caller buffers from `play_samples` may overshoot. */
-static int16_t clamp12(int16_t s)
+/** Clamp a caller sample to ±BOS1921_REFERENCE_MAX (±95 V rated output).
+ *  Caller buffers from `play_samples` may overshoot. */
+static int16_t clamp_ref(int16_t s)
 {
-    if (s >  2047) return  2047;
-    if (s < -2048) return -2048;
+    if (s >  BOS1921_REFERENCE_MAX) return  BOS1921_REFERENCE_MAX;
+    if (s < -BOS1921_REFERENCE_MAX) return -BOS1921_REFERENCE_MAX;
     return s;
 }
 
@@ -624,7 +627,7 @@ void tile_drive_p_play_samples(tile_t* tile, const int16_t* samples,
     while (i < count) {
         uint16_t n = ((count - i) < CHUNK) ? (uint16_t)(count - i) : CHUNK;
         for (uint16_t j = 0; j < n; j++) {
-            tile_drive_p_write_fifo(tile, clamp12(samples[i + j]));
+            tile_drive_p_write_fifo(tile, clamp_ref(samples[i + j]));
         }
         i += n;
         if (i < count) tile->hal->delay_ms(8);
