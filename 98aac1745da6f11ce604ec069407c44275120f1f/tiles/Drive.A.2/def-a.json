@@ -1,0 +1,377 @@
+{
+  "rev": "a",
+  "name": "A.2",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "an internal 100k pull-up ",
+          "type": "digital",
+          "function": "GPIO",
+          "direction": "bidirectional",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "an internal 100k pull sets the default I2C address to 0x49.",
+          "type": "digital",
+          "function": "A0",
+          "direction": "input",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT.0-",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT.0+",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT.1-",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT.1+",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "2.5-5.5V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 5.5,
+      "min": 2.5,
+      "type": "system",
+      "notes": "logic inputs can go down to 1.8V",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "SPI",
+          "value": "spi",
+          "activates": {
+            "interface": "SPI"
+          }
+        }
+      ],
+      "description": "Selects which bus this tile sits on. The chip's mode is set by firmware via register write at init (no boot-strap pad on this tile), so the catalog choice expresses *wiring intent* and which interface's pad_assignments are active."
+    }
+  },
+  "family": "Drive",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 13,
+  "headline": "I2C/SPI-input dual 3W Class-D amplifier",
+  "components": [
+    {
+      "url": "https://www.ti.com/product/DAC63202W",
+      "part": "DAC63202W",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/13/Texas_Instruments-DAC63202W.pdf",
+      "manufacturer": "Texas Instruments"
+    },
+    {
+      "url": "https://www.ti.com/product/TPA2028D1",
+      "part": "TPA2028D1",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/13/Texas_Instruments-TPA2028D1.pdf",
+      "manufacturer": "Texas Instruments"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x49",
+            "is_default": true
+          },
+          {
+            "address": "0x48"
+          },
+          {
+            "address": "0x4A"
+          },
+          {
+            "address": "0x4B"
+          }
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "SPI"
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "50MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MISO",
+          "is_required": true
+        },
+        {
+          "pad": "3",
+          "role": "bus",
+          "function": "SPI.MOSI",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "4",
+          "role": "other",
+          "function": "SPI.CS",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C"
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:42:45.081Z",
+  "description": "The Drive.A.2 is a dual-channel audio output tile combining a DAC63202W 12-bit smart DAC with two TPA2028D1 Class-D audio power amplifiers. It provides two independent audio channels, each capable of delivering up to 3 W into 4 Ω or 880 mW into 8 Ω speakers.\n\nThe DAC63202W generates analog waveforms from digital data with 12-bit resolution and supports built-in waveform generation (sine, cosine, triangular, sawtooth) for processor-less tone generation. The DAC connects to a host processor via either I2C (up to 1 Mbps) or SPI (up to 50 MHz), auto-detected at power-on.\n\nEach TPA2028D1 amplifier features I2C-programmable gain control (−28 dB to +30 dB in 1 dB steps), automatic gain control (AGC), and dynamic range compression (DRC) to prevent speaker overdrive and enhance perceived loudness. The amplifiers operate filter-free in Class-D mode for high efficiency and include thermal and short-circuit protection.\n\nThe tile operates from a 2.5 V to 5.5 V supply. All three ICs are controlled via a shared I2C bus, while the DAC can alternatively be driven over SPI for higher-bandwidth waveform updates.",
+  "json_version": "0.11",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "The DAC in the Drive.A.2 tile automatically detects whether it is connected via I2C of SPI.  ",
+      "heading": "Automatic Bus Detection",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "The Drive.A.2 can be configured for one of four I2C addresses by manipulating the connection of pad 3 (A0).  Leaving the pad floating (or connecting to V+) uses the default address of 0x49.  Connecting pad 3 to GND will change to address 0x48, while connecting to pad 3 to pad 4 (I2C.CLK) or pad 5 (I2C.DAT) will set the address to 0x4B or 0x4A, respectively.",
+      "heading": "I2C Addresses",
+      "image_url": ""
+    }
+  ]
+}
