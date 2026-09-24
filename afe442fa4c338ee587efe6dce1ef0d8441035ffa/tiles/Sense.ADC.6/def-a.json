@@ -1,0 +1,490 @@
+{
+  "rev": "a",
+  "name": "ADC.6",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH0",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH1",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH2",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH3",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH4",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "analog",
+          "function": "CH5",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.6,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "5.5mA",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "i2cAddress": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "I2C address",
+      "default": "0x28",
+      "options": [
+        {
+          "label": "0x28 (default)",
+          "value": "0x28",
+          "derived": {
+            "i2c_address": "0x28"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x28"
+            }
+          }
+        },
+        {
+          "label": "0x29",
+          "value": "0x29",
+          "derived": {
+            "i2c_address": "0x29"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x29"
+            }
+          }
+        },
+        {
+          "label": "0x2A",
+          "value": "0x2A",
+          "derived": {
+            "i2c_address": "0x2A"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x2A"
+            }
+          }
+        },
+        {
+          "label": "0x2B",
+          "value": "0x2B",
+          "derived": {
+            "i2c_address": "0x2B"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x2B"
+            }
+          }
+        }
+      ]
+    },
+    "outputRate": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Output rate",
+      "default": "100",
+      "options": [
+        {
+          "label": "10 Hz (nulls 50 and 60 Hz)",
+          "value": "10",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 10,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "50 Hz",
+          "value": "50",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 50,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "100 Hz (default)",
+          "value": "100",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 100,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "120 Hz (pairs with 60 Hz rejection)",
+          "value": "120",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 120,
+              "register": "RATE_HZ"
+            }
+          ]
+        },
+        {
+          "label": "200 Hz",
+          "value": "200",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 200,
+              "register": "RATE_HZ"
+            }
+          ]
+        }
+      ]
+    },
+    "oversample": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Sweeps averaged per period",
+      "default": "8",
+      "options": [
+        {
+          "label": "4",
+          "value": "4",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 4,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "8 (default)",
+          "value": "8",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 8,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "16",
+          "value": "16",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 16,
+              "register": "OVERSAMP"
+            }
+          ]
+        },
+        {
+          "label": "32",
+          "value": "32",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 32,
+              "register": "OVERSAMP"
+            }
+          ]
+        }
+      ]
+    },
+    "averagingWindow": {
+      "kind": "select",
+      "group": "Acquisition",
+      "label": "Averaging window",
+      "default": "1",
+      "options": [
+        {
+          "label": "One output period (fastest response)",
+          "value": "1",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 1,
+              "register": "WINDOW"
+            }
+          ]
+        },
+        {
+          "label": "Two output periods (nulls half the output rate: 50 Hz at 100 Hz out)",
+          "value": "2",
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": 2,
+              "register": "WINDOW"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 93,
+  "headline": "six-channel analog input",
+  "components": [
+    {
+      "url": "",
+      "part": "Core.ST.L0.1",
+      "datasheet": "",
+      "manufacturer": "Bergsonne"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x28",
+            "is_default": true
+          },
+          {
+            "address": ""
+          }
+        ],
+        "max_clock_speed": "400kHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-09-22T20:50:13.046Z",
+  "description": "Sense.ADC.6 turns six analog inputs into calibrated millivolt readings served over I2C, so a host reads voltages instead of managing an ADC. All sampling, filtering and timing happen on the tile. It sweeps the six channels continuously at a paced rate and publishes a filtered set at a configurable output rate, 100 Hz by default.\n\nEvery published set is coherent: all six channels come from the same instant, never a mix of old and new, and each set carries a sequence number so a host can tell a fresh reading from a repeat. Readings span 0 V to the tile's own supply and are calibrated against an internal reference, so they track the rail rather than assuming it. The supply is readable too, which doubles as the full-scale value.\n\nInputs accept source impedances up to roughly 30–50 kΩ.  Output rate (1–250 Hz), sweeps averaged per period (1–32), and filter-window length are all settable at runtime and can be stored on the tile to survive reboot.",
+  "json_version": "0.6",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "The I2C address is stored on the tile and changeable across 0x08–0x77, so several tiles can share one bus; it ships at 0x28.",
+      "heading": "I2C address",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "Filtering is a boxcar average whose window is set in output periods, which doubles as mains rejection: a two-period window nulls 50 Hz at a 100 Hz output, or 60 Hz at 120 Hz, and a 100 ms window nulls both",
+      "heading": "Filtering",
+      "image_url": ""
+    },
+    {
+      "sort": 2,
+      "details": "Poll a little faster than the output rate, two to three times, and use the sequence number to discard repeats. The tile's clock and the host's drift apart by about a percent, so polling at exactly the output rate will occasionally read the same set twice or miss one.",
+      "heading": "Polling",
+      "image_url": ""
+    }
+  ]
+}

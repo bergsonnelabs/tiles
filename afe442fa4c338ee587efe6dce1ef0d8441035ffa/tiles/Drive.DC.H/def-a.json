@@ -1,0 +1,502 @@
+{
+  "rev": "a",
+  "name": "DC.H",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "EN",
+          "direction": "input"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "IN1",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "PH",
+          "direction": "input"
+        },
+        {
+          "note": "",
+          "type": "digital",
+          "function": "IN2",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "analog current output proportional to motor current",
+          "type": "analog",
+          "function": "NPROP",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT2",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT1",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "1.8-11V drive supply",
+          "type": "power",
+          "function": "VM",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8-5.0V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 5,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 11,
+      "min": 1.8,
+      "type": "drive",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "9"
+      ]
+    }
+  ],
+  "config": {
+    "inputMode": {
+      "kind": "select",
+      "group": "Drive",
+      "label": "Motor control mode",
+      "default": "i2c-only",
+      "options": [
+        {
+          "label": "I2C only (pads 2, 3 unused)",
+          "value": "i2c-only",
+          "states": {
+            "2": "open",
+            "3": "open"
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "I2C_ONLY",
+              "register": "BRIDGE_CONTROL"
+            }
+          ]
+        },
+        {
+          "label": "EN/PH (PWM enable + direction)",
+          "value": "en-ph",
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output",
+                    "pwm"
+                  ]
+                },
+                "tag": "inputMode.en-ph.en.attached",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "data"
+              },
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output"
+                  ]
+                },
+                "tag": "inputMode.en-ph.ph.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "EN_PH",
+              "register": "BRIDGE_CONTROL"
+            }
+          ]
+        },
+        {
+          "label": "IN1/IN2 (independent half-bridge PWM)",
+          "value": "in1-in2",
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output",
+                    "pwm"
+                  ]
+                },
+                "tag": "inputMode.in1-in2.in1.attached",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "data"
+              },
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output",
+                    "pwm"
+                  ]
+                },
+                "tag": "inputMode.in1-in2.in2.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "IN1_IN2",
+              "register": "BRIDGE_CONTROL"
+            }
+          ]
+        }
+      ]
+    },
+    "currentSense": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use NPROP analog current output",
+      "binding": {
+        "pad": "6",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "CURRENT_MIRROR"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "ADC",
+                  "capabilities": [
+                    "analog-input"
+                  ]
+                },
+                "tag": "currentSense.attached",
+                "from": {
+                  "pad": "6",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "CURRENT_MIRROR"
+            },
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "<configured>",
+              "register": "VREF"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "family": "Drive",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 14,
+  "headline": "11V/2A H-bridge DC-motor driver",
+  "variants": {
+    "varies": [
+      {
+        "type": "i2c-address",
+        "description": "I2C address"
+      }
+    ],
+    "options": {
+      "A30": {
+        "i2c-address": "0x30"
+      },
+      "A31": {
+        "i2c-address": "0x31"
+      },
+      "A33": {
+        "i2c-address": "0x33"
+      },
+      "A34": {
+        "default": true,
+        "i2c-address": "0x34"
+      }
+    }
+  },
+  "components": [
+    {
+      "url": "https://www.ti.com/product/DRV8214",
+      "part": "DRV8214",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/14/Texas_Instruments-DRV8214.pdf",
+      "manufacturer": "Texas Instruments"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x34",
+            "is_default": true
+          },
+          {
+            "address": "0x30"
+          },
+          {
+            "address": "0x31"
+          },
+          {
+            "address": "0x33"
+          }
+        ]
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-07-11T15:29:56.576Z",
+  "description": "The Drive.DC.I is a single-channel H-bridge motor driver built around the DRV8214. It can deliver up to 4 A peak (2 A RMS continuous) and operates from a 1.65 V to 11 V supply, making it suitable for a wide range of small brushed DC motors in robotics, haptics, and actuation applications.\n\nThe DRV8214 features sensorless ripple counting, which tracks motor commutation ripples in the current waveform to determine relative position and speed — eliminating the need for external encoders. Integrated speed regulation maintains constant motor speed across varying supply voltages, while voltage regulation allows driving the motor at a programmable lower terminal voltage to save energy.\n\nMotor speed can be controlled via either PWM at frequencies up to 200 kHz or via the I2C interface, which is also used for register-based configuration and diagnostics, including soft-start/stop, stall detection, and various limits.",
+  "json_version": "0.16",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "Integrated current sensing via an internal current mirror provides an analog output (NPROP) proportional to load current, with selectable gain for accurate sensing down to 10 mA. Current regulation limits motor current autonomously during stall or high-load events.",
+      "heading": "Integrated Current Sensing",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "Four different order-time variants exist for this tile, representing the four possible I2C addresses (0x30, 0x31, 0x33, 0x34), allowing up to four motors to be independently controlled on the same bus. ",
+      "heading": "I2C address variants",
+      "image_url": ""
+    }
+  ]
+}

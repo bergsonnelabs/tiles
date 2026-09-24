@@ -1,0 +1,891 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@98aac17",
+  "tile": "Display.RGBW",
+  "palette": {
+    "label": "Display.RGBW",
+    "icon": "◑"
+  },
+  "driver": {
+    "prefix": "tile_display_rgbw",
+    "header": "tile_display_rgbw.h",
+    "version": "2.5.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_display_rgbw_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "set"
+      ],
+      "symbol": "tile_display_rgbw_set",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set RGBW output levels.",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Red PWM."
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Green PWM."
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Blue PWM."
+        },
+        {
+          "name": "w",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "White PWM."
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "off"
+      ],
+      "symbol": "tile_display_rgbw_off",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Turn all LEDs off (PWM = 0).",
+      "params": [],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_current"
+      ],
+      "symbol": "tile_display_rgbw_set_current",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set per-channel current limit.",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Red current (fraction of full-scale max)."
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Green current."
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Blue current."
+        },
+        {
+          "name": "w",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "White current."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "r",
+          "label": "Red current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.r"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "g",
+          "label": "Green current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.g"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "b",
+          "label": "Blue current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.b"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        },
+        {
+          "param": "w",
+          "label": "White current",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "mA",
+          "default": 5,
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_current.w"
+                  },
+                  {
+                    "value": "set_max_current.mode"
+                  }
+                ]
+              },
+              {
+                "num": 255
+              }
+            ]
+          }
+        }
+      ],
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_max_current"
+      ],
+      "symbol": "tile_display_rgbw_set_max_current",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set the global maximum-current range (MC bit).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "25.5 mA (0) or 51 mA (1)",
+          "choices": [
+            {
+              "name": "DISP_RGBW_MAX_CURRENT_25_5_MA",
+              "value": 0,
+              "label": "25.5 mA full scale per channel",
+              "quantity": 25.5
+            },
+            {
+              "name": "DISP_RGBW_MAX_CURRENT_51_MA",
+              "value": 1,
+              "label": "51 mA full scale per channel",
+              "quantity": 51
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Full-scale current",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        }
+      ],
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_faults"
+      ],
+      "symbol": "tile_display_rgbw_read_faults",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Read the per-channel open / short / thermal fault state.",
+      "params": [
+        {
+          "name": "out",
+          "type": "?disp_rgbw_faults_t *",
+          "description": "Caller-allocated fault snapshot (zeroed on entry)"
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "clear_faults"
+      ],
+      "symbol": "tile_display_rgbw_clear_faults",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Clear all latched LED open / short / TSD fault flags.",
+      "params": [],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_short_threshold"
+      ],
+      "symbol": "tile_display_rgbw_set_short_threshold",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set the short-circuit detection threshold (fraction of VOUT).",
+      "params": [
+        {
+          "name": "threshold",
+          "type": "int",
+          "description": "One of DISP_RGBW_LSD_TH_*",
+          "choices": [
+            {
+              "name": "DISP_RGBW_LSD_TH_0_35",
+              "value": 0,
+              "label": "0.35 × VOUT (most sensitive)"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_45",
+              "value": 1,
+              "label": "0.45 × VOUT"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_55",
+              "value": 2,
+              "label": "0.55 × VOUT"
+            },
+            {
+              "name": "DISP_RGBW_LSD_TH_0_65",
+              "value": 3,
+              "label": "0.65 × VOUT (least sensitive — driver default)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Short detection threshold",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3
+        }
+      ],
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_short_shutdown"
+      ],
+      "symbol": "tile_display_rgbw_set_short_shutdown",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Configure whether a short-circuit fault auto-disables outputs.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = chip auto-shuts-down on LSD, 0 = report only"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Shut down on a short",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_open_shutdown"
+      ],
+      "symbol": "tile_display_rgbw_set_open_shutdown",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Configure whether an open-circuit fault auto-disables a sink.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = chip auto-shuts-down a single sink, 0 = report only"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Shut down an open channel",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_display_rgbw_sleep",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Enter sleep (disable chip).",
+      "params": [],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_display_rgbw_wake",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Wake (re-enable chip, LEDs retain previous state).",
+      "params": [],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_display_rgbw_reset",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Software reset. Must call init() again after.",
+      "params": [],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_color"
+      ],
+      "symbol": "tile_display_rgbw_set_color",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set a solid RGB colour (W channel forced off).",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "description": "Blue PWM  [0..255]"
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "pulse"
+      ],
+      "symbol": "tile_display_rgbw_pulse",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Show a colour for `ms` milliseconds, then turn off.",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "description": "Blue PWM  [0..255]"
+        },
+        {
+          "name": "ms",
+          "type": "int",
+          "description": "Duration in milliseconds"
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "breathe"
+      ],
+      "symbol": "tile_display_rgbw_breathe",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Continuous fade in/out (one breath cycle).",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "description": "Peak red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "description": "Peak green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "description": "Peak blue PWM  [0..255]"
+        },
+        {
+          "name": "period_ms",
+          "type": "int",
+          "description": "One full breath duration in milliseconds (>= 64 recommended)"
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "flash"
+      ],
+      "symbol": "tile_display_rgbw_flash",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "N quick on/off blinks at the given colour.",
+      "params": [
+        {
+          "name": "r",
+          "type": "int",
+          "description": "Red PWM   [0..255]"
+        },
+        {
+          "name": "g",
+          "type": "int",
+          "description": "Green PWM [0..255]"
+        },
+        {
+          "name": "b",
+          "type": "int",
+          "description": "Blue PWM  [0..255]"
+        },
+        {
+          "name": "count",
+          "type": "int",
+          "description": "Number of on/off cycles (1..255)"
+        }
+      ],
+      "returns": "void",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_faulted"
+      ],
+      "symbol": "tile_display_rgbw_is_faulted",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Quick yes/no on whether any LP5811 fault is currently latched.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "icon": "◑",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "ms_to_slope"
+      ],
+      "symbol": "tile_display_rgbw_ms_to_slope",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Convert a duration in milliseconds to the nearest AEU slope/pause code.",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "description": "Duration in milliseconds (0-8050)."
+        }
+      ],
+      "returns": "uint8_t"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_autonomous"
+      ],
+      "symbol": "tile_display_rgbw_set_autonomous",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Put a channel into (or out of) autonomous animation mode.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3 (R, W, G, B)."
+        },
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = autonomous, 0 = manual."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_aeu"
+      ],
+      "symbol": "tile_display_rgbw_set_aeu",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Program one AEU sub-engine of a channel.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3."
+        },
+        {
+          "name": "aeu",
+          "type": "int",
+          "description": "Sub-engine index 1-3."
+        },
+        {
+          "name": "prog",
+          "type": "?const display_rgbw_aeu_t *",
+          "description": "5-keyframe ramp + slope times + repeat."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_animation"
+      ],
+      "symbol": "tile_display_rgbw_set_animation",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set a channel's overall autonomous playback.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3."
+        },
+        {
+          "name": "num_aeu",
+          "type": "int",
+          "description": "How many AEUs to chain, 1-3."
+        },
+        {
+          "name": "pause_start",
+          "type": "int",
+          "description": "Start-of-pattern pause code (0-15, see ms_to_slope)."
+        },
+        {
+          "name": "pause_end",
+          "type": "int",
+          "description": "End-of-pattern pause code (0-15)."
+        },
+        {
+          "name": "repeats",
+          "type": "int",
+          "description": "Whole-pattern repeat: 0-14, 15 = infinite."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_exp_dimming"
+      ],
+      "symbol": "tile_display_rgbw_set_exp_dimming",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Enable/disable exponential PWM dimming for a channel (Dev_Config_5).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3."
+        },
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = exponential curve, 0 = linear."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_phase_align"
+      ],
+      "symbol": "tile_display_rgbw_set_phase_align",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Set a channel's PWM phase-align method (Dev_Config_7).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3."
+        },
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "0/1 = forward, 2 = middle, 3 = backward align."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "update"
+      ],
+      "symbol": "tile_display_rgbw_update",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Latch pending config/animation register writes (CMD_Update = 0x55).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "animate_start"
+      ],
+      "symbol": "tile_display_rgbw_animate_start",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Start (or restart) autonomous animation on all enabled channels.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "animate_stop"
+      ],
+      "symbol": "tile_display_rgbw_animate_stop",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Stop autonomous animation and return to the INITIAL state.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "animate_pause"
+      ],
+      "symbol": "tile_display_rgbw_animate_pause",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Pause autonomous animation, holding the current output.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "animate_continue"
+      ],
+      "symbol": "tile_display_rgbw_animate_continue",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Resume autonomous animation after a pause.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "breathe_auto"
+      ],
+      "symbol": "tile_display_rgbw_breathe_auto",
+      "header": "tile_display_rgbw.h",
+      "category": "tile",
+      "description": "Configure + start an autonomous breathe on one channel.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-3 (R, W, G, B)."
+        },
+        {
+          "name": "peak",
+          "type": "int",
+          "description": "Peak brightness 0-255."
+        },
+        {
+          "name": "period_ms",
+          "type": "int",
+          "description": "Full breathe period (up+down) in ms."
+        },
+        {
+          "name": "repeats",
+          "type": "int",
+          "description": "Whole-pattern repeat: 0-14, 15 = infinite."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x50"
+      }
+    ]
+  }
+}
