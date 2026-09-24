@@ -353,6 +353,10 @@ void tile_display_rgbw_off(tile_t *tile);
  * @studio control g label="Green current" tier=basic default=5 show="g * value(set_max_current.mode) / 255" unit=mA
  * @studio control b label="Blue current" tier=basic default=5 show="b * value(set_max_current.mode) / 255" unit=mA
  * @studio control w label="White current" tier=basic default=5 show="w * value(set_max_current.mode) / 255" unit=mA
+ * @studio require expr="r * value(set_max_current.mode) / 255 <= 5" message="Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+ * @studio require expr="g * value(set_max_current.mode) / 255 <= 5" message="Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+ * @studio require expr="b * value(set_max_current.mode) / 255 <= 5" message="Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+ * @studio require expr="w * value(set_max_current.mode) / 255 <= 5" message="White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
  * @param r [0..255] Red current (fraction of full-scale max).
  * @param g [0..255] Green current.
  * @param b [0..255] Blue current.
@@ -375,7 +379,6 @@ void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b
  *
  * @studio expose category=tile icon=◑ name=set_max_current section=config
  * @studio control mode label="Full-scale current" tier=advanced default=DISP_RGBW_MAX_CURRENT_51_MA
- * @param  tile  Initialised tile handle
  * @param  mode  25.5 mA (0) or 51 mA (1)
  */
 void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mode);
@@ -402,7 +405,6 @@ void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mod
  *          returns a clean bill of health that means nothing.
  *
  * @studio expose category=tile icon=◑ name=read_faults section=runtime
- * @param  tile  Initialised tile handle
  * @param  out   Caller-allocated fault snapshot (zeroed on entry)
  */
 void tile_display_rgbw_read_faults(tile_t *tile, disp_rgbw_faults_t *out);
@@ -414,7 +416,6 @@ void tile_display_rgbw_read_faults(tile_t *tile, disp_rgbw_faults_t *out);
  * call, `read_faults()` reflects only currently-active faults.
  *
  * @studio expose category=tile icon=◑ name=clear_faults section=runtime
- * @param  tile  Initialised tile handle
  */
 void tile_display_rgbw_clear_faults(tile_t *tile);
 
@@ -428,7 +429,6 @@ void tile_display_rgbw_clear_faults(tile_t *tile);
  *
  * @studio expose category=tile icon=◑ name=set_short_threshold section=config
  * @studio control threshold label="Short detection threshold" tier=advanced default=DISP_RGBW_LSD_TH_0_65
- * @param  tile       Initialised tile handle
  * @param  threshold  One of DISP_RGBW_LSD_TH_*
  */
 void tile_display_rgbw_set_short_threshold(tile_t *tile,
@@ -444,7 +444,6 @@ void tile_display_rgbw_set_short_threshold(tile_t *tile,
  *
  * @studio expose category=tile icon=◑ name=set_short_shutdown section=config
  * @studio control enabled label="Shut down on a short" tier=advanced type=bool default=0
- * @param  tile     Initialised tile handle
  * @param  enabled  1 = chip auto-shuts-down on LSD, 0 = report only
  */
 void tile_display_rgbw_set_short_shutdown(tile_t *tile, uint8_t enabled);
@@ -460,7 +459,6 @@ void tile_display_rgbw_set_short_shutdown(tile_t *tile, uint8_t enabled);
  *
  * @studio expose category=tile icon=◑ name=set_open_shutdown section=config
  * @studio control enabled label="Shut down an open channel" tier=advanced type=bool default=1
- * @param  tile     Initialised tile handle
  * @param  enabled  1 = chip auto-shuts-down a single sink, 0 = report only
  */
 void tile_display_rgbw_set_open_shutdown(tile_t *tile, uint8_t enabled);
@@ -505,7 +503,6 @@ void tile_display_rgbw_reset(tile_t *tile);
  * common case where only the RGB channels matter. White is held at
  * zero — drop to `set()` directly if you want to mix white in.
  *
- * @param  tile  Initialised tile handle
  * @param  r     Red PWM   [0..255]
  * @param  g     Green PWM [0..255]
  * @param  b     Blue PWM  [0..255]
@@ -522,7 +519,6 @@ void tile_display_rgbw_set_color(tile_t *tile, uint8_t r, uint8_t g, uint8_t b);
  * is forced off (RGB-only); use @ref tile_display_rgbw_set + manual
  * delay if you need full RGBW pulse control.
  *
- * @param  tile  Initialised tile handle
  * @param  r     Red PWM   [0..255]
  * @param  g     Green PWM [0..255]
  * @param  b     Blue PWM  [0..255]
@@ -551,7 +547,6 @@ void tile_display_rgbw_pulse(tile_t *tile, uint8_t r, uint8_t g, uint8_t b,
  *        at 32 PWM levels per half-cycle; with `period_ms < 64` the
  *        delay-per-step rounds to 1 ms and the breath becomes choppy.
  *
- * @param  tile        Initialised tile handle
  * @param  r           Peak red PWM   [0..255]
  * @param  g           Peak green PWM [0..255]
  * @param  b           Peak blue PWM  [0..255]
@@ -572,7 +567,6 @@ void tile_display_rgbw_breathe(tile_t *tile, uint8_t r, uint8_t g, uint8_t b,
  * @note  Blocking. Total runtime is approximately `count * 200` ms.
  *        Call from a dedicated task or accept the stall.
  *
- * @param  tile   Initialised tile handle
  * @param  r      Red PWM   [0..255]
  * @param  g      Green PWM [0..255]
  * @param  b      Blue PWM  [0..255]
@@ -592,7 +586,6 @@ void tile_display_rgbw_flash(tile_t *tile, uint8_t r, uint8_t g, uint8_t b,
  * (which LED is open / shorted), use `read_faults()` directly. Faults
  * stay latched until cleared via @ref tile_display_rgbw_clear_faults.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if any fault bit is set, 0 if healthy
  */
 uint8_t tile_display_rgbw_is_faulted(tile_t *tile);

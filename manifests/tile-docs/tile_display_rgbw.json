@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@98aac17",
+  "source": "tiles@afe442f",
   "file": "tile_display_rgbw.h",
   "brief": "RGBW LED driver for the Display.RGBW tile (LP5811).",
   "description": "@version 2.5.0\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives\nwhite and OUT3 (ball D2) blue (tile schematic; confirmed on the board\n2026-09-24). Before 2.5.0 the driver had blue and white swapped.\n\n\nVersion history:\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
@@ -293,10 +293,6 @@
       "signature": "void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mode)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "mode",
           "description": "25.5 mA (0) or 51 mA (1)"
         }
@@ -312,10 +308,6 @@
       "signature": "void tile_display_rgbw_read_faults(tile_t *tile, disp_rgbw_faults_t *out)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "out",
           "description": "Caller-allocated fault snapshot (zeroed on entry)"
         }
@@ -329,12 +321,7 @@
     },
     {
       "signature": "void tile_display_rgbw_clear_faults(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -345,10 +332,6 @@
     {
       "signature": "void tile_display_rgbw_set_short_threshold(tile_t *tile, disp_rgbw_lsd_threshold_t threshold)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "threshold",
           "description": "One of DISP_RGBW_LSD_TH_*"
@@ -365,10 +348,6 @@
       "signature": "void tile_display_rgbw_set_short_shutdown(tile_t *tile, uint8_t enabled)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "enabled",
           "description": "1 = chip auto-shuts-down on LSD, 0 = report only"
         }
@@ -383,10 +362,6 @@
     {
       "signature": "void tile_display_rgbw_set_open_shutdown(tile_t *tile, uint8_t enabled)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "enabled",
           "description": "1 = chip auto-shuts-down a single sink, 0 = report only"
@@ -433,10 +408,6 @@
       "signature": "void tile_display_rgbw_set_color(tile_t *tile, uint8_t r, uint8_t g, uint8_t b)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "r",
           "description": "Red PWM   [0..255]"
         },
@@ -459,10 +430,6 @@
     {
       "signature": "void tile_display_rgbw_pulse(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint16_t ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "r",
           "description": "Red PWM   [0..255]"
@@ -490,10 +457,6 @@
     {
       "signature": "void tile_display_rgbw_breathe(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint16_t period_ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "r",
           "description": "Peak red PWM   [0..255]"
@@ -525,10 +488,6 @@
       "signature": "void tile_display_rgbw_flash(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t count)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "r",
           "description": "Red PWM   [0..255]"
         },
@@ -556,12 +515,7 @@
     },
     {
       "signature": "uint8_t tile_display_rgbw_is_faulted(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -882,6 +836,24 @@
       "param": "enabled",
       "kind": "bool",
       "default": 1
+    }
+  ],
+  "vibe_rules": [
+    {
+      "function": "set_current",
+      "message": "Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+    },
+    {
+      "function": "set_current",
+      "message": "Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+    },
+    {
+      "function": "set_current",
+      "message": "Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+    },
+    {
+      "function": "set_current",
+      "message": "White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
     }
   ]
 }

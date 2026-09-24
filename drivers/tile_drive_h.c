@@ -477,7 +477,7 @@ void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot,
 /* Library + actuator-tuning runtime setters                       */
 /* -------------------------------------------------------------- */
 
-void tile_drive_h_set_library(tile_t* tile, uint8_t library)
+void tile_drive_h_set_library(tile_t* tile, drive_h_library_t library)
 {
     if (tile->state != TILE_STATE_READY) {
         TILE_ON_ERROR(tile, "set_library: not ready");

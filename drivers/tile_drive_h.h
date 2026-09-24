@@ -81,7 +81,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_DRIVE_H_VERSION_MAJOR  4
-#define TILE_DRIVE_H_VERSION_MINOR  2
+#define TILE_DRIVE_H_VERSION_MINOR  3
 #define TILE_DRIVE_H_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -191,13 +191,16 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* Library selection                                               */
 /* -------------------------------------------------------------- */
 
-#define DRIVE_H_LIB_EMPTY    0  /**< Empty library (silence). */
-#define DRIVE_H_LIB_ERM_A    1  /**< TS2200 Library A (ERM, fixed open-loop overdrive). */
-#define DRIVE_H_LIB_ERM_B    2  /**< TS2200 Library B (ERM, no overdrive). */
-#define DRIVE_H_LIB_ERM_C    3  /**< TS2200 Library C (ERM, no overdrive). */
-#define DRIVE_H_LIB_ERM_D    4  /**< TS2200 Library D (ERM, no overdrive). */
-#define DRIVE_H_LIB_ERM_E    5  /**< TS2200 Library E (ERM, no overdrive). */
-#define DRIVE_H_LIB_LRA      6  /**< LRA Library (auto-resonance). */
+/** ROM waveform library, which also sets the actuator type (ERM vs LRA). */
+typedef enum {
+    DRIVE_H_LIB_EMPTY = 0,  /**< Empty library (silence). */
+    DRIVE_H_LIB_ERM_A = 1,  /**< ERM motor: TS2200 Library A (fixed open-loop overdrive). */
+    DRIVE_H_LIB_ERM_B = 2,  /**< ERM motor: TS2200 Library B (no overdrive). */
+    DRIVE_H_LIB_ERM_C = 3,  /**< ERM motor: TS2200 Library C (no overdrive). */
+    DRIVE_H_LIB_ERM_D = 4,  /**< ERM motor: TS2200 Library D (no overdrive). */
+    DRIVE_H_LIB_ERM_E = 5,  /**< ERM motor: TS2200 Library E (no overdrive). */
+    DRIVE_H_LIB_LRA   = 6,  /**< LRA (coin / linear actuator): LRA library, auto-resonance. */
+} drive_h_library_t;
 
 /* -------------------------------------------------------------- */
 /* Public API                                                      */
@@ -292,7 +295,6 @@ void tile_drive_h_play(tile_t* tile, uint8_t index, uint8_t repeats);
  *
  * @studio expose category=tile name=play_sequence section=runtime
  * @studio in_buffer effects type=uint8_t length=8 length_param=count
- * @param  tile     Pointer to tile handle
  * @param  effects  Array of effect indices (1-123, 0 = stop)
  * @param  count    Number of effects (1-8)
  */
@@ -308,7 +310,6 @@ void tile_drive_h_play_sequence(tile_t* tile, const uint8_t *effects,
  *
  * @studio expose category=tile name=load_sequence section=runtime
  * @studio in_buffer effects type=uint8_t length=8 length_param=count
- * @param  tile     Pointer to tile handle
  * @param  effects  Array of effect indices (1-123, 0 = stop)
  * @param  count    Number of effects (1-8)
  */
@@ -328,7 +329,6 @@ void tile_drive_h_load_sequence(tile_t* tile, const uint8_t *effects,
  * Slot is silently ignored if >= 8; delay_steps is clipped to 0x7F.
  *
  * @studio expose category=tile name=set_sequence_wait
- * @param  tile         Pointer to tile handle
  * @param  slot         Slot index 0..7
  * @param  delay_steps  Wait length in 10 ms steps (0 = no wait, 0x7F = 1.27 s)
  */
@@ -349,7 +349,6 @@ void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot,
  *     High = playing, low = idle. Falling edge cancels.
  *
  * @studio expose category=tile name=set_trigger section=runtime
- * @param  tile  Pointer to tile handle
  * @param  mode  [0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),
  *               DRIVE_H_TRIG_LEVEL (2)
  */
@@ -383,11 +382,15 @@ void tile_drive_h_stop(tile_t* tile);
  * (silence). This call also updates the FEEDBACK_CTRL N_ERM_LRA
  * bit so the chip drives the correct actuator type.
  *
+ * The actuator is external (OUT± pads), so this must match what is
+ * wired: an LRA (coin / linear) uses DRIVE_H_LIB_LRA, an ERM (spinning
+ * mass) motor one of the ERM libraries.
+ *
  * @studio expose category=tile name=set_library
- * @param  tile     Pointer to tile handle
- * @param  library  [0..6] Library index (use DRIVE_H_LIB_* constants)
+ * @studio control library label="Actuator type" tier=basic default=DRIVE_H_LIB_LRA allow=DRIVE_H_LIB_LRA,DRIVE_H_LIB_ERM_A,DRIVE_H_LIB_ERM_B,DRIVE_H_LIB_ERM_C,DRIVE_H_LIB_ERM_D,DRIVE_H_LIB_ERM_E
+ * @param  library  Library (use DRIVE_H_LIB_* constants)
  */
-void tile_drive_h_set_library(tile_t* tile, uint8_t library);
+void tile_drive_h_set_library(tile_t* tile, drive_h_library_t library);
 
 /**
  * @brief  Tune the actuator drive parameters.
@@ -404,7 +407,6 @@ void tile_drive_h_set_library(tile_t* tile, uint8_t library);
  * tile_drive_h_calibrate() afterwards to update A_CAL_COMP / A_CAL_BEMF.
  *
  * @studio expose category=tile name=set_actuator_params
- * @param  tile           Pointer to tile handle
  * @param  rated_voltage  RATED_VOLTAGE byte (0 = no change)
  * @param  od_clamp       OD_CLAMP byte (0 = no change)
  * @param  fb_brake       Feedback brake factor 0..7 (0xFF = no change)
@@ -435,7 +437,6 @@ void tile_drive_h_set_actuator_params(tile_t* tile,
  *
  * @studio expose category=tile name=set_loop_mode section=config
  * @studio control closed label="Closed-loop drive" tier=advanced type=bool default=1
- * @param  tile    Pointer to tile handle
  * @param  closed  1 = closed-loop (smart-loop), 0 = open-loop
  */
 void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed);
@@ -468,9 +469,8 @@ void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed);
  * at init's 238 Hz DRIVE_TIME.
  *
  * @studio expose category=tile name=set_actuator_voltage section=config
- * @studio control rated_mv label="Actuator rated voltage" tier=advanced default=2230 scale=0.001 unit=V
+ * @studio control rated_mv label="Actuator rated voltage" tier=basic default=2230 scale=0.001 unit=V
  * @studio control overdrive_mv label="Overdrive clamp" tier=advanced default=2700 scale=0.001 unit=V
- * @param  tile          Pointer to tile handle
  * @param  rated_mv      [300..3600] Rated drive level in mV
  * @param  overdrive_mv  [300..5000] Overdrive clamp in mV
  */
@@ -489,7 +489,6 @@ void tile_drive_h_set_actuator_voltage(tile_t* tile, uint16_t rated_mv,
  *
  * @studio expose category=tile name=set_resonance_hz section=config
  * @studio control hz label="LRA resonance" tier=advanced default=238 unit=Hz
- * @param  tile  Pointer to tile handle
  * @param  hz    [125..300] LRA resonant frequency in Hz
  */
 void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz);
@@ -506,7 +505,6 @@ void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz);
  * Pass 0xFF for any field to leave that register slice untouched.
  *
  * @studio expose category=tile name=set_resonance_params
- * @param  tile           Pointer to tile handle
  * @param  sample_time    Sample time 0..3 (0=150µs, 3=300µs; 0xFF = no change)
  * @param  blanking_time  Blanking time 0..3 (0xFF = no change)
  * @param  idiss_time     Current-dissipation time 0..3 (0xFF = no change)
@@ -529,7 +527,6 @@ void tile_drive_h_set_resonance_params(tile_t* tile,
  * mode generates them automatically from back-EMF feedback.
  *
  * @studio expose category=tile name=set_waveform_timing
- * @param  tile          Pointer to tile handle
  * @param  overdrive     Overdrive Time Offset (0x0D, signed × 5 ms)
  * @param  sustain_pos   Sustain-Time Positive Offset (0x0E, signed × 5 ms)
  * @param  sustain_neg   Sustain-Time Negative Offset (0x0F, signed × 5 ms)
@@ -577,7 +574,6 @@ void tile_drive_h_rtp_write(tile_t* tile, uint8_t amplitude);
  * to the same convention as the format flag.
  *
  * @studio expose category=tile name=set_rtp_format
- * @param  tile        Pointer to tile handle
  * @param  unsigned_   1 = unsigned data format, 0 = signed (default)
  * @param  bidir       1 = bidirectional input (default), 0 = unidirectional
  */
@@ -671,7 +667,6 @@ void tile_drive_h_audio_start(tile_t* tile);
  * Pass 0xFF for any field to leave it untouched.
  *
  * @studio expose category=tile name=set_audio_params
- * @param  tile         Pointer to tile handle
  * @param  peak_time    ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)
  * @param  filter       ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)
  * @param  min_input    Minimum input gate (0xFF = no change)
@@ -706,7 +701,6 @@ void tile_drive_h_audio_stop(tile_t* tile);
  * OVER_TEMP[1], OC_DETECT[0]. Status bits clear on read.
  *
  * @studio expose category=tile name=get_status returns=int section=runtime
- * @param  tile  Pointer to tile handle
  * @return Raw status byte
  */
 uint8_t tile_drive_h_get_status(tile_t* tile);
@@ -806,7 +800,6 @@ void tile_drive_h_wake(tile_t* tile);
  * Returns 1 if the OTP_STATUS bit reads 1 after programming, 0 if
  * the burn failed or OTP was already programmed.
  *
- * @param  tile  Pointer to tile handle
  * @return 1 on success, 0 on failure / already-programmed
  */
 uint8_t tile_drive_h_program_otp(tile_t* tile);
@@ -841,7 +834,6 @@ uint8_t tile_drive_h_get_otp_status(tile_t* tile);
  * immediately; the chip drives the click after the call returns.
  * Use @ref tile_drive_h_is_playing to poll for completion.
  *
- * @param  tile  Initialised tile handle
  */
 void tile_drive_h_play_click(tile_t* tile);
 
@@ -855,7 +847,6 @@ void tile_drive_h_play_click(tile_t* tile);
  * chip handles the inter-tap timing internally. Returns
  * immediately; use @ref tile_drive_h_is_playing to poll.
  *
- * @param  tile  Initialised tile handle
  */
 void tile_drive_h_play_double_tap(tile_t* tile);
 
@@ -868,7 +859,6 @@ void tile_drive_h_play_double_tap(tile_t* tile);
  * 100%") → effect 56 ("Pulsing Sharp 1 — 100%") → effect 14.
  * Returns immediately; use @ref tile_drive_h_is_playing to poll.
  *
- * @param  tile  Initialised tile handle
  */
 void tile_drive_h_play_alert(tile_t* tile);
 
@@ -886,7 +876,6 @@ void tile_drive_h_play_alert(tile_t* tile);
  *        @ref tile_drive_h_rtp_start / @ref tile_drive_h_rtp_write
  *        / @ref tile_drive_h_rtp_stop.
  *
- * @param  tile  Initialised tile handle
  * @param  ms    [0..65535] Duration in milliseconds
  */
 void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms);
@@ -905,7 +894,6 @@ void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms);
  * @note  STATUS bits clear on read, so the result reflects the
  *        most recent calibration / diagnostic run.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if calibration converged, 0 otherwise
  */
 uint8_t tile_drive_h_is_calibrated(tile_t* tile);

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@1c38a75",
+  "source": "tiles@afe442f",
   "tile": "Drive.H",
   "palette": {
     "label": "Drive.H",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_h",
     "header": "tile_drive_h.h",
-    "version": "4.2.0"
+    "version": "4.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -185,14 +185,88 @@
         {
           "name": "library",
           "type": "int",
-          "range": [
-            0,
-            6
-          ],
-          "description": "Library index (use DRIVE_H_LIB_* constants)"
+          "description": "Library (use DRIVE_H_LIB_* constants)",
+          "choices": [
+            {
+              "name": "DRIVE_H_LIB_EMPTY",
+              "value": 0,
+              "label": "Empty library (silence)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_A",
+              "value": 1,
+              "label": "ERM motor: TS2200 Library A (fixed open-loop overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_B",
+              "value": 2,
+              "label": "ERM motor: TS2200 Library B (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_C",
+              "value": 3,
+              "label": "ERM motor: TS2200 Library C (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_D",
+              "value": 4,
+              "label": "ERM motor: TS2200 Library D (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_E",
+              "value": 5,
+              "label": "ERM motor: TS2200 Library E (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_LRA",
+              "value": 6,
+              "label": "LRA (coin / linear actuator): LRA library, auto-resonance"
+            }
+          ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "library",
+          "label": "Actuator type",
+          "tier": "basic",
+          "scope": "config",
+          "default": 6,
+          "choices": [
+            {
+              "name": "DRIVE_H_LIB_ERM_A",
+              "value": 1,
+              "label": "ERM motor: TS2200 Library A (fixed open-loop overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_B",
+              "value": 2,
+              "label": "ERM motor: TS2200 Library B (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_C",
+              "value": 3,
+              "label": "ERM motor: TS2200 Library C (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_D",
+              "value": 4,
+              "label": "ERM motor: TS2200 Library D (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_ERM_E",
+              "value": 5,
+              "label": "ERM motor: TS2200 Library E (no overdrive)"
+            },
+            {
+              "name": "DRIVE_H_LIB_LRA",
+              "value": 6,
+              "label": "LRA (coin / linear actuator): LRA library, auto-resonance"
+            }
+          ]
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -292,7 +366,7 @@
         {
           "param": "rated_mv",
           "label": "Actuator rated voltage",
-          "tier": "advanced",
+          "tier": "basic",
           "scope": "config",
           "scale": 0.001,
           "display_unit": "V",
