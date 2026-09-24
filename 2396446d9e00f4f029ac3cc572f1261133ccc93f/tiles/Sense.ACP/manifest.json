@@ -1,0 +1,323 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@f5a0d22",
+  "tile": "Sense.ACP",
+  "palette": {
+    "label": "Sense.ACP",
+    "icon": "🎨"
+  },
+  "driver": {
+    "prefix": "tile_sense_acp",
+    "header": "tile_sense_acp.h",
+    "version": "1.0.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_acp_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_acp_sleep",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Power down the sensor (clears PON/AEN/PEN).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_acp_wake",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Resume from sleep, restoring the engines enabled at init.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_als_gain"
+      ],
+      "symbol": "tile_sense_acp_set_als_gain",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Set the ALS/Color gain.",
+      "params": [
+        {
+          "name": "gain",
+          "type": "int",
+          "description": "ALS gain selection (sense_acp_als_gain_t).",
+          "choices": [
+            {
+              "name": "SENSE_ACP_ALS_GAIN_1X",
+              "value": 0,
+              "label": "1x"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_4X",
+              "value": 1,
+              "label": "4x"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_16X",
+              "value": 2,
+              "label": "16x (default)"
+            },
+            {
+              "name": "SENSE_ACP_ALS_GAIN_64X",
+              "value": 3,
+              "label": "64x"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "gain",
+          "label": "Light sensor gain",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_integration_time"
+      ],
+      "symbol": "tile_sense_acp_set_integration_time",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Set the ALS integration time.",
+      "params": [
+        {
+          "name": "atime",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Raw ATIME register value."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "atime",
+          "label": "Light integration time",
+          "tier": "basic",
+          "scope": "config",
+          "show_unit": "ms",
+          "default": 47,
+          "show": {
+            "op": "*",
+            "args": [
+              {
+                "op": "+",
+                "args": [
+                  {
+                    "ref": "set_integration_time.atime"
+                  },
+                  {
+                    "num": 1
+                  }
+                ]
+              },
+              {
+                "num": 2.81
+              }
+            ]
+          }
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_prox_gain"
+      ],
+      "symbol": "tile_sense_acp_set_prox_gain",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Set the proximity IR-sensor gain.",
+      "params": [
+        {
+          "name": "gain",
+          "type": "int",
+          "description": "Proximity gain selection (sense_acp_prox_gain_t).",
+          "choices": [
+            {
+              "name": "SENSE_ACP_PROX_GAIN_1X",
+              "value": 0,
+              "label": "1x"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_2X",
+              "value": 1,
+              "label": "2x"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_4X",
+              "value": 2,
+              "label": "4x (default)"
+            },
+            {
+              "name": "SENSE_ACP_PROX_GAIN_8X",
+              "value": 3,
+              "label": "8x"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "gain",
+          "label": "Proximity sensor gain",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 2
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_prox_drive_ma"
+      ],
+      "symbol": "tile_sense_acp_set_prox_drive_ma",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Set the proximity IR-LED drive current.",
+      "params": [
+        {
+          "name": "ma",
+          "type": "int",
+          "range": [
+            6,
+            192
+          ],
+          "unit": "mA",
+          "description": "Desired LED drive current, in milliamps."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Proximity LED current",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 12
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_clear"
+      ],
+      "symbol": "tile_sense_acp_get_clear",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the Clear (unfiltered) channel — overall ambient light.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_red"
+      ],
+      "symbol": "tile_sense_acp_get_red",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the Red channel count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_green"
+      ],
+      "symbol": "tile_sense_acp_get_green",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the Green channel count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_blue"
+      ],
+      "symbol": "tile_sense_acp_get_blue",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the Blue channel count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_proximity"
+      ],
+      "symbol": "tile_sense_acp_get_proximity",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the proximity result (larger = closer object).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_status"
+      ],
+      "symbol": "tile_sense_acp_get_status",
+      "header": "tile_sense_acp.h",
+      "category": "tile",
+      "description": "Read the STATUS register.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x39"
+      }
+    ]
+  }
+}
