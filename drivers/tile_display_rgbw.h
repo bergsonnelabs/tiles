@@ -1,10 +1,12 @@
 /**
  * @file   tile_display_rgbw.h
  * @brief  RGBW LED driver for the Display.RGBW tile (LP5811).
- * @version 2.4.1
+ * @version 2.5.0
  *
  * 4-channel LED driver with independent PWM + current control.
- * Channels: R (LED0), G (LED2), B (LED1), W (LED3).
+ * Channels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives
+ * white and OUT3 (ball D2) blue (tile schematic; confirmed on the board
+ * 2026-09-24). Before 2.5.0 the driver had blue and white swapped.
  *
  * Quick start:
  * @code
@@ -76,8 +78,8 @@
 /* ---- Driver version ---- */
 
 #define TILE_DISP_RGBW_VERSION_MAJOR  2
-#define TILE_DISP_RGBW_VERSION_MINOR  4
-#define TILE_DISP_RGBW_VERSION_PATCH  1
+#define TILE_DISP_RGBW_VERSION_MINOR  5
+#define TILE_DISP_RGBW_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -88,9 +90,10 @@ TILES_CHECK_VERSION(1, 0);
  * |----------|------|-------------------------|
  * | 0        | 0x50 | LP5811A (Bit4=0,Bit3=0) |
  *
- * @note  The LP5811 has four factory-strapped material variants
- *        (LP5811A/B/C/D) with hard-wired I2C addresses 0x50/0x51/
- *        0x52/0x53. The Display.RGBW tile (rev a) ships with the A
+ * @note  The LP5811 has four factory-set material variants
+ *        (LP5811A/B/C/D) with base addresses 0x50/0x54/0x58/0x5C
+ *        (0x51-0x53 are the A part's own register pages, not other
+ *        variants). The Display.RGBW tile (rev a) ships with the A
  *        variant only — see the chip-gated note in the multi-address
  *        unsupported annotation.
  */
@@ -108,13 +111,17 @@ TILES_CHECK_VERSION(1, 0);
 #define LP5811_REG_FAULT_CLEAR  0x22
 #define LP5811_REG_RESET        0x23
 #define LP5811_REG_DC_0         0x30  /* Current limit channel 0 (R) */
-#define LP5811_REG_DC_1         0x31  /* Current limit channel 1 (B) */
+#define LP5811_REG_DC_1         0x31  /* Current limit channel 1 (W) */
 #define LP5811_REG_DC_2         0x32  /* Current limit channel 2 (G) */
-#define LP5811_REG_DC_3         0x33  /* Current limit channel 3 (W) */
+#define LP5811_REG_DC_3         0x33  /* Current limit channel 3 (B) */
 #define LP5811_REG_PWM_0        0x40  /* PWM channel 0 (R) */
-#define LP5811_REG_PWM_1        0x41  /* PWM channel 1 (B) */
+#define LP5811_REG_PWM_1        0x41  /* PWM channel 1 (W) */
 #define LP5811_REG_PWM_2        0x42  /* PWM channel 2 (G) */
-#define LP5811_REG_PWM_3        0x43  /* PWM channel 3 (W) */
+#define LP5811_REG_PWM_3        0x43  /* PWM channel 3 (B) */
+#define LP5811_REG_AUTO_DC_0    0x50  /* Autonomous-mode current, channel 0 (R) */
+#define LP5811_REG_AUTO_DC_1    0x51  /* Autonomous-mode current, channel 1 (W) */
+#define LP5811_REG_AUTO_DC_2    0x52  /* Autonomous-mode current, channel 2 (G) */
+#define LP5811_REG_AUTO_DC_3    0x53  /* Autonomous-mode current, channel 3 (B) */
 
 /* Page-3 status registers (0x300+ — accessed via address-bump trick) */
 #define LP5811_REG_TSD_STATUS   0x00  /* page 3, offset 0x00 (=0x300) */
@@ -230,8 +237,7 @@ typedef enum {
  * @brief  LED open / short fault snapshot.
  *
  * Bit N of each mask corresponds to LED channel N. Mapping:
- *   bit0 = R, bit1 = B, bit2 = G, bit3 = W (matches `set()` order
- *   inside the chip). Faults are sticky in the chip — read once,
+ *   bit0 = R, bit1 = W, bit2 = G, bit3 = B (the chip's LED order). Faults are sticky in the chip — read once,
  *   then call `clear_faults()` to reset the latches.
  */
 typedef struct {
@@ -329,6 +335,18 @@ void tile_display_rgbw_off(tile_t *tile);
 
 /**
  * @brief Set per-channel current limit.
+ *
+ * Peak sink current = full_scale * code / 255 (datasheet Eq. 4), where
+ * full_scale is 51 mA after init (see set_max_current()). The same code
+ * is written to Manual_DC (manual mode) and Auto_DC (autonomous
+ * animation mode, registers 0x50-0x53, reset 0), so animations run at
+ * the same current as set() / set_color().
+ *
+ * @warning The on-tile LED (B3R14RBGW05DX001A4U1930) is rated 5 mA
+ *          continuous per die, 20 mA pulsed at 1/10 duty (LED
+ *          datasheet, Absolute Maximum Ratings). At the 51 mA full
+ *          scale that is code 25; at 25.5 mA it is code 50. Codes
+ *          above that, with PWM near 255, exceed the LED's rating.
  *
  * @studio expose category=tile icon=◑ name=set_current section=runtime
  * @studio control r label="Red current" tier=basic default=5 show="r * value(set_max_current.mode) / 255" unit=mA
@@ -521,11 +539,9 @@ void tile_display_rgbw_pulse(tile_t *tile, uint8_t r, uint8_t g, uint8_t b,
  * The "thinking" indicator. Plays a single up-and-down PWM ramp over
  * `period_ms` (i.e., dark → peak → dark = one full breath). Loop in
  * the caller for sustained breathing. Implementation is a software
- * loop — the LP5811 has on-chip animation engines (AEU) that could
- * run this autonomously, but the AEU bytecode/timing semantics aren't
- * fully documented in the public datasheet (see @ref tile_display_rgbw.h
- * "unsupported AEU" annotation). The software loop is fine for
- * indicator-grade breathing at v2.1; revisit when AEU lands.
+ * loop; for a breathe that runs without the MCU, use
+ * tile_display_rgbw_breathe_auto(), which programs the on-chip
+ * animation engine (AEU).
  *
  * @note  Blocking. Spends `period_ms` in `delay_ms()`. Call from a
  *        dedicated task or accept the stall — the function does not
@@ -615,7 +631,7 @@ uint8_t tile_display_rgbw_ms_to_slope(uint16_t ms);
  * registers (set / set_color). Call update() after configuring.
  *
  * @studio expose category=tile name=set_autonomous section=config
- * @param  channel  0-3 (R, B, G, W).
+ * @param  channel  0-3 (R, W, G, B).
  * @param  enabled  1 = autonomous, 0 = manual.
  */
 void tile_display_rgbw_set_autonomous(tile_t *tile, uint8_t channel, uint8_t enabled);
@@ -701,7 +717,7 @@ void tile_display_rgbw_animate_continue(tile_t *tile);
  * over the AEU API for the common case.
  *
  * @studio expose category=tile name=breathe_auto section=runtime
- * @param  channel    0-3.
+ * @param  channel    0-3 (R, W, G, B).
  * @param  peak       Peak brightness 0-255.
  * @param  period_ms  Full breathe period (up+down) in ms.
  * @param  repeats    Whole-pattern repeat: 0-14, 15 = infinite.

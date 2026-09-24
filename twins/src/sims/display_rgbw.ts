@@ -2,7 +2,7 @@
 //
 // The LP5811 is a boost + four low-side current sinks. On this tile the RGBW LED
 // is ON-BOARD: the boost output (VOUT, 4.5 V after init) feeds the LED's common
-// anode and the sinks pull the cathodes — LED0 = R, LED1 = B, LED2 = G, LED3 = W
+// anode and the sinks pull the cathodes — LED0 = R, LED1 = W, LED2 = G, LED3 = B
 // (the driver's channel map). The light is therefore an indicator, not a pad;
 // the tile's pads are GND (1), I²C (4/5), EN (8, pulled up; GND disables) and
 // V+ (10).
@@ -31,9 +31,15 @@ const EN_VIL_MV = 400; // EN read low below this
 const ISD_UA = 0.1; // EN low
 const ISTB_UA = 26; // CHIP_EN = 0, or no LED effective
 const INOR_UA = 450; // normal operation, boost running
+// On-tile EN pull-up: R1 = 100 kΩ from V+ to EN (tile schematic), so a grounded
+// EN pad sinks V+ / 100 kΩ through it.
+const EN_PULLUP_OHM = 100_000;
+// On-tile LED (B3R14RBGW05DX001A4U1930) absolute max forward current per die.
+const LED_IF_MAX_MA = 5;
 
-// Channel letters by LP5811 LED index: LED0 = R, LED1 = B, LED2 = G, LED3 = W.
-const CH = ['r', 'b', 'g', 'w'] as const;
+// Channel letters by LP5811 LED index: LED0 = R, LED1 = W, LED2 = G, LED3 = B.
+// (OUT1 / ball C1 = white, OUT3 / ball D2 = blue: tile schematic, confirmed on the board.)
+const CH = ['r', 'w', 'g', 'b'] as const;
 type Ch = (typeof CH)[number];
 
 // Software-helper kinds (`helper_kind`)
@@ -117,7 +123,8 @@ function animDuty(s: State): number {
 }
 
 // A channel's PWM duty 0…1: the engine's envelope when it owns the channel,
-// otherwise the manual PWM register.
+// otherwise the manual PWM register. (The driver writes the same DC code to
+// Manual_DC and Auto_DC, so one current field serves both modes.)
 function duty(s: State, ch: Ch): number {
   if (autoOn(s, ch)) {
     return s.animating === 1 && s.anim_channel === CH.indexOf(ch) ? animDuty(s) : 0;
@@ -471,7 +478,7 @@ const sim: TileSim<State> = {
     tile_display_rgbw_animate_pause: 'canonical',
     tile_display_rgbw_animate_continue: 'canonical',
     tile_display_rgbw_breathe_auto: 'inferred', // AEU program modeled as a triangle, loops forever
-    power: 'inferred', // ISD / ISTB / INOR canonical; boost efficiency 90 % (datasheet guidance)
+    power: 'inferred', // ISD / ISTB / INOR canonical; boost efficiency 90 % (datasheet guidance); EN pull-up from tile schematic
   },
 
   // Each tick: advance the engine clock, play a software helper's envelope, and
@@ -537,15 +544,22 @@ const sim: TileSim<State> = {
       draw = 0;
       note = 'unpowered (below UVLO)';
     } else if (!enHigh) {
-      draw = ISD_UA;
-      note = 'shutdown (EN low)';
+      draw = ISD_UA + Math.round((vin * 1000) / EN_PULLUP_OHM);
+      note = 'shutdown (EN low; includes the 100 kΩ EN pull-up)';
     } else if (state.enabled !== 1 || ledMa <= 0) {
       draw = ISTB_UA;
       note = state.enabled !== 1 ? 'standby (CHIP_EN = 0)' : 'standby (no LED on)';
     } else {
       const vout = Math.max(state.boost_mv, vin);
       draw = Math.round(INOR_UA + (ledMa * 1000 * vout) / (BOOST_EFF * vin));
-      note = 'boost + LED current';
+      // Peak die current (PWM aside) above the LED's 5 mA continuous rating.
+      const over = CH.filter(
+        (ch) =>
+          level(state, ch) > 0 && (dcOf(state, ch) / 255) * fullScaleMa(state) > LED_IF_MAX_MA,
+      );
+      note = over.length
+        ? `boost + LED current; ${over.join('/').toUpperCase()} above the LED's 5 mA rating`
+        : 'boost + LED current';
     }
     const rails: PowerRail[] = [
       { name: 'V+', role: 'supply', v_mv: vin, i_ua: draw, pads: ['10'], note },

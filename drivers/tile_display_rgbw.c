@@ -138,16 +138,25 @@ void tile_display_rgbw_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile,
     lp_write(tile, LP5811_REG_DC_2, LP5811_DC_DEFAULT);
     lp_write(tile, LP5811_REG_DC_3, LP5811_DC_DEFAULT);
 
+    /* Autonomous mode drives from Auto_DC_x (0x50-0x53), not Manual_DC,
+     * and those reset to 0 (register map SNVU925 §2.10): without this an
+     * AEU animation (breathe_auto etc.) runs at zero current. Mirror the
+     * same safe default. */
+    lp_write(tile, LP5811_REG_AUTO_DC_0, LP5811_DC_DEFAULT);
+    lp_write(tile, LP5811_REG_AUTO_DC_1, LP5811_DC_DEFAULT);
+    lp_write(tile, LP5811_REG_AUTO_DC_2, LP5811_DC_DEFAULT);
+    lp_write(tile, LP5811_REG_AUTO_DC_3, LP5811_DC_DEFAULT);
+
     tile->state = TILE_STATE_READY;
 }
 
 void tile_display_rgbw_set(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 {
-    /* Channel mapping: LED0=R, LED1=B, LED2=G, LED3=W */
+    /* Channel mapping: LED0=R, LED1=W, LED2=G, LED3=B (tile schematic) */
     lp_write(tile, LP5811_REG_PWM_0, r);
-    lp_write(tile, LP5811_REG_PWM_1, b);
+    lp_write(tile, LP5811_REG_PWM_1, w);
     lp_write(tile, LP5811_REG_PWM_2, g);
-    lp_write(tile, LP5811_REG_PWM_3, w);
+    lp_write(tile, LP5811_REG_PWM_3, b);
 }
 
 void tile_display_rgbw_off(tile_t *tile)
@@ -161,9 +170,14 @@ void tile_display_rgbw_off(tile_t *tile)
 void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 {
     lp_write(tile, LP5811_REG_DC_0, r);
-    lp_write(tile, LP5811_REG_DC_1, b);
+    lp_write(tile, LP5811_REG_DC_1, w);
     lp_write(tile, LP5811_REG_DC_2, g);
-    lp_write(tile, LP5811_REG_DC_3, w);
+    lp_write(tile, LP5811_REG_DC_3, b);
+    /* Autonomous-mode current follows the manual setting (see init). */
+    lp_write(tile, LP5811_REG_AUTO_DC_0, r);
+    lp_write(tile, LP5811_REG_AUTO_DC_1, w);
+    lp_write(tile, LP5811_REG_AUTO_DC_2, g);
+    lp_write(tile, LP5811_REG_AUTO_DC_3, b);
 }
 
 void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mode)
@@ -267,8 +281,7 @@ void tile_display_rgbw_breathe(tile_t *tile, uint8_t r, uint8_t g, uint8_t b,
                                uint16_t period_ms)
 {
     /* Software ramp — 32 steps up, 32 steps down (64 total).
-     * On-chip AEU could do this autonomously, but its bytecode is not
-     * publicly documented (see header @studio unsupported note). */
+     * breathe_auto() is the on-chip (AEU) equivalent. */
     const uint8_t STEPS = 32;
     uint16_t step_ms = period_ms / (uint16_t)(STEPS * 2u);
     if (step_ms == 0) step_ms = 1;  /* clamp — too-short period falls back to choppy */
