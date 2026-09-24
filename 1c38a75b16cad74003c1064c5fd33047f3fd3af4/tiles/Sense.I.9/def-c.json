@@ -1,0 +1,485 @@
+{
+  "rev": "c",
+  "name": "I.9",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "type": "power",
+          "function": "GND",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "weak internal pull-up sets I2C address to 0x69.  Connect to GND to set I2C address to 0x68.",
+          "type": "digital",
+          "function": "I2C.AD0",
+          "direction": "input",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.MISO",
+          "direction": "output",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "weak internal pull-up enables I2C.  Connect to GND to switch to SPI mode.",
+          "type": "digital",
+          "function": "I2C.EN",
+          "direction": "input",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.CS",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "when using a non-Core processor, ensure adequate external pull-up resistance.",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.CLK",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "when using a non-Core processor, ensure adequate external pull-up resistance.",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "SPI.MOSI",
+          "direction": "input",
+          "interface": "SPI"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "programmable interrupt output",
+          "type": "digital",
+          "function": "INT",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.71-1.95V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    }
+  ],
+  "power": [
+    {
+      "max": 1.95,
+      "min": 1.71,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "3.11mA",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "int": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use INT line",
+      "binding": {
+        "pad": "9",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "INT_CONFIG.INT"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "int.attached",
+                "from": {
+                  "pad": "9",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "INT_CONFIG.INT"
+            }
+          ]
+        }
+      ]
+    },
+    "i2cAddress": {
+      "kind": "select",
+      "when": {
+        "interfaceMode": "i2c"
+      },
+      "group": "Interfaces",
+      "label": "I2C address",
+      "binding": {
+        "pad": "2",
+        "kind": "strap",
+        "states": {
+          "low": "0x68",
+          "high": "0x69 (forced)",
+          "open": "0x69 (default, via internal PU)"
+        }
+      },
+      "default": "default",
+      "options": [
+        {
+          "label": "0x69 (default)",
+          "value": "default",
+          "states": {
+            "2": "open"
+          },
+          "derived": {
+            "i2c_address": "0x69"
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x69"
+            }
+          }
+        },
+        {
+          "label": "0x68 (alternate)",
+          "value": "alternate",
+          "states": {
+            "2": "low"
+          },
+          "derived": {
+            "i2c_address": "0x68"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "i2cAddress.alternate.connection",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          },
+          "contributes": {
+            "busAddress": {
+              "bus": "i2c",
+              "value": "0x68"
+            }
+          }
+        }
+      ]
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "binding": {
+        "pad": "3",
+        "kind": "strap",
+        "states": {
+          "low": "SPI/SPI3",
+          "high": "I2C/I3C (forced)",
+          "open": "I2C/I3C (default, via internal PU)"
+        }
+      },
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "states": {
+            "3": "open"
+          },
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "SPI (4-wire)",
+          "value": "spi",
+          "states": {
+            "3": "low"
+          },
+          "activates": {
+            "interface": "SPI"
+          }
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 2,
+  "headline": "digital 9-DOF IMU",
+  "components": [
+    {
+      "url": "https://invensense.tdk.com/products/motion-tracking/9-axis/icm-20948",
+      "part": "ICM-20948",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/2/TDK_Invensense-ICM20948.pdf",
+      "manufacturer": "TDK Invensense"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x68"
+          },
+          {
+            "address": "0x69",
+            "is_default": true
+          }
+        ],
+        "data_bits": [
+          8
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "400kHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "strap",
+          "function": "I2C.AD0"
+        },
+        {
+          "pad": "3",
+          "role": "strap",
+          "function": "I2C.EN"
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "SPI"
+      ]
+    },
+    {
+      "name": "SPI",
+      "type": "SPI",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "max_clock_speed": "7MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "2",
+          "role": "bus",
+          "function": "SPI.MISO",
+          "is_required": true
+        },
+        {
+          "pad": "3",
+          "role": "other",
+          "function": "SPI.CS",
+          "is_required": true
+        },
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "SPI.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "SPI.MOSI",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C"
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:38:57.850Z",
+  "description": "The Sense.I.9 embeds the TDK Invensense ICM20948 IMU with a co-packaged 6-DOF IMU and a 3-DOF magnetic compass.  The triaxial accelerometer has a configurable 16-bit full-scale range from +/-2g to +/-16g with an output data rate up to 4.5 kHz, while the triaxial rate gyroscope has a 16-bit full-scale range from +/-250 to 2000 degrees per second with an output date rate up to 9 kHz.  The triaxial magnetic compass has a 16-bit full-scale range of +/-4900µT with an output data rate of up to 100 Hz.  The sensor includes configurable filters and an on-board motion processor.",
+  "json_version": "0.11",
+  "application_notes": [
+    {
+      "details": "The IMU and compass origins are colocated, with the axes aligned at the center of the IC, which is at (-0.2, -0.2) mm relative to the center of the tile.  The Z axis (blue head) of the sensor extends from the top surface of the tile, while the X axis (red head) points up between pads 1 and 10.",
+      "heading": "Sensor Axes",
+      "image_url": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/2/app-note-0.png"
+    }
+  ]
+}
