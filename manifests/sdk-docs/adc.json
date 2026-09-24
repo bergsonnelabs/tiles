@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6897677",
+  "source": "tiles@3af6291",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -489,6 +489,20 @@
       "signature": "hal_adc_read_temp_decidegc(hal_adc_t * adc)",
       "returns": "int32_t",
       "brief": "Read die temperature in tenths of a degree C. Example: returns 253 for 25.3 °C. Uses TS_CAL1 / TS_CAL2 factory calibration values. Automatically adds the internal temperature sensor channel on first call.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "hal_adc_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_adc_deinit",
+      "signature": "hal_adc_deinit(hal_adc_t * adc)",
+      "returns": "void",
+      "brief": "Disable an ADC initialised with hal_adc_init() and power it down, so a one-off measurement (the status LED's VDD read) leaves no standing current behind. L0: ADEN and the voltage regulator off (RM0377 ADC_CR bit 28). L4: also back into deep power-down (RM0394 ADC_CR bit 29). Other families: ADEN off only. The peripheral clock stays enabled.",
       "params": [
         {
           "name": "adc",
