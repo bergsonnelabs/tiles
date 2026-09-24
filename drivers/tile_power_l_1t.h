@@ -1,18 +1,30 @@
 /**
  * @file   tile_power_l_1t.h
- * @brief  Li-Ion charge controller driver for the Power.L.1T tile (rev a).
+ * @brief  Li-Ion charge controller driver for the Power.L.1T tile (rev b).
  *
  * Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge
  * controller with programmable 1.8 V LDO output and 12-bit ADC for
  * battery and system monitoring.
  *
  * Key specifications:
- *   - Charge input:     3.4–5.5 V (up to 500 mA)
- *   - Battery voltage:  3.6–4.6 V (programmable in 10 mV steps)
- *   - LDO output:       1.8 V on this tile (chip is programmable)
+ *   - Charge input:     3.4–5.5 V (VUVLO / VOVP), input limit 50–600 mA
+ *   - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)
+ *   - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V
+ *                       programmable, 100 mA max (datasheet 7.3 ILDO)
  *   - ADC:              12-bit, 6 input channels
  *   - Charge current:   1.25–500 mA programmable
- *   - JEITA-style NTC:  cold / cool / warm / hot thresholds
+ *   - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)
+ *
+ * Tile wiring that matters to firmware (Power-L-1T-b schematic):
+ *   - I²C only answers on battery when LP (pad 2) is driven > 1.35 V; with
+ *     LP low (its 900 kΩ default) and no SUPPLY+, the chip is in low-power
+ *     mode with I²C and the ADC off. With SUPPLY+ present LP has no effect.
+ *   - GND (pad 1) is a SWITCHED ground: an SI8806 N-FET joins it to
+ *     BATT-/SUPPLY- (pads 6/9), its gate fed from V+ through 220 kΩ. SW
+ *     (pad 3) to ground, LDO disabled, PMID off or ship mode all open it.
+ *   - IMAX = 10 kΩ (no hardware charge-current cap below 500 mA).
+ *   - /CE, /MR, /PG and INT are not routed (/CE's internal pull-down keeps
+ *     charging enabled).
  *
  * Datasheet: https://www.bergsonne.io/tiles/power/l1t
  * IC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf
@@ -37,6 +49,14 @@
  *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
+ * @studio unsupported severity=advanced category="Battery NTC / JEITA"
+ *   Hardware-gated (not a driver gap). The BQ25150 can pause or derate
+ *   charging from a battery thermistor on TS, but Power-L-1T-b straps TS to
+ *   a fixed 5 kΩ resistor (the datasheet's "TS not used" connection), which
+ *   reads a constant ~0.40 V: always the normal band. Battery temperature is
+ *   therefore NOT monitored; set_ts_* and set_ts_enabled have no practical
+ *   effect. The chip's die thermal foldback (80 °C) still applies.
+ *
  * @studio unsupported severity=advanced category="MR button + INT pin handling"
  *   The chip's MR (push-button) and INT (interrupt) pins aren't
  *   routed to tile pads on the current revision — nothing for a
@@ -57,8 +77,8 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_POWER_L_1T_VERSION_MAJOR  3
-#define TILE_POWER_L_1T_VERSION_MINOR  2
-#define TILE_POWER_L_1T_VERSION_PATCH  1
+#define TILE_POWER_L_1T_VERSION_MINOR  3
+#define TILE_POWER_L_1T_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -228,8 +248,14 @@ typedef struct {
  *
  * Verifies the device ID, disables the I²C watchdog (the chip
  * otherwise resets all charge parameters every 50 s), enables all
- * 6 ADC channels, configures sane charge defaults, and exits ship
- * mode. Pass cfg=NULL for defaults.
+ * 6 ADC channels, configures charge defaults (80 mA fast charge,
+ * 18.75 mA pre-charge, 4.20 V regulation, 2.6 V battery UVLO, TS on,
+ * 6 h safety timer) and clears the ship-mode request. Input limit,
+ * termination, LDO and charger-enable are left as the chip holds them.
+ * Pass cfg=NULL for defaults.
+ *
+ * On battery alone, LP (pad 2) must be high for this to find the chip
+ * (I²C is off in low-power mode).
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0 = default, see mapping table)
@@ -246,11 +272,13 @@ void tile_power_l_1t_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
  *
  * Programs ICHG_CTRL with the appropriate ICHARGE_RANGE bit so the
  * resolution scales: ≤318 mA uses 1.25 mA steps, >318 mA uses
- * 2.5 mA steps. Values clamp to 1.25–500 mA.
+ * 2.5 mA steps (rounded down). Values clamp to 500 mA. Crossing 318 mA
+ * also doubles the pre-charge step, so the pre-charge current doubles.
+ * Keep it at or below 1C for the cell fitted; there is no thermistor.
  *
  * @studio expose category=tile name=set_charge_current_ma section=config
- * @param  tile  Initialised tile handle
- * @param  ma    Target charge current in mA (1.25–500)
+ * @studio control ma label="Charge current" tier=basic default=80
+ * @param  ma    [2..500] mA Target charge current in mA (below 2 the code is 0: no charge).
  */
 void tile_power_l_1t_set_charge_current_ma(tile_t* tile, uint16_t ma);
 
@@ -262,8 +290,8 @@ void tile_power_l_1t_set_charge_current_ma(tile_t* tile, uint16_t ma);
  * for high-voltage NMC variants.
  *
  * @studio expose category=tile name=set_charge_voltage_mv section=config
- * @param  tile  Initialised tile handle
- * @param  mv    Target battery voltage in mV (3600–4600)
+ * @studio control mv label="Charge to" tier=advanced default=4200 scale=0.001 unit=V
+ * @param  mv    [3600..4600] mV Target battery voltage in millivolts.
  */
 void tile_power_l_1t_set_charge_voltage_mv(tile_t* tile, uint16_t mv);
 
@@ -274,8 +302,7 @@ void tile_power_l_1t_set_charge_voltage_mv(tile_t* tile, uint16_t mv);
  * the fast-charge rate. Values clamp to 1.25–77.5 mA.
  *
  * @studio expose category=tile name=set_pre_charge_ma section=config
- * @param  tile  Initialised tile handle
- * @param  ma   Target pre-charge current in mA (1.25–77.5)
+ * @param  ma   [2..77] mA Target pre-charge current (38 mA max below 318 mA fast charge).
  */
 void tile_power_l_1t_set_pre_charge_ma(tile_t* tile, uint8_t ma);
 
@@ -287,21 +314,22 @@ void tile_power_l_1t_set_pre_charge_ma(tile_t* tile, uint8_t ma);
  * continuously until VBATREG is reached). Values clamp to 1–31 %.
  *
  * @studio expose category=tile name=set_termination_percent section=config
- * @param  tile  Initialised tile handle
- * @param  pct   Termination current as % of ICHG (0 = disabled, 1–31)
+ * @param  pct   [0..31] % Termination current as % of ICHG (0 = disabled).
  */
 void tile_power_l_1t_set_termination_percent(tile_t* tile, uint8_t pct);
 
 /**
- * @brief  Set the input current limit (DPM threshold).
+ * @brief  Set the input (SUPPLY+) current limit.
  *
- * When the adapter can't supply more than this, charge current
- * folds back to keep VIN above the DPM threshold. Values clamp to
- * 5–500 mA in 5 mA steps.
+ * ILIMCTRL is a discrete table: 50, 100, 150, 200, 300, 400, 500 or
+ * 600 mA. The largest level not above the request is used (50 mA
+ * floor). The chip powers up at 100 mA and init() leaves it there;
+ * when the load plus charge current reach the limit, charge current
+ * folds back first. The tile is rated for 500 mA on SUPPLY+.
  *
  * @studio expose category=tile name=set_input_current_limit_ma section=config
- * @param  tile  Initialised tile handle
- * @param  ma   Input current limit in mA (5–500)
+ * @studio control ma label="Input current limit" tier=basic default=100
+ * @param  ma   [50..600] mA Input current limit.
  */
 void tile_power_l_1t_set_input_current_limit_ma(tile_t* tile, uint16_t ma);
 
@@ -314,7 +342,6 @@ void tile_power_l_1t_set_input_current_limit_ma(tile_t* tile, uint16_t ma);
  * read to avoid torn samples.
  *
  * @studio expose category=tile name=get_vbat_mv returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return Battery voltage in mV (0–6000)
  */
 uint16_t tile_power_l_1t_get_vbat_mv(tile_t* tile);
@@ -322,7 +349,6 @@ uint16_t tile_power_l_1t_get_vbat_mv(tile_t* tile);
 /**
  * @brief  Read input (VIN) voltage from the ADC.
  * @studio expose category=tile name=get_vin_mv returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return VIN in mV (0–6000)
  */
 uint16_t tile_power_l_1t_get_vin_mv(tile_t* tile);
@@ -330,7 +356,6 @@ uint16_t tile_power_l_1t_get_vin_mv(tile_t* tile);
 /**
  * @brief  Read PMID (system rail) voltage from the ADC.
  * @studio expose category=tile name=get_pmid_mv returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return PMID in mV (0–6000)
  */
 uint16_t tile_power_l_1t_get_pmid_mv(tile_t* tile);
@@ -342,7 +367,6 @@ uint16_t tile_power_l_1t_get_pmid_mv(tile_t* tile);
  * actual mA flowing into the cell.
  *
  * @studio expose category=tile name=get_charge_current_ma returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return Charge current in mA (0–500)
  */
 uint16_t tile_power_l_1t_get_charge_current_ma(tile_t* tile);
@@ -354,7 +378,6 @@ uint16_t tile_power_l_1t_get_charge_current_ma(tile_t* tile);
  * scale; >150 mA range gives 0–750 mA full scale.
  *
  * @studio expose category=tile name=get_input_current_ma returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return Input current in mA (0–750)
  */
 uint16_t tile_power_l_1t_get_input_current_ma(tile_t* tile);
@@ -362,12 +385,12 @@ uint16_t tile_power_l_1t_get_input_current_ma(tile_t* tile);
 /**
  * @brief  Read raw TS pin voltage from the ADC.
  *
- * Returns the millivolt reading on the TS pin (0–1200 mV). Convert
- * to °C using the NTC's resistance/temperature curve in firmware —
- * the chip doesn't expose temperature directly.
+ * Returns the millivolt reading on the TS pin (0–1200 mV). On
+ * Power-L-1T-b TS is a fixed 5 kΩ to ground (no thermistor), so this
+ * reads a constant ~400 mV (5 kΩ x 80 µA bias); it is not a
+ * temperature. Not measured in low-power mode.
  *
  * @studio expose category=tile name=get_ts_mv returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return TS voltage in mV (0–1200)
  */
 uint16_t tile_power_l_1t_get_ts_mv(tile_t* tile);
@@ -379,7 +402,6 @@ uint16_t tile_power_l_1t_get_ts_mv(tile_t* tile);
  * an external sensor (e.g., separate NTC, voltage divider).
  *
  * @studio expose category=tile name=get_adcin_mv returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return ADCIN voltage in mV (0–1200)
  */
 uint16_t tile_power_l_1t_get_adcin_mv(tile_t* tile);
@@ -393,7 +415,6 @@ uint16_t tile_power_l_1t_get_adcin_mv(tile_t* tile);
  * 100%). Coarse — a real fuel gauge would integrate Coulombs.
  *
  * @studio expose category=tile name=get_percent returns=int section=runtime
- * @param  tile  Initialised tile handle
  * @return Battery percentage (0–100)
  */
 uint8_t tile_power_l_1t_get_percent(tile_t* tile);
@@ -405,11 +426,10 @@ uint8_t tile_power_l_1t_get_percent(tile_t* tile);
  *
  * The TS register codes are bit-positional (1, 2, 4, 8, 16, ...
  * encode multiples of 4.688 mV up to 600 mV). Datasheet section
- * 8.5.1.49–52 describes the exact mapping; users tuning JEITA
- * thresholds should consult the chip's NTC profile guide.
+ * 8.5.1.49–52 describes the exact mapping. No practical effect on
+ * Power-L-1T-b: TS is a fixed 5 kΩ, not a thermistor.
  *
  * @studio expose category=tile name=set_ts_cold section=config
- * @param  tile  Initialised tile handle
  * @param  code  Raw 8-bit TS_COLD register value
  */
 void tile_power_l_1t_set_ts_cold(tile_t* tile, uint8_t code);
@@ -417,7 +437,6 @@ void tile_power_l_1t_set_ts_cold(tile_t* tile, uint8_t code);
 /**
  * @brief  Set the cool-temperature TS threshold (raw register value).
  * @studio expose category=tile name=set_ts_cool section=config
- * @param  tile  Initialised tile handle
  * @param  code  Raw 8-bit TS_COOL register value
  */
 void tile_power_l_1t_set_ts_cool(tile_t* tile, uint8_t code);
@@ -425,7 +444,6 @@ void tile_power_l_1t_set_ts_cool(tile_t* tile, uint8_t code);
 /**
  * @brief  Set the warm-temperature TS threshold (raw register value).
  * @studio expose category=tile name=set_ts_warm section=config
- * @param  tile  Initialised tile handle
  * @param  code  Raw 8-bit TS_WARM register value
  */
 void tile_power_l_1t_set_ts_warm(tile_t* tile, uint8_t code);
@@ -433,7 +451,6 @@ void tile_power_l_1t_set_ts_warm(tile_t* tile, uint8_t code);
 /**
  * @brief  Set the hot-temperature TS threshold (raw register value).
  * @studio expose category=tile name=set_ts_hot section=config
- * @param  tile  Initialised tile handle
  * @param  code  Raw 8-bit TS_HOT register value
  */
 void tile_power_l_1t_set_ts_hot(tile_t* tile, uint8_t code);
@@ -441,11 +458,11 @@ void tile_power_l_1t_set_ts_hot(tile_t* tile, uint8_t code);
 /**
  * @brief  Enable or disable TS-based thermal protection.
  *
- * When disabled, the chip ignores the NTC entirely (charging
- * proceeds regardless of battery temperature). Default at init: enabled.
+ * When disabled, the chip ignores the TS pin for charge control
+ * (monitoring continues). Default at init: enabled. No practical
+ * effect on Power-L-1T-b: TS is a fixed 5 kΩ, not a thermistor.
  *
  * @studio expose category=tile name=set_ts_enabled section=config
- * @param  tile     Initialised tile handle
  * @param  enabled  1 = TS thermal protection on, 0 = off
  */
 void tile_power_l_1t_set_ts_enabled(tile_t* tile, uint8_t enabled);
@@ -461,28 +478,33 @@ typedef enum {
 /**
  * @brief  Set the LDO output voltage.
  *
- * VLDO = 600 + code × 100 mV. Values clamp to 600–3700 mV. Tile
- * design gates this rail to a fixed 1.8 V at the connector — changing
- * the LDO voltage breaks downstream peripherals expecting 1.8 V on
- * pad 10. Useful for non-default tile variants or load-switch-mode
- * pass-through use.
+ * VLDO = 600 + code × 100 mV (rounded down). Values clamp to
+ * 600–3700 mV.
+ *
+ * @warning The datasheet (8.3.5) says the output voltage "can only be
+ * changed when the EN_LS_LDO ... have disabled the output". This call
+ * writes the code without disabling the LDO, so a change made while
+ * V+ is on may not apply until the LDO is next disabled and enabled.
+ * V+ also drives the pad 1 ground switch gate (SI8806, VGS(th) up to
+ * 1.0 V, RDS(on) specified from 1.8 V): below ~1.8 V the downstream
+ * ground is not reliably closed.
  *
  * @studio expose category=tile name=set_ldo_voltage_mv section=config
- * @param  tile  Initialised tile handle
- * @param  mv    Target LDO voltage in mV (600–3700)
+ * @param  mv    [600..3700] mV Target LDO voltage.
  */
 void tile_power_l_1t_set_ldo_voltage_mv(tile_t* tile, uint16_t mv);
 
 /**
  * @brief  Set the LS/LDO output mode (regulated LDO vs load switch).
  *
- * In LDO mode the chip regulates pad 10 to the configured voltage
- * (10 mA max). In load-switch mode it pass-through-connects PMID
- * via a FET (up to 150 mA, but VINLS must be tied to the desired
- * supply on the tile PCB).
+ * In LDO mode the chip regulates pad 10 to the configured voltage;
+ * in load-switch mode it connects VINLS straight through. VINLS is
+ * tied to PMID on this tile, so pad 10 then carries PMID (VIN or
+ * VBAT, up to 5.5 V). 100 mA max either way (datasheet 7.3). The
+ * datasheet (8.3.5) requires the LDO to be disabled before the mode
+ * changes; this call does not do that.
  *
  * @studio expose category=tile name=set_ldo_mode section=config
- * @param  tile  Initialised tile handle
  * @param  mode  LDO mode (POWER_L_1T_LDO_MODE_LDO or _LOAD_SWITCH)
  */
 void tile_power_l_1t_set_ldo_mode(tile_t* tile, power_l_1t_ldo_mode_t mode);
@@ -490,11 +512,12 @@ void tile_power_l_1t_set_ldo_mode(tile_t* tile, power_l_1t_ldo_mode_t mode);
 /**
  * @brief  Enable or disable the LS/LDO output.
  *
- * When disabled, pad 10 (V+) goes high-impedance — downstream rails
- * expecting 1.8 V will drop. Default at init: enabled (chip default).
+ * When disabled, pad 10 (V+) is pulled down by the chip, and because
+ * V+ feeds the pad 1 ground-switch gate, the downstream ground (pad 1)
+ * opens too: everything on this tile's output powers off. Default:
+ * enabled (chip reset value; init does not touch it).
  *
  * @studio expose category=tile name=set_ldo_enabled section=config
- * @param  tile     Initialised tile handle
  * @param  enabled  1 = output on, 0 = output off (high-Z)
  */
 void tile_power_l_1t_set_ldo_enabled(tile_t* tile, uint8_t enabled);
@@ -509,7 +532,6 @@ void tile_power_l_1t_set_ldo_enabled(tile_t* tile, uint8_t enabled);
  * polling cycle — multiple reads will lose flag transitions.
  *
  * @studio expose category=tile name=get_charge_status section=runtime
- * @param  tile  Initialised tile handle
  * @param  out   Caller-allocated status struct (zeroed on entry)
  */
 void tile_power_l_1t_get_charge_status(tile_t* tile,
@@ -520,16 +542,17 @@ void tile_power_l_1t_get_charge_status(tile_t* tile,
 /**
  * @brief  Enter ship mode (~10 nA quiescent).
  *
- * Disconnects the battery internally; only an MR press or VIN
- * insertion will wake the chip. Charge parameters reset to defaults
- * on exit. Use only for long-term storage / end-of-line packaging.
+ * Sets EN_SHIP_MODE. If SUPPLY+ is present the chip waits until it is
+ * removed, then disconnects the battery (10 nA typ). /MR is not routed
+ * on this tile, so the only way out is applying SUPPLY+ again; the
+ * output (pad 10, and the pad 1 ground) stays off until then. Registers
+ * return to reset values on exit. Use only for storage / shipping.
  *
  * @warning Destructive: requires physical user action (MR press or VIN
  * re-insertion) to recover. Marked `section=advanced` for the same
  * posture as other one-way / hardware-gated operations.
  *
  * @studio expose category=tile name=enter_ship_mode section=advanced
- * @param  tile  Initialised tile handle
  */
 void tile_power_l_1t_enter_ship_mode(tile_t* tile);
 
@@ -539,7 +562,6 @@ void tile_power_l_1t_enter_ship_mode(tile_t* tile);
  * @brief  Read any 8-bit BQ25150 register.
  *
  * @studio expose category=tile name=read_status returns=int section=advanced
- * @param  tile  Initialised tile handle
  * @param  reg   Register address
  * @return 8-bit register value
  */
@@ -553,7 +575,6 @@ uint8_t tile_power_l_1t_read_status(tile_t* tile, uint8_t reg);
  * chip — most useful registers have typed setters above.
  *
  * @studio expose category=tile name=write_reg section=advanced
- * @param  tile   Initialised tile handle
  * @param  reg    Register address
  * @param  value  Value to write
  */
@@ -576,11 +597,12 @@ void tile_power_l_1t_write_reg(tile_t* tile, uint8_t reg, uint8_t value);
  * @studio expose category=tile name=is_charging returns=bool section=runtime
  *
  * Convenience over @ref tile_power_l_1t_get_charge_status — returns
- * the `charging` field as a bool. Note this reads (and clears) FLAG3
- * as a side effect; if you also poll the full status struct, alternate
- * with this rather than calling both per cycle.
+ * the `charging` field as a bool: VIN good, not done, charger not
+ * disabled over I²C, PMID in AUTO, no UVLO / OVP / TS cold / TS hot.
+ * Note this reads (and clears) FLAG3 as a side effect; if you also poll
+ * the full status struct, alternate with this rather than calling both
+ * per cycle.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if charging, 0 otherwise
  */
 uint8_t tile_power_l_1t_is_charging(tile_t* tile);
@@ -593,7 +615,6 @@ uint8_t tile_power_l_1t_is_charging(tile_t* tile);
  * Returns the `charge_done` bit from STAT0 — set when the cell
  * reaches VBATREG and current tapers below the termination threshold.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if charge cycle has finished, 0 otherwise
  */
 uint8_t tile_power_l_1t_is_charge_done(tile_t* tile);
@@ -606,7 +627,6 @@ uint8_t tile_power_l_1t_is_charge_done(tile_t* tile);
  * The classic "go to sleep" trigger. Equivalent to
  * `get_percent() < threshold_pct`. Quick: one ADC read.
  *
- * @param  tile           Initialised tile handle
  * @param  threshold_pct  Threshold in percent (0–100)
  * @return 1 if battery percent is strictly below threshold, 0 otherwise
  */
@@ -621,7 +641,6 @@ uint8_t tile_power_l_1t_is_battery_low(tile_t* tile, uint8_t threshold_pct);
  * operating range (3.4–5.5 V). Use to branch behaviour between
  * "plugged in" and "battery only" modes.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if VIN is good, 0 if running off battery only
  */
 uint8_t tile_power_l_1t_is_powered(tile_t* tile);
@@ -636,7 +655,6 @@ uint8_t tile_power_l_1t_is_powered(tile_t* tile);
  * MCU cycles and bus bandwidth without finer-grained answers).
  * Returns 1 immediately if the cycle is already finished.
  *
- * @param  tile        Initialised tile handle
  * @param  timeout_ms  Maximum time to wait, in milliseconds
  * @return 1 if charge_done was observed, 0 on timeout
  */
@@ -654,6 +672,7 @@ uint8_t tile_power_l_1t_wait_for_charge_done(tile_t* tile, uint32_t timeout_ms);
  * bit; this only takes effect when /CE is held low (the tile's default).
  *
  * @studio expose category=tile name=charger_enable section=config
+ * @studio control on label="Charge the battery" tier=basic type=bool default=1
  * @param  on  1 = allow charging, 0 = disable charging.
  */
 void tile_power_l_1t_charger_enable(tile_t* tile, uint8_t on);
@@ -666,12 +685,17 @@ void tile_power_l_1t_charger_enable(tile_t* tile, uint8_t on);
  * (precharge threshold, OCP limit) are preserved.
  *
  * @studio expose category=tile name=set_battery_uvlo_mv section=config
- * @param  mv  Desired UVLO in mV (2200-3000).
+ * @param  mv  [2200..3000] mV Desired UVLO.
  */
 void tile_power_l_1t_set_battery_uvlo_mv(tile_t* tile, uint16_t mv);
 
 /**
  * @brief  Set the charge safety-timer limit.
+ *
+ * The timer stops a charge that has not terminated in time; with no
+ * battery thermistor on this tile it is one of the few backstops, so
+ * prefer not to choose OFF. Changing it while charging restarts it.
+ *
  * @studio expose category=tile name=set_safety_timer section=config
  * @param  mode  power_l_1t_safety_timer_t (3h / 6h / 12h / off).
  */
@@ -679,6 +703,12 @@ void tile_power_l_1t_set_safety_timer(tile_t* tile, power_l_1t_safety_timer_t mo
 
 /**
  * @brief  Set the PMID power-path mode (ICCTRL1[1:0]).
+ *
+ * BAT_ONLY stops charging. FLOAT and PULLDOWN disconnect PMID and turn
+ * the LDO off, so V+ (pad 10) and the pad 1 ground go off; the datasheet
+ * (8.3.6) says those modes exit only through I²C or an /MR reset, and
+ * /MR is not routed here. Do not use them if the Core runs from V+.
+ *
  * @studio expose category=tile name=set_pmid_mode section=config
  * @param  mode  power_l_1t_pmid_mode_t.
  */
@@ -694,12 +724,13 @@ void tile_power_l_1t_set_pmid_mode(tile_t* tile, power_l_1t_pmid_mode_t mode);
  * Pass channel = POWER_L_1T_ADC_CH_DISABLED to turn a comparator off.
  *
  * Note: the chip's above/below polarity bit (ADCALARM_ABOVE) is not
- * exposed by this driver yet — the comparator uses its default sense.
+ * exposed by this driver yet — the comparator uses its default sense
+ * (flag when the measurement falls below the threshold).
  *
  * @studio expose category=tile name=set_adc_comparator section=config
- * @param  comp       Comparator index 1-3.
+ * @param  comp       [1..3] Comparator index.
  * @param  channel    power_l_1t_adc_channel_t to monitor.
- * @param  threshold  16-bit raw ADC threshold.
+ * @param  threshold  Raw left-justified ADC threshold (top 12 bits used).
  */
 void tile_power_l_1t_set_adc_comparator(tile_t* tile, uint8_t comp,
                                         power_l_1t_adc_channel_t channel,

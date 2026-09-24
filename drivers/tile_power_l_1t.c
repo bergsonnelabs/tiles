@@ -123,6 +123,14 @@ void tile_power_l_1t_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     bq_write(tile, BQ25150_REG_PCHRGCTRL, 0x0F);   /* range 0, IPRECHG = 15 → 18.75 mA */
     bq_write(tile, BQ25150_REG_ICHG_CTRL, 0x40);   /* 64 × 1.25 = 80 mA */
 
+    /* Battery regulation (charge-to) voltage: 4.20 V, written explicitly.
+     * 0x3C is the chip's reset value, but the BQ25150 is battery-powered and
+     * keeps its registers across a host reset or re-flash: without this, a
+     * VBATREG raised by an earlier program (up to 4.6 V) would survive into a
+     * program that expects the documented 4.20 V default. VBATREG = 3.6 V +
+     * code x 10 mV (datasheet 8.5.1.12). */
+    bq_write(tile, BQ25150_REG_VBAT_CTRL, 0x3C);
+
     /* Battery undervoltage lockout: 2.6 V */
     bq_write(tile, BQ25150_REG_BUVLO, 0x04);
 
@@ -438,8 +446,16 @@ void tile_power_l_1t_get_charge_status(tile_t* tile,
     out->charge_done     = (s0 & 0x20) ? 1 : 0;
     out->cv_mode         = (s0 & 0x40) ? 1 : 0;
 
-    /* Derived: charging when VIN good and not done / not faulted. */
-    out->charging = (out->vin_pgood && !out->charge_done) ? 1 : 0;
+    /* Derived: charging when VIN good and not done / not faulted. The
+     * BQ25150 has no single "charging" status bit, so the software gates are
+     * folded in too: ICCTRL2.CHARGER_DISABLE (bit0) stops charging, and any
+     * PMID_MODE other than 00 (ICCTRL1[1:0]) stops it as well (datasheet
+     * 8.3.6: BAT_ONLY "charging will be stopped"; FLOAT / PULLDOWN disconnect
+     * PMID). Without these, is_charging() said 1 after charger_enable(0). */
+    uint8_t icctrl2 = bq_read(tile, BQ25150_REG_ICCTRL2);
+    uint8_t icctrl1 = bq_read(tile, BQ25150_REG_ICCTRL1);
+    out->charging = (out->vin_pgood && !out->charge_done &&
+                     !(icctrl2 & 0x01) && (icctrl1 & 0x03) == 0) ? 1 : 0;
 
     /* STAT1: bit 7 VIN_OVP, 5 BAT_OCP, 4 BAT_UVLO,
      *        3 TS_COLD, 2 TS_COOL, 1 TS_WARM, 0 TS_HOT */
@@ -595,6 +611,11 @@ void tile_power_l_1t_set_adc_comparator(tile_t* tile, uint8_t comp,
                                         uint16_t threshold)
 {
     uint8_t ch = (uint8_t)channel & 0x07;
+    /* The threshold is 12 bits, left-justified: ADCALARM_COMPn_L[7:4] holds
+     * its low nibble, bit3 is ADCALARM_ABOVE (polarity) and bits 2:0 are
+     * reserved (datasheet 8.5.1.42). Mask the low nibble off so a threshold
+     * never flips the polarity or writes reserved bits; polarity stays 0
+     * ("flag when the measurement falls below"). */
     switch (comp) {
     case 1: {
         /* Channel in ADCCTRL0[2:0]; threshold at 0x52/0x53. */
@@ -602,7 +623,7 @@ void tile_power_l_1t_set_adc_comparator(tile_t* tile, uint8_t comp,
         v = (uint8_t)((v & ~0x07) | ch);
         bq_write(tile, BQ25150_REG_ADCCTRL0, v);
         bq_write(tile, BQ25150_REG_ADCALARM_C1_M, (uint8_t)(threshold >> 8));
-        bq_write(tile, BQ25150_REG_ADCALARM_C1_L, (uint8_t)(threshold & 0xFF));
+        bq_write(tile, BQ25150_REG_ADCALARM_C1_L, (uint8_t)(threshold & 0xF0));
         break;
     }
     case 2: {
@@ -611,7 +632,7 @@ void tile_power_l_1t_set_adc_comparator(tile_t* tile, uint8_t comp,
         v = (uint8_t)((v & ~0xE0) | (ch << 5));
         bq_write(tile, BQ25150_REG_ADCCTRL1, v);
         bq_write(tile, BQ25150_REG_ADCALARM_C2_M, (uint8_t)(threshold >> 8));
-        bq_write(tile, BQ25150_REG_ADCALARM_C2_L, (uint8_t)(threshold & 0xFF));
+        bq_write(tile, BQ25150_REG_ADCALARM_C2_L, (uint8_t)(threshold & 0xF0));
         break;
     }
     case 3: {
@@ -620,7 +641,7 @@ void tile_power_l_1t_set_adc_comparator(tile_t* tile, uint8_t comp,
         v = (uint8_t)((v & ~0x1C) | (ch << 2));
         bq_write(tile, BQ25150_REG_ADCCTRL1, v);
         bq_write(tile, BQ25150_REG_ADCALARM_C3_M, (uint8_t)(threshold >> 8));
-        bq_write(tile, BQ25150_REG_ADCALARM_C3_L, (uint8_t)(threshold & 0xFF));
+        bq_write(tile, BQ25150_REG_ADCALARM_C3_L, (uint8_t)(threshold & 0xF0));
         break;
     }
     default:

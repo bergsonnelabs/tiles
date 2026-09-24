@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@afe442f",
   "tile": "Power.L.1T",
   "palette": {
     "label": "Power.L.1T",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_power_l_1t",
     "header": "tile_power_l_1t.h",
-    "version": "3.2.1"
+    "version": "3.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -29,10 +29,24 @@
         {
           "name": "ma",
           "type": "int",
-          "description": "Target charge current in mA (1.25–500)"
+          "range": [
+            2,
+            500
+          ],
+          "unit": "mA",
+          "description": "Target charge current in mA (below 2 the code is 0: no charge)."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Charge current",
+          "tier": "basic",
+          "scope": "config",
+          "default": 80
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -48,10 +62,26 @@
         {
           "name": "mv",
           "type": "int",
-          "description": "Target battery voltage in mV (3600–4600)"
+          "range": [
+            3600,
+            4600
+          ],
+          "unit": "mV",
+          "description": "Target battery voltage in millivolts."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mv",
+          "label": "Charge to",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 4200
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -67,7 +97,12 @@
         {
           "name": "ma",
           "type": "int",
-          "description": "Target pre-charge current in mA (1.25–77.5)"
+          "range": [
+            2,
+            77
+          ],
+          "unit": "mA",
+          "description": "Target pre-charge current (38 mA max below 318 mA fast charge)."
         }
       ],
       "returns": "void",
@@ -86,7 +121,12 @@
         {
           "name": "pct",
           "type": "int",
-          "description": "Termination current as % of ICHG (0 = disabled, 1–31)"
+          "range": [
+            0,
+            31
+          ],
+          "unit": "%",
+          "description": "Termination current as % of ICHG (0 = disabled)."
         }
       ],
       "returns": "void",
@@ -100,15 +140,29 @@
       "symbol": "tile_power_l_1t_set_input_current_limit_ma",
       "header": "tile_power_l_1t.h",
       "category": "tile",
-      "description": "Set the input current limit (DPM threshold).",
+      "description": "Set the input (SUPPLY+) current limit.",
       "params": [
         {
           "name": "ma",
           "type": "int",
-          "description": "Input current limit in mA (5–500)"
+          "range": [
+            50,
+            600
+          ],
+          "unit": "mA",
+          "description": "Input current limit."
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Input current limit",
+          "tier": "basic",
+          "scope": "config",
+          "default": 100
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -331,7 +385,12 @@
         {
           "name": "mv",
           "type": "int",
-          "description": "Target LDO voltage in mV (600–3700)"
+          "range": [
+            600,
+            3700
+          ],
+          "unit": "mV",
+          "description": "Target LDO voltage."
         }
       ],
       "returns": "void",
@@ -562,6 +621,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "on",
+          "label": "Charge the battery",
+          "tier": "basic",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -577,7 +646,12 @@
         {
           "name": "mv",
           "type": "int",
-          "description": "Desired UVLO in mV (2200-3000)."
+          "range": [
+            2200,
+            3000
+          ],
+          "unit": "mV",
+          "description": "Desired UVLO."
         }
       ],
       "returns": "void",
@@ -678,7 +752,11 @@
         {
           "name": "comp",
           "type": "int",
-          "description": "Comparator index 1-3."
+          "range": [
+            1,
+            3
+          ],
+          "description": "Comparator index."
         },
         {
           "name": "channel",
@@ -730,7 +808,7 @@
         {
           "name": "threshold",
           "type": "int",
-          "description": "16-bit raw ADC threshold."
+          "description": "Raw left-justified ADC threshold (top 12 bits used)."
         }
       ],
       "returns": "void",

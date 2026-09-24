@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@5f180cb",
+  "source": "tiles@afe442f",
   "file": "tile_power_l_1t.h",
-  "brief": "Li-Ion charge controller driver for the Power.L.1T tile (rev a).",
-  "description": "Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge\ncontroller with programmable 1.8 V LDO output and 12-bit ADC for\nbattery and system monitoring.\n\nKey specifications:\n  - Charge input:     3.4–5.5 V (up to 500 mA)\n  - Battery voltage:  3.6–4.6 V (programmable in 10 mV steps)\n  - LDO output:       1.8 V on this tile (chip is programmable)\n  - ADC:              12-bit, 6 input channels\n  - Charge current:   1.25–500 mA programmable\n  - JEITA-style NTC:  cold / cool / warm / hot thresholds\n\nDatasheet: https://www.bergsonne.io/tiles/power/l1t\nIC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf\n\n@studio tile label=Power.L.1T icon=☷\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"MR button + INT pin handling\"\n  The chip's MR (push-button) and INT (interrupt) pins aren't\n  routed to tile pads on the current revision — nothing for a\n  Core GPIO to attach to. Closing this gap requires a tile\n  hardware revision that routes at least INT to a connector\n  pad. Until then, MASK0–3 / MRCTRL register writes have no\n  external effect.",
+  "brief": "Li-Ion charge controller driver for the Power.L.1T tile (rev b).",
+  "description": "Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge\ncontroller with programmable 1.8 V LDO output and 12-bit ADC for\nbattery and system monitoring.\n\nKey specifications:\n  - Charge input:     3.4–5.5 V (VUVLO / VOVP), input limit 50–600 mA\n  - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)\n  - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V\n                      programmable, 100 mA max (datasheet 7.3 ILDO)\n  - ADC:              12-bit, 6 input channels\n  - Charge current:   1.25–500 mA programmable\n  - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)\n\nTile wiring that matters to firmware (Power-L-1T-b schematic):\n  - I²C only answers on battery when LP (pad 2) is driven > 1.35 V; with\n    LP low (its 900 kΩ default) and no SUPPLY+, the chip is in low-power\n    mode with I²C and the ADC off. With SUPPLY+ present LP has no effect.\n  - GND (pad 1) is a SWITCHED ground: an SI8806 N-FET joins it to\n    BATT-/SUPPLY- (pads 6/9), its gate fed from V+ through 220 kΩ. SW\n    (pad 3) to ground, LDO disabled, PMID off or ship mode all open it.\n  - IMAX = 10 kΩ (no hardware charge-current cap below 500 mA).\n  - /CE, /MR, /PG and INT are not routed (/CE's internal pull-down keeps\n    charging enabled).\n\nDatasheet: https://www.bergsonne.io/tiles/power/l1t\nIC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf\n\n@studio tile label=Power.L.1T icon=☷\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Battery NTC / JEITA\"\n  Hardware-gated (not a driver gap). The BQ25150 can pause or derate\n  charging from a battery thermistor on TS, but Power-L-1T-b straps TS to\n  a fixed 5 kΩ resistor (the datasheet's \"TS not used\" connection), which\n  reads a constant ~0.40 V: always the normal band. Battery temperature is\n  therefore NOT monitored; set_ts_* and set_ts_enabled have no practical\n  effect. The chip's die thermal foldback (80 °C) still applies.\n\n@studio unsupported severity=advanced category=\"MR button + INT pin handling\"\n  The chip's MR (push-button) and INT (interrupt) pins aren't\n  routed to tile pads on the current revision — nothing for a\n  Core GPIO to attach to. Closing this gap requires a tile\n  hardware revision that routes at least INT to a connector\n  pad. Until then, MASK0–3 / MRCTRL register writes have no\n  external effect.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -12,6 +12,11 @@
   ],
   "studio_ready": true,
   "studio_unsupported": [
+    {
+      "severity": "advanced",
+      "category": "Battery NTC / JEITA",
+      "brief": "Hardware-gated (not a driver gap). The BQ25150 can pause or derate charging from a battery thermistor on TS, but Power-L-1T-b straps TS to a fixed 5 kΩ resistor (the datasheet's \"TS not used\" connection), which reads a constant ~0.40 V: always the normal band. Battery temperature is therefore NOT monitored; set_ts_* and set_ts_enabled have no practical effect. The chip's die thermal foldback (80 °C) still applies."
+    },
     {
       "severity": "advanced",
       "category": "MR button + INT pin handling",
@@ -27,13 +32,13 @@
     },
     {
       "name": "TILE_POWER_L_1T_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_POWER_L_1T_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -279,38 +284,30 @@
       ],
       "notes": [],
       "brief": "Initialize the BQ25150 charge controller.",
-      "description": "Verifies the device ID, disables the I²C watchdog (the chip\notherwise resets all charge parameters every 50 s), enables all\n6 ADC channels, configures sane charge defaults, and exits ship\nmode. Pass cfg=NULL for defaults.",
+      "description": "Verifies the device ID, disables the I²C watchdog (the chip\notherwise resets all charge parameters every 50 s), enables all\n6 ADC channels, configures charge defaults (80 mA fast charge,\n18.75 mA pre-charge, 4.20 V regulation, 2.6 V battery UVLO, TS on,\n6 h safety timer) and clears the ship-mode request. Input limit,\ntermination, LDO and charger-enable are left as the chip holds them.\nPass cfg=NULL for defaults.\n\nOn battery alone, LP (pad 2) must be high for this to find the chip\n(I²C is off in low-power mode).",
       "name": "tile_power_l_1t_init"
     },
     {
       "signature": "void tile_power_l_1t_set_charge_current_ma(tile_t* tile, uint16_t ma)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "ma",
-          "description": "Target charge current in mA (1.25–500)"
+          "description": "[2..500] mA Target charge current in mA (below 2 the code is 0: no charge)."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the fast-charge current.",
-      "description": "Programs ICHG_CTRL with the appropriate ICHARGE_RANGE bit so the\nresolution scales: ≤318 mA uses 1.25 mA steps, >318 mA uses\n2.5 mA steps. Values clamp to 1.25–500 mA.",
+      "description": "Programs ICHG_CTRL with the appropriate ICHARGE_RANGE bit so the\nresolution scales: ≤318 mA uses 1.25 mA steps, >318 mA uses\n2.5 mA steps (rounded down). Values clamp to 500 mA. Crossing 318 mA\nalso doubles the pre-charge step, so the pre-charge current doubles.\nKeep it at or below 1C for the cell fitted; there is no thermistor.",
       "name": "tile_power_l_1t_set_charge_current_ma"
     },
     {
       "signature": "void tile_power_l_1t_set_charge_voltage_mv(tile_t* tile, uint16_t mv)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "mv",
-          "description": "Target battery voltage in mV (3600–4600)"
+          "description": "[3600..4600] mV Target battery voltage in millivolts."
         }
       ],
       "notes": [],
@@ -324,12 +321,8 @@
       "signature": "void tile_power_l_1t_set_pre_charge_ma(tile_t* tile, uint8_t ma)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "ma",
-          "description": "Target pre-charge current in mA (1.25–77.5)"
+          "description": "[2..77] mA Target pre-charge current (38 mA max below 318 mA fast charge)."
         }
       ],
       "notes": [],
@@ -343,12 +336,8 @@
       "signature": "void tile_power_l_1t_set_termination_percent(tile_t* tile, uint8_t pct)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "pct",
-          "description": "Termination current as % of ICHG (0 = disabled, 1–31)"
+          "description": "[0..31] % Termination current as % of ICHG (0 = disabled)."
         }
       ],
       "notes": [],
@@ -362,29 +351,20 @@
       "signature": "void tile_power_l_1t_set_input_current_limit_ma(tile_t* tile, uint16_t ma)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "ma",
-          "description": "Input current limit in mA (5–500)"
+          "description": "[50..600] mA Input current limit."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
-      "brief": "Set the input current limit (DPM threshold).",
-      "description": "When the adapter can't supply more than this, charge current\nfolds back to keep VIN above the DPM threshold. Values clamp to\n5–500 mA in 5 mA steps.",
+      "brief": "Set the input (SUPPLY+) current limit.",
+      "description": "ILIMCTRL is a discrete table: 50, 100, 150, 200, 300, 400, 500 or\n600 mA. The largest level not above the request is used (50 mA\nfloor). The chip powers up at 100 mA and init() leaves it there;\nwhen the load plus charge current reach the limit, charge current\nfolds back first. The tile is rated for 500 mA on SUPPLY+.",
       "name": "tile_power_l_1t_set_input_current_limit_ma"
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_vbat_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -395,12 +375,7 @@
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_vin_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -411,12 +386,7 @@
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_pmid_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -427,12 +397,7 @@
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_charge_current_ma(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -443,12 +408,7 @@
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_input_current_ma(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -459,28 +419,18 @@
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_ts_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "TS voltage in mV (0–1200)",
       "brief": "Read raw TS pin voltage from the ADC.",
-      "description": "Returns the millivolt reading on the TS pin (0–1200 mV). Convert\nto °C using the NTC's resistance/temperature curve in firmware —\nthe chip doesn't expose temperature directly.",
+      "description": "Returns the millivolt reading on the TS pin (0–1200 mV). On\nPower-L-1T-b TS is a fixed 5 kΩ to ground (no thermistor), so this\nreads a constant ~400 mV (5 kΩ x 80 µA bias); it is not a\ntemperature. Not measured in low-power mode.",
       "name": "tile_power_l_1t_get_ts_mv"
     },
     {
       "signature": "uint16_t tile_power_l_1t_get_adcin_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -491,12 +441,7 @@
     },
     {
       "signature": "uint8_t tile_power_l_1t_get_percent(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -509,10 +454,6 @@
       "signature": "void tile_power_l_1t_set_ts_cold(tile_t* tile, uint8_t code)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "code",
           "description": "Raw 8-bit TS_COLD register value"
         }
@@ -521,16 +462,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the cold-temperature TS threshold (raw register value).",
-      "description": "The TS register codes are bit-positional (1, 2, 4, 8, 16, ...\nencode multiples of 4.688 mV up to 600 mV). Datasheet section\n8.5.1.49–52 describes the exact mapping; users tuning JEITA\nthresholds should consult the chip's NTC profile guide.",
+      "description": "The TS register codes are bit-positional (1, 2, 4, 8, 16, ...\nencode multiples of 4.688 mV up to 600 mV). Datasheet section\n8.5.1.49–52 describes the exact mapping. No practical effect on\nPower-L-1T-b: TS is a fixed 5 kΩ, not a thermistor.",
       "name": "tile_power_l_1t_set_ts_cold"
     },
     {
       "signature": "void tile_power_l_1t_set_ts_cool(tile_t* tile, uint8_t code)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "code",
           "description": "Raw 8-bit TS_COOL register value"
@@ -547,10 +484,6 @@
       "signature": "void tile_power_l_1t_set_ts_warm(tile_t* tile, uint8_t code)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "code",
           "description": "Raw 8-bit TS_WARM register value"
         }
@@ -565,10 +498,6 @@
     {
       "signature": "void tile_power_l_1t_set_ts_hot(tile_t* tile, uint8_t code)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "code",
           "description": "Raw 8-bit TS_HOT register value"
@@ -585,10 +514,6 @@
       "signature": "void tile_power_l_1t_set_ts_enabled(tile_t* tile, uint8_t enabled)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "enabled",
           "description": "1 = TS thermal protection on, 0 = off"
         }
@@ -597,35 +522,27 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Enable or disable TS-based thermal protection.",
-      "description": "When disabled, the chip ignores the NTC entirely (charging\nproceeds regardless of battery temperature). Default at init: enabled.",
+      "description": "When disabled, the chip ignores the TS pin for charge control\n(monitoring continues). Default at init: enabled. No practical\neffect on Power-L-1T-b: TS is a fixed 5 kΩ, not a thermistor.",
       "name": "tile_power_l_1t_set_ts_enabled"
     },
     {
       "signature": "void tile_power_l_1t_set_ldo_voltage_mv(tile_t* tile, uint16_t mv)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "mv",
-          "description": "Target LDO voltage in mV (600–3700)"
+          "description": "[600..3700] mV Target LDO voltage."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the LDO output voltage.",
-      "description": "VLDO = 600 + code × 100 mV. Values clamp to 600–3700 mV. Tile\ndesign gates this rail to a fixed 1.8 V at the connector — changing\nthe LDO voltage breaks downstream peripherals expecting 1.8 V on\npad 10. Useful for non-default tile variants or load-switch-mode\npass-through use.",
+      "description": "VLDO = 600 + code × 100 mV (rounded down). Values clamp to\n600–3700 mV.\n\nchanged when the EN_LS_LDO ... have disabled the output\". This call\nwrites the code without disabling the LDO, so a change made while\nV+ is on may not apply until the LDO is next disabled and enabled.\nV+ also drives the pad 1 ground switch gate (SI8806, VGS(th) up to\n1.0 V, RDS(on) specified from 1.8 V): below ~1.8 V the downstream\nground is not reliably closed.",
       "name": "tile_power_l_1t_set_ldo_voltage_mv"
     },
     {
       "signature": "void tile_power_l_1t_set_ldo_mode(tile_t* tile, power_l_1t_ldo_mode_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "mode",
           "description": "LDO mode (POWER_L_1T_LDO_MODE_LDO or _LOAD_SWITCH)"
@@ -635,16 +552,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the LS/LDO output mode (regulated LDO vs load switch).",
-      "description": "In LDO mode the chip regulates pad 10 to the configured voltage\n(10 mA max). In load-switch mode it pass-through-connects PMID\nvia a FET (up to 150 mA, but VINLS must be tied to the desired\nsupply on the tile PCB).",
+      "description": "In LDO mode the chip regulates pad 10 to the configured voltage;\nin load-switch mode it connects VINLS straight through. VINLS is\ntied to PMID on this tile, so pad 10 then carries PMID (VIN or\nVBAT, up to 5.5 V). 100 mA max either way (datasheet 7.3). The\ndatasheet (8.3.5) requires the LDO to be disabled before the mode\nchanges; this call does not do that.",
       "name": "tile_power_l_1t_set_ldo_mode"
     },
     {
       "signature": "void tile_power_l_1t_set_ldo_enabled(tile_t* tile, uint8_t enabled)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "enabled",
           "description": "1 = output on, 0 = output off (high-Z)"
@@ -654,16 +567,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Enable or disable the LS/LDO output.",
-      "description": "When disabled, pad 10 (V+) goes high-impedance — downstream rails\nexpecting 1.8 V will drop. Default at init: enabled (chip default).",
+      "description": "When disabled, pad 10 (V+) is pulled down by the chip, and because\nV+ feeds the pad 1 ground-switch gate, the downstream ground (pad 1)\nopens too: everything on this tile's output powers off. Default:\nenabled (chip reset value; init does not touch it).",
       "name": "tile_power_l_1t_set_ldo_enabled"
     },
     {
       "signature": "void tile_power_l_1t_get_charge_status(tile_t* tile, power_l_1t_status_t *out)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "out",
           "description": "Caller-allocated status struct (zeroed on entry)"
@@ -678,26 +587,17 @@
     },
     {
       "signature": "void tile_power_l_1t_enter_ship_mode(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
       "brief": "Enter ship mode (~10 nA quiescent).",
-      "description": "Disconnects the battery internally; only an MR press or VIN\ninsertion will wake the chip. Charge parameters reset to defaults\non exit. Use only for long-term storage / end-of-line packaging.\n\nre-insertion) to recover. Marked `section=advanced` for the same\nposture as other one-way / hardware-gated operations.",
+      "description": "Sets EN_SHIP_MODE. If SUPPLY+ is present the chip waits until it is\nremoved, then disconnects the battery (10 nA typ). /MR is not routed\non this tile, so the only way out is applying SUPPLY+ again; the\noutput (pad 10, and the pad 1 ground) stays off until then. Registers\nreturn to reset values on exit. Use only for storage / shipping.\n\nre-insertion) to recover. Marked `section=advanced` for the same\nposture as other one-way / hardware-gated operations.",
       "name": "tile_power_l_1t_enter_ship_mode"
     },
     {
       "signature": "uint8_t tile_power_l_1t_read_status(tile_t* tile, uint8_t reg)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "reg",
           "description": "Register address"
@@ -714,10 +614,6 @@
     {
       "signature": "void tile_power_l_1t_write_reg(tile_t* tile, uint8_t reg, uint8_t value)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "reg",
           "description": "Register address"
@@ -736,28 +632,18 @@
     },
     {
       "signature": "uint8_t tile_power_l_1t_is_charging(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "1 if charging, 0 otherwise",
       "brief": "Is the cell currently being charged?",
-      "description": "Convenience over @ref tile_power_l_1t_get_charge_status — returns\nthe `charging` field as a bool. Note this reads (and clears) FLAG3\nas a side effect; if you also poll the full status struct, alternate\nwith this rather than calling both per cycle.",
+      "description": "Convenience over @ref tile_power_l_1t_get_charge_status — returns\nthe `charging` field as a bool: VIN good, not done, charger not\ndisabled over I²C, PMID in AUTO, no UVLO / OVP / TS cold / TS hot.\nNote this reads (and clears) FLAG3 as a side effect; if you also poll\nthe full status struct, alternate with this rather than calling both\nper cycle.",
       "name": "tile_power_l_1t_is_charging"
     },
     {
       "signature": "uint8_t tile_power_l_1t_is_charge_done(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -769,10 +655,6 @@
     {
       "signature": "uint8_t tile_power_l_1t_is_battery_low(tile_t* tile, uint8_t threshold_pct)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "threshold_pct",
           "description": "Threshold in percent (0–100)"
@@ -788,12 +670,7 @@
     },
     {
       "signature": "uint8_t tile_power_l_1t_is_powered(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -805,10 +682,6 @@
     {
       "signature": "uint8_t tile_power_l_1t_wait_for_charge_done(tile_t* tile, uint32_t timeout_ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "timeout_ms",
           "description": "Maximum time to wait, in milliseconds"
@@ -842,7 +715,7 @@
       "params": [
         {
           "name": "mv",
-          "description": "Desired UVLO in mV (2200-3000)."
+          "description": "[2200..3000] mV Desired UVLO."
         }
       ],
       "notes": [],
@@ -864,7 +737,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the charge safety-timer limit.",
-      "description": "",
+      "description": "The timer stops a charge that has not terminated in time; with no\nbattery thermistor on this tile it is one of the few backstops, so\nprefer not to choose OFF. Changing it while charging restarts it.",
       "name": "tile_power_l_1t_set_safety_timer"
     },
     {
@@ -879,7 +752,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the PMID power-path mode (ICCTRL1[1:0]).",
-      "description": "",
+      "description": "BAT_ONLY stops charging. FLOAT and PULLDOWN disconnect PMID and turn\nthe LDO off, so V+ (pad 10) and the pad 1 ground go off; the datasheet\n(8.3.6) says those modes exit only through I²C or an /MR reset, and\n/MR is not routed here. Do not use them if the Core runs from V+.",
       "name": "tile_power_l_1t_set_pmid_mode"
     },
     {
@@ -887,7 +760,7 @@
       "params": [
         {
           "name": "comp",
-          "description": "Comparator index 1-3."
+          "description": "[1..3] Comparator index."
         },
         {
           "name": "channel",
@@ -895,14 +768,14 @@
         },
         {
           "name": "threshold",
-          "description": "16-bit raw ADC threshold."
+          "description": "Raw left-justified ADC threshold (top 12 bits used)."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Configure a programmable ADC comparator (threshold alarm).",
-      "description": "Routes ADC channel `channel` to comparator `comp` (1-3) and sets its\n16-bit threshold (left-justified, same scale as the channel's ADC\nresult). When the measurement crosses the threshold, the matching\nCOMPn_ALARM bit latches in FLAG2 (read via get_adc_comparators()).\nPass channel = POWER_L_1T_ADC_CH_DISABLED to turn a comparator off.\n\nNote: the chip's above/below polarity bit (ADCALARM_ABOVE) is not\nexposed by this driver yet — the comparator uses its default sense.",
+      "description": "Routes ADC channel `channel` to comparator `comp` (1-3) and sets its\n16-bit threshold (left-justified, same scale as the channel's ADC\nresult). When the measurement crosses the threshold, the matching\nCOMPn_ALARM bit latches in FLAG2 (read via get_adc_comparators()).\nPass channel = POWER_L_1T_ADC_CH_DISABLED to turn a comparator off.\n\nNote: the chip's above/below polarity bit (ADCALARM_ABOVE) is not\nexposed by this driver yet — the comparator uses its default sense\n(flag when the measurement falls below the threshold).",
       "name": "tile_power_l_1t_set_adc_comparator"
     },
     {
@@ -918,8 +791,61 @@
     }
   ],
   "source_file": "tile_power_l_1t.h",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "tile_family": "Power",
   "tile_name": "L.1T",
-  "display_name": "Power.L.1T"
+  "display_name": "Power.L.1T",
+  "vibe_settings": [
+    {
+      "label": "Charge current",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_charge_current_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        2,
+        500
+      ],
+      "unit": "mA",
+      "default": 80
+    },
+    {
+      "label": "Input current limit",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_input_current_limit_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        50,
+        600
+      ],
+      "unit": "mA",
+      "default": 100
+    },
+    {
+      "label": "Charge the battery",
+      "tier": "basic",
+      "scope": "config",
+      "function": "charger_enable",
+      "param": "on",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "Charge to",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_charge_voltage_mv",
+      "param": "mv",
+      "kind": "number",
+      "range": [
+        3.6,
+        4.6
+      ],
+      "unit": "V",
+      "default": 4200
+    }
+  ]
 }
