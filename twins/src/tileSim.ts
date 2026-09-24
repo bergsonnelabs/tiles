@@ -150,6 +150,19 @@ export interface PowerRail {
   // does not clip to it — it reports a rail asked for more (`snapshot.limits`), so
   // the design's problem is shown rather than hidden.
   limit_ua?: number;
+  // How an `output` rail's current is paid for upstream, when the solver
+  // back-fills the tile's input (a supply rail with no `i_ua`). All optional;
+  // omitted = a lossless switching converter fed from the input, which is what
+  // the solver assumed before these existed.
+  // `from`: the name of another `output` rail on this tile that feeds this one
+  // (an LDO after a buck). Its load then counts toward that rail's current and
+  // its `limit_ua`. Omitted = fed from the tile's input.
+  from?: string;
+  // `switching` conserves power (I_in = V_out * I_out / (V_in * efficiency));
+  // `linear` passes current through (I_in = I_out): an LDO, a load switch.
+  conversion?: 'switching' | 'linear';
+  // Switching only: 0 < efficiency <= 1. Omitted = 1.
+  efficiency?: number;
 }
 
 // Electrical behavior of the tile in its current state — the power layer.
