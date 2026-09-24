@@ -3,12 +3,18 @@
 //
 // Pad map (Power-L-1T-b.json): GND (1, switched), LP (2), SW (3), I²C CLK/DAT
 // (4/5), BATT- (6), BATT+ (7), SUPPLY+ (8, 3.15–5.5 V charge input), SUPPLY- (9),
-// V+ (10, 1.8 V LDO out, up to 10 mA).
+// V+ (10, 1.8 V LDO out; the BQ25150 LDO is rated 100 mA, datasheet §7.3 ILDO).
 //
 // THE INTERESTING GROUND: the downstream GND (pad 1) is NOT a hard tie — it
 // reaches BATT- (pad 6) only through an on-board SI8806 MOSFET whose gate follows
-// the LDO. When the LDO is off (SW→GND, ship mode, no power) the MOSFET opens and
-// the downstream system's ground floats: a true soft off.
+// the LDO through 220 kΩ. When the LDO is off (SW→GND, ship mode, no power) the
+// MOSFET opens and the downstream system's ground floats: a true soft off. The
+// SI8806's VGS(th) is 0.4–1.0 V, so an LDO set below 1.0 V can't be counted on
+// to close it either.
+//
+// NO BATTERY THERMISTOR: TS is strapped to a fixed 5 kΩ (the datasheet's "TS
+// not used" connection), so the TS pin sits at 5 kΩ × 80 µA = 400 mV, inside the
+// normal band, whatever the cell's temperature. There is no temperature stimulus.
 //
 // ONE state, two readers. The firmware's calls (worker) and the power layer (main
 // thread) read the same fields — the names the driver's setters use. The power
@@ -20,9 +26,9 @@
 // Conversions and register semantics follow tile_power_l_1t.c + the BQ25150
 // datasheet (SLUSD04B): VUVLO 3.4 V rising, VOVP 5.5 V, VSLP 130 mV, VLOWV 3.0 V,
 // register reset values (VBATREG 4.2 V, ITERM 10 %, ILIM 100 mA, LDO 1.8 V), the
-// driver's init (ICHG 80 mA, IPRECHG 18.75 mA, BUVLO 2.6 V), the quiescent
-// currents in §7.5, and the TS thresholds (VHOT 0.185 / VWARM 0.265 / VCOOL
-// 0.514 / VCOLD 0.585 V).
+// driver's init (ICHG 80 mA, IPRECHG 18.75 mA, VBATREG 4.2 V, BUVLO 2.6 V), the
+// quiescent currents in §7.5, and the TS thresholds (VHOT 0.185 / VWARM 0.265 /
+// VCOOL 0.514 / VCOLD 0.585 V).
 import type { PowerCtx, PowerRail, TileSim } from '../tileSim';
 
 const DEVICE_ID = 0x20;
@@ -41,7 +47,13 @@ const IBAT_LP_UA = 0.46; // low-power mode, LDO disabled
 const IBAT_LP_LDO_UA = 1.7; // low-power mode, LDO enabled
 const IBAT_ACTIVE_UA = 18; // active battery mode, LDO disabled
 const IBAT_ACTIVE_LDO_UA = 21; // active battery mode, LDO enabled
-const LDO_LIMIT_UA = 10_000; // tile JSON pad 10: "1.8V, up to 10mA"
+// LS/LDO output current, datasheet §7.3 ILDO max 100 mA. (The tile JSON's pad 10
+// note says 10 mA and its application note 150 mA; the part's rating is used.)
+const LDO_LIMIT_UA = 100_000;
+// SI8806 ground switch: gate = V+ via 220 kΩ; VGS(th) max 1.0 V (SI8806DB §Specs).
+const GND_SWITCH_VTH_MV = 1000;
+// TS pin: fixed 5 kΩ strap × 80 µA ITS_BIAS (datasheet §7.5, pin table "TS").
+const TS_STRAP_MV = 400;
 
 // TS thresholds, mV (datasheet VHOT/VWARM/VCOOL/VCOLD, default registers).
 const TS_HOT_MV = 185;
@@ -64,7 +76,6 @@ interface State {
   battery_present: number; // a cell is attached
   vin_mv: number; // adapter voltage on SUPPLY+ when plugged in
   vin_present: number; // adapter plugged in
-  temp_c: number; // battery (NTC) temperature
   lp_mode: number; // LP pad held low (900 kΩ pull-down) → low-power mode on battery
   sw_grounded: number; // SW pad tied to GND → LDO output off
   adcin_mv: number; // ADCIN pin (not routed to a pad on this tile)
@@ -108,23 +119,8 @@ const num = (args: number[], i: number, dflt: number) =>
   args.length > i && Number.isFinite(args[i]) ? Math.trunc(args[i]!) : dflt;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-// Battery temperature → TS pin voltage. The four datasheet thresholds sit at the
-// JEITA temperatures TI's recommended 10 kΩ NTC network targets (0/10/45/60 °C);
-// between them, linear. Beyond the ends, extrapolate.
-const TS_CURVE: readonly [number, number][] = [
-  [0, TS_COLD_MV],
-  [10, 514],
-  [45, 265],
-  [60, TS_HOT_MV],
-];
-function tsMv(tc: number): number {
-  const c = TS_CURVE;
-  let i = 0;
-  while (i < c.length - 2 && tc > c[i + 1]![0]) i++;
-  const [t0, v0] = c[i]!;
-  const [t1, v1] = c[i + 1]!;
-  return clamp(Math.round(v0 + ((tc - t0) * (v1 - v0)) / (t1 - t0)), 0, 1200);
-}
+// TS pin voltage. Fixed: the tile has a 5 kΩ strap, not a thermistor.
+const tsMv = (): number => TS_STRAP_MV;
 
 // The inputs the chip sees. With a solved system (`ctx`) the wiring decides; a
 // wired pad with nothing driving it reads 0. Without one, the stimuli stand in.
@@ -170,13 +166,20 @@ const i2cAlive = (s: State, i: Inputs) => poweredUp(s, i) && !lowPower(i);
 
 const tsFault = (s: State) => {
   if (!s.ts_enabled) return false;
-  const ts = tsMv(s.temp_c);
+  const ts = tsMv();
   return ts <= TS_HOT_MV || ts >= TS_COLD_MV;
 };
 
 // What the chip's charger is actually doing.
 function chargeState(s: State, i: Inputs): number {
-  if (!vinPgood(i) || !batteryPresent(i) || !s.charging_enabled || tsFault(s)) return CS_IDLE;
+  if (
+    !vinPgood(i) ||
+    !batteryPresent(i) ||
+    !s.charging_enabled ||
+    s.pmid_mode !== PMID_AUTO || // BAT_ONLY stops charging; FLOAT / PULLDOWN cut PMID
+    tsFault(s)
+  )
+    return CS_IDLE;
   if (i.battV >= s.charge_voltage_mv) return s.termination_pct > 0 ? CS_DONE : CS_IDLE;
   return i.battV < VLOWV_MV ? CS_PRE_CHARGE : CS_FAST_CHARGE;
 }
@@ -195,7 +198,8 @@ function pmidMv(s: State, i: Inputs): number {
   return 0; // floating / pulled down
 }
 
-// The LDO's input (VINLS) is taken as PMID. The SI8806 ground switch follows it.
+// The LDO's input (VINLS) is tied to PMID on the tile (schematic). The SI8806
+// ground switch follows the LDO output.
 const ldoOn = (s: State, i: Inputs) =>
   s.ldo_enabled === 1 && !i.swGrounded && poweredUp(s, i) && pmidMv(s, i) > 0;
 const ldoOutMv = (s: State, i: Inputs) =>
@@ -222,7 +226,7 @@ function stat0(s: State, i: Inputs): number {
   return b;
 }
 function stat1(s: State, i: Inputs): number {
-  const ts = tsMv(s.temp_c);
+  const ts = tsMv();
   let b = 0;
   if (i.vinV > VOVP_MV) b |= 0x80;
   if (batteryPresent(i) && i.battV < s.batt_uvlo_mv) b |= 0x10;
@@ -235,11 +239,18 @@ function stat1(s: State, i: Inputs): number {
   return b;
 }
 // tile_power_l_1t_get_charge_status().charging — the driver derives it from
-// STAT0/STAT1: PGOOD and not done, and no UVLO / OVP / TS cold / TS hot.
+// STAT0/STAT1 (PGOOD, not done, no UVLO / OVP / TS cold / TS hot) plus the
+// software gates: ICCTRL2.CHARGER_DISABLE clear and PMID_MODE = AUTO.
 function driverCharging(s: State, i: Inputs): boolean {
   const s0 = stat0(s, i);
   const s1 = stat1(s, i);
-  return (s0 & 0x01) !== 0 && (s0 & 0x20) === 0 && (s1 & 0x99) === 0;
+  return (
+    (s0 & 0x01) !== 0 &&
+    (s0 & 0x20) === 0 &&
+    (s1 & 0x99) === 0 &&
+    s.charging_enabled === 1 &&
+    s.pmid_mode === PMID_AUTO
+  );
 }
 
 // Charge-current register quantization (driver set_charge_current_ma).
@@ -252,15 +263,14 @@ function quantizeIchg(ma: number): number {
 const sim: TileSim<State> = {
   tile: 'Power.L.1T',
 
-  // After tile_power_l_1t_init(): ICHG 80 mA, IPRECHG 18.75 mA, BUVLO 2.6 V,
-  // watchdog off, ship mode cleared; everything else at its register reset
-  // (VBATREG 4.2 V, ITERM 10 %, ILIM 100 mA, LDO on at 1.8 V, TS on, 6 h timer).
+  // After tile_power_l_1t_init(): ICHG 80 mA, IPRECHG 18.75 mA, VBATREG 4.2 V,
+  // BUVLO 2.6 V, TS on, 6 h timer, watchdog off, ship mode cleared; everything
+  // else at its register reset (ITERM 10 %, ILIM 100 mA, LDO on at 1.8 V).
   defaultState: {
     vbat_mv: 3800,
     battery_present: 1,
     vin_mv: 5000,
     vin_present: 0,
-    temp_c: 25,
     lp_mode: 0,
     sw_grounded: 0,
     adcin_mv: 0,
@@ -321,17 +331,6 @@ const sim: TileSim<State> = {
       description: 'Adapter voltage on SUPPLY+ (pad 8). Valid 3.4–5.5 V; above 5.5 V is OVP.',
     },
     {
-      type: 'slider',
-      field: 'temp_c',
-      label: 'Battery temperature',
-      min: -20,
-      max: 70,
-      step: 1,
-      unit: '°C',
-      description:
-        'NTC temperature → get_ts_mv. With TS on, below 0 °C or above 60 °C pauses charging.',
-    },
-    {
       type: 'toggle',
       field: 'lp_mode',
       label: 'LP pad low',
@@ -343,7 +342,19 @@ const sim: TileSim<State> = {
   hostCalls: {
     // ── lifecycle ──
     tile_power_l_1t_find: () => ({ scalar: 1 }),
-    tile_power_l_1t_init: () => ({ scalar: 0 }),
+    // init (tile_power_l_1t.c): the charge settings it writes, and the ship
+    // request it clears. ILIM, ITERM, the LDO and charger-enable are untouched.
+    tile_power_l_1t_init: () => ({
+      nextState: {
+        charge_current_ma: 80,
+        pre_charge_cma: 1875,
+        charge_voltage_mv: 4200,
+        batt_uvlo_mv: 2600,
+        ts_enabled: 1,
+        safety_timer: 1,
+        ship_mode: 0,
+      },
+    }),
 
     // ── charge config ──
     tile_power_l_1t_set_charge_current_ma: ({ args }) => ({
@@ -415,7 +426,8 @@ const sim: TileSim<State> = {
     },
     tile_power_l_1t_get_ts_mv: ({ state }) => {
       const i = resolveInputs(state);
-      return { scalar: i2cAlive(state, i) ? tsMv(state.temp_c) : 0 };
+      // TS isn't measured in low-power mode, like the rest of the ADC.
+      return { scalar: i2cAlive(state, i) ? tsMv() : 0 };
     },
     tile_power_l_1t_get_adcin_mv: ({ state }) => {
       const i = resolveInputs(state);
@@ -538,7 +550,7 @@ const sim: TileSim<State> = {
     tile_power_l_1t_get_pmid_mv: 'inferred', // PMID ≈ VIN / VBAT (FET drop ignored)
     tile_power_l_1t_get_charge_current_ma: 'inferred', // CC step, no CV taper
     tile_power_l_1t_get_input_current_ma: 'inferred', // no system load in the worker
-    tile_power_l_1t_get_ts_mv: 'inferred', // thresholds canonical; NTC network assumed
+    tile_power_l_1t_get_ts_mv: 'canonical', // 5 kΩ strap × 80 µA bias = 400 mV
     tile_power_l_1t_get_adcin_mv: 'hallucinated', // ADCIN isn't routed on this tile
     tile_power_l_1t_get_percent: 'canonical', // driver's linear 3.0–4.2 V
     tile_power_l_1t_set_ts_cold: 'inferred', // codes stored; thresholds stay default
@@ -547,7 +559,7 @@ const sim: TileSim<State> = {
     tile_power_l_1t_set_ts_hot: 'inferred',
     tile_power_l_1t_set_ts_enabled: 'canonical',
     tile_power_l_1t_set_ldo_voltage_mv: 'canonical', // 600 mV + 100 mV·code
-    tile_power_l_1t_set_ldo_mode: 'inferred', // load-switch input assumed = PMID
+    tile_power_l_1t_set_ldo_mode: 'canonical', // VINLS tied to PMID (schematic)
     tile_power_l_1t_set_ldo_enabled: 'canonical',
     tile_power_l_1t_get_charge_status: 'inferred', // struct not readable from the DSL
     tile_power_l_1t_read_status: 'inferred', // STAT0/1, config regs, DEVICE_ID; rest 0
@@ -560,7 +572,7 @@ const sim: TileSim<State> = {
     tile_power_l_1t_enter_ship_mode: 'canonical', // arms; enters on VIN removal
     tile_power_l_1t_set_adc_comparator: 'inferred',
     tile_power_l_1t_get_adc_comparators: 'inferred',
-    power: 'inferred', // quiescents canonical; charge/LDO currents and VINLS=PMID modeled
+    power: 'inferred', // quiescents + LDO rating canonical; charge/LDO currents modeled
   },
 
   // Each tick: latch/unlatch ship mode and publish the charge state, from the
@@ -584,7 +596,8 @@ const sim: TileSim<State> = {
 
   // V+ (pad 10) and the switched ground (pad 1, the SI8806 follows the LDO).
   padOutputs(state) {
-    const on = ldoOn(state, resolveInputs(state)) ? 1 : 0;
+    const i = resolveInputs(state);
+    const on = ldoOn(state, i) && ldoOutMv(state, i) >= GND_SWITCH_VTH_MV ? 1 : 0;
     return { '10': on, '1': on };
   },
 
@@ -598,8 +611,10 @@ const sim: TileSim<State> = {
     const onVin = vinValid(i);
     const shipped = inShip(state, i);
     const chargeUa = Math.round(chargeMa(state, i) * 1000);
-    const ldoEn = ldoOn(state, i);
-    const vout = ldoOutMv(state, i);
+    // Below the SI8806's VGS(th) the downstream ground (pad 1) isn't closed, so
+    // nothing on V+ has a return path: treat the output as off.
+    const ldoEn = ldoOn(state, i) && ldoOutMv(state, i) >= GND_SWITCH_VTH_MV;
+    const vout = ldoEn ? ldoOutMv(state, i) : 0;
     const rails: PowerRail[] = [];
 
     rails.push({
