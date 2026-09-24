@@ -11,7 +11,16 @@
  * The chip regulates output amplitude itself: the supply rail only
  * sets headroom. Full-scale drive level comes from RATED_VOLTAGE /
  * OD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the
- * voltage applied to V_MOTOR.
+ * voltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply
+ * (VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's
+ * minimum load is 8 Ω at VDD = 5.2 V.
+ *
+ * V+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).
+ * Power V+ from a logic rail, or drive pad 3 high from a Core pin:
+ * with neither, EN floats, the chip may stay in shutdown, and init()
+ * fails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ
+ * (33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The
+ * tile has no I2C pull-ups.
  *
  * Key specifications:
  *   - Output:       full-bridge, amplitude regulated per config
@@ -37,15 +46,28 @@
  *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
- * This driver covers every register-controllable feature of the
- * DRV2605L; the only deliberate omission is OTP waveform burning.
- *
  * @studio unsupported severity=niche category="OTP waveform burning"
- *   The DRV2605L can burn custom waveforms into one-time-programmable
+ *   The DRV2605 can burn custom waveforms into one-time-programmable
  *   memory. This is implemented in firmware (tile_drive_h_program_otp())
  *   but intentionally NOT exposed to Studio: it permanently and
  *   irreversibly modifies the chip. Driver-deferred by policy, not a
  *   hardware gap — call it from C if you really need it.
+ *
+ * @studio unsupported severity=niche category="Minor control bits"
+ *   Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),
+ *   SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /
+ *   analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,
+ *   LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and
+ *   MODE.DEV_RESET have no setter. Reachable only by editing the
+ *   driver; none is hardware-gated.
+ *
+ * @studio unsupported severity=niche category="Hardware EN control"
+ *   Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a
+ *   100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the
+ *   STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core
+ *   GPIO. With EN low the chip still ACKs its address but ignores
+ *   reads and writes (SLOS825E §7.4.1.3), so init fails on the
+ *   device-ID check; registers are kept.
  */
 
 #ifndef INC_TILE_DRIVE_H_H_
@@ -75,13 +97,13 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
  * |----------|------|------|----------------------|
  * | 0        | 0x5A | I2C  | Fixed address        |
  *
- * @note  The DRV2605L has a single fixed I2C address. Multiple
+ * @note  The DRV2605 has a single fixed I2C address. Multiple
  *        Drive.H tiles require separate I2C buses.
  */
 #define DRV2605L_I2C_ADDR_DEFAULT   0x5A
 
 /* -------------------------------------------------------------- */
-/* DRV2605L register map                                           */
+/* DRV2605 register map                                           */
 /* -------------------------------------------------------------- */
 
 #define DRV2605L_REG_STATUS         0x00  /**< Status register */
@@ -182,7 +204,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* -------------------------------------------------------------- */
 
 /**
- * @brief  Check whether a DRV2605L is present on the I2C bus.
+ * @brief  Check whether a DRV2605 is present on the I2C bus.
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0 = default, see mapping table)
@@ -192,19 +214,26 @@ uint8_t tile_drive_h_find(tiles_pal_t* hal, uint8_t instance);
 
 /**
  * Optional init config. Pass NULL for defaults: LRA closed-loop,
- * library 6, drive levels for a typical 2.0 Vrms-class coin LRA
- * (1.8 Vrms rated — the actuator is external, via the OUT± pads).
+ * library 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C (the actuator is
+ * external, via the OUT± pads). At init's ~238 Hz DRIVE_TIME and the
+ * reset SAMPLE_TIME (300 µs), 0x56 is ~2.2 Vrms closed-loop
+ * (SLOS825E Eq 3) and 0x8C is a 3.07 V peak clamp (Eq 7), ~2.7 Vrms
+ * full scale in open loop (Eq 5). That suits a 2.0 Vrms-class coin
+ * LRA (bench-verified on a Vybronix V4CHA1) and over-drives smaller
+ * ones.
  *
- * If your actuator is smaller, set rated_voltage and od_clamp using
- * the formulas in the DRV2605 datasheet (section 7.5.2), or call
- * tile_drive_h_set_actuator_voltage() with millivolts. Typical values:
+ * For any other actuator, set rated_voltage and od_clamp from its
+ * datasheet with Eq 2-5 (SLOS825E §7.5.2.1-7.5.2.2), or call
+ * tile_drive_h_set_actuator_voltage() with millivolts. Values at
+ * 238 Hz / 300 µs, open-loop clamp = rated:
  *
  * | LRA rated voltage | rated_voltage | od_clamp |
  * |-------------------|---------------|----------|
- * | 0.5 Vrms          | 0x13          | 0x1B     |
- * | 0.7 Vrms          | 0x1A          | 0x25     |
- * | 1.0 Vrms          | 0x26          | 0x36     |
- * | 1.8 Vrms          | 0x56          | 0x8C     |
+ * | 0.5 Vrms          | 0x13          | 0x1A     |
+ * | 0.7 Vrms          | 0x1B          | 0x24     |
+ * | 1.0 Vrms          | 0x26          | 0x34     |
+ * | 1.8 Vrms          | 0x45          | 0x5D     |
+ * | 2.0 Vrms          | 0x4D          | 0x68     |
  *
  * Note: in open-loop mode the chip ignores RATED_VOLTAGE and derives
  * full-scale output from OD_CLAMP alone (and LRA playback does not
@@ -216,17 +245,17 @@ typedef struct {
     uint8_t closed_loop;   /**< 0 = open-loop, 1 = closed-loop.
                                 (cfg=NULL defaults to closed-loop.) */
     uint8_t rated_voltage; /**< RATED_VOLTAGE register (0x16). 0 = default
-                                (0x56 = 1.8 Vrms). Closed-loop reference. */
+                                (0x56, ~2.2 Vrms at 238 Hz). Closed-loop reference. */
     uint8_t od_clamp;      /**< OD_CLAMP register (0x17). 0 = default
-                                (0x8C). Overdrive clamp / open-loop ref. */
+                                (0x8C, 3.07 V peak). Overdrive clamp / open-loop ref. */
 } drive_h_cfg_t;
 
 /**
- * @brief  Initialize the DRV2605L haptic driver.
+ * @brief  Initialize the DRV2605 haptic driver.
  *
  * Verifies the device ID, exits standby, and configures the
  * actuator drive mode. Pass cfg=NULL for defaults (LRA closed-loop,
- * library 6, 1.8 Vrms drive levels).
+ * library 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C: see drive_h_cfg_t).
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0 = default, see mapping table)
@@ -321,8 +350,8 @@ void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot,
  *
  * @studio expose category=tile name=set_trigger section=runtime
  * @param  tile  Pointer to tile handle
- * @param  mode  One of DRIVE_H_TRIG_INTERNAL, DRIVE_H_TRIG_EDGE,
- *               DRIVE_H_TRIG_LEVEL
+ * @param  mode  [0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),
+ *               DRIVE_H_TRIG_LEVEL (2)
  */
 void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode);
 
@@ -349,14 +378,14 @@ void tile_drive_h_stop(tile_t* tile);
 /**
  * @brief  Switch the active waveform library at runtime.
  *
- * The DRV2605L ships with 6 ROM libraries: 1–5 are TS2200 ERM
+ * The DRV2605 ships with 6 ROM libraries: 1–5 are TS2200 ERM
  * libraries (A–E), 6 is the LRA library. Library 0 is empty
  * (silence). This call also updates the FEEDBACK_CTRL N_ERM_LRA
  * bit so the chip drives the correct actuator type.
  *
  * @studio expose category=tile name=set_library
  * @param  tile     Pointer to tile handle
- * @param  library  Library index 0..6 (use DRIVE_H_LIB_* constants)
+ * @param  library  [0..6] Library index (use DRIVE_H_LIB_* constants)
  */
 void tile_drive_h_set_library(tile_t* tile, uint8_t library);
 
@@ -401,7 +430,11 @@ void tile_drive_h_set_actuator_params(tile_t* tile,
  * Applies to whichever actuator type is currently selected
  * (set_library() / FEEDBACK_CTRL N_ERM_LRA).
  *
+ * @note  Switching to open loop makes OD_CLAMP the full-scale level:
+ *        with init's 0x8C that is ~2.7 Vrms, stronger than closed loop.
+ *
  * @studio expose category=tile name=set_loop_mode section=config
+ * @studio control closed label="Closed-loop drive" tier=advanced type=bool default=1
  * @param  tile    Pointer to tile handle
  * @param  closed  1 = closed-loop (smart-loop), 0 = open-loop
  */
@@ -426,7 +459,17 @@ void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed);
  * Run tile_drive_h_calibrate() afterwards — the datasheet requires
  * recalibration whenever these references change.
  *
+ * @warning Set rated_mv from the actuator's datasheet. Driving an LRA
+ *          above its rated voltage for long effects (play_buzz, RTP)
+ *          heats it and shortens its life. The output never exceeds
+ *          V_MOTOR, whatever is set here.
+ *
+ * The control defaults (2230 / 2700 mV) reproduce init's 0x56 / 0x8C
+ * at init's 238 Hz DRIVE_TIME.
+ *
  * @studio expose category=tile name=set_actuator_voltage section=config
+ * @studio control rated_mv label="Actuator rated voltage" tier=advanced default=2230 scale=0.001 unit=V
+ * @studio control overdrive_mv label="Overdrive clamp" tier=advanced default=2700 scale=0.001 unit=V
  * @param  tile          Pointer to tile handle
  * @param  rated_mv      [300..3600] Rated drive level in mV
  * @param  overdrive_mv  [300..5000] Overdrive clamp in mV
@@ -445,6 +488,7 @@ void tile_drive_h_set_actuator_voltage(tile_t* tile, uint16_t rated_mv,
  * tile_drive_h_get_resonance_hz() while driving in closed loop.
  *
  * @studio expose category=tile name=set_resonance_hz section=config
+ * @studio control hz label="LRA resonance" tier=advanced default=238 unit=Hz
  * @param  tile  Pointer to tile handle
  * @param  hz    [125..300] LRA resonant frequency in Hz
  */
@@ -502,7 +546,7 @@ void tile_drive_h_set_waveform_timing(tile_t* tile,
 /**
  * @brief  Enter RTP (Real-Time Playback) mode.
  *
- * Sets DRV2605L MODE register to 0x05 (RTP). The chip drives
+ * Sets DRV2605 MODE register to 0x05 (RTP). The chip drives
  * the LRA at its resonant frequency with amplitude controlled
  * by tile_drive_h_rtp_write(). Call tile_drive_h_rtp_stop()
  * to return to internal trigger mode.
@@ -600,7 +644,7 @@ void tile_drive_h_pwm_input_stop(tile_t* tile);
  * envelope-detects the audio and drives haptic vibration at
  * matching intensity.
  *
- * @note The DRV2605L expects an AC-coupled line-level audio
+ * @note The DRV2605 expects an AC-coupled line-level audio
  *       source (1.8 Vpp full-scale). Drive.H rev a does not
  *       include a series capacitor on pad 2 — users wanting
  *       audio-to-vibe must add their own external 1 µF AC-coupling
@@ -671,7 +715,7 @@ uint8_t tile_drive_h_get_status(tile_t* tile);
  * @brief  Run actuator diagnostics.
  *
  * Enters diagnostic mode (MODE=6), triggers GO, and polls
- * for completion. The DRV2605L checks whether the actuator is
+ * for completion. The DRV2605 checks whether the actuator is
  * present, open, or shorted.
  *
  * @studio expose category=tile name=diagnose returns=bool section=runtime
@@ -684,7 +728,7 @@ uint8_t tile_drive_h_diagnose(tile_t* tile);
  *
  * Enters calibration mode (MODE=7) with datasheet-recommended
  * parameters, triggers GO, and polls for completion. On success,
- * the DRV2605L stores optimized A_CAL_COMP and A_CAL_BEMF values
+ * the DRV2605 stores optimized A_CAL_COMP and A_CAL_BEMF values
  * that improve playback fidelity.
  *
  * @studio expose category=tile name=calibrate returns=bool section=runtime
@@ -746,11 +790,11 @@ void tile_drive_h_wake(tile_t* tile);
  *
  * Writes the current contents of registers 0x16–0x1A
  * (RATED_VOLTAGE, OD_CLAMP, A_CAL_COMP, A_CAL_BEMF, FEEDBACK_CTRL)
- * to the DRV2605L's nonvolatile OTP cells. After this, those values
+ * to the DRV2605's nonvolatile OTP cells. After this, those values
  * become the power-on defaults — the chip skips run-time calibration
  * on subsequent boots.
  *
- * @warning IRREVERSIBLE. The DRV2605L OTP can be programmed exactly
+ * @warning IRREVERSIBLE. The DRV2605 OTP can be programmed exactly
  *          once per device. A bad programming run permanently
  *          mistunes the chip. NOT exposed to Studio by design.
  *
@@ -806,8 +850,8 @@ void tile_drive_h_play_click(tile_t* tile);
  *
  * @studio expose category=tile name=play_double_tap section=runtime
  *
- * Loads the sequencer with two strong-click effects (ROM library
- * effect 10 — "Double Click — 100%") and triggers playback. The
+ * Loads the sequencer with ROM library effect 10 ("Double Click —
+ * 100%"), a two-click effect, and triggers playback. The
  * chip handles the inter-tap timing internally. Returns
  * immediately; use @ref tile_drive_h_is_playing to poll.
  *
@@ -820,9 +864,8 @@ void tile_drive_h_play_double_tap(tile_t* tile);
  *
  * @studio expose category=tile name=play_alert section=runtime
  *
- * Sequences three ROM-library effects to produce a sharp-buzz-sharp
- * notification: effect 14 ("Strong Buzz — 100%" tick) → effect 56
- * ("Long Buzz for Programmatic Stopping — 100%") → effect 14.
+ * Sequences three ROM-library effects: effect 14 ("Strong Buzz —
+ * 100%") → effect 56 ("Pulsing Sharp 1 — 100%") → effect 14.
  * Returns immediately; use @ref tile_drive_h_is_playing to poll.
  *
  * @param  tile  Initialised tile handle
@@ -844,7 +887,7 @@ void tile_drive_h_play_alert(tile_t* tile);
  *        / @ref tile_drive_h_rtp_stop.
  *
  * @param  tile  Initialised tile handle
- * @param  ms    Duration in milliseconds
+ * @param  ms    [0..65535] Duration in milliseconds
  */
 void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms);
 

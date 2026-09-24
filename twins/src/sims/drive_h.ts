@@ -97,8 +97,8 @@ const INIT_CONFIG = {
   library: 6,
   n_erm_lra: 1, // FEEDBACK_CTRL 0xB6
   closed_loop: 1,
-  rated_voltage: 0x56, // 1.8 Vrms
-  od_clamp: 0x8c,
+  rated_voltage: 0x56, // ~2.2 Vrms at 238 Hz / 300 µs (SLOS825E Eq 3)
+  od_clamp: 0x8c, // 3.07 V peak clamp (Eq 7)
   fb_brake: 3, // 0xB6[6:4]
   loop_gain: 1, // 0xB6[3:2]
   drive_time: 16, // ~238 Hz coin LRA
@@ -132,6 +132,18 @@ function sampled(s: State): Partial<State> {
     vbat_reg: vbatReg(s.vbat_mv),
     ...(s.n_erm_lra ? { lra_period_reg: lraPeriodReg(s.resonance_hz) } : {}),
   };
+}
+
+// Full-scale output (mV RMS for an LRA, average for an ERM) from the amplitude
+// registers, SLOS825E §7.5.2.1: closed loop RATED_VOLTAGE (Eq 2 / Eq 3), open
+// loop OD_CLAMP (Eq 4 / Eq 5). LRA frequency from DRIVE_TIME, as the driver.
+function fullScaleMv(s: State): number {
+  if (!s.n_erm_lra) return s.closed_loop ? s.rated_voltage * 21.33 : s.od_clamp * 21.96;
+  const f = 1e6 / (2 * (500 + 100 * (s.drive_time & 0x1f)));
+  const ts = [150, 200, 250, 300][s.sample_time & 0x03] * 1e-6;
+  if (s.closed_loop)
+    return (s.rated_voltage * 20.71) / Math.sqrt(Math.max(0.1, 1 - (4 * ts + 300e-6) * f));
+  return s.od_clamp * 21.32 * Math.sqrt(Math.max(0.1, 1 - f * 800e-6));
 }
 
 // Integer sqrt (floor), as the driver's isqrt32 (tile_drive_h.c:42-57).
@@ -599,7 +611,7 @@ const sim: TileSim<State> = {
     tile_drive_h_play_double_tap: 'inferred',
     tile_drive_h_play_alert: 'inferred',
     tile_drive_h_play_buzz: 'inferred',
-    power: 'inferred', // base currents from the datasheet; actuator load is an assumed 25 Ω LRA
+    power: 'inferred', // chip currents and Eq 2-5 from the datasheet; actuator load an assumed 25 Ω LRA
   },
 
   // Expire a timed playback: GO drops as the sequencer drains; play_buzz's RTP
@@ -638,11 +650,14 @@ const sim: TileSim<State> = {
     return { '7': s, '8': s };
   },
 
-  // Two tile rails (Drive-H-a.json power[]): V+ (pad 10, 1.8-5 V) and V_MOTOR
-  // (pad 9, 2.5-5.5 V). Logic: standby 1.9 µA, enabled 0.6 mA; while driving,
-  // ~2.9 mA operating plus the actuator load. Output level from the amplitude
-  // registers — closed loop references RATED_VOLTAGE (20.71 mV/LSB), open loop
-  // OD_CLAMP (21.32 mV/LSB) — so a low RATED_VOLTAGE shows as weak drive.
+  // Two tile rails (Drive-H-a.json power[]): V_MOTOR (pad 9, 2.5-5.5 V) is the
+  // DRV2605's only supply (VDD): standby 1.9 µA, enabled 0.6 mA (SLOS825E §6.5),
+  // ~2.9 mA operating plus the actuator load while driving. V+ (pad 10,
+  // 1.8-5 V) feeds only R2, the 100 kΩ EN pull-up (tile schematic): ~0 while
+  // EN is left to it, V+ / 100 kΩ if a Core holds pad 3 low. Output level
+  // from the amplitude registers: closed loop RATED_VOLTAGE (Eq 3), open loop
+  // OD_CLAMP (Eq 5), with the frequency from DRIVE_TIME and t_sample from
+  // CONTROL2, and never above V_MOTOR.
   power(state, ctx) {
     const vPlus = ctx?.padVoltage['10'] ?? 3300;
     const vMotor = ctx?.padVoltage['9'] ?? state.vbat_mv;
@@ -650,29 +665,35 @@ const sim: TileSim<State> = {
       return {
         draw_ua: 1.9,
         rails: [
-          { name: 'V+', role: 'supply', v_mv: vPlus, i_ua: 1.9, pads: ['10'], note: 'standby' },
-          { name: 'V_MOTOR', role: 'supply', v_mv: vMotor, i_ua: 0, pads: ['9'], note: 'idle' },
+          { name: 'V+', role: 'supply', v_mv: vPlus, i_ua: 0, pads: ['10'], note: 'EN pull-up' },
+          {
+            name: 'V_MOTOR',
+            role: 'supply',
+            v_mv: vMotor,
+            i_ua: 1.9,
+            pads: ['9'],
+            note: 'standby',
+          },
         ],
       };
     }
     const s = driveStrength(state);
-    const fullScaleMv = state.closed_loop ? state.rated_voltage * 20.71 : state.od_clamp * 21.32;
-    const outMv = Math.round(s * fullScaleMv);
+    const outMv = Math.round(Math.min(vMotor, s * fullScaleMv(state)));
     const R_ACTUATOR_OHM = 25; // typical coin LRA (assumed; actuator is external)
     const loadUa = Math.round((outMv / R_ACTUATOR_OHM) * 1000);
-    const logicUa = 600;
-    const driveUa = s > 0 ? 2900 + loadUa : 0;
+    const chipUa = s > 0 ? 2900 : 600;
+    const driveUa = chipUa + (s > 0 ? loadUa : 0);
     return {
-      draw_ua: logicUa + driveUa,
+      draw_ua: driveUa,
       rails: [
-        { name: 'V+', role: 'supply', v_mv: vPlus, i_ua: logicUa, pads: ['10'], note: 'logic' },
+        { name: 'V+', role: 'supply', v_mv: vPlus, i_ua: 0, pads: ['10'], note: 'EN pull-up' },
         {
           name: 'V_MOTOR',
           role: 'supply',
           v_mv: vMotor,
           i_ua: driveUa,
           pads: ['9'],
-          note: 'H-bridge + actuator (25 Ω load assumed)',
+          note: 'DRV2605 VDD: chip + H-bridge + actuator (25 Ω load assumed)',
         },
         {
           name: 'OUT±',

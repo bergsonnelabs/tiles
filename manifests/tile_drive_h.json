@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@bc9bb0f",
+  "source": "tiles@1c38a75",
   "tile": "Drive.H",
   "palette": {
     "label": "Drive.H",
@@ -135,7 +135,11 @@
         {
           "name": "mode",
           "type": "int",
-          "description": "One of DRIVE_H_TRIG_INTERNAL, DRIVE_H_TRIG_EDGE,"
+          "range": [
+            0,
+            2
+          ],
+          "description": "One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),"
         }
       ],
       "returns": "void",
@@ -181,7 +185,11 @@
         {
           "name": "library",
           "type": "int",
-          "description": "Library index 0..6 (use DRIVE_H_LIB_* constants)"
+          "range": [
+            0,
+            6
+          ],
+          "description": "Library index (use DRIVE_H_LIB_* constants)"
         }
       ],
       "returns": "void",
@@ -238,6 +246,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "closed",
+          "label": "Closed-loop drive",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -270,6 +288,26 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "rated_mv",
+          "label": "Actuator rated voltage",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 2230
+        },
+        {
+          "param": "overdrive_mv",
+          "label": "Overdrive clamp",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 2700
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -293,6 +331,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "hz",
+          "label": "LRA resonance",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 238
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -702,6 +749,10 @@
         {
           "name": "ms",
           "type": "int",
+          "range": [
+            0,
+            65535
+          ],
           "description": "Duration in milliseconds"
         }
       ],
