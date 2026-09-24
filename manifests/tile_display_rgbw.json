@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@98aac17",
+  "source": "tiles@afe442f",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -240,7 +240,129 @@
         }
       ],
       "icon": "◑",
-      "receiver": "tile_t *"
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "ref": "set_current.r"
+                      },
+                      {
+                        "value": "set_max_current.mode"
+                      }
+                    ]
+                  },
+                  {
+                    "num": 255
+                  }
+                ]
+              },
+              {
+                "num": 5
+              }
+            ]
+          },
+          "message": "Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "ref": "set_current.g"
+                      },
+                      {
+                        "value": "set_max_current.mode"
+                      }
+                    ]
+                  },
+                  {
+                    "num": 255
+                  }
+                ]
+              },
+              {
+                "num": 5
+              }
+            ]
+          },
+          "message": "Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "ref": "set_current.b"
+                      },
+                      {
+                        "value": "set_max_current.mode"
+                      }
+                    ]
+                  },
+                  {
+                    "num": 255
+                  }
+                ]
+              },
+              {
+                "num": 5
+              }
+            ]
+          },
+          "message": "Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "/",
+                "args": [
+                  {
+                    "op": "*",
+                    "args": [
+                      {
+                        "ref": "set_current.w"
+                      },
+                      {
+                        "value": "set_max_current.mode"
+                      }
+                    ]
+                  },
+                  {
+                    "num": 255
+                  }
+                ]
+              },
+              {
+                "num": 5
+              }
+            ]
+          },
+          "message": "White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+        }
+      ]
     },
     {
       "qname": [

@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@1c38a75",
+  "source": "tiles@afe442f",
   "file": "tile_drive_h.h",
   "brief": "LRA/ERM haptic driver for the Drive.H tile (rev a).",
   "description": "Embeds the TI DRV2605 (DEVICE_ID 3 — the non-L part), a haptic\ndriver for LRA (Linear Resonant Actuator) and ERM actuators with\na built-in waveform library of 123 effects. The actuator is\nexternal, connected via the tile's OUT+ / OUT- pads; V_MOTOR\naccepts 2.5-5.5 V.\n\nThe chip regulates output amplitude itself: the supply rail only\nsets headroom. Full-scale drive level comes from RATED_VOLTAGE /\nOD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the\nvoltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply\n(VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's\nminimum load is 8 Ω at VDD = 5.2 V.\n\nV+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).\nPower V+ from a logic rail, or drive pad 3 high from a Core pin:\nwith neither, EN floats, the chip may stay in shutdown, and init()\nfails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ\n(33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The\ntile has no I2C pull-ups.\n\nKey specifications:\n  - Output:       full-bridge, amplitude regulated per config\n  - Waveform lib: 123 haptic effects (6 libraries)\n  - Smart-loop:   automatic resonance tracking for LRA (closed loop)\n  - Modes:        Internal trigger, RTP, PWM, audio-to-vibe\n\nDatasheet: https://www.bergsonne.io/tiles/drive/h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv2605.pdf\n\n\n@studio tile label=Drive.H icon=≋\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"OTP waveform burning\"\n  The DRV2605 can burn custom waveforms into one-time-programmable\n  memory. This is implemented in firmware (tile_drive_h_program_otp())\n  but intentionally NOT exposed to Studio: it permanently and\n  irreversibly modifies the chip. Driver-deferred by policy, not a\n  hardware gap — call it from C if you really need it.\n\n@studio unsupported severity=niche category=\"Minor control bits\"\n  Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),\n  SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /\n  analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,\n  LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and\n  MODE.DEV_RESET have no setter. Reachable only by editing the\n  driver; none is hardware-gated.\n\n@studio unsupported severity=niche category=\"Hardware EN control\"\n  Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a\n  100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the\n  STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core\n  GPIO. With EN low the chip still ACKs its address but ignores\n  reads and writes (SLOS825E §7.4.1.3), so init fails on the\n  device-ID check; registers are kept.",
@@ -37,7 +37,7 @@
     },
     {
       "name": "TILE_DRIVE_H_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -160,51 +160,52 @@
       "value": "8",
       "description": "",
       "section": "* Maximum effects in a single waveform sequence."
-    },
-    {
-      "name": "DRIVE_H_LIB_EMPTY",
-      "value": "0",
-      "description": "Empty library (silence).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_ERM_A",
-      "value": "1",
-      "description": "TS2200 Library A (ERM, fixed open-loop overdrive).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_ERM_B",
-      "value": "2",
-      "description": "TS2200 Library B (ERM, no overdrive).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_ERM_C",
-      "value": "3",
-      "description": "TS2200 Library C (ERM, no overdrive).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_ERM_D",
-      "value": "4",
-      "description": "TS2200 Library D (ERM, no overdrive).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_ERM_E",
-      "value": "5",
-      "description": "TS2200 Library E (ERM, no overdrive).",
-      "section": ""
-    },
-    {
-      "name": "DRIVE_H_LIB_LRA",
-      "value": "6",
-      "description": "LRA Library (auto-resonance).",
-      "section": ""
     }
   ],
-  "enums": [],
+  "enums": [
+    {
+      "name": "drive_h_library_t",
+      "brief": "ROM waveform library, which also sets the actuator type (ERM vs LRA).",
+      "description": "",
+      "members": [
+        {
+          "name": "DRIVE_H_LIB_EMPTY",
+          "value": "0",
+          "description": "Empty library (silence)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_A",
+          "value": "1",
+          "description": "ERM motor: TS2200 Library A (fixed open-loop overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_B",
+          "value": "2",
+          "description": "ERM motor: TS2200 Library B (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_C",
+          "value": "3",
+          "description": "ERM motor: TS2200 Library C (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_D",
+          "value": "4",
+          "description": "ERM motor: TS2200 Library D (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_E",
+          "value": "5",
+          "description": "ERM motor: TS2200 Library E (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_LRA",
+          "value": "6",
+          "description": "LRA (coin / linear actuator): LRA library, auto-resonance."
+        }
+      ]
+    }
+  ],
   "structs": [
     {
       "name": "drive_h_cfg_t",
@@ -303,10 +304,6 @@
       "signature": "void tile_drive_h_play_sequence(tile_t* tile, const uint8_t *effects, uint8_t count)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "effects",
           "description": "Array of effect indices (1-123, 0 = stop)"
         },
@@ -325,10 +322,6 @@
     {
       "signature": "void tile_drive_h_load_sequence(tile_t* tile, const uint8_t *effects, uint8_t count)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "effects",
           "description": "Array of effect indices (1-123, 0 = stop)"
@@ -349,10 +342,6 @@
       "signature": "void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot, uint8_t delay_steps)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "slot",
           "description": "Slot index 0..7"
         },
@@ -370,10 +359,6 @@
     {
       "signature": "void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "mode",
           "description": "[0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),"
@@ -408,30 +393,22 @@
       "name": "tile_drive_h_stop"
     },
     {
-      "signature": "void tile_drive_h_set_library(tile_t* tile, uint8_t library)",
+      "signature": "void tile_drive_h_set_library(tile_t* tile, drive_h_library_t library)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "library",
-          "description": "[0..6] Library index (use DRIVE_H_LIB_* constants)"
+          "description": "Library (use DRIVE_H_LIB_* constants)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "brief": "Switch the active waveform library at runtime.",
-      "description": "The DRV2605 ships with 6 ROM libraries: 1–5 are TS2200 ERM\nlibraries (A–E), 6 is the LRA library. Library 0 is empty\n(silence). This call also updates the FEEDBACK_CTRL N_ERM_LRA\nbit so the chip drives the correct actuator type.",
+      "description": "The DRV2605 ships with 6 ROM libraries: 1–5 are TS2200 ERM\nlibraries (A–E), 6 is the LRA library. Library 0 is empty\n(silence). This call also updates the FEEDBACK_CTRL N_ERM_LRA\nbit so the chip drives the correct actuator type.\n\nThe actuator is external (OUT± pads), so this must match what is\nwired: an LRA (coin / linear) uses DRIVE_H_LIB_LRA, an ERM (spinning\nmass) motor one of the ERM libraries.",
       "name": "tile_drive_h_set_library"
     },
     {
       "signature": "void tile_drive_h_set_actuator_params(tile_t* tile, uint8_t rated_voltage, uint8_t od_clamp, uint8_t fb_brake, uint8_t loop_gain)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "rated_voltage",
           "description": "RATED_VOLTAGE byte (0 = no change)"
@@ -459,10 +436,6 @@
       "signature": "void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "closed",
           "description": "1 = closed-loop (smart-loop), 0 = open-loop"
         }
@@ -479,10 +452,6 @@
     {
       "signature": "void tile_drive_h_set_actuator_voltage(tile_t* tile, uint16_t rated_mv, uint16_t overdrive_mv)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "rated_mv",
           "description": "[300..3600] Rated drive level in mV"
@@ -503,10 +472,6 @@
       "signature": "void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "hz",
           "description": "[125..300] LRA resonant frequency in Hz"
         }
@@ -521,10 +486,6 @@
     {
       "signature": "void tile_drive_h_set_resonance_params(tile_t* tile, uint8_t sample_time, uint8_t blanking_time, uint8_t idiss_time)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "sample_time",
           "description": "Sample time 0..3 (0=150µs, 3=300µs; 0xFF = no change)"
@@ -547,10 +508,6 @@
     {
       "signature": "void tile_drive_h_set_waveform_timing(tile_t* tile, int8_t overdrive, int8_t sustain_pos, int8_t sustain_neg, int8_t brake)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "overdrive",
           "description": "Overdrive Time Offset (0x0D, signed × 5 ms)"
@@ -602,10 +559,6 @@
     {
       "signature": "void tile_drive_h_set_rtp_format(tile_t* tile, uint8_t unsigned_, uint8_t bidir)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "unsigned_",
           "description": "1 = unsigned data format, 0 = signed (default)"
@@ -675,10 +628,6 @@
       "signature": "void tile_drive_h_set_audio_params(tile_t* tile, uint8_t peak_time, uint8_t filter, uint8_t min_input, uint8_t max_input, uint8_t min_drive, uint8_t max_drive)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "peak_time",
           "description": "ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)"
         },
@@ -720,12 +669,7 @@
     },
     {
       "signature": "uint8_t tile_drive_h_get_status(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -800,12 +744,7 @@
     },
     {
       "signature": "uint8_t tile_drive_h_program_otp(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "return": "1 on success, 0 on failure / already-programmed",
       "brief": "Burn the current calibration into on-chip OTP.",
@@ -824,12 +763,7 @@
     },
     {
       "signature": "void tile_drive_h_play_click(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -839,12 +773,7 @@
     },
     {
       "signature": "void tile_drive_h_play_double_tap(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -854,12 +783,7 @@
     },
     {
       "signature": "void tile_drive_h_play_alert(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -870,10 +794,6 @@
     {
       "signature": "void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "ms",
           "description": "[0..65535] Duration in milliseconds"
@@ -890,12 +810,7 @@
     },
     {
       "signature": "uint8_t tile_drive_h_is_calibrated(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [
         "STATUS bits clear on read, so the result reflects the most recent calibration / diagnostic run."
       ],
@@ -908,23 +823,31 @@
     }
   ],
   "source_file": "tile_drive_h.h",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "tile_family": "Drive",
   "tile_name": "H",
   "display_name": "Drive.H",
   "vibe_settings": [
     {
-      "label": "Closed-loop drive",
-      "tier": "advanced",
+      "label": "Actuator type",
+      "tier": "basic",
       "scope": "config",
-      "function": "set_loop_mode",
-      "param": "closed",
-      "kind": "bool",
-      "default": 1
+      "function": "set_library",
+      "param": "library",
+      "kind": "choice",
+      "choices": [
+        "ERM motor: TS2200 Library A (fixed open-loop overdrive)",
+        "ERM motor: TS2200 Library B (no overdrive)",
+        "ERM motor: TS2200 Library C (no overdrive)",
+        "ERM motor: TS2200 Library D (no overdrive)",
+        "ERM motor: TS2200 Library E (no overdrive)",
+        "LRA (coin / linear actuator): LRA library, auto-resonance"
+      ],
+      "default": "LRA (coin / linear actuator): LRA library, auto-resonance"
     },
     {
       "label": "Actuator rated voltage",
-      "tier": "advanced",
+      "tier": "basic",
       "scope": "config",
       "function": "set_actuator_voltage",
       "param": "rated_mv",
@@ -935,6 +858,15 @@
       ],
       "unit": "V",
       "default": 2230
+    },
+    {
+      "label": "Closed-loop drive",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_loop_mode",
+      "param": "closed",
+      "kind": "bool",
+      "default": 1
     },
     {
       "label": "Overdrive clamp",
