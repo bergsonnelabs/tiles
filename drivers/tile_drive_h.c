@@ -1,6 +1,6 @@
 /**
  * @file   tile_drive_h.c
- * @brief  LRA haptic driver implementation (DRV2605L).
+ * @brief  LRA haptic driver implementation (DRV2605).
  */
 
 #include "tile_drive_h.h"
@@ -125,12 +125,14 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     hal->delay_ms(400);
 
     /* Parse config. Defaults target the typical externally attached
-     * coin LRA (2.0 Vrms-class, ~235 Hz): closed-loop smart-loop with
-     * 1.8 Vrms drive levels. The tile has no onboard actuator. */
+     * coin LRA (2.0 Vrms-class, ~235 Hz): closed-loop smart-loop. At
+     * 238 Hz and SAMPLE_TIME 300 µs (CONTROL2 reset), 0x56 is ~2.2 Vrms
+     * (SLOS825E Eq 3) and 0x8C a 3.07 V peak clamp (Eq 7). The tile
+     * has no onboard actuator. */
     uint8_t closed_loop = 1;
     uint8_t library = 6;
-    uint8_t rated_v = 0x56;   /* 1.8 Vrms */
-    uint8_t od_clamp = 0x8C;
+    uint8_t rated_v = 0x56;   /* ~2.2 Vrms closed loop (bench-verified) */
+    uint8_t od_clamp = 0x8C;  /* 3.07 V peak */
     if (cfg != NULL) {
         if (cfg->library >= 1 && cfg->library <= 6) {
             library = cfg->library;
@@ -145,7 +147,7 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     drv_write(tile, DRV2605L_REG_OD_CLAMP, od_clamp);
 
     /* Reset auto-cal results to defaults so diagnostics and calibration
-     * start from a known state. The DRV2605L retains registers across
+     * start from a known state. The DRV2605 retains registers across
      * MCU resets if it stays powered — stale cal values from a prior
      * session would skew back-EMF thresholds. */
     drv_write(tile, DRV2605L_REG_A_CAL_COMP, 0x0D);
@@ -885,7 +887,7 @@ void tile_drive_h_play_double_tap(tile_t* tile)
 
 void tile_drive_h_play_alert(tile_t* tile)
 {
-    /* Sharp tick (14) → strong sustained buzz (56) → sharp tick (14). */
+    /* Strong Buzz (14) → Pulsing Sharp 1 (56) → Strong Buzz (14). */
     static const uint8_t seq[4] = { 14, 56, 14, 0 };
     tile_drive_h_play_sequence(tile, seq, 4);
 }
