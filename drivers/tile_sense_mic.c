@@ -1,6 +1,7 @@
 /**
  * @file   tile_sense_mic.c
- * @brief  Sense.MIC (MAX11645 + AMM-2742) — complete driver implementation.
+ * @brief  Sense.MIC (CMM-2718AT-38164W mic + AD8605 amp + MAX11645 ADC) —
+ *         complete driver implementation.
  *
  * Platform-agnostic. All bus access via tile->hal raw I2C function pointers.
  * The MAX11645 is a command-based device (no register addresses); we use
@@ -65,13 +66,40 @@ static void mic_write_cmd(tile_t *tile, uint8_t cmd)
     tile->hal->i2c_write_raw(tile->hal->handle, tile->id, &cmd, 1);
 }
 
-static uint16_t mic_read_sample(tile_t *tile)
+/* Internal-reference wake-up (datasheet "Automatic Shutdown"): 10 ms. */
+#define MIC_REF_WAKE_MS  10
+
+/* A result that is not a conversion: the bus failed, or the upper nibble
+ * was not the four high "empty" bits every result starts with. */
+#define MIC_SAMPLE_INVALID  0xFFFF
+
+static uint16_t decode(const uint8_t *b)
+{
+    /* Each result is 2 bytes: four high empty bits (SDA left high), then
+     * D11:D8, then D7:D0 (datasheet "Reading a Conversion"). */
+    if ((b[0] & 0xF0) != 0xF0) return MIC_SAMPLE_INVALID;
+    return (uint16_t)(((b[0] & 0x0F) << 8) | b[1]);
+}
+
+/** One conversion, or MIC_SAMPLE_INVALID. */
+static uint16_t mic_read_checked(tile_t *tile)
 {
     uint8_t buf[2] = {0, 0};
-    tile->hal->i2c_read_raw(tile->hal->handle, tile->id, buf, 2);
-    /* 12-bit result: upper nibble of buf[0] is status/padding,
-     * lower nibble is D11:D8, buf[1] is D7:D0 */
-    return (uint16_t)(((buf[0] & 0x0F) << 8) | buf[1]);
+    if (tile->hal->i2c_read_raw(tile->hal->handle, tile->id, buf, 2) != 0)
+        return MIC_SAMPLE_INVALID;
+    return decode(buf);
+}
+
+/** One conversion; 0 on a failed read, so the public API stays in range. */
+static uint16_t mic_read_sample(tile_t *tile)
+{
+    uint16_t v = mic_read_checked(tile);
+    return (v == MIC_SAMPLE_INVALID) ? 0 : v;
+}
+
+static uint8_t ref_is_internal(uint8_t ref_sel)
+{
+    return (ref_sel & 0x04) != 0;   /* SEL2 = 1: the internal reference */
 }
 
 static void memzero(void *p, uint8_t n)
@@ -156,7 +184,9 @@ void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance,
     /* Apply config or defaults */
     uint8_t ref_sel  = (cfg && cfg->ref) ? cfg->ref : SENSE_MIC_REF_VDD;
     uint8_t channel  = (cfg && cfg->channel) ? cfg->channel : SENSE_MIC_CH_AIN0;
-    uint8_t scan     = (cfg) ? cfg->scan : 0;  /* 0 = SCAN_UP (scan from AIN0) */
+    /* 0 = default = one conversion of the selected channel. (SCAN_UP is 0
+     * in the chip's encoding; pick it with set_scan_mode.) */
+    uint8_t scan     = (cfg && cfg->scan) ? cfg->scan : SENSE_MIC_SCAN_SINGLE;
     uint8_t clock    = (cfg) ? cfg->clock : SENSE_MIC_CLOCK_INTERNAL;
     uint8_t polarity = (cfg) ? cfg->polarity : SENSE_MIC_POLARITY_UNIPOLAR;
 
@@ -169,25 +199,24 @@ void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance,
 
     /* Send setup byte — configures Vref, clock, polarity */
     mic_write_cmd(tile, s->setup_byte);
-    hal->delay_ms(1);  /* Settling time for reference */
+    hal->delay_ms(ref_is_internal(ref_sel) ? MIC_REF_WAKE_MS : 1);
 
     /* Send configuration byte — scan mode, channel, single-ended */
     mic_write_cmd(tile, s->config_byte);
 
-    /* Verify the device responds by reading a sample.
-     * The MAX11645 has no WHO_AM_I, so we check that we get a
-     * plausible 12-bit value (not 0xFFFF which indicates bus error). */
-    uint16_t test = mic_read_sample(tile);
-    if (test > MAX11645_ADC_MAX) {
+    /* Verify the device responds by reading a sample. The MAX11645 has no
+     * WHO_AM_I; a real result starts with four high bits. */
+    uint16_t test = mic_read_checked(tile);
+    if (test == MIC_SAMPLE_INVALID) {
         tile->state = TILE_STATE_ERROR;
         TILE_ON_ERROR(tile, "sense_mic: test read failed");
         return;
     }
 
-    /* Auto-calibrate DC offset: average 64 samples to measure the mic
-     * bias point. This takes ~3.5 ms at 400 kHz I2C and captures the
-     * actual quiescent voltage, which varies with supply and PCB layout
-     * (typically 600–900 counts with VDD ref, not necessarily mid-scale). */
+    /* Auto-calibrate DC offset: average 64 samples of the resting level.
+     * About 3.5 ms at 400 kHz I2C. On this board the level is near 0 in
+     * the VDD / INTERNAL modes (the amp's bias comes from the undriven REF
+     * pin; see the header's signal-chain note). */
     {
         uint32_t sum = 0;
         for (uint8_t i = 0; i < 64; i++)
@@ -201,12 +230,14 @@ void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance,
 /** @brief Enter low-power mode. */
 void tile_sense_mic_sleep(tile_t *tile)
 {
-    /* Write a setup byte with RST=0 to reset the config register,
-     * which puts the ADC into its lowest-power idle state.
-     * Keep the reference selection to allow quick wake. */
+    /* The ADC already shuts itself down between conversions (0.5 µA) —
+     * except an "always on" internal reference, about 330 µA. So sleep
+     * selects the VDD reference, which turns the internal one off, and
+     * wake() restores the real setup. The mic (175 µA) and the AD8605
+     * (1 mA) are powered from V+ and keep running: the tile has no
+     * switch for them. */
     mic_state_t *s = state_for(tile);
-    uint8_t sleep_setup = (s->setup_byte & ~MAX11645_RST_NORESET);  /* RST=0 */
-    mic_write_cmd(tile, sleep_setup);
+    mic_write_cmd(tile, build_setup(SENSE_MIC_REF_VDD, s->clock_sel, s->polarity_sel));
     tile->state = TILE_STATE_SLEEPING;
 }
 
@@ -217,7 +248,7 @@ void tile_sense_mic_wake(tile_t *tile)
 
     /* Re-send setup byte (with RST=1 to preserve config) */
     mic_write_cmd(tile, s->setup_byte);
-    tile->hal->delay_ms(1);  /* Reference settling */
+    tile->hal->delay_ms(ref_is_internal(s->ref_sel) ? MIC_REF_WAKE_MS : 1);
 
     /* Re-send configuration byte */
     mic_write_cmd(tile, s->config_byte);
@@ -253,7 +284,8 @@ void tile_sense_mic_set_reference(tile_t *tile, sense_mic_ref_t ref)
     s->vref_mv    = resolve_vref((uint8_t)ref, 0);
 
     mic_write_cmd(tile, s->setup_byte);
-    tile->hal->delay_ms(1);  /* Reference settling time */
+    /* The internal reference takes 10 ms to wake; VDD needs nothing. */
+    tile->hal->delay_ms(ref_is_internal(s->ref_sel) ? MIC_REF_WAKE_MS : 1);
 }
 
 /** @brief Switch the conversion-clock source. */
@@ -356,7 +388,26 @@ void tile_sense_mic_calibrate(tile_t *tile)
 /** @brief Burst-read N samples into a buffer. */
 void tile_sense_mic_get_samples(tile_t *tile, uint16_t *buf, uint16_t count)
 {
-    for (uint16_t i = 0; i < count; i++) {
+    mic_state_t *s = state_for(tile);
+    uint16_t i = 0;
+
+    /* In 8x scan mode one read transaction returns eight conversions,
+     * saving seven address phases per eight samples. */
+    if (((s->config_byte >> 5) & 0x03) == SENSE_MIC_SCAN_8X) {
+        uint8_t b[16];
+        while (count - i >= 8) {
+            if (tile->hal->i2c_read_raw(tile->hal->handle, tile->id, b, 16) != 0) {
+                for (uint8_t k = 0; k < 8; k++) buf[i + k] = 0;
+            } else {
+                for (uint8_t k = 0; k < 8; k++) {
+                    uint16_t v = decode(&b[2 * k]);
+                    buf[i + k] = (v == MIC_SAMPLE_INVALID) ? 0 : v;
+                }
+            }
+            i += 8;
+        }
+    }
+    for (; i < count; i++) {
         buf[i] = mic_read_sample(tile);
     }
 }
@@ -424,24 +475,29 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw)
 /* ================================================================
  * Tier-2 — SPL conversion + event-detection helpers
  *
- * Math: The CMM-2718AT has a typical sensitivity of −42 dBV/Pa (analog
- * output in V_RMS for 1 Pa input pressure). Translating that:
- *   -42 dBV  = 10^(-42/20) V_RMS = 7.943 mV_RMS per Pascal AT THE MIC.
- *   1 Pa SPL = 94 dB SPL (since 0 dB SPL = 20 µPa).
- * BUT the AD8605 amplifies the mic by ~48× before the ADC, so the ADC
- * sees 48 × the mic voltage. We must divide that gain back out:
- *   mic_mV = adc_mV / 48
- *   dB SPL  = 94 + 20*log10((adc_mV / 48) / 7.943)
- *           = 20*log10(adc_mV) + (94 − 20*log10(7.943)) − 20*log10(48)
- *           = 20*log10(adc_mV) + 76 − 33.6
- *           = 20*log10(adc_mV) + 42.4 (approx)
- * (The earlier driver omitted the gain term and over-read SPL by ~33.6 dB.)
+ * The signal chain as built (see the header):
+ *   - CMM-2718AT-38164W: −38 dBV/Pa, i.e. 12.59 mV RMS per pascal (94 dB SPL).
+ *   - C2/C3 (100 nF / 100 nF) halve it into the amp; the AD8605 gains 48x:
+ *     24x from mic to ADC.
+ *   - In the VDD / INTERNAL reference modes the amp rests at 0 V, so only
+ *     the positive half-cycles reach the ADC. For any symmetric signal that
+ *     halves the mean square about the resting level: the RMS reads 1/√2
+ *     (−3.01 dB) of the full signal's. When the measured resting level is
+ *     near 0 (dc_offset below MIC_HALFWAVE_REST_MAX), that is added back.
  *
- * We carry SPL in 0.1 dB units to keep integer precision tight
- * without floats. The 20*log10(mV_RMS) term is tabulated for
- * mV_RMS ∈ [1, 32] — small RMS values around the noise floor /
- * mid-loudness regime — and saturates above 32 mV (~110 dB SPL)
- * for the rare clipping-loud case.
+ *   dB SPL = 94 + 20·log10(adc_mV / 24 / 12.59) (+3.01 if half-wave)
+ *          = 20·log10(adc_mV) + 94 − 22.00 − 27.60 (+3.01)
+ *          = 20·log10(adc_mV) + 44.40 (+3.01)
+ *
+ * The RMS is carried in 0.1 mV units, so one ADC count (0.8 mV at a 3.3 V
+ * reference) still resolves: 20·log10(dmV) − 20 dB = 20·log10(mV). The
+ * log term is tabulated for 1..32; larger values are halved into range
+ * with 6.02 dB added per halving.
+ *
+ * Range on this board: the floor is about 45 dB SPL (one count of RMS at
+ * the VDD reference; the mic's own noise is ~30 dBA), and half-wave
+ * clipping at full scale caps it near 112 dB (VDD) / 108 dB (internal
+ * 2.048 V), below the mic's 128 dB overload point. Carried in 0.1 dB.
  * ================================================================ */
 
 /* Sample window for tier-2 ops. ~5 ms at 12.5 ksps (400 kHz I2C). */
@@ -450,14 +506,19 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw)
 /* SPL polling interval used by wait_for_sound / detect_clap. */
 #define MIC_TIER2_POLL_MS  5
 
-/* AD8605 non-inverting gain (R4 47k / R3 1k → 1 + 47 = 48×) expressed as
- * 20*log10(48) in 0.1 dB units. The ADC sees the amplified signal, so this
- * is subtracted from the mV→SPL offset to recover SPL at the microphone. */
-#define MIC_AMP_GAIN_DX_DB  336   /* 20*log10(48) ≈ 33.6 dB */
+/* 94 dB − 20·log10(12.59 mV/Pa) − 20·log10(24), in 0.1 dB: the mV→SPL
+ * offset for this chain. */
+#define MIC_SPL_OFFSET_DX_DB   444
+/* 20·log10(√2) in 0.1 dB: the half-wave correction. */
+#define MIC_HALFWAVE_DX_DB     30
+/* Resting level (counts) below which the signal is taken as half-wave. The
+ * amp's offset (≤65 µV × 48) is ~4 counts; a centred signal rests near
+ * half scale. */
+#define MIC_HALFWAVE_REST_MAX  256
 
 /* 20*log10(n) in 0.1 dB units, indexed by integer n.
  * Index 0 is unused (log10(0) is −∞ — handled by the caller).
- * Indexes 1..32 covered; saturates at n≥32 (~30.1 dB above 1 mV). */
+ * Indexes 1..32 covered; mv_rms_to_spl_dx10() scales larger values down. */
 static const int16_t k_log10_x20_table[33] = {
        0,    0,   60,   95,  120,  140,  156,  169,  /* idx 0..7 */
      181,  191,  200,  208,  216,  223,  229,  235,  /* idx 8..15 */
@@ -466,33 +527,38 @@ static const int16_t k_log10_x20_table[33] = {
      301,                                            /* idx 32 */
 };
 
-/* Convert RMS mV to SPL in 0.1 dB units. Integer-only, table-LUT. */
-static int16_t mv_rms_to_spl_dx10(uint16_t mv_rms)
+/* Convert an RMS in 0.1 mV units to SPL in 0.1 dB units. Integer-only. */
+static int16_t dmv_rms_to_spl_dx10(uint16_t dmv_rms, uint8_t half_wave)
 {
-    /* Floor: below 1 mV the lookup saturates at 0 → 76*10 = 760
-     * (~76 dB SPL). For "no signal" we'd rather report an honest
-     * low-SPL floor; clamp to 30 dB minimum. */
-    if (mv_rms == 0) {
-        return 300;  /* 30.0 dB SPL — below noise floor */
+    /* No measurable signal: report the documented floor value. */
+    if (dmv_rms == 0) {
+        return 300;  /* 30.0 dB SPL — below the noise floor */
     }
-    uint8_t idx = (mv_rms > 32) ? 32 : (uint8_t)mv_rms;
-    int16_t log_term = k_log10_x20_table[idx];     /* 20*log10(mV) in 0.1 dB */
-    /* dB SPL = 20*log10(adc_mV) + 76 − 20*log10(48), in 0.1 dB units:
-     * +760 − 336 = +424 (the AD8605 gain is divided back out). */
-    return (int16_t)(log_term + 760 - MIC_AMP_GAIN_DX_DB);
+    /* Above 32, halve k times into the table's 16..32 range and add
+     * k * 20*log10(2) (6.02 dB each) back. Rounding error <= ~0.3 dB. */
+    uint8_t k = 0;
+    while ((dmv_rms >> k) > 32) k++;
+    uint16_t idx = (k == 0) ? dmv_rms
+                            : (uint16_t)((dmv_rms + (1u << (k - 1))) >> k);
+    if (idx > 32) idx = 32;
+    int16_t log_term = (int16_t)(k_log10_x20_table[idx]  /* 20*log10(dmV) in 0.1 dB */
+                                 + ((int16_t)k * 602) / 10);
+    /* 20·log10(mV) = 20·log10(dmV) − 20 dB. */
+    int16_t spl = (int16_t)(log_term - 200 + MIC_SPL_OFFSET_DX_DB
+                            + (half_wave ? MIC_HALFWAVE_DX_DB : 0));
+    return (spl < 300) ? 300 : spl;
 }
 
-/* Capture a sample buffer + compute RMS in mV. Used by all SPL hosts. */
-static uint16_t mic_capture_rms_mv(tile_t *tile)
+/* Capture a sample buffer and return its SPL. Used by all SPL helpers. */
+static int16_t mic_capture_spl(tile_t *tile)
 {
     uint16_t buf[MIC_TIER2_BUF_LEN];
     mic_state_t *s = state_for(tile);
-    for (uint16_t i = 0; i < MIC_TIER2_BUF_LEN; i++) {
-        buf[i] = mic_read_sample(tile);
-    }
+    tile_sense_mic_get_samples(tile, buf, MIC_TIER2_BUF_LEN);
     uint16_t rms_raw = tile_sense_mic_rms(tile, buf, MIC_TIER2_BUF_LEN, s->dc_offset);
-    /* mV = raw * vref_mv / 4096 */
-    return (uint16_t)(((uint32_t)rms_raw * s->vref_mv) >> 12);
+    /* 0.1 mV = raw * vref_mv * 10 / 4096 */
+    uint16_t dmv = (uint16_t)(((uint32_t)rms_raw * s->vref_mv * 10u) >> 12);
+    return dmv_rms_to_spl_dx10(dmv, s->dc_offset < MIC_HALFWAVE_REST_MAX);
 }
 
 /** @brief Quick "is the room loud right now?" check. */
@@ -504,17 +570,14 @@ uint8_t tile_sense_mic_is_loud(tile_t *tile, int16_t threshold_db)
 
 /** @brief Read instantaneous SPL in 0.1 dB units.
  *
- * TODO HW: SPL accuracy is rough (±5 dB in the 50–100 dB range, no
- * A-weighting). The mV→dB LUT is units-only from the AMM-2742 typical
- * −42 dBV/Pa sensitivity; calibration vs. a reference SPL meter has
- * not been done. Also, DC offset is captured once at init() and any
- * supply drift after that shifts SPL — call tile_sense_mic_calibrate()
- * to re-zero. Good enough for clap/voice/event detection, not for
- * studio metering. */
+ * TODO HW: not yet checked against a reference SPL meter. The constants
+ * come from the datasheets and the schematic (±1 dB mic sensitivity,
+ * 1 % resistors, the half-wave correction assumes a symmetric signal),
+ * so expect a few dB absolute, with no A-weighting. The resting level is
+ * captured at init(); call tile_sense_mic_calibrate() to re-zero. */
 int16_t tile_sense_mic_read_spl_db(tile_t *tile)
 {
-    uint16_t mv_rms = mic_capture_rms_mv(tile);
-    return mv_rms_to_spl_dx10(mv_rms);
+    return mic_capture_spl(tile);
 }
 
 /** @brief Block until ambient SPL crosses threshold (or timeout). */

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@624d703",
+  "source": "tiles@8c11e89",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_mic",
     "header": "tile_sense_mic.h",
-    "version": "2.3.0"
+    "version": "2.4.0"
   },
   "handle": {
     "type": "tile_t",
@@ -73,7 +73,7 @@
             {
               "name": "SENSE_MIC_REF_VDD",
               "value": 0,
-              "label": "Supply voltage (3.3V)"
+              "label": "Supply voltage (V+)"
             },
             {
               "name": "SENSE_MIC_REF_EXTERNAL",
@@ -83,12 +83,12 @@
             {
               "name": "SENSE_MIC_REF_INTERNAL",
               "value": 5,
-              "label": "Internal 2.048V"
+              "label": "Internal 2.048 V"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL_BUF",
               "value": 7,
-              "label": "Internal 2.048V, also on the REF pin"
+              "label": "Internal 2.048V, also on the REF pin (saturates this board's amp)"
             }
           ]
         }
@@ -105,12 +105,12 @@
             {
               "name": "SENSE_MIC_REF_VDD",
               "value": 0,
-              "label": "Supply voltage (3.3V)"
+              "label": "Supply voltage (V+)"
             },
             {
               "name": "SENSE_MIC_REF_INTERNAL",
               "value": 5,
-              "label": "Internal 2.048V"
+              "label": "Internal 2.048 V"
             }
           ]
         }
@@ -176,7 +176,7 @@
             {
               "name": "SENSE_MIC_SCAN_8X",
               "value": 1,
-              "label": "Convert CS0 8 times (averaging)"
+              "label": "Convert CS0 8 times, 8 results per read"
             }
           ]
         }
@@ -421,7 +421,7 @@
         {
           "name": "dc_offset",
           "type": "int",
-          "description": "DC bias point (use dc_level() to measure, or pass 2048)."
+          "description": "Resting level (get_dc_offset(), or dc_level() of a quiet buffer)."
         }
       ],
       "returns": "uint16_t",
@@ -472,9 +472,9 @@
           "type": "int",
           "range": [
             300,
-            1300
+            1100
           ],
-          "description": "SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the"
+          "description": "SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). Readings start at ~45 dB and clip near 112 dB, so thresholds outside that never change."
         }
       ],
       "returns": "uint8_t",
@@ -485,7 +485,8 @@
           "tier": "basic",
           "scope": "usage",
           "scale": 0.1,
-          "display_unit": "dB"
+          "display_unit": "dB",
+          "default": 700
         }
       ],
       "dsl_returns": "bool",
@@ -520,7 +521,7 @@
           "type": "int",
           "range": [
             300,
-            1300
+            1100
           ],
           "description": "SPL threshold in 0.1 dB units."
         },
@@ -543,13 +544,15 @@
           "tier": "basic",
           "scope": "usage",
           "scale": 0.1,
-          "display_unit": "dB"
+          "display_unit": "dB",
+          "default": 700
         },
         {
           "param": "timeout_ms",
           "label": "Sound wait timeout",
           "tier": "advanced",
-          "scope": "usage"
+          "scope": "usage",
+          "default": 5000
         }
       ],
       "dsl_returns": "bool",
@@ -582,7 +585,8 @@
           "param": "timeout_ms",
           "label": "Clap wait timeout",
           "tier": "advanced",
-          "scope": "usage"
+          "scope": "usage",
+          "default": 5000
         }
       ],
       "dsl_returns": "bool",
