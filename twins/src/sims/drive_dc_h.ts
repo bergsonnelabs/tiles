@@ -2,9 +2,9 @@
 //
 // 11 V / 2 A H-bridge with current sense (IPROPI → NPROP), voltage / speed
 // regulation, stall detection and sensorless ripple counting. I²C on pads 4/5;
-// the bridge drives a motor across OUT1 / OUT2. Per the tile schematic chip OUT1
-// lands on pad 8 and OUT2 on pad 7 (the tile JSON lists them the other way round
-// — a product-DB correction, flagged there). NPROP (pad 6) mirrors motor current.
+// the bridge drives a motor across OUT1 / OUT2: chip OUT1 on pad 8, OUT2 on pad 7,
+// as the tile definition lists them since the 2026-06 product-DB correction (the
+// pre-correction JSON had them swapped). NPROP (pad 6) mirrors motor current.
 // VM on pad 9, the logic supply V+ (the chip's VCC) on pad 10.
 //
 // ONE state, two readers: the firmware's calls (worker) and power / pads (main
@@ -20,8 +20,14 @@ import type { PowerCtx, TileSim } from '../tileSim';
 
 // CS_GAIN_SEL → max current (mA), the driver's cs_max_ma table.
 const CS_MAX_MA = [4000, 2000, 1000, 500, 250, 125, 250, 125];
-// W_SCALE codes (REG_CTRL0[1:0]) → scale.
-const W_SCALE = [24, 40, 64, 128];
+// W_SCALE codes (REG_CTRL0[1:0]) → ripple rad/s per SPEED LSB (datasheet Table 8-24).
+const W_SCALE = [16, 32, 64, 128];
+// Ripple speed is in rad/s (datasheet Eq. 11): ripple Hz × 2π. The driver's
+// integer conversions use 2π × 1000 = 6283.
+const TWO_PI_X1000 = 6283;
+// rpm → ripple rad/s and back, for `ripples_per_rev` ripples per shaft turn.
+const rpmToRad = (rpm: number, rpr: number) => (rpm * rpr * 2 * Math.PI) / 60;
+const radToRpm = (rad: number, rpr: number) => (rad * 60) / (2 * Math.PI * Math.max(1, rpr));
 
 // bridge state (`direction`)
 const COAST = 0;
@@ -49,9 +55,11 @@ const IVCC_ACTIVE_UA = 1500;
 const VCC_UVLO_MV = 1650; // VCC below this: device off (UVLO)
 const VM_MIN_MV = 1650; // full-bridge supply minimum
 
-// The external motor (modeled — no datasheet): back-EMF constant and the share
-// of stall current a spinning, unloaded rotor still draws.
-const MOTOR_KV_UV_PER_RPM = 300; // ≈ 3.3 rpm/mV: a small 3–6 V hobby motor
+// The external motor (modeled — no datasheet): default back-EMF constant (a
+// placeholder for a small 3–6 V hobby motor, ≈ 3.3 rpm/mV; set_motor_params()'s
+// kv argument, or the "Motor Kv" control, replaces it) and the share of stall
+// current a spinning, unloaded rotor still draws.
+const MOTOR_KV_UV_PER_RPM = 300;
 const NO_LOAD_CURRENT_FRAC = 0.1;
 
 interface State {
@@ -59,6 +67,7 @@ interface State {
   vm_mv: number; // motor supply on VM (pad 9)
   vplus_mv: number; // logic supply on V+ (pad 10)
   motor_mohm: number; // winding resistance of the attached motor
+  motor_kv: number; // back-EMF constant of the attached motor, µV/RPM
   load: number; // mechanical load 0…100 % (100 = locked rotor)
 
   // ── bridge + regulation (driver setters) ──
@@ -121,11 +130,11 @@ function motorOp(s: State): MotorOp {
   if (!ready(s) || s.control_mode !== CTRL_I2C || !driving(s) || latchedOff(s)) return off;
   if (s.vm_mv < VM_MIN_MV) return off;
   const L = clamp(s.load, 0, 100) / 100;
-  const rpmPerMv = (1000 / MOTOR_KV_UV_PER_RPM) * (1 - L);
+  const rpmPerMv = (1000 / Math.max(1, s.motor_kv)) * (1 - L);
   let v: number;
   if (s.regulation_mode === REG_SPEED) {
     // PI loop: the voltage that makes SPEED match WSET_VSET, up to VM.
-    const targetRpm = (s.target * s.w_scale * 60) / Math.max(1, s.ripples_per_rev);
+    const targetRpm = radToRpm(s.target * s.w_scale, s.ripples_per_rev);
     v = rpmPerMv > 0 ? Math.min(s.vm_mv, targetRpm / rpmPerMv) : s.vm_mv;
   } else if (s.regulation_mode === REG_VOLTAGE) {
     v = Math.min(s.vm_mv, (s.target * voltFs(s)) / 255);
@@ -137,10 +146,10 @@ function motorOp(s: State): MotorOp {
   return { v, i, rpm: v * rpmPerMv };
 }
 
-// RC_STATUS1: ripple frequency / W_SCALE, 8-bit; 0 unless EN_RC.
+// RC_STATUS1: ripple speed (rad/s) / W_SCALE, 8-bit; 0 unless EN_RC.
 const speedRaw = (s: State, op: MotorOp) =>
   s.rc_enabled && op.rpm > 0
-    ? clamp(Math.round((op.rpm * s.ripples_per_rev) / 60 / s.w_scale), 0, 255)
+    ? clamp(Math.round(rpmToRad(op.rpm, s.ripples_per_rev) / s.w_scale), 0, 255)
     : 0;
 // VMTR / IMTR round-trips at the register's resolution.
 const vmtrMv = (s: State, op: MotorOp) => {
@@ -185,10 +194,15 @@ const sim: TileSim<State> = {
   // voltage regulation, VM_GAIN_SEL = 1 (3.92 V range), CS_GAIN_SEL 0 (4 A),
   // target 0xFF, TINRUSH ≈ 100 ms, EN_STALL on, SMODE report, IMODE inrush,
   // FLT_GAIN ×4, EN_RC off, W_SCALE 128, 12 ripples/rev; CLR_FLT → NPOR high.
+  // (Datasheet Table 8-29: REG_CTRL / IMODE / SMODE / INT_VREF / PMODE / I2C_BC
+  // are writable only while EN_OUT = 0. Since driver 4.3.0 init writes them with
+  // the outputs off and turns EN_OUT on last, and the runtime setters drop EN_OUT
+  // around the write, so these settings do take effect.)
   defaultState: {
     vm_mv: 5000,
     vplus_mv: 3300,
     motor_mohm: 5000,
+    motor_kv: MOTOR_KV_UV_PER_RPM,
     load: 30,
 
     direction: COAST,
@@ -240,6 +254,17 @@ const sim: TileSim<State> = {
       step: 100,
       unit: 'mΩ',
       description: 'Winding resistance: sets the locked-rotor current V/R.',
+    },
+    {
+      type: 'slider',
+      field: 'motor_kv',
+      label: 'Motor Kv',
+      min: 50,
+      max: 3000,
+      step: 10,
+      unit: 'µV/RPM',
+      description:
+        "Back-EMF constant of the attached motor: sets speed per volt. A placeholder until the program's set_motor_params() gives the real value.",
     },
     {
       type: 'slider',
@@ -345,8 +370,11 @@ const sim: TileSim<State> = {
     }),
     tile_drive_dc_h_get_speed_rpm: ({ state }) => {
       const raw = chipOn(state) ? speedRaw(state, motorOp(state)) : 0;
+      // Driver: raw × W_SCALE × 60000 / (6283 × rpr), integer.
       return {
-        scalar: Math.floor((raw * 60 * state.w_scale) / Math.max(1, state.ripples_per_rev)),
+        scalar: Math.floor(
+          (raw * state.w_scale * 60000) / (TWO_PI_X1000 * Math.max(1, state.ripples_per_rev)),
+        ),
       };
     },
     tile_drive_dc_h_get_ripple_count: ({ state }) => ({
@@ -361,14 +389,16 @@ const sim: TileSim<State> = {
     // ── tier-2 helpers ──
     tile_drive_dc_h_set_speed_rpm: ({ state, args }) => {
       if (!ready(state)) return {};
-      const rpm = Math.max(0, num(args, 0, 0));
+      const rpm = Math.min(400000, Math.max(0, num(args, 0, 0)));
       const rpr = Math.max(1, state.ripples_per_rev);
-      // Finest W_SCALE whose 8-bit WSET still reaches the speed; round.
+      // Finest W_SCALE whose 8-bit WSET still reaches the speed; round. Same
+      // integer math as the driver: ripple rad/s = rpm × rpr × 6283 / 60000.
+      const rpmRpr = Math.min(400000, rpm * rpr);
       let code = 3;
       let wset = 0xff;
       for (let k = 0; k < 4; k++) {
-        const den = 60 * W_SCALE[k]!;
-        const v = Math.floor((rpm * rpr + den / 2) / den);
+        const den = 60000 * W_SCALE[k]!;
+        const v = Math.floor((rpmRpr * TWO_PI_X1000 + Math.floor(den / 2)) / den);
         if (v <= 0xff) {
           code = k;
           wset = v;
@@ -389,8 +419,15 @@ const sim: TileSim<State> = {
     tile_drive_dc_h_set_motor_params: ({ state, args }) => {
       if (!ready(state)) return {};
       const rpr = num(args, 1, 12);
-      // INV_R / KMC tune the chip's ripple estimator; only the profile is modeled.
-      return { nextState: { ripples_per_rev: rpr <= 0 ? 12 : Math.min(255, rpr) } };
+      const kv = num(args, 2, 0);
+      // INV_R / KMC tune the chip's ripple estimator (not modeled); the profile
+      // also describes the attached motor, so a nonzero kv sets the model's Kv.
+      return {
+        nextState: {
+          ripples_per_rev: rpr <= 0 ? 12 : Math.min(255, rpr),
+          ...(kv > 0 ? { motor_kv: kv } : {}),
+        },
+      };
     },
     // The driver blocks until CNT_DONE (or STALL) and then brakes; here the move
     // is armed and the tick brakes it when the count arrives.

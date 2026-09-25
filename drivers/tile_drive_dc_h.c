@@ -79,11 +79,34 @@ static void drv_rmw(tile_t* tile, uint8_t reg, uint8_t mask, uint8_t bits)
     drv_write(tile, reg, v);
 }
 
-/* W_SCALE encoding in REG_CTRL0 [1:0]:
- *   00 → 24, 01 → 40, 10 → 64, 11 → 128.
- * The chip's speed estimator multiplies the ripple-counter output by
- * this scaling factor; WSET_VSET is interpreted in the same units. */
-static const uint16_t w_scale_lookup[4] = { 24, 40, 64, 128 };
+/* Fields marked * in the register map (datasheet Table 8-29) are "writable
+ * only when EN_OUT=0": CONFIG0 VSNS_SEL / VM_GAIN_SEL / DUTY_CTRL, CONFIG3
+ * IMODE..TSD_MODE, CONFIG4 PMODE / I2C_BC, REG_CTRL0 REG_CTRL / PWM_FREQ.
+ * With the outputs on, a write to them is silently dropped. Take EN_OUT down
+ * around such a write and put it back: the bridge coasts for the few I²C
+ * bytes. CLR_CNT / CLR_FLT (CONFIG0 bits 2 / 1) are write-1 actions, so they
+ * are never written back from a read. */
+static void drv_locked_rmw(tile_t* tile, uint8_t reg, uint8_t mask, uint8_t bits)
+{
+    uint8_t c0 = (uint8_t)(drv_read(tile, DRV8214_REG_CONFIG0) & ~0x06u);
+    uint8_t was_on = c0 & 0x80u;
+    if (was_on) drv_write(tile, DRV8214_REG_CONFIG0, (uint8_t)(c0 & ~0x80u));
+    drv_rmw(tile, reg, mask, bits);
+    if (was_on) {
+        c0 = (uint8_t)(drv_read(tile, DRV8214_REG_CONFIG0) & ~0x06u);
+        drv_write(tile, DRV8214_REG_CONFIG0, (uint8_t)(c0 | 0x80u));
+    }
+}
+
+/* W_SCALE encoding in REG_CTRL0 [1:0] (datasheet Table 8-24 / 8-49):
+ *   00 → 16, 01 → 32, 10 → 64, 11 → 128  (rad/s per LSB).
+ * Ripple speed (rad/s) = SPEED × W_SCALE (Eq. 8); WSET_VSET is in the
+ * same units in speed mode. Ripple speed in rad/s = ripple Hz × 2π
+ * (Eq. 11), so shaft RPM = SPEED × W_SCALE × 60 / (2π × ripples/rev). */
+static const uint16_t w_scale_lookup[4] = { 16, 32, 64, 128 };
+
+/* 2π × 1000, for the integer rad/s ↔ RPM conversions. */
+#define TWO_PI_X1000  6283u
 
 /* CONFIG4 base: STALL_REP=1, CBC_REP=1, PMODE=1 (PWM), I2C_BC=1 */
 #define CONFIG4_BASE  0x3C
@@ -247,6 +270,11 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * carry this anywhere we can read back. */
     state_for(tile)->ripples_per_rev = ripples_per_rev;
 
+    /* Outputs off first: the starred fields below are only writable while
+     * EN_OUT = 0 (datasheet Table 8-29), and the chip keeps EN_OUT across an
+     * MCU reset if it stays powered. EN_OUT goes back on at the end. */
+    drv_write(tile, DRV8214_REG_CONFIG0, 0x00);
+
     /* ---- CONFIG4: bridge control mode ----
      * [7:6] RC_REP     = 00  (no ripple count on nFAULT)
      * [5]   STALL_REP  = 1   (report stall on nFAULT)
@@ -269,8 +297,9 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
         drv_write(tile, DRV8214_REG_CONFIG4, cfg4);
     }
 
-    /* ---- CONFIG0: enable output stage, faults, voltage range ----
-     * [7]   EN_OUT       = 1   (enable output FETs)
+    /* ---- CONFIG0: faults, voltage range (EN_OUT still 0) ----
+     * [7]   EN_OUT       = 0   (set last, below, once the locked fields
+     *                           are written)
      * [6]   EN_OVP       = 1   (overvoltage protection on)
      * [5]   EN_STALL     = mode-dependent (off for pad control)
      * [4]   VSNS_SEL     = 0   (analog output filter)
@@ -279,7 +308,7 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * [1]   CLR_FLT      = 1   (clear any power-on faults)
      * [0]   DUTY_CTRL    = 0   (internal duty control)             */
     drv_write(tile, DRV8214_REG_CONFIG0,
-              0xE2 | (vm_gain << 3));
+              0x62 | (vm_gain << 3));
 
     /* ---- CONFIG3: stall/current regulation settings ----
      * [7:6] IMODE     = mode-dependent
@@ -345,6 +374,10 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * runtime via tile_drive_dc_h_set_motor_params().               */
     drv_apply_motor_tuning(tile, motor_mohm, ripples_per_rev,
                            kv_uv_per_rpm);
+
+    /* Every locked field is written: enable the output stage. */
+    drv_write(tile, DRV8214_REG_CONFIG0,
+              (uint8_t)((drv_read(tile, DRV8214_REG_CONFIG0) & ~0x06u) | 0x80u));
 
     tile->state = TILE_STATE_READY;
 }
@@ -436,7 +469,8 @@ void tile_drive_dc_h_set_control_mode(tile_t* tile,
             cfg4 |= CONFIG4_PMODE_MASK | CONFIG4_I2C_BC_MASK;
             break;
     }
-    drv_write(tile, DRV8214_REG_CONFIG4, cfg4);
+    /* PMODE / I2C_BC are locked while EN_OUT = 1 (Table 8-29). */
+    drv_locked_rmw(tile, DRV8214_REG_CONFIG4, 0xFF, cfg4);
 }
 
 /* ---- Regulation ---- */
@@ -460,7 +494,7 @@ void tile_drive_dc_h_set_regulation_mode(tile_t* tile,
 
     /* REG_CTRL[1:0] occupies CTRL0 bits [4:3]. */
     uint8_t bits = (uint8_t)((mode & 0x03) << 3);
-    drv_rmw(tile, DRV8214_REG_CTRL0, 0x18, bits);
+    drv_locked_rmw(tile, DRV8214_REG_CTRL0, 0x18, bits);  /* REG_CTRL: locked */
 
     /* Speed regulation requires EN_RC=1; force it (and leave it on
      * when switching away — clearing it would invalidate get_speed
@@ -480,7 +514,7 @@ void tile_drive_dc_h_set_current_regulation_mode(tile_t* tile,
         return;
     }
     /* IMODE[1:0] occupies CONFIG3 bits [7:6]. */
-    drv_rmw(tile, DRV8214_REG_CONFIG3, 0xC0,
+    drv_locked_rmw(tile, DRV8214_REG_CONFIG3, 0xC0,
             (uint8_t)((mode & 0x03) << 6));
 }
 
@@ -529,7 +563,7 @@ void tile_drive_dc_h_set_stall_recovery(tile_t* tile,
         return;
     }
     /* SMODE is CONFIG3 bit 5. */
-    drv_rmw(tile, DRV8214_REG_CONFIG3, 0x20,
+    drv_locked_rmw(tile, DRV8214_REG_CONFIG3, 0x20,
             (mode == DRIVE_DC_H_STALL_REPORT) ? 0x20 : 0x00);
 }
 
@@ -644,9 +678,11 @@ uint32_t tile_drive_dc_h_get_speed_rpm(tile_t* tile)
     uint8_t rpr = st->ripples_per_rev ? st->ripples_per_rev : 12;
 
     /* Inverse of the set_speed_rpm() conversion, using the live
-     * W_SCALE from CTRL0 so the pair always agrees. */
-    return ((uint32_t)raw * 60u * (uint32_t)w_scale_lookup[ctrl0 & 0x03])
-           / rpr;
+     * W_SCALE from CTRL0 so the pair always agrees:
+     * RPM = SPEED × W_SCALE [rad/s] × 60 / (2π × rpr).
+     * Max numerator 255 × 128 × 60000 ≈ 1.96e9 fits uint32. */
+    return ((uint32_t)raw * (uint32_t)w_scale_lookup[ctrl0 & 0x03] * 60000u)
+           / (TWO_PI_X1000 * (uint32_t)rpr);
 }
 
 uint16_t tile_drive_dc_h_get_ripple_count(tile_t* tile)
@@ -669,7 +705,7 @@ void tile_drive_dc_h_sleep(tile_t* tile)
     if (tile->state != TILE_STATE_READY) return;
 
     uint8_t cfg0 = drv_read(tile, DRV8214_REG_CONFIG0);
-    drv_write(tile, DRV8214_REG_CONFIG0, cfg0 & ~0x80);  /* EN_OUT = 0 */
+    drv_write(tile, DRV8214_REG_CONFIG0, cfg0 & ~0x86);  /* EN_OUT = 0; no CLR_* */
     tile->state = TILE_STATE_SLEEPING;
 }
 
@@ -678,7 +714,7 @@ void tile_drive_dc_h_wake(tile_t* tile)
     if (tile->state != TILE_STATE_SLEEPING) return;
 
     uint8_t cfg0 = drv_read(tile, DRV8214_REG_CONFIG0);
-    drv_write(tile, DRV8214_REG_CONFIG0, cfg0 | 0x80);   /* EN_OUT = 1 */
+    drv_write(tile, DRV8214_REG_CONFIG0, (cfg0 & ~0x06) | 0x80);  /* EN_OUT = 1 */
     tile->hal->delay_ms(1);  /* tWAKE < 410 us */
     tile->state = TILE_STATE_READY;
 }
@@ -714,17 +750,26 @@ void tile_drive_dc_h_set_speed_rpm(tile_t *tile, uint32_t rpm,
     drive_dc_h_state_t *st = state_for(tile);
     uint8_t rpr = st->ripples_per_rev ? st->ripples_per_rev : 12;
 
-    /* Pick the finest W_SCALE (24/40/64/128) whose 8-bit WSET range
-     * still reaches the requested speed — a finer scale means finer
-     * RPM granularity at the low end (LSB = 60 × W_SCALE / rpr RPM,
-     * e.g. 120 RPM at W_SCALE=24 / rpr=12 vs 640 RPM at the old
-     * fixed W_SCALE=128). The driver owns CTRL0[1:0]; get_speed_rpm()
-     * reads it back so conversions stay consistent. */
+    /* Pick the finest W_SCALE (16/32/64/128 rad/s) whose 8-bit WSET
+     * range still reaches the requested speed — a finer scale means
+     * finer RPM granularity at the low end (LSB = 60 × W_SCALE /
+     * (2π × rpr) RPM, e.g. ~12.7 RPM at W_SCALE=16 / rpr=12). The
+     * driver owns CTRL0[1:0]; get_speed_rpm() reads it back so
+     * conversions stay consistent.
+     *
+     * Ripple speed [rad/s] = rpm × rpr × 2π / 60. Saturate rpm × rpr
+     * first so the ×6283 below fits uint32 (400000 × 6283 ≈ 2.5e9);
+     * 400000 rpm·ripples is ~41900 rad/s, above the 32640 rad/s top
+     * of the coarsest scale, so the clamp never changes the result. */
+    if (rpm > 400000u) rpm = 400000u;
+    uint32_t rpm_rpr = rpm * (uint32_t)rpr;
+    if (rpm_rpr > 400000u) rpm_rpr = 400000u;
+
     uint8_t  scale_bits = 3;
     uint32_t wset = 0xFFu;
     for (uint8_t i = 0; i < 4; i++) {
-        uint32_t den = 60u * (uint32_t)w_scale_lookup[i];
-        uint32_t v   = (rpm * (uint32_t)rpr + den / 2) / den;  /* round */
+        uint32_t den = 60000u * (uint32_t)w_scale_lookup[i];
+        uint32_t v   = (rpm_rpr * TWO_PI_X1000 + den / 2) / den;  /* round */
         if (v <= 0xFFu) {
             scale_bits = i;
             wset = v;
