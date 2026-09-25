@@ -1,0 +1,2341 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@2396446",
+  "file": "tile_sense_i_6p6.h",
+  "brief": "Complete driver for the Sense.I.6P6 tile (ICM-42686-P). Supports both I2C and SPI bus access via tiles_pal_t.",
+  "description": "        Supports both I2C and SPI bus access via tiles_pal_t.\n@version 1.3.0\n\n6-axis IMU with extended measurement range:\n  - Accelerometer:  16-bit, ±2/4/8/16/32 G, up to 32 kHz ODR\n  - Gyroscope:      16-bit, ±31.25 to ±4000 DPS, up to 32 kHz ODR\n  - Temperature:    on-chip sensor\n  - FIFO:           2 KB with multiple packet formats\n  - APEX:           Pedometer, tilt, wake-on-motion, tap detection\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: TDK InvenSense DS-000639, Rev 1.0\n\n@studio tile label=Sense.I.6P6 icon=triad\n@studio event name=data_ready mask=ICM42686P_INT_DATA_RDY\n@studio event name=fifo_watermark mask=ICM42686P_INT_FIFO_THS\n@studio event name=tilt mask=ICM42686P_INT_STATUS3_TILT_DET\n@studio event name=tap mask=ICM42686P_INT_STATUS3_TAP_DET payload=count:int,axis:int,direction:int read=tile_sense_i_6p6_get_tap_result read_type=sense_i_6p6_tap_result_t\n@studio event name=wake_on_motion mask=ICM42686P_INT_STATUS2_WOM_ANY\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"External timing pins (FSYNC / CLKIN)\"\n  Hardware-gated (not a driver gap). The ICM-42686-P can take a 31–50 kHz\n  FSYNC input (TIMESTAMP_FSYNC_EN) for sample time-stamping and a ~32 kHz\n  external CLKIN (RTC) for precise ODR. Neither pin is routed to a tile pad\n  on Sense-I-6P6-a, so the capability simply isn't wired out — closing\n  requires a tile hardware revision, not driver work.\n\n@studio unsupported severity=niche category=\"FIFO 20-bit hi-res mode\"\n  Design-gated. FIFO_HIRES_EN switches FIFO packets to 20-bit accel\n  + 20-bit gyro (Packet 4 with 3-byte extensions) at higher\n  sensitivity scale factors. Closing properly requires extending\n  sense_i_6p6_fifo_packet_t to represent 20-bit fields and reworking\n  the read_packet parser; toggling the bit alone breaks the existing\n  16-bit parsing path. Deferred to a future driver pass.\n\n@studio unsupported severity=advanced category=\"I3C support\"\n  Ecosystem-gated. ICM-42686-P supports I3C SDR (up to 12.5 MHz\n  with in-band interrupts and dynamic addressing) and the tile\n  straps I3C on pads 3/4/5. The driver framework currently uses\n  tiles_pal I²C calls only; closing requires a new bus abstraction\n  in Studio. Defer to a multi-bus driver framework pass.\n\n@studio unsupported severity=advanced category=\"APEX raise-to-wake / raise-to-sleep\"\n  Driver-deferred (true driver gap — hardware supports it). The APEX engine\n  detects raise-to-wake / raise-to-sleep gestures (RWR), routable to INT via\n  INT_SOURCE6/7. The driver wraps pedometer / tilt / tap / WOM / SMD but not\n  RWR; no hardware or framework blocker — closing is a driver pass.\n\n@studio unsupported severity=advanced category=\"UI notch / anti-alias filter tuning\"\n  Driver-deferred (true driver gap). set_filter_bw / set_filter_order expose\n  the UI filter bandwidth and order, but not the notch-filter centre\n  frequency / Q (Bank-1 GYRO_CFG_STATIC registers) for rejecting a specific\n  vibration band.\n\n@studio unsupported severity=niche category=\"Standalone timestamp (TMSTVAL) read\"\n  Driver-deferred (true driver gap). FIFO packets carry a 16-bit timestamp,\n  but the chip's free-running timestamp counter (Bank-1 TMSTVAL0-2) isn't\n  exposed as a direct read.",
+  "code_examples": [
+    {
+      "label": "Quick start — I2C (polling)",
+      "code": "  tile_t imu;\n  tile_sense_i_6p6_init(core_tiles_pal(&core_i2c3), 0, &imu, NULL);\n  int16_t accel[3], gyro[3];\n  tile_sense_i_6p6_get_raw_accels(&imu, accel);\n  tile_sense_i_6p6_get_raw_gyros(&imu, gyro);"
+    },
+    {
+      "label": "Quick start — SPI",
+      "code": "  tile_t imu;\n  tile_sense_i_6p6_init(core_tiles_pal(&core_spi1), 0, &imu, NULL);\n  int16_t accel[3];\n  tile_sense_i_6p6_get_raw_accels(&imu, accel);"
+    },
+    {
+      "label": "Quick start — interrupt-driven with callback",
+      "code": "  void on_data(tile_t *t, uint8_t events, void *ctx) {\n      int16_t buf[7];\n      tile_sense_i_6p6_get_raw_all(t, buf);\n  }\n  sense_i_6p6_cfg_t cfg = {\n      .on_event = on_data,\n      .int1_pin = 9,  // Core pad connected to INT1\n  };\n  tile_sense_i_6p6_init(core_tiles_pal(&core_i2c3), 0, &imu, &cfg);\n  tile_sense_i_6p6_int1_data_ready(&imu, 1);\n  while (1) { tile_sense_i_6p6_process(&imu); }"
+    }
+  ],
+  "studio_ready": true,
+  "studio_events": [
+    {
+      "name": "data_ready"
+    },
+    {
+      "name": "fifo_watermark"
+    },
+    {
+      "name": "tilt"
+    },
+    {
+      "name": "tap"
+    },
+    {
+      "name": "wake_on_motion"
+    }
+  ],
+  "studio_unsupported": [
+    {
+      "severity": "advanced",
+      "category": "External timing pins (FSYNC / CLKIN)",
+      "brief": "Hardware-gated (not a driver gap). The ICM-42686-P can take a 31–50 kHz FSYNC input (TIMESTAMP_FSYNC_EN) for sample time-stamping and a ~32 kHz external CLKIN (RTC) for precise ODR. Neither pin is routed to a tile pad on Sense-I-6P6-a, so the capability simply isn't wired out — closing requires a tile hardware revision, not driver work."
+    },
+    {
+      "severity": "niche",
+      "category": "FIFO 20-bit hi-res mode",
+      "brief": "Design-gated. FIFO_HIRES_EN switches FIFO packets to 20-bit accel + 20-bit gyro (Packet 4 with 3-byte extensions) at higher sensitivity scale factors. Closing properly requires extending sense_i_6p6_fifo_packet_t to represent 20-bit fields and reworking the read_packet parser; toggling the bit alone breaks the existing 16-bit parsing path. Deferred to a future driver pass."
+    },
+    {
+      "severity": "advanced",
+      "category": "I3C support",
+      "brief": "Ecosystem-gated. ICM-42686-P supports I3C SDR (up to 12.5 MHz with in-band interrupts and dynamic addressing) and the tile straps I3C on pads 3/4/5. The driver framework currently uses tiles_pal I²C calls only; closing requires a new bus abstraction in Studio. Defer to a multi-bus driver framework pass."
+    },
+    {
+      "severity": "advanced",
+      "category": "APEX raise-to-wake / raise-to-sleep",
+      "brief": "Driver-deferred (true driver gap — hardware supports it). The APEX engine detects raise-to-wake / raise-to-sleep gestures (RWR), routable to INT via INT_SOURCE6/7. The driver wraps pedometer / tilt / tap / WOM / SMD but not RWR; no hardware or framework blocker — closing is a driver pass."
+    },
+    {
+      "severity": "advanced",
+      "category": "UI notch / anti-alias filter tuning",
+      "brief": "Driver-deferred (true driver gap). set_filter_bw / set_filter_order expose the UI filter bandwidth and order, but not the notch-filter centre frequency / Q (Bank-1 GYRO_CFG_STATIC registers) for rejecting a specific vibration band."
+    },
+    {
+      "severity": "niche",
+      "category": "Standalone timestamp (TMSTVAL) read",
+      "brief": "Driver-deferred (true driver gap). FIFO packets carry a 16-bit timestamp, but the chip's free-running timestamp counter (Bank-1 TMSTVAL0-2) isn't exposed as a direct read."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_I_6P6_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_I_6P6_VERSION_MINOR",
+      "value": "3",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_I_6P6_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_I2C_ADDR_DEFAULT",
+      "value": "0x69",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_I2C_ADDR_ALT",
+      "value": "0x68",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_SENSOR_CONFIG0",
+      "value": "0x03",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC2",
+      "value": "0x0B",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC3",
+      "value": "0x0C",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC4",
+      "value": "0x0D",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC5",
+      "value": "0x0E",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_NF_COSWZ_X",
+      "value": "0x0F",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_NF_COSWZ_Y",
+      "value": "0x10",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_NF_COSWZ_Z",
+      "value": "0x11",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC9",
+      "value": "0x12",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_GYRO_CFG_STATIC10",
+      "value": "0x13",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_XG_ST_DATA",
+      "value": "0x5F",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_YG_ST_DATA",
+      "value": "0x60",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_ZG_ST_DATA",
+      "value": "0x61",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_TMSTVAL0",
+      "value": "0x62",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_TMSTVAL1",
+      "value": "0x63",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_TMSTVAL2",
+      "value": "0x64",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_INTF_CONFIG4",
+      "value": "0x7A",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B1_INTF_CONFIG5",
+      "value": "0x7B",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_ACCEL_CFG_STATIC2",
+      "value": "0x03",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_ACCEL_CFG_STATIC3",
+      "value": "0x04",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_ACCEL_CFG_STATIC4",
+      "value": "0x05",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_XA_ST_DATA",
+      "value": "0x3B",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_YA_ST_DATA",
+      "value": "0x3C",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B2_ZA_ST_DATA",
+      "value": "0x3D",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG1",
+      "value": "0x40",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG2",
+      "value": "0x41",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG3",
+      "value": "0x42",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG4",
+      "value": "0x43",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG7",
+      "value": "0x46",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG8",
+      "value": "0x47",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_APEX_CONFIG9",
+      "value": "0x48",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_WOM_X_THR",
+      "value": "0x4A",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_WOM_Y_THR",
+      "value": "0x4B",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_WOM_Z_THR",
+      "value": "0x4C",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_INT_SOURCE6",
+      "value": "0x4D",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_INT_SOURCE7",
+      "value": "0x4E",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_INT_SOURCE8",
+      "value": "0x4F",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_INT_SOURCE9",
+      "value": "0x50",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_INT_SOURCE10",
+      "value": "0x51",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER0",
+      "value": "0x77",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER1",
+      "value": "0x78",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER2",
+      "value": "0x79",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER3",
+      "value": "0x7A",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER4",
+      "value": "0x7B",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER5",
+      "value": "0x7C",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER6",
+      "value": "0x7D",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER7",
+      "value": "0x7E",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_B4_OFFSET_USER8",
+      "value": "0x7F",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "ICM42686P_WHOAMI_DEFAULT",
+      "value": "0x44",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_i_6p6_accel_range_t",
+      "brief": "Accelerometer full-scale range.",
+      "description": "| Enum value   | FSR    | Sensitivity (LSB/g) |\n|--------------|--------|---------------------|\n| ACCEL_32G    | ±32 g  |  1,024              |\n| ACCEL_16G    | ±16 g  |  2,048              |\n| ACCEL_8G     | ±8 g   |  4,096              |\n| ACCEL_4G     | ±4 g   |  8,192              |\n| ACCEL_2G     | ±2 g   | 16,384              |",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_ACCEL_32G",
+          "value": "0x00",
+          "description": "+/- 32g"
+        },
+        {
+          "name": "SENSE_I_6P6_ACCEL_16G",
+          "value": "0x01",
+          "description": "+/- 16g"
+        },
+        {
+          "name": "SENSE_I_6P6_ACCEL_8G",
+          "value": "0x02",
+          "description": "+/- 8g"
+        },
+        {
+          "name": "SENSE_I_6P6_ACCEL_4G",
+          "value": "0x03",
+          "description": "+/- 4g"
+        },
+        {
+          "name": "SENSE_I_6P6_ACCEL_2G",
+          "value": "0x04",
+          "description": "+/- 2g"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_gyro_range_t",
+      "brief": "Gyroscope full-scale range.",
+      "description": "| Enum value    | FSR          | Sensitivity (LSB/dps) |\n|---------------|--------------|----------------------|\n| GYRO_4000DPS  | ±4000 °/s    |     8.2              |\n| GYRO_2000DPS  | ±2000 °/s    |    16.4              |\n| GYRO_1000DPS  | ±1000 °/s    |    32.8              |\n| GYRO_500DPS   | ±500 °/s     |    65.5              |\n| GYRO_250DPS   | ±250 °/s     |   131.0              |\n| GYRO_125DPS   | ±125 °/s     |   262.0              |\n| GYRO_62_5DPS  | ±62.5 °/s    |   524.3              |\n| GYRO_31_25DPS | ±31.25 °/s   |  1048.6              |",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_GYRO_4000DPS",
+          "value": "0x00",
+          "description": "+/- 4000 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_2000DPS",
+          "value": "0x01",
+          "description": "+/- 2000 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_1000DPS",
+          "value": "0x02",
+          "description": "+/- 1000 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_500DPS",
+          "value": "0x03",
+          "description": "+/- 500 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_250DPS",
+          "value": "0x04",
+          "description": "+/- 250 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_125DPS",
+          "value": "0x05",
+          "description": "+/- 125 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_62_5DPS",
+          "value": "0x06",
+          "description": "+/- 62.5 deg/s"
+        },
+        {
+          "name": "SENSE_I_6P6_GYRO_31_25DPS",
+          "value": "0x07",
+          "description": "+/- 31.25 deg/s"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_odr_t",
+      "brief": "Output data rate selection.",
+      "description": "Same encoding for both accel and gyro (GYRO_CONFIG0[3:0], ACCEL_CONFIG0[3:0]).\nRates above 200 Hz require Low-Noise mode. Rates below 12.5 Hz are accel LP only.",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_ODR_32KHZ",
+          "value": "0x01",
+          "description": "32 kHz @studio value=32000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_16KHZ",
+          "value": "0x02",
+          "description": "16 kHz @studio value=16000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_8KHZ",
+          "value": "0x03",
+          "description": "8 kHz @studio value=8000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_4KHZ",
+          "value": "0x04",
+          "description": "4 kHz @studio value=4000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_2KHZ",
+          "value": "0x05",
+          "description": "2 kHz @studio value=2000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_1KHZ",
+          "value": "0x06",
+          "description": "1 kHz @studio value=1000"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_200HZ",
+          "value": "0x07",
+          "description": "200 Hz @studio value=200"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_100HZ",
+          "value": "0x08",
+          "description": "100 Hz @studio value=100"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_50HZ",
+          "value": "0x09",
+          "description": "50 Hz @studio value=50"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_25HZ",
+          "value": "0x0A",
+          "description": "25 Hz @studio value=25"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_12_5HZ",
+          "value": "0x0B",
+          "description": "12.5 Hz @studio value=12.5"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_6_25HZ",
+          "value": "0x0C",
+          "description": "6.25 Hz (accel LP only) @studio value=6.25"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_3_125HZ",
+          "value": "0x0D",
+          "description": "3.125 Hz (accel LP only) @studio value=3.125"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_1_5625HZ",
+          "value": "0x0E",
+          "description": "1.5625 Hz (accel LP only) @studio value=1.5625"
+        },
+        {
+          "name": "SENSE_I_6P6_ODR_500HZ",
+          "value": "0x0F",
+          "description": "500 Hz @studio value=500"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_power_mode_t",
+      "brief": "Power mode for accel/gyro independently.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_MODE_OFF",
+          "value": "0x00",
+          "description": "Powered off"
+        },
+        {
+          "name": "SENSE_I_6P6_MODE_STANDBY",
+          "value": "0x01",
+          "description": "Gyro only: drive on, no output"
+        },
+        {
+          "name": "SENSE_I_6P6_MODE_LP",
+          "value": "0x02",
+          "description": "Accel only: duty-cycled"
+        },
+        {
+          "name": "SENSE_I_6P6_MODE_LN",
+          "value": "0x03",
+          "description": "Low-noise (full performance)"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_filter_bw_t",
+      "brief": "UI filter bandwidth selection.",
+      "description": "Used for both accel and gyro in GYRO_ACCEL_CONFIG0 (0x52).\nIn Low-Noise mode: sets the digital low-pass filter cutoff. Per the datasheet\n(GYRO_ACCEL_CONFIG0, 0x52) the cutoff is ODR/2 for setting 0 and\nmax(400 Hz, ODR)/N for settings 1–7 — NOT ODR/N: below 400 Hz the filter stops\ntracking the data rate. `@studio value=` is the divisor N.\nIn Low-Power mode: sets averaging factor.",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_2",
+          "value": "0x00",
+          "description": "ODR/2 (Nyquist) @studio value=2"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_4",
+          "value": "0x01",
+          "description": "max(400 Hz, ODR)/4 (default) @studio value=4"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_5",
+          "value": "0x02",
+          "description": "max(400 Hz, ODR)/5 @studio value=5"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_8",
+          "value": "0x03",
+          "description": "max(400 Hz, ODR)/8 @studio value=8"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_10",
+          "value": "0x04",
+          "description": "max(400 Hz, ODR)/10 @studio value=10"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_16",
+          "value": "0x05",
+          "description": "max(400 Hz, ODR)/16 @studio value=16"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_20",
+          "value": "0x06",
+          "description": "max(400 Hz, ODR)/20 @studio value=20"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_BW_ODR_40",
+          "value": "0x07",
+          "description": "max(400 Hz, ODR)/40 @studio value=40"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_LP_1X_AVG",
+          "value": "0x01",
+          "description": "LP mode: 1× averaging (default)"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_LP_16X_AVG",
+          "value": "0x06",
+          "description": "LP mode: 16× averaging"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_filter_order_t",
+      "brief": "UI filter order.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_FILT_ORDER_1ST",
+          "value": "0x00",
+          "description": "1st order"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_ORDER_2ND",
+          "value": "0x01",
+          "description": "2nd order"
+        },
+        {
+          "name": "SENSE_I_6P6_FILT_ORDER_3RD",
+          "value": "0x02",
+          "description": "3rd order"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_temp_filter_t",
+      "brief": "Temperature filter bandwidth.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_4000HZ",
+          "value": "0x00",
+          "description": "4000 Hz cutoff @studio value=4000"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_170HZ",
+          "value": "0x01",
+          "description": "170 Hz cutoff @studio value=170"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_82HZ",
+          "value": "0x02",
+          "description": "82 Hz cutoff @studio value=82"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_40HZ",
+          "value": "0x03",
+          "description": "40 Hz cutoff @studio value=40"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_20HZ",
+          "value": "0x04",
+          "description": "20 Hz cutoff @studio value=20"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_10HZ",
+          "value": "0x05",
+          "description": "10 Hz cutoff @studio value=10"
+        },
+        {
+          "name": "SENSE_I_6P6_TEMP_FILT_5HZ",
+          "value": "0x06",
+          "description": "5 Hz cutoff @studio value=5"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_fifo_mode_t",
+      "brief": "FIFO mode.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_FIFO_BYPASS",
+          "value": "0x00",
+          "description": "FIFO disabled"
+        },
+        {
+          "name": "SENSE_I_6P6_FIFO_STREAM",
+          "value": "0x01",
+          "description": "Stream mode (oldest data replaced)"
+        },
+        {
+          "name": "SENSE_I_6P6_FIFO_STOP_ON_FULL",
+          "value": "0x02",
+          "description": "Stop on full"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_dmp_odr_t",
+      "brief": "APEX DMP output data rate.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_DMP_ODR_25HZ",
+          "value": "0x00",
+          "description": "25 Hz"
+        },
+        {
+          "name": "SENSE_I_6P6_DMP_ODR_50HZ",
+          "value": "0x02",
+          "description": "50 Hz"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_wom_mode_t",
+      "brief": "WOM (Wake-on-Motion) compare mode.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_WOM_INITIAL",
+          "value": "0x00",
+          "description": "Compare against first sample"
+        },
+        {
+          "name": "SENSE_I_6P6_WOM_PREVIOUS",
+          "value": "0x01",
+          "description": "Compare against previous sample"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_smd_mode_t",
+      "brief": "SMD (Significant Motion Detection) mode.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_SMD_DISABLED",
+          "value": "0x00",
+          "description": "Disabled"
+        },
+        {
+          "name": "SENSE_I_6P6_SMD_SHORT",
+          "value": "0x02",
+          "description": "1 second WOM window"
+        },
+        {
+          "name": "SENSE_I_6P6_SMD_LONG",
+          "value": "0x03",
+          "description": "3 second WOM window"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_int_config_t",
+      "brief": "Interrupt pin configuration.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_INT_ACTIVE_LOW",
+          "value": "0x00",
+          "description": "Active low"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_ACTIVE_HIGH",
+          "value": "0x01",
+          "description": "Active high"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_OPEN_DRAIN",
+          "value": "0x00",
+          "description": "Open drain"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_PUSH_PULL",
+          "value": "0x02",
+          "description": "Push-pull"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_PULSED",
+          "value": "0x00",
+          "description": "Pulsed"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_LATCHED",
+          "value": "0x04",
+          "description": "Latched"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_activity_t",
+      "brief": "APEX activity classification.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_ACTIVITY_UNKNOWN",
+          "value": "0x00",
+          "description": "Unknown"
+        },
+        {
+          "name": "SENSE_I_6P6_ACTIVITY_WALK",
+          "value": "0x01",
+          "description": "Walking"
+        },
+        {
+          "name": "SENSE_I_6P6_ACTIVITY_RUN",
+          "value": "0x02",
+          "description": "Running"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_int_pulse_t",
+      "brief": "Pulse-width selector for INT pin pulse mode.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_INT_PULSE_100US",
+          "value": "0",
+          "description": "100 µs pulse (default)"
+        },
+        {
+          "name": "SENSE_I_6P6_INT_PULSE_8US",
+          "value": "1",
+          "description": "8 µs pulse — for fast hosts"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_subsystem_t",
+      "brief": "Subsystem selector for scoped resets.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_I_6P6_RESET_APEX",
+          "value": "0",
+          "description": "APEX (DMP) memory + state"
+        },
+        {
+          "name": "SENSE_I_6P6_RESET_TEMP",
+          "value": "1",
+          "description": "No-op: the ICM-42686-P has no temperature-path reset"
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_i_6p6_fifo_packet_t",
+      "brief": "FIFO packet structure (16 bytes, accel + gyro + temp + timestamp).",
+      "description": "",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "header",
+          "description": "Packet header byte (use SENSE_I_6P6_FIFO_HEADER_* masks)."
+        },
+        {
+          "type": "int8_t",
+          "name": "temp",
+          "description": "8-bit temperature: degC = temp/2.07 + 25"
+        },
+        {
+          "type": "uint16_t",
+          "name": "timestamp",
+          "description": "16-bit timestamp"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_tap_result_t",
+      "brief": "Tap detection result.",
+      "description": "",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "count",
+          "description": "0=none, 1=single, 2=double"
+        },
+        {
+          "type": "uint8_t",
+          "name": "axis",
+          "description": "0=X, 1=Y, 2=Z"
+        },
+        {
+          "type": "uint8_t",
+          "name": "direction",
+          "description": "0=positive, 1=negative"
+        },
+        {
+          "type": "uint8_t",
+          "name": "timing",
+          "description": "Double-tap timing: seconds = timing * 16 / ODR"
+        }
+      ]
+    },
+    {
+      "name": "sense_i_6p6_cfg_t",
+      "brief": "",
+      "description": "Optional init config. Pass NULL for defaults (polling, no interrupts).",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "int1_pin",
+          "description": "Core pad number for INT1. 0 = polled."
+        },
+        {
+          "type": "uint8_t",
+          "name": "int2_pin",
+          "description": "Core pad number for INT2. 0 = unused."
+        },
+        {
+          "type": "sense_i_6p6_event_cb_t",
+          "name": "on_event",
+          "description": "Callback. NULL = no callback."
+        },
+        {
+          "type": "uint8_t",
+          "name": "accel_range",
+          "description": "sense_i_6p6_accel_range_t. 0 = default."
+        },
+        {
+          "type": "uint8_t",
+          "name": "gyro_range",
+          "description": "sense_i_6p6_gyro_range_t. 0 = default."
+        },
+        {
+          "type": "uint8_t",
+          "name": "odr",
+          "description": "sense_i_6p6_odr_t. 0 = default (100Hz)."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_i_6p6_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [],
+      "notes": [],
+      "brief": "Check if a Sense.I.6P6 is present on the bus (address probe only).",
+      "description": "",
+      "name": "tile_sense_i_6p6_find"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_i_6p6_cfg_t *cfg)",
+      "params": [],
+      "notes": [
+        "Blocks for ~2 ms (reset). Call once at startup."
+      ],
+      "brief": "Initialize the ICM-42686P.",
+      "description": "Performs soft reset, verifies WHO_AM_I, configures sensor ranges\nand ODR. Pass cfg=NULL for defaults (±8g, ±1000dps, 100Hz, polled).",
+      "name": "tile_sense_i_6p6_init"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_process(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "events",
+      "brief": "Process pending interrupt events. Call from your main loop.",
+      "description": "In interrupt mode: returns immediately if no INT1 interrupt fired;\nreads INT_STATUS and fires callback only when events are pending.\nIn polled mode: reads INT_STATUS every call, fires callback if set.",
+      "name": "tile_sense_i_6p6_process"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_on_event(tile_t *tile, sense_i_6p6_event_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "cb",
+          "description": "Callback to fire on interrupt events. NULL to clear."
+        },
+        {
+          "name": "ctx",
+          "description": "Opaque user pointer passed to the callback."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "events",
+      "brief": "Register or change the event callback.",
+      "description": "",
+      "name": "tile_sense_i_6p6_on_event"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_sleep(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Enter sleep mode (accel + gyro off). ~7.5 µA.",
+      "description": "",
+      "name": "tile_sense_i_6p6_sleep"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_wake(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Wake from sleep, restore low-noise mode. Range/ODR preserved.",
+      "description": "",
+      "name": "tile_sense_i_6p6_wake"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_reset(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Software reset. Blocks ~2 ms. Must call init() again after.",
+      "description": "",
+      "name": "tile_sense_i_6p6_reset"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t range)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set accelerometer full-scale range.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_accel_range"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t range)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set gyroscope full-scale range.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_gyro_range"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set accelerometer output data rate.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_accel_odr"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set gyroscope output data rate.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_gyro_odr"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_power_mode(tile_t *tile, sense_i_6p6_power_mode_t accel, sense_i_6p6_power_mode_t gyro)",
+      "params": [],
+      "notes": [
+        "Wait 200 µs after changing mode before accessing other registers."
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set power mode independently for accel and gyro.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_power_mode"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_filter_bw(tile_t *tile, sense_i_6p6_filter_bw_t accel_bw, sense_i_6p6_filter_bw_t gyro_bw)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set UI filter bandwidth for both accel and gyro.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_filter_bw"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_filter_order(tile_t *tile, sense_i_6p6_filter_order_t accel_order, sense_i_6p6_filter_order_t gyro_order)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set UI filter order for accel and gyro (1st, 2nd, or 3rd).",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_filter_order"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set temperature sensor filter bandwidth.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_temp_filter"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_temp_enabled(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "[0..1] 1 = on, 0 = off."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable the temperature sensor.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_temp_enabled"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_data_ready(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Check if new sensor data is available.",
+      "description": "",
+      "name": "tile_sense_i_6p6_data_ready"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_raw_accels(tile_t *tile, int16_t *buffer)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read raw accelerometer [X, Y, Z]. Convert: g = raw / sensitivity.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_raw_accels"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_raw_gyros(tile_t *tile, int16_t *buffer)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read raw gyroscope [X, Y, Z]. Convert: dps = raw / sensitivity.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_raw_gyros"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_raw_6dof(tile_t *tile, int16_t *buffer)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Burst read accel + gyro [AX, AY, AZ, GX, GY, GZ]. One transaction.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_raw_6dof"
+    },
+    {
+      "signature": "int16_t tile_sense_i_6p6_get_temperature(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read temperature. Convert: degC = raw / 132.48 + 25.0",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_temperature"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_raw_all(tile_t *tile, int16_t *buffer)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read all 7 channels [Temp, AX, AY, AZ, GX, GY, GZ] in one burst.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_raw_all"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_is_face_up(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if face-up, 0 otherwise.",
+      "brief": "Detect whether the device is approximately face-up (Z ≈ +1g).",
+      "description": "Reads the accelerometer once and returns 1 when Z is within ±200 mg of\n+1 g and X/Y are within ±300 mg of 0. Uses the current ACCEL_CONFIG0\nfull-scale range to compute thresholds at runtime, so the helper stays\ncorrect after `set_accel_range`. Integer math only.",
+      "name": "tile_sense_i_6p6_is_face_up"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_is_face_down(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if face-down, 0 otherwise.",
+      "brief": "Detect whether the device is approximately face-down (Z ≈ −1g).",
+      "description": "Mirror of `is_face_up` with an inverted Z target. Same ±200 mg /\n±300 mg tolerance bands; same range-aware thresholding.",
+      "name": "tile_sense_i_6p6_is_face_down"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_is_moving(tile_t *tile, uint16_t threshold_mg)",
+      "params": [
+        {
+          "name": "threshold_mg",
+          "description": "[1..32000] Deviation threshold in milli-g (typical: 50–200)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if moving, 0 otherwise.",
+      "brief": "Detect motion: |‖a‖ − 1g| > threshold.",
+      "description": "Reads the accelerometer, computes the squared magnitude in raw counts,\nand compares against the squared 1-g + threshold band. Squared-form\nkeeps the math integer (no sqrt). Threshold is symmetric around 1 g\nso the helper triggers on both lift and drop. Range-aware.",
+      "name": "tile_sense_i_6p6_is_moving"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_read_tilt_centi_degrees(tile_t *tile, uint8_t axis, int16_t *out_centi_deg)",
+      "params": [
+        {
+          "name": "axis",
+          "description": "0 = X, 1 = Y, 2 = Z."
+        },
+        {
+          "name": "out_centi_deg",
+          "description": "Output tilt in 0.01° (signed, −9000..+9000)."
+        }
+      ],
+      "notes": [],
+      "return": "1 on success, 0 on bad axis or zero vector.",
+      "brief": "Tilt angle of one axis vs gravity, in 0.01°.",
+      "description": "Computes `atan2(axis, sqrt(other_a^2 + other_b^2))` for the requested\naxis using a small integer atan2 approximation: the elevation of that\naxis above the horizontal plane. Output range: −9000..+9000\n(−90.00°..+90.00°; +9000 = axis pointing straight up, e.g. Z when the\ntile lies face up). Returns 0 and writes 0 to `*out_centi_deg` if the\ndevice is in free-fall (all-zero vector). Range-independent (a ratio).",
+      "name": "tile_sense_i_6p6_read_tilt_centi_degrees"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_read_tilt_centi_degrees_flat(tile_t *tile, uint8_t axis, int32_t *out_centi_deg)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "axis",
+          "description": "[0..2] 0 = X, 1 = Y, 2 = Z."
+        },
+        {
+          "name": "out_centi_deg",
+          "description": "Output: elevation of the axis in 0.01° (−9000..+9000)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 on success, 0 on bad axis or zero vector.",
+      "brief": "Elevation of one axis above horizontal, in 0.01° (int32 out).",
+      "description": "Flat-output variant of read_tilt_centi_degrees(): same computation, but\nthe angle is written through an int32_t so Studio's 32-bit out-scalar\nlocals receive it without a width mismatch.",
+      "name": "tile_sense_i_6p6_read_tilt_centi_degrees_flat"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_wait_for_tap(tile_t *tile, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "description": "[1..60000] ms Max time to wait, in ms. Use 0 for a single-shot poll."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "tap",
+      "return": "1 if a tap was detected, 0 on timeout.",
+      "brief": "Block until a tap interrupt fires or the timeout expires.",
+      "description": "Polls INT_STATUS3 at ~1 ms cadence (delay_ms(1)). Tap detection must be\nenabled first via `tile_sense_i_6p6_tap_enable`. The status read is\ndestructive (clear-on-read), so call `get_tap_result` immediately after\na positive return to retrieve count/axis/direction.",
+      "name": "tile_sense_i_6p6_wait_for_tap"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_wait_for_motion(tile_t *tile, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "description": "[1..60000] ms Max time to wait, in ms. Use 0 for a single-shot poll."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "wom",
+      "return": "1 if motion was detected, 0 on timeout.",
+      "brief": "Block until a wake-on-motion interrupt fires or the timeout expires.",
+      "description": "Polls INT_STATUS2 at ~1 ms cadence. WOM must be configured (thresholds\n+ enable) first. Returns on any-axis WOM. The status read clears the\nlatch.",
+      "name": "tile_sense_i_6p6_wait_for_motion"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_fifo_config(tile_t *tile, sense_i_6p6_fifo_mode_t mode, uint8_t accel, uint8_t gyro, uint8_t temp, uint8_t hires)",
+      "params": [
+        {
+          "name": "mode",
+          "description": "FIFO operating mode (bypass/stream/stop-on-full)"
+        },
+        {
+          "name": "accel",
+          "description": "Include accel data in FIFO packets"
+        },
+        {
+          "name": "gyro",
+          "description": "Include gyro data in FIFO packets"
+        },
+        {
+          "name": "temp",
+          "description": "Include temperature in FIFO packets"
+        },
+        {
+          "name": "hires",
+          "description": "Enable 20-bit high-resolution mode (forces ±32g/±4000dps)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Configure the FIFO.",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_config"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_fifo_set_watermark(tile_t *tile, uint16_t records)",
+      "params": [
+        {
+          "name": "records",
+          "description": "[1..4095] Records in the FIFO that raise the watermark interrupt."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Set the FIFO watermark threshold in records (1–4095).",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_set_watermark"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_fifo_flush(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Flush the FIFO (discard all data).",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_flush"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_fifo_read_packet(tile_t *tile, sense_i_6p6_fifo_packet_t *pkt)",
+      "params": [],
+      "notes": [],
+      "return": "1 if valid packet read, 0 if FIFO empty or error.",
+      "brief": "Read one standard FIFO packet (16 bytes: accel + gyro + temp + timestamp).",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_read_packet"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_fifo_read_packet_flat(tile_t *tile, int32_t *out)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "out",
+          "description": "Output buffer (8 int32_t slots)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "DSL-friendly flat-output variant of fifo_read_packet().",
+      "description": "Drops the struct in favor of a positional int[8] array — the DSL\ndoesn't have a struct ABI yet, so the per-field outputs come back\nindexed. Layout:\n  out[0..2] = accel x,y,z   (raw int16 widened to int32)\n  out[3..5] = gyro x,y,z    (raw int16 widened to int32)\n  out[6]    = temp          (raw int8 widened to int32)\n  out[7]    = timestamp     (raw uint16)\n\nDrops the success bool — call fifo_count() first to know whether\nthere's data. On an empty FIFO, the slots are left untouched.",
+      "name": "tile_sense_i_6p6_fifo_read_packet_flat"
+    },
+    {
+      "signature": "uint16_t tile_sense_i_6p6_fifo_read_packets(tile_t *tile, sense_i_6p6_fifo_packet_t *packets, uint16_t max_count)",
+      "params": [
+        {
+          "name": "packets",
+          "description": "Output array"
+        },
+        {
+          "name": "max_count",
+          "description": "Maximum packets to read"
+        }
+      ],
+      "notes": [],
+      "return": "Number of packets actually read",
+      "brief": "Read multiple FIFO packets.",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_read_packets"
+    },
+    {
+      "signature": "uint16_t tile_sense_i_6p6_fifo_read_packets_flat(tile_t *tile, int32_t *out, uint16_t cap_ints)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "out",
+          "description": "Output buffer; must be sized N × 8 ints."
+        },
+        {
+          "name": "cap_ints",
+          "description": "Buffer capacity in int slots (= packets × 8)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "return": "Number of packets actually drained from the FIFO.",
+      "brief": "DSL-friendly flat-output variant of fifo_read_packets().",
+      "description": "Drains up to N packets from the FIFO into the caller's int32 buffer,\n8 ints per packet (same layout as fifo_read_packet_flat). Returns\nthe number of *packets* read (not ints), so callers can iterate\nwith `for i in 0..n { let ax = buf[i*8 + 0]; ... }`.\n\nThe caller's array length is the int-cap (N packets × 8 ints), not\nthe packet count — `cap_ints / 8` packets are attempted. Mirrors\nthe cap-mode array-OUT convention used by Sense.BP read_fifo_batch.",
+      "name": "tile_sense_i_6p6_fifo_read_packets_flat"
+    },
+    {
+      "signature": "uint16_t tile_sense_i_6p6_fifo_count(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Read the FIFO record (packet) count.",
+      "description": "init() sets INTF_CONFIG0.FIFO_COUNT_REC, so FIFO_COUNT is in records.",
+      "name": "tile_sense_i_6p6_fifo_count"
+    },
+    {
+      "signature": "uint16_t tile_sense_i_6p6_fifo_lost_count(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Get the number of lost FIFO packets since last check.",
+      "description": "",
+      "name": "tile_sense_i_6p6_fifo_lost_count"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int1_config(tile_t *tile, uint8_t config)",
+      "params": [
+        {
+          "name": "config",
+          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Configure INT1 pin behavior.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int1_config"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int1_data_ready(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route data-ready interrupt to INT1.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int1_data_ready"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int1_fifo_ths(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route FIFO watermark interrupt to INT1.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int1_fifo_ths"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int1_wom(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route WOM (wake-on-motion) interrupt to INT1.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int1_wom"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int2_config(tile_t *tile, uint8_t config)",
+      "params": [
+        {
+          "name": "config",
+          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc. (same"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Configure INT2 pin behavior.",
+      "description": "Mirrors int1_config for the chip's second interrupt pin (tile pad 8).\nINT_CONFIG bits [5:3] hold INT2's polarity / drive / mode bits.\n\n                layout as int1_config; the driver shifts the bits\n                into the INT2 positions internally).",
+      "name": "tile_sense_i_6p6_int2_config"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int2_data_ready(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route data-ready interrupt to INT2.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int2_data_ready"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int2_fifo_ths(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route FIFO watermark interrupt to INT2.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int2_fifo_ths"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_int2_wom(tile_t *tile, uint8_t enabled)",
+      "params": [
+        {
+          "name": "enabled",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Route WOM (wake-on-motion) interrupt to INT2.",
+      "description": "",
+      "name": "tile_sense_i_6p6_int2_wom"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_int_pulse_duration(tile_t *tile, sense_i_6p6_int_pulse_t pulse)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "pulse",
+          "description": "Pulse-width selector"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Set the INT pin pulse-width when configured for pulse mode.",
+      "description": "Applies to both INT1 and INT2 (it's a chip-wide setting in\nINT_CONFIG1 bit 6). Only affects pulse-mode interrupts; in latched\nmode the line stays asserted until the status register is read.",
+      "name": "tile_sense_i_6p6_set_int_pulse_duration"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_subsystem_reset(tile_t *tile, sense_i_6p6_subsystem_t which)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "which",
+          "description": "Subsystem to reset"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Reset a single chip subsystem without touching the others.",
+      "description": "Issues the relevant SIGNAL_PATH_RESET bits. Distinct from the\ndriver's full `reset()` (which re-initialises the whole chip) and\nfrom `fifo_flush()` (which targets just the FIFO, also a\nsubsystem reset but already exposed).\n\n  - APEX: DMP_MEM_RESET_EN, 1 ms, then DMP_INIT_EN (DS-000639\n          §8.3/§14.33); blocks ~51 ms. Clears the step count.\n          Use after reconfiguring pedometer / tilt / tap features.\n  - TEMP: does nothing. SIGNAL_PATH_RESET has no temperature bit on\n          this part; kept only for source compatibility.",
+      "name": "tile_sense_i_6p6_subsystem_reset"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_get_int_status(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Read and clear INT_STATUS register.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_int_status"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_get_int_status2(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Read and clear INT_STATUS2 (WOM/SMD flags).",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_int_status2"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_get_int_status3(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "interrupts",
+      "brief": "Read and clear INT_STATUS3 (APEX: step/tilt/tap flags).",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_int_status3"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_wom_config(tile_t *tile, uint16_t x_mg, uint16_t y_mg, uint16_t z_mg, sense_i_6p6_wom_mode_t mode)",
+      "params": [
+        {
+          "name": "x_mg",
+          "description": "[0..1000] X-axis threshold in mg (resolution ~3.9 mg; values"
+        },
+        {
+          "name": "y_mg",
+          "description": "[0..1000] Y-axis threshold in mg"
+        },
+        {
+          "name": "z_mg",
+          "description": "[0..1000] Z-axis threshold in mg"
+        },
+        {
+          "name": "mode",
+          "description": "Compare against initial or previous sample"
+        }
+      ],
+      "notes": [
+        "Requires accel to be running (LN or LP mode)."
+      ],
+      "studio_exposed": true,
+      "studio_section": "wom",
+      "brief": "Configure Wake-on-Motion thresholds.",
+      "description": "above ~996 mg clamp to the register maximum 255)",
+      "name": "tile_sense_i_6p6_wom_config"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_wom_enable(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "wom",
+      "brief": "Enable WOM. Must configure thresholds first.",
+      "description": "Keeps the compare mode set by wom_config() and any SMD mode already set.",
+      "name": "tile_sense_i_6p6_wom_enable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_wom_disable(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "wom",
+      "brief": "Disable WOM (SMD_CONFIG.SMD_MODE = 00). Also stops SMD.",
+      "description": "Thresholds are kept, so wom_enable() re-arms with the last config.",
+      "name": "tile_sense_i_6p6_wom_disable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "smd",
+      "brief": "Configure and enable SMD. WOM thresholds must be set first.",
+      "description": "",
+      "name": "tile_sense_i_6p6_smd_config"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_pedometer_enable(tile_t *tile, sense_i_6p6_dmp_odr_t dmp_odr)",
+      "params": [
+        {
+          "name": "dmp_odr",
+          "description": "DMP processing rate (25 or 50 Hz)"
+        }
+      ],
+      "notes": [
+        "APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it set. Per DS-000639 §8.2 the APEX features then run only after a WOM event (WOM must be enabled). Not yet bench-verified."
+      ],
+      "studio_exposed": true,
+      "studio_section": "pedometer",
+      "brief": "Enable the pedometer (step counter + step detector).",
+      "description": "Requires accel at ≥25 Hz. Initializes the DMP if not already running.",
+      "name": "tile_sense_i_6p6_pedometer_enable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_pedometer_disable(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "pedometer",
+      "brief": "Disable the pedometer.",
+      "description": "",
+      "name": "tile_sense_i_6p6_pedometer_disable"
+    },
+    {
+      "signature": "uint16_t tile_sense_i_6p6_get_step_count(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "pedometer",
+      "return": "16-bit step count (resets on power cycle or DMP reset)",
+      "brief": "Read the step count.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_step_count"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_get_step_cadence(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "pedometer",
+      "return": "Steps per second in u6.2 fixed-point (divide by 4.0 for float)",
+      "brief": "Read the step cadence.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_step_cadence"
+    },
+    {
+      "signature": "sense_i_6p6_activity_t tile_sense_i_6p6_get_activity(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "pedometer",
+      "return": "0=unknown, 1=walk, 2=run",
+      "brief": "Read the activity classification.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_activity"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_tilt_enable(tile_t *tile, uint8_t wait_seconds)",
+      "params": [
+        {
+          "name": "wait_seconds",
+          "description": "[0..6] s Time the tilt must be sustained (0, 2, 4, or 6)."
+        }
+      ],
+      "notes": [
+        "APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it set. Per DS-000639 §8.2 the APEX features then run only after a WOM event (WOM must be enabled). Not yet bench-verified."
+      ],
+      "studio_exposed": true,
+      "studio_section": "tilt",
+      "brief": "Enable tilt detection.",
+      "description": "Triggers when device tilts >35° for the configured wait time.\nRequires accel at ≥25 Hz. Initializes DMP if needed.",
+      "name": "tile_sense_i_6p6_tilt_enable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_tilt_disable(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "tilt",
+      "brief": "Disable tilt detection.",
+      "description": "",
+      "name": "tile_sense_i_6p6_tilt_disable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_tap_enable(tile_t *tile)",
+      "params": [],
+      "notes": [
+        "APEX_CONFIG0.DMP_POWER_SAVE resets to 1 and the driver leaves it set. Per DS-000639 §8.2 the APEX features then run only after a WOM event (WOM must be enabled). Not yet bench-verified."
+      ],
+      "studio_exposed": true,
+      "studio_section": "tap",
+      "brief": "Enable tap detection (single + double tap).",
+      "description": "Requires accel in LN mode at 200 Hz, 500 Hz, or 1 kHz.\nInitializes DMP if needed.",
+      "name": "tile_sense_i_6p6_tap_enable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_tap_disable(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "tap",
+      "brief": "Disable tap detection.",
+      "description": "",
+      "name": "tile_sense_i_6p6_tap_disable"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_tap_result(tile_t *tile, sense_i_6p6_tap_result_t *result)",
+      "params": [
+        {
+          "name": "result",
+          "description": "Output tap information"
+        }
+      ],
+      "notes": [],
+      "brief": "Read the last tap detection result.",
+      "description": "",
+      "name": "tile_sense_i_6p6_get_tap_result"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_get_tap_result_flat(tile_t *tile, int32_t *count, int32_t *axis, int32_t *direction, int32_t *timing)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "count",
+          "description": "Output: 0 = none, 1 = single tap, 2 = double."
+        },
+        {
+          "name": "axis",
+          "description": "Output: 0 = X, 1 = Y, 2 = Z."
+        },
+        {
+          "name": "direction",
+          "description": "Output: 0 = positive, 1 = negative."
+        },
+        {
+          "name": "timing",
+          "description": "Output: double-tap timing (chip-specific units)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "tap",
+      "brief": "DSL-friendly flat-output variant of get_tap_result().",
+      "description": "Same data, four positional out-scalars instead of a struct. Useful\nfor polling-style flows; event-driven flows already get these values\nvia the `Sense.I.6P6.tap` event payload.",
+      "name": "tile_sense_i_6p6_get_tap_result_flat"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_gyro_offset(tile_t *tile, int16_t x_dps16, int16_t y_dps16, int16_t z_dps16)",
+      "params": [
+        {
+          "name": "x_dps",
+          "description": "X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)"
+        },
+        {
+          "name": "y_dps",
+          "description": "Y offset"
+        },
+        {
+          "name": "z_dps",
+          "description": "Z offset"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Set user-programmable gyro offset.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_gyro_offset"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_set_accel_offset(tile_t *tile, int16_t x_mg, int16_t y_mg, int16_t z_mg)",
+      "params": [
+        {
+          "name": "x_mg",
+          "description": "X offset in mg (12-bit signed, ±2000 mg max, 1 mg resolution)"
+        },
+        {
+          "name": "y_mg",
+          "description": "Y offset"
+        },
+        {
+          "name": "z_mg",
+          "description": "Z offset"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Set user-programmable accel offset.",
+      "description": "",
+      "name": "tile_sense_i_6p6_set_accel_offset"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *gyro_pass)",
+      "params": [
+        {
+          "name": "accel_pass",
+          "description": "Output: 1 if accel self-test passed, 0 if failed (per-axis OR'd)"
+        },
+        {
+          "name": "gyro_pass",
+          "description": "Output: 1 if gyro self-test passed, 0 if failed"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "1 if both passed, 0 if either failed",
+      "brief": "Perform self-test.",
+      "description": "Runs the built-in self-test for both accel and gyro.",
+      "name": "tile_sense_i_6p6_self_test"
+    },
+    {
+      "signature": "uint8_t tile_sense_i_6p6_read_reg(tile_t *tile, uint8_t bank, uint8_t reg)",
+      "params": [
+        {
+          "name": "bank",
+          "description": "Bank index (0, 1, 2, or 4)."
+        },
+        {
+          "name": "reg",
+          "description": "Register address within the bank."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Read a register from any bank.",
+      "description": "Automatically switches to the specified bank and back to bank 0.\nFor advanced/debug use.",
+      "name": "tile_sense_i_6p6_read_reg"
+    },
+    {
+      "signature": "void tile_sense_i_6p6_write_reg(tile_t *tile, uint8_t bank, uint8_t reg, uint8_t val)",
+      "params": [
+        {
+          "name": "bank",
+          "description": "Bank index (0, 1, 2, or 4)."
+        },
+        {
+          "name": "reg",
+          "description": "Register address within the bank."
+        },
+        {
+          "name": "val",
+          "description": "Byte to write."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Write a register in any bank.",
+      "description": "Automatically switches to the specified bank and back to bank 0.\nFor advanced/debug use.",
+      "name": "tile_sense_i_6p6_write_reg"
+    }
+  ],
+  "source_file": "tile_sense_i_6p6.h",
+  "version": "1.3.0",
+  "tile_family": "Sense",
+  "tile_name": "I.6P6",
+  "display_name": "Sense.I.6P6",
+  "vibe_settings": [
+    {
+      "label": "Accel range",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_accel_range",
+      "param": "range",
+      "kind": "choice",
+      "choices": [
+        "±32 g",
+        "±16 g",
+        "±8 g",
+        "±4 g",
+        "±2 g"
+      ],
+      "default": "±8 g"
+    },
+    {
+      "label": "Gyro range",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_gyro_range",
+      "param": "range",
+      "kind": "choice",
+      "choices": [
+        "±4000 deg/s",
+        "±2000 deg/s",
+        "±1000 deg/s",
+        "±500 deg/s",
+        "±250 deg/s",
+        "±125 deg/s",
+        "±62.5 deg/s",
+        "±31.25 deg/s"
+      ],
+      "default": "±1000 deg/s"
+    },
+    {
+      "label": "Accel data rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_accel_odr",
+      "param": "odr",
+      "kind": "choice",
+      "choices": [
+        "32 kHz",
+        "16 kHz",
+        "8 kHz",
+        "4 kHz",
+        "2 kHz",
+        "1 kHz",
+        "200 Hz",
+        "100 Hz",
+        "50 Hz",
+        "25 Hz",
+        "12.5 Hz",
+        "6.25 Hz (accel LP only)",
+        "3.125 Hz (accel LP only)",
+        "1.5625 Hz (accel LP only)",
+        "500 Hz"
+      ],
+      "default": "100 Hz",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Gyro data rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_gyro_odr",
+      "param": "odr",
+      "kind": "choice",
+      "choices": [
+        "32 kHz",
+        "16 kHz",
+        "8 kHz",
+        "4 kHz",
+        "2 kHz",
+        "1 kHz",
+        "200 Hz",
+        "100 Hz",
+        "50 Hz",
+        "25 Hz",
+        "12.5 Hz",
+        "500 Hz"
+      ],
+      "default": "100 Hz",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Motion threshold",
+      "tier": "basic",
+      "scope": "usage",
+      "function": "is_moving",
+      "param": "threshold_mg",
+      "kind": "number",
+      "range": [
+        1,
+        32000
+      ]
+    },
+    {
+      "label": "Accel power mode",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_power_mode",
+      "param": "accel",
+      "kind": "choice",
+      "choices": [
+        "Powered off",
+        "Accel only: duty-cycled",
+        "Low-noise (full performance)"
+      ],
+      "default": "Low-noise (full performance)"
+    },
+    {
+      "label": "Gyro power mode",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_power_mode",
+      "param": "gyro",
+      "kind": "choice",
+      "choices": [
+        "Powered off",
+        "Gyro only: drive on, no output",
+        "Low-noise (full performance)"
+      ],
+      "default": "Low-noise (full performance)"
+    },
+    {
+      "label": "Accel filter bandwidth",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_filter_bw",
+      "param": "accel_bw",
+      "kind": "choice",
+      "choices": [
+        "ODR/2 (Nyquist)",
+        "max(400 Hz, ODR)/4 (default)",
+        "max(400 Hz, ODR)/5",
+        "max(400 Hz, ODR)/8",
+        "max(400 Hz, ODR)/10",
+        "max(400 Hz, ODR)/16",
+        "max(400 Hz, ODR)/20",
+        "max(400 Hz, ODR)/40"
+      ],
+      "default": "max(400 Hz, ODR)/4 (default)",
+      "computed_unit": "Hz"
+    },
+    {
+      "label": "Gyro filter bandwidth",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_filter_bw",
+      "param": "gyro_bw",
+      "kind": "choice",
+      "choices": [
+        "ODR/2 (Nyquist)",
+        "max(400 Hz, ODR)/4 (default)",
+        "max(400 Hz, ODR)/5",
+        "max(400 Hz, ODR)/8",
+        "max(400 Hz, ODR)/10",
+        "max(400 Hz, ODR)/16",
+        "max(400 Hz, ODR)/20",
+        "max(400 Hz, ODR)/40"
+      ],
+      "default": "max(400 Hz, ODR)/4 (default)",
+      "computed_unit": "Hz"
+    },
+    {
+      "label": "Accel filter order",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_filter_order",
+      "param": "accel_order",
+      "kind": "choice",
+      "choices": [
+        "1st order",
+        "2nd order",
+        "3rd order"
+      ],
+      "default": "2nd order"
+    },
+    {
+      "label": "Gyro filter order",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_filter_order",
+      "param": "gyro_order",
+      "kind": "choice",
+      "choices": [
+        "1st order",
+        "2nd order",
+        "3rd order"
+      ],
+      "default": "2nd order"
+    },
+    {
+      "label": "Temperature filter",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_temp_filter",
+      "param": "bw",
+      "kind": "choice",
+      "choices": [
+        "4000 Hz cutoff",
+        "170 Hz cutoff",
+        "82 Hz cutoff",
+        "40 Hz cutoff",
+        "20 Hz cutoff",
+        "10 Hz cutoff",
+        "5 Hz cutoff"
+      ],
+      "default": "4000 Hz cutoff"
+    },
+    {
+      "label": "Temperature sensor",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_temp_enabled",
+      "param": "enabled",
+      "kind": "bool",
+      "range": [
+        0,
+        1
+      ],
+      "default": 1
+    },
+    {
+      "label": "Tap wait timeout",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wait_for_tap",
+      "param": "timeout_ms",
+      "kind": "number",
+      "range": [
+        1,
+        60000
+      ],
+      "unit": "ms"
+    },
+    {
+      "label": "Motion wait timeout",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wait_for_motion",
+      "param": "timeout_ms",
+      "kind": "number",
+      "range": [
+        1,
+        60000
+      ],
+      "unit": "ms"
+    },
+    {
+      "label": "FIFO watermark",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "fifo_set_watermark",
+      "param": "records",
+      "kind": "number",
+      "range": [
+        1,
+        4095
+      ]
+    },
+    {
+      "label": "Wake threshold X",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wom_config",
+      "param": "x_mg",
+      "kind": "number",
+      "range": [
+        0,
+        1000
+      ]
+    },
+    {
+      "label": "Wake threshold Y",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wom_config",
+      "param": "y_mg",
+      "kind": "number",
+      "range": [
+        0,
+        1000
+      ]
+    },
+    {
+      "label": "Wake threshold Z",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wom_config",
+      "param": "z_mg",
+      "kind": "number",
+      "range": [
+        0,
+        1000
+      ]
+    },
+    {
+      "label": "Wake compare",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "wom_config",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Compare against first sample",
+        "Compare against previous sample"
+      ],
+      "default": "Compare against previous sample"
+    },
+    {
+      "label": "Significant motion",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "smd_config",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Disabled",
+        "1 second WOM window",
+        "3 second WOM window"
+      ],
+      "default": "Disabled"
+    },
+    {
+      "label": "Pedometer rate",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "pedometer_enable",
+      "param": "dmp_odr",
+      "kind": "choice",
+      "choices": [
+        "25 Hz",
+        "50 Hz"
+      ]
+    },
+    {
+      "label": "Tilt delay",
+      "tier": "advanced",
+      "scope": "usage",
+      "function": "enable_tilt",
+      "param": "wait_seconds",
+      "kind": "number",
+      "range": [
+        0,
+        6
+      ],
+      "unit": "s"
+    }
+  ],
+  "vibe_rules": [
+    {
+      "function": "set_accel_odr",
+      "message": "Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first."
+    },
+    {
+      "function": "set_accel_odr",
+      "message": "In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates."
+    },
+    {
+      "function": "set_filter_bw",
+      "message": "In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid."
+    }
+  ]
+}

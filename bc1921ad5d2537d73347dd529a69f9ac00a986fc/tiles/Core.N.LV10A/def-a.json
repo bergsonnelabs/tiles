@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "N.LV10A",
+  "pads": [],
+  "power": [],
+  "family": "Core",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 90,
+  "headline": "ultra-low-power BLE MCU",
+  "components": [
+    {
+      "url": "",
+      "part": "nRF54LV10A",
+      "datasheet": "",
+      "manufacturer": "Nordic Semiconductor"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-06-05T15:39:35.469Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}

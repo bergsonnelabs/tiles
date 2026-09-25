@@ -1,0 +1,378 @@
+{
+  "rev": "a",
+  "name": "H",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "type": "power",
+          "function": "GND",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "TRIG",
+          "direction": "input",
+          "thresholds": {
+            "logic_low": "0.3 * V+",
+            "logic_high": "0.7 * V+"
+          }
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "an internal pull-up resistor enables the output by default; connect to GND to disable",
+          "type": "digital",
+          "function": "EN",
+          "direction": "input",
+          "thresholds": {
+            "logic_low": "0.3 * V+",
+            "logic_high": "0.7 * V+"
+          }
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "if using a non-Core processor, ensure adequate external pull-up resistance",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "if using a non-Core processor, ensure adequate external pull-up resistance",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT+",
+          "direction": "output",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT-",
+          "direction": "output",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "2.5-5.5V supply for the motor driver",
+          "type": "power",
+          "function": "V_MOTOR",
+          "direction": "input",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8-5.0V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 5,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 5.5,
+      "min": 2.5,
+      "type": "drive",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "9"
+      ]
+    }
+  ],
+  "config": {
+    "enable": {
+      "kind": "boolean",
+      "group": "Drive",
+      "label": "Enable haptic output",
+      "binding": {
+        "pad": "3",
+        "kind": "strap",
+        "states": {
+          "low": "disabled",
+          "high": "enabled (forced)",
+          "open": "enabled (default, via internal PU)"
+        }
+      },
+      "default": true,
+      "options": [
+        {
+          "value": true,
+          "states": {
+            "3": "open"
+          }
+        },
+        {
+          "value": false,
+          "states": {
+            "3": "low"
+          },
+          "netlist": {
+            "requires": [
+              {
+                "to": {
+                  "kind": "rail",
+                  "rail": "GND"
+                },
+                "tag": "enable.disabled.connection",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "power"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "trigger": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use external trigger input",
+      "binding": {
+        "pad": "2",
+        "kind": "intent"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "internal",
+              "register": "MODE.TRIG_SRC"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output"
+                  ]
+                },
+                "tag": "trigger.attached",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "external",
+              "register": "MODE.TRIG_SRC"
+            }
+          ]
+        }
+      ],
+      "description": "When enabled, pad 2 (TRIG) becomes an external pulse input that the chip uses as a haptic-effect trigger; firmware switches the DRV2605 into external-trigger mode."
+    }
+  },
+  "family": "Drive",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 4,
+  "headline": "haptic ERM/LRA driver",
+  "components": [
+    {
+      "url": "https://www.ti.com/product/DRV2605",
+      "part": "DRV2605",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/4/Texas_Instruments-DRV2605.pdf",
+      "manufacturer": "Texas Instruments"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x5A",
+            "is_default": true
+          }
+        ],
+        "data_bits": [
+          8
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "400kHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:19:55.691Z",
+  "description": "The Drive.H tile is designed for driving linear-resonant actuators (LRAs) or eccentric rotating-mass motors (ERMs) using the Texas Instruments DRV2605 IC.  Haptic signals can be generated either from an internal effects library, streamed in real time over I2C, or input as a high-speed pulse-width modulation (PWM) signal.  Additionally, an optional hardware trigger can be used to play back pre-configured effects.  Separate logic and motor supply connections allows for digital interfacing with logic down to 1.8V.",
+  "json_version": "0.5",
+  "application_notes": []
+}
