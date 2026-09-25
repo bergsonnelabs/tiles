@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@ca327c2",
   "tile": "Sense.I.9",
   "palette": {
     "label": "Sense.I.9",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_i_9",
     "header": "tile_sense_i_9.h",
-    "version": "3.1.1"
+    "version": "3.2.0"
   },
   "handle": {
     "type": "tile_t",
@@ -176,7 +176,11 @@
         {
           "name": "divider",
           "type": "int",
-          "description": "11-bit sample rate divider (0–4095)"
+          "range": [
+            0,
+            4095
+          ],
+          "description": "12-bit ACCEL_SMPLRT_DIV (DS-000189 §10.11)"
         }
       ],
       "returns": "void",
@@ -195,7 +199,11 @@
         {
           "name": "divider",
           "type": "int",
-          "description": "8-bit sample rate divider (0–255)"
+          "range": [
+            0,
+            255
+          ],
+          "description": "8-bit GYRO_SMPLRT_DIV"
         }
       ],
       "returns": "void",
@@ -734,23 +742,34 @@
         "$slot",
         "read_tilt_centi_degrees"
       ],
-      "symbol": "tile_sense_i_9_read_tilt_centi_degrees",
+      "symbol": "tile_sense_i_9_read_tilt_centi_degrees_flat",
       "header": "tile_sense_i_9.h",
       "category": "tile",
-      "description": "Read the tilt of one accel axis vs gravity, in centi-degrees.",
+      "description": "Angle between one accel axis and \"up\", in 0.01° (int32 out).",
       "params": [
         {
           "name": "axis",
           "type": "int",
-          "description": "0/1/2 selecting X, Y, or Z"
+          "range": [
+            0,
+            2
+          ],
+          "description": "0 = X, 1 = Y, 2 = Z."
         },
         {
           "name": "out_centi_deg",
-          "type": "?int16_t*",
-          "description": "Output tilt in 0.01° units (signed)"
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: angle between the axis and \"up\", 0.01° (0..18000)."
         }
       ],
       "returns": "void",
+      "c_out_scalars": [
+        {
+          "name": "out_centi_deg",
+          "type": "int32_t"
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -758,18 +777,25 @@
         "$slot",
         "read_heading_centi_degrees"
       ],
-      "symbol": "tile_sense_i_9_read_heading_centi_degrees",
+      "symbol": "tile_sense_i_9_read_heading_centi_degrees_flat",
       "header": "tile_sense_i_9.h",
       "category": "tile",
-      "description": "Read a compass heading from the magnetometer, in centi-degrees.",
+      "description": "Compass heading of +X from magnetic north, in 0.01° (int32 out).",
       "params": [
         {
           "name": "out_centi_deg",
-          "type": "?uint16_t*",
-          "description": "Output heading in 0.01° units (0..35999)"
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: heading of +X from magnetic north, 0.01° (0..35999)."
         }
       ],
       "returns": "void",
+      "c_out_scalars": [
+        {
+          "name": "out_centi_deg",
+          "type": "int32_t"
+        }
+      ],
       "receiver": "tile_t*"
     },
     {

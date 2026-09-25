@@ -1,7 +1,11 @@
 /**
  * @file   tile_sense_i_9.h
  * @brief  9-DOF IMU driver for the Sense.I.9 tile (rev c).
- * @version 3.1.1
+ * @version 3.2.0
+ *
+ * Retirement: the ICM-20948 is obsolete and Sense.I.9 is moving to a Bosch
+ * two-chip design, so this revision will not be built in new panels. This
+ * driver stays for the boards already made.
  *
  * Embeds the TDK InvenSense ICM-20948: 6-DOF IMU (accel + gyro)
  * with co-packaged AK09916 3-DOF magnetometer (accessed via the
@@ -102,8 +106,8 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_SENSE_I_9_VERSION_MAJOR  3
-#define TILE_SENSE_I_9_VERSION_MINOR  1
-#define TILE_SENSE_I_9_VERSION_PATCH  1
+#define TILE_SENSE_I_9_VERSION_MINOR  2
+#define TILE_SENSE_I_9_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -192,6 +196,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* Bank 2 registers */
 #define ICM20948_REG_GYRO_SMPLRT      0x00
 #define ICM20948_REG_GYRO_CONFIG      0x01
+#define ICM20948_REG_GYRO_CONFIG_2    0x02  /**< Gyro self-test enables [5:3] + LP averaging */
 #define ICM20948_REG_ACCEL_SMPLRT_H   0x10
 #define ICM20948_REG_ACCEL_SMPLRT_L   0x11
 #define ICM20948_REG_ACCEL_INTEL_CTRL 0x12  /**< WoM enable + mode */
@@ -409,7 +414,6 @@ void tile_sense_i_9_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
  *
  * Reads the ICM-20948 interrupt status register.
  *
- * @param  tile  Pointer to tile handle
  * @return 1 if new data is available, 0 otherwise
  */
 uint8_t tile_sense_i_9_data_ready(tile_t* tile);
@@ -418,7 +422,6 @@ uint8_t tile_sense_i_9_data_ready(tile_t* tile);
  * @brief  Set the accelerometer full-scale range.
  * @studio expose category=tile name=set_accel_range section=runtime
  *
- * @param  tile   Pointer to tile handle
  * @param  range  One of the sense_i_9_accel_range_t values
  */
 void tile_sense_i_9_set_accel_range(tile_t* tile, sense_i_9_accel_range_t range);
@@ -427,7 +430,6 @@ void tile_sense_i_9_set_accel_range(tile_t* tile, sense_i_9_accel_range_t range)
  * @brief  Set the gyroscope full-scale range.
  * @studio expose category=tile name=set_gyro_range section=runtime
  *
- * @param  tile   Pointer to tile handle
  * @param  range  One of the sense_i_9_gyro_range_t values
  */
 void tile_sense_i_9_set_gyro_range(tile_t* tile, sense_i_9_gyro_range_t range);
@@ -436,7 +438,6 @@ void tile_sense_i_9_set_gyro_range(tile_t* tile, sense_i_9_gyro_range_t range);
  * @brief  Set the magnetometer operating mode.
  * @studio expose category=tile name=set_mag_mode section=runtime
  *
- * @param  tile  Pointer to tile handle
  * @param  mode  One of the sense_i_9_mag_mode_t values
  *
  * @note   Switching modes resets the AK09916 measurement cycle.
@@ -453,8 +454,7 @@ void tile_sense_i_9_set_mag_mode(tile_t* tile, sense_i_9_mag_mode_t mode);
  *   divider = 10  → ~102 Hz
  *   divider = 44  →   25 Hz
  *
- * @param  tile     Pointer to tile handle
- * @param  divider  11-bit sample rate divider (0–4095)
+ * @param  divider  [0..4095] 12-bit ACCEL_SMPLRT_DIV (DS-000189 §10.11)
  */
 void tile_sense_i_9_set_accel_odr(tile_t* tile, uint16_t divider);
 
@@ -462,10 +462,10 @@ void tile_sense_i_9_set_accel_odr(tile_t* tile, uint16_t divider);
  * @brief  Set the gyroscope output data rate.
  * @studio expose category=tile name=set_gyro_odr section=runtime
  *
- * ODR = 1100 / (1 + divider) Hz.
+ * ODR = 1125 / (1 + divider) Hz (DS-000189 Table 16; divider only applies
+ * while the DLPF is on, which init and set_gyro_range leave enabled).
  *
- * @param  tile     Pointer to tile handle
- * @param  divider  8-bit sample rate divider (0–255)
+ * @param  divider  [0..255] 8-bit GYRO_SMPLRT_DIV
  */
 void tile_sense_i_9_set_gyro_odr(tile_t* tile, uint8_t divider);
 
@@ -477,7 +477,6 @@ void tile_sense_i_9_set_gyro_odr(tile_t* tile, uint8_t divider);
  * Returns signed 16-bit ADC counts. Convert to milli-g using the
  * sensitivity for the configured range (e.g. ±2 G → 1 LSB ≈ 0.061 mg).
  *
- * @param  tile    Pointer to tile handle
  * @param  buffer  Output array, minimum 3 × int16_t [X, Y, Z]
  */
 void tile_sense_i_9_get_raw_accels(tile_t* tile, int16_t* buffer);
@@ -490,7 +489,6 @@ void tile_sense_i_9_get_raw_accels(tile_t* tile, int16_t* buffer);
  * Returns signed 16-bit ADC counts. Convert to °/s using the
  * sensitivity for the configured range (e.g. ±250 DPS → 131 LSB/°/s).
  *
- * @param  tile    Pointer to tile handle
  * @param  buffer  Output array, minimum 3 × int16_t [X, Y, Z]
  */
 void tile_sense_i_9_get_raw_gyros(tile_t* tile, int16_t* buffer);
@@ -503,7 +501,6 @@ void tile_sense_i_9_get_raw_gyros(tile_t* tile, int16_t* buffer);
  * More efficient than calling get_raw_accels + get_raw_gyros separately
  * (one I2C transaction instead of two). Data is time-coherent.
  *
- * @param  tile    Pointer to tile handle
  * @param  buffer  Output array, minimum 6 × int16_t [AX, AY, AZ, GX, GY, GZ]
  */
 void tile_sense_i_9_get_raw_6dof(tile_t* tile, int16_t* buffer);
@@ -517,7 +514,6 @@ void tile_sense_i_9_get_raw_6dof(tile_t* tile, int16_t* buffer);
  *
  * @studio expose category=tile name=get_raw_mags returns=int[3] section=runtime
  * @studio out_buffer buffer type=int16_t length=3
- * @param  tile    Pointer to tile handle
  * @param  buffer  Output array, minimum 3 × int16_t [X, Y, Z]
  *
  * @note   Automatically reads the ST2 register to release the
@@ -538,7 +534,6 @@ void tile_sense_i_9_get_raw_mags(tile_t* tile, int16_t* buffer);
  * tile_sense_i_9_get_raw_mags() does, so it can be used standalone
  * after a non-locking peek.
  *
- * @param  tile  Pointer to tile handle
  * @return 1 if HOFL was set after the most recent measurement, 0 otherwise
  */
 uint8_t tile_sense_i_9_mag_overflowed(tile_t* tile);
@@ -549,7 +544,6 @@ uint8_t tile_sense_i_9_mag_overflowed(tile_t* tile);
  *
  * Convert raw value to °C:  temp_degC = (raw / 333.87) + 21.0
  *
- * @param  tile  Pointer to tile handle
  * @return Raw signed 16-bit temperature value
  */
 int16_t tile_sense_i_9_get_temperature(tile_t* tile);
@@ -561,7 +555,6 @@ int16_t tile_sense_i_9_get_temperature(tile_t* tile);
  * Stops all sensor sampling. Current draw drops to ~8 µA.
  * Call tile_sense_i_9_wake() to resume.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_sense_i_9_sleep(tile_t* tile);
 
@@ -572,7 +565,6 @@ void tile_sense_i_9_sleep(tile_t* tile);
  * Restores auto clock selection. Previously configured ranges
  * and ODRs are preserved across sleep/wake cycles.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_sense_i_9_wake(tile_t* tile);
 
@@ -583,7 +575,6 @@ void tile_sense_i_9_wake(tile_t* tile);
  * You must call tile_sense_i_9_init() again after reset.
  *
  * @studio expose category=tile name=reset section=lifecycle
- * @param  tile  Pointer to tile handle
  */
 void tile_sense_i_9_reset(tile_t* tile);
 
@@ -603,7 +594,6 @@ void tile_sense_i_9_reset(tile_t* tile);
  * @note  INT_PIN_CFG bit 1 (BYPASS_EN) is preserved by this call —
  *        the driver needs bypass mode to talk to the AK09916.
  *
- * @param  tile   Initialized tile handle
  * @param  flags  OR of SENSE_I_9_INT_* flags
  */
 void tile_sense_i_9_int_config(tile_t* tile, uint8_t flags);
@@ -612,7 +602,6 @@ void tile_sense_i_9_int_config(tile_t* tile, uint8_t flags);
  * @brief  Route the data-ready interrupt to the INT pin.
  *
  * @studio expose category=tile name=int_data_ready section=interrupts
- * @param  tile     Initialized tile handle
  * @param  enabled  1 to enable, 0 to disable
  */
 void tile_sense_i_9_int_data_ready(tile_t* tile, uint8_t enabled);
@@ -621,7 +610,6 @@ void tile_sense_i_9_int_data_ready(tile_t* tile, uint8_t enabled);
  * @brief  Route the wake-on-motion interrupt to the INT pin.
  *
  * @studio expose category=tile name=int_wom section=interrupts
- * @param  tile     Initialized tile handle
  * @param  enabled  1 to enable, 0 to disable
  */
 void tile_sense_i_9_int_wom(tile_t* tile, uint8_t enabled);
@@ -630,7 +618,6 @@ void tile_sense_i_9_int_wom(tile_t* tile, uint8_t enabled);
  * @brief  Route the FIFO overflow interrupt to the INT pin.
  *
  * @studio expose category=tile name=int_fifo_overflow section=interrupts
- * @param  tile     Initialized tile handle
  * @param  enabled  1 to enable for any sensor, 0 to disable all
  */
 void tile_sense_i_9_int_fifo_overflow(tile_t* tile, uint8_t enabled);
@@ -639,7 +626,6 @@ void tile_sense_i_9_int_fifo_overflow(tile_t* tile, uint8_t enabled);
  * @brief  Route the FIFO watermark interrupt to the INT pin.
  *
  * @studio expose category=tile name=int_fifo_watermark section=interrupts
- * @param  tile     Initialized tile handle
  * @param  enabled  1 to enable for any sensor, 0 to disable all
  */
 void tile_sense_i_9_int_fifo_watermark(tile_t* tile, uint8_t enabled);
@@ -683,7 +669,6 @@ uint8_t tile_sense_i_9_get_int_status_fifo_watermark(tile_t* tile);
  *
  * @note  Requires accel running. Mag and gyro can be off.
  *
- * @param  tile     Initialized tile handle
  * @param  thr_mg   Threshold in mg (clamped to 1020 mg / 0xFF LSB)
  * @param  mode     Compare against initial sample or previous sample
  */
@@ -698,7 +683,6 @@ void tile_sense_i_9_wom_config(tile_t* tile, uint16_t thr_mg,
  * Call after wom_config(). Routes to the INT pin only if int_wom()
  * was also enabled.
  *
- * @param  tile  Initialized tile handle
  */
 void tile_sense_i_9_wom_enable(tile_t* tile);
 
@@ -706,7 +690,6 @@ void tile_sense_i_9_wom_enable(tile_t* tile);
  * @brief  Disable Wake-on-Motion logic.
  *
  * @studio expose category=tile name=wom_disable section=wom
- * @param  tile  Initialized tile handle
  */
 void tile_sense_i_9_wom_disable(tile_t* tile);
 
@@ -723,7 +706,6 @@ void tile_sense_i_9_wom_disable(tile_t* tile);
  * Always sets FIFO_MODE = stream when enabling. Disables FIFO entirely
  * if accel, gyro and temp are all 0.
  *
- * @param  tile   Initialized tile handle
  * @param  mode   FIFO operating mode (stream or snapshot)
  * @param  accel  1 to write all 3 accel axes
  * @param  gyro   1 to write all 3 gyro axes
@@ -736,7 +718,6 @@ void tile_sense_i_9_fifo_config(tile_t* tile, sense_i_9_fifo_mode_t mode,
  * @brief  Reset the FIFO contents (clears all queued samples).
  *
  * @studio expose category=tile name=fifo_flush section=fifo
- * @param  tile  Initialized tile handle
  */
 void tile_sense_i_9_fifo_flush(tile_t* tile);
 
@@ -749,7 +730,6 @@ void tile_sense_i_9_fifo_flush(tile_t* tile);
  * 12 bytes. Read FIFO_COUNTL first to latch both bytes (handled
  * internally).
  *
- * @param  tile  Initialized tile handle
  * @return Bytes available in the FIFO (0–512)
  */
 uint16_t tile_sense_i_9_fifo_count(tile_t* tile);
@@ -757,7 +737,6 @@ uint16_t tile_sense_i_9_fifo_count(tile_t* tile);
 /**
  * @brief  Read one accel + gyro packet from the FIFO.
  *
- * @param  tile  Initialized tile handle
  * @param  pkt   Output packet (populated only if return is 1)
  * @return 1 if a 12-byte packet was read, 0 if FIFO has fewer bytes
  */
@@ -779,7 +758,6 @@ uint8_t tile_sense_i_9_fifo_read_packet(tile_t* tile,
  * @studio expose category=tile name=fifo_read_packet returns=int[6] section=fifo
  * @studio out_buffer out type=int32_t length=6
  *
- * @param  tile  Initialized tile handle.
  * @param  out   Output buffer (6 int32_t slots).
  */
 void tile_sense_i_9_fifo_read_packet_flat(tile_t* tile, int32_t* out);
@@ -806,7 +784,6 @@ void tile_sense_i_9_fifo_read_packet_flat(tile_t* tile, int32_t* out);
  * exit; ranges/ODRs you set before this call may need to be
  * reapplied.
  *
- * @param  tile        Initialized tile handle
  * @param  accel_pass  Output: bit 0/1/2 = X/Y/Z accel pass (1 = pass)
  * @param  gyro_pass   Output: bit 0/1/2 = X/Y/Z gyro pass (1 = pass)
  * @return 1 if every accel axis and every gyro axis passed, 0 otherwise
@@ -827,7 +804,6 @@ uint8_t tile_sense_i_9_self_test(tile_t* tile,
  * Blocks for ~10 ms. Leaves the AK09916 in power-down — call
  * tile_sense_i_9_set_mag_mode() afterwards to resume measurements.
  *
- * @param  tile  Initialized tile handle
  * @return 1 if all three axes were within spec, 0 otherwise
  */
 uint8_t tile_sense_i_9_mag_self_test(tile_t* tile);
@@ -841,8 +817,7 @@ uint8_t tile_sense_i_9_mag_self_test(tile_t* tile);
 /* the ICM-20948 datasheet to detect a flip or read a heading.     */
 /*                                                                  */
 /* All conversions are integer-only so they run cheaply on the     */
-/* Cortex-M0+ in Core.ST.L4 / Core.ST.W5 without pulling in the soft-FP    */
-/* library.                                                         */
+/* Cores without pulling in soft-float code.                       */
 /* ============================================================== */
 
 /**
@@ -857,11 +832,10 @@ uint8_t tile_sense_i_9_mag_self_test(tile_t* tile);
  * tilted-but-mostly-up orientations also count as face-up.
  *
  * @note  Assumes the accel range is the default ±2 g configured by
- *        @ref tile_sense_i_9_init. If the range was changed, the
- *        thresholds remain proportional (band is in fractions of
- *        full-scale) so behaviour is unaffected.
+ *        @ref tile_sense_i_9_init. The thresholds are raw counts fixed
+ *        for ±2 g (1 g = 16384 LSB), so after set_accel_range to ±4 g
+ *        or wider this never returns 1.
  *
- * @param  tile  Initialized tile handle
  * @return 1 if face-up, 0 otherwise
  */
 uint8_t tile_sense_i_9_is_face_up(tile_t* tile);
@@ -873,7 +847,6 @@ uint8_t tile_sense_i_9_is_face_up(tile_t* tile);
  *
  * Mirror of @ref tile_sense_i_9_is_face_up — Z-axis close to −1 g.
  *
- * @param  tile  Initialized tile handle
  * @return 1 if face-down, 0 otherwise
  */
 uint8_t tile_sense_i_9_is_face_down(tile_t* tile);
@@ -893,10 +866,10 @@ uint8_t tile_sense_i_9_is_face_down(tile_t* tile);
  * comparison: it checks the squared deviation against the squared
  * threshold to avoid a square root.
  *
- * @note  Assumes ±2 g range (init default). Other ranges still work
- *        but the noise floor scales with full-scale.
+ * @note  Assumes ±2 g range (init default): 1 g is taken as 16384 LSB.
+ *        After set_accel_range the result is wrong (at ±4 g a resting
+ *        tile reads as 0.5 g, i.e. "moving" for thresholds < 500 mg).
  *
- * @param  tile          Initialized tile handle
  * @param  threshold_mg  Deviation from 1 g, in milli-g
  * @return 1 if moving, 0 if at rest
  */
@@ -905,30 +878,43 @@ uint8_t tile_sense_i_9_is_moving(tile_t* tile, uint16_t threshold_mg);
 /**
  * @brief  Read the tilt of one accel axis vs gravity, in centi-degrees.
  *
- * @studio expose category=tile name=read_tilt_centi_degrees section=runtime
- *
  * Returns the angle (in 0.01° units) between the requested axis and
- * the gravity vector. Range is −18000..+18000 centi-degrees
- * (−180.00°..+180.00°). Computed from `atan2(other_components,
- * axis)` using an integer approximation; absolute accuracy is
- * roughly ±1° in the noise-free case.
+ * the measured +1 g reaction vector (the "up" direction when at rest).
+ * Range is 0..18000 centi-degrees (0.00°..180.00°); the value is never
+ * negative. Computed from `atan2(|other_components|, axis)` using an
+ * integer approximation; worst-case error about 0.15° in the
+ * noise-free case.
+ *
+ * @note  Semantics differ from Sense.I.6P6's read_tilt_centi_degrees,
+ *        which returns the axis's elevation above horizontal (−90..+90°).
  *
  * Axis selector:
  *   0 = X axis (pitch around Y, with the chip lying on its back)
  *   1 = Y axis (roll around X)
  *   2 = Z axis (deviation from horizontal — 0 = face-up, 180 = face-down)
  *
- * @param  tile           Initialized tile handle
  * @param  axis           0/1/2 selecting X, Y, or Z
- * @param  out_centi_deg  Output tilt in 0.01° units (signed)
+ * @param  out_centi_deg  Output tilt in 0.01° units (0..18000)
  */
 void tile_sense_i_9_read_tilt_centi_degrees(tile_t* tile, uint8_t axis,
                                             int16_t* out_centi_deg);
 
 /**
- * @brief  Read a compass heading from the magnetometer, in centi-degrees.
+ * @brief  Angle between one accel axis and "up", in 0.01° (int32 out).
  *
- * @studio expose category=tile name=read_heading_centi_degrees section=runtime
+ * Flat-output variant of read_tilt_centi_degrees(): same computation; the angle is written through an int32_t so Studio's
+ * out-scalar locals (32-bit) receive it without a width mismatch.
+ *
+ * @studio expose category=tile name=read_tilt_centi_degrees section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ * @param  axis           [0..2] 0 = X, 1 = Y, 2 = Z.
+ * @param  out_centi_deg  Output: angle between the axis and "up", 0.01° (0..18000).
+ */
+void tile_sense_i_9_read_tilt_centi_degrees_flat(tile_t* tile, uint8_t axis,
+                                                 int32_t* out_centi_deg);
+
+/**
+ * @brief  Read a compass heading from the magnetometer, in centi-degrees.
  *
  * Returns the bearing of the +X axis relative to magnetic north in
  * 0.01° units, range 0..35999 (0.00°..359.99°). 0° means +X is
@@ -952,11 +938,26 @@ void tile_sense_i_9_read_tilt_centi_degrees(tile_t* tile, uint8_t axis,
  *           sensor in its final enclosure before relying on the
  *           heading.
  *
- * @param  tile           Initialized tile handle
+ * @warning  The AK09916 axes are not the accel/gyro axes (DS-000189
+ *           Figure 13); the driver applies no remap yet. Bench-unverified.
+ *
  * @param  out_centi_deg  Output heading in 0.01° units (0..35999)
  */
 void tile_sense_i_9_read_heading_centi_degrees(tile_t* tile,
                                                uint16_t* out_centi_deg);
+
+/**
+ * @brief  Compass heading of +X from magnetic north, in 0.01° (int32 out).
+ *
+ * Flat-output variant of read_heading_centi_degrees(): same computation; the heading is written through an int32_t so Studio's
+ * out-scalar locals (32-bit) receive it without a width mismatch.
+ *
+ * @studio expose category=tile name=read_heading_centi_degrees section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ * @param  out_centi_deg  Output: heading of +X from magnetic north, 0.01° (0..35999).
+ */
+void tile_sense_i_9_read_heading_centi_degrees_flat(tile_t* tile,
+                                                    int32_t* out_centi_deg);
 
 /**
  * @brief  Block until a Wake-on-Motion event fires, or timeout.
@@ -978,7 +979,6 @@ void tile_sense_i_9_read_heading_centi_degrees(tile_t* tile,
  * @note  This call blocks. For non-blocking use, drive @ref
  *        tile_sense_i_9_get_int_status from your own loop.
  *
- * @param  tile        Initialized tile handle
  * @param  timeout_ms  Maximum time to wait, in milliseconds
  * @return 1 if motion was detected, 0 on timeout
  */
@@ -1016,7 +1016,6 @@ uint8_t tile_sense_i_9_wait_for_motion(tile_t* tile, uint32_t timeout_ms);
  * (DMP_EN in USER_CTRL + feature configuration) is a separate step,
  * shipped in a follow-up phase.
  *
- * @param  tile  Initialized tile handle.
  * @return 1 on successful load + verify, 0 on bus error or verify mismatch.
  */
 uint8_t tile_sense_i_9_dmp_load(tile_t* tile);
@@ -1028,7 +1027,6 @@ uint8_t tile_sense_i_9_dmp_load(tile_t* tile);
  * the DMP RAM but doesn't auto-clear this flag — call after reset()
  * to know whether you need to reload.
  *
- * @param  tile  Initialized tile handle.
  * @return 1 if dmp_load() has succeeded since the driver last cleared its state.
  */
 uint8_t tile_sense_i_9_dmp_is_loaded(tile_t* tile);
@@ -1081,7 +1079,6 @@ uint8_t tile_sense_i_9_dmp_is_loaded(tile_t* tile);
  *   - Resets and enables the FIFO; old packets are discarded.
  *
  * @studio expose category=tile name=dmp_start_quat9 returns=bool section=advanced
- * @param  tile              Initialized tile handle (DMP firmware loaded).
  * @param  output_period_ms  DMP output period, in ms (clamped to 10–1000 ms).
  *                           Internally maps to a divider against the DMP's
  *                           ~225 Hz base ODR.
@@ -1101,7 +1098,6 @@ uint8_t tile_sense_i_9_dmp_start_quat9(tile_t* tile, uint16_t output_period_ms);
  * Idempotent — safe to call when the DMP is already stopped.
  *
  * @studio expose category=tile name=dmp_stop section=advanced
- * @param  tile  Initialized tile handle.
  */
 void tile_sense_i_9_dmp_stop(tile_t* tile);
 
@@ -1113,7 +1109,6 @@ void tile_sense_i_9_dmp_stop(tile_t* tile);
  * available. Cheap (a single 2-byte register read).
  *
  * @studio expose category=tile name=dmp_data_ready returns=bool section=advanced
- * @param  tile  Initialized tile handle.
  * @return 1 if a packet can be read, 0 otherwise.
  */
 uint8_t tile_sense_i_9_dmp_data_ready(tile_t* tile);
@@ -1138,12 +1133,11 @@ uint8_t tile_sense_i_9_dmp_data_ready(tile_t* tile);
  * @studio out_buffer out_q type=int32_t length=4
  * @studio out_scalar out_accuracy type=uint16_t
  *
- * @param  tile          Initialized tile handle.
  * @param  out_q         Output array, 4 × int32_t [q0, q1, q2, q3] in Q30.
  * @param  out_accuracy  Output: DMP heading-accuracy estimate.
  * @return 1 if a packet was decoded, 0 if FIFO didn't have one ready.
  */
-uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t out_q[4],
+uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t* out_q,
                                       uint16_t* out_accuracy);
 
 #endif /* INC_TILE_SENSE_I_9_H_ */

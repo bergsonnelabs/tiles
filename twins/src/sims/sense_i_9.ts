@@ -105,14 +105,29 @@ const FIFO_BYTES = 512;
 const FIFO_SNAPSHOT = 0x1f;
 
 /** ACCEL_FS_SEL (ACCEL_CONFIG[2:1]) → LSB/g, DS-000189 Table 2. */
-const ACCEL_LSB_PER_G: Record<number, number> = { 0: 16384, 2: 8192, 4: 4096, 6: 2048 };
+const ACCEL_LSB_PER_G: Record<number, number> = {
+  0: 16384,
+  2: 8192,
+  4: 4096,
+  6: 2048,
+};
 /** GYRO_FS_SEL (GYRO_CONFIG_1[2:1]) → LSB/dps, DS-000189 Table 1. */
-const GYRO_LSB_PER_DPS: Record<number, number> = { 0: 131, 2: 65.5, 4: 32.8, 6: 16.4 };
+const GYRO_LSB_PER_DPS: Record<number, number> = {
+  0: 131,
+  2: 65.5,
+  4: 32.8,
+  6: 16.4,
+};
 /** AK09916: 0.15 µT/LSB, output ±32752. */
 const MAG_UT_PER_LSB = 0.15;
 const MAG_MAX = 32752;
 /** CNTL2 continuous modes → Hz. */
-const MAG_HZ: Record<number, number> = { 0x02: 10, 0x04: 20, 0x06: 50, 0x08: 100 };
+const MAG_HZ: Record<number, number> = {
+  0x02: 10,
+  0x04: 20,
+  0x06: 50,
+  0x08: 100,
+};
 
 // Driver's tier-2 constants, fixed for ±2 g (driver .c:666-676).
 const LSB_PER_G_2G = 16384;
@@ -120,6 +135,23 @@ const FACE_Z_MIN = 13926;
 const FACE_XY_MAX = 8192;
 
 // ── conversions ─────────────────────────────────────────────────────────────
+
+/** The driver's integer atan2 (tile_sense_i_9.c atan2_centi), 0.01°, ±18000. */
+function atan2Centi(y: number, x: number): number {
+  if (x === 0 && y === 0) return 0;
+  const ay = Math.abs(y);
+  const ax = Math.abs(x);
+  const core = (t: number) => {
+    const corr = Math.trunc(((t - 1000) * (14000 + 4 * t)) / 1000);
+    const a = Math.trunc((t * 4500 - Math.trunc((t * corr) / 10)) / 1000);
+    return Math.max(0, Math.min(4500, a));
+  };
+  let angle =
+    ax >= ay ? core(Math.trunc((ay * 1000) / ax)) : 9000 - core(Math.trunc((ax * 1000) / ay));
+  if (x < 0) angle = 18000 - angle;
+  if (y < 0) angle = -angle;
+  return angle;
+}
 
 const clampI16 = (v: number) => {
   const r = Math.round(v);
@@ -309,6 +341,95 @@ const sim: TileSim<State> = {
     },
   ],
 
+  // What a person does to a 9-axis IMU: tilt it, shake it, turn it, bring a
+  // magnet near it, warm it.
+  stimuli: [
+    {
+      id: 'orientation',
+      label: 'Orientation',
+      controls: [
+        {
+          kind: 'attitude',
+          id: 'attitude',
+          label: 'orientation',
+          accel: { x: 'accel_x_mg', y: 'accel_y_mg', z: 'accel_z_mg' },
+        },
+      ],
+    },
+    {
+      id: 'accel',
+      label: 'Accelerations',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
+        id: `accel_${a}_mg`,
+        label: `accel ${a}`,
+        field: `accel_${a}_mg`,
+        min: -16000,
+        max: 16000,
+        step: 50,
+        unit: 'mg',
+      })),
+    },
+    {
+      id: 'shake',
+      label: 'Shake intensity',
+      controls: [
+        {
+          kind: 'shake',
+          id: 'shake',
+          label: 'shake',
+          max: 2000,
+          unit: 'mg',
+          accel: { x: 'accel_x_mg', y: 'accel_y_mg', z: 'accel_z_mg' },
+        },
+      ],
+    },
+    {
+      id: 'gyro',
+      label: 'Gyro rates',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
+        id: `gyro_${a}_dps`,
+        label: `gyro ${a}`,
+        field: `gyro_${a}_dps`,
+        min: -2000,
+        max: 2000,
+        step: 5,
+        unit: '°/s',
+      })),
+    },
+    {
+      id: 'magnetic',
+      label: 'Magnetic field',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
+        id: `mag_${a}_ut`,
+        label: `field ${a}`,
+        field: `mag_${a}_ut`,
+        min: -4900,
+        max: 4900,
+        step: 5,
+        unit: 'µT',
+      })),
+    },
+    {
+      id: 'temperature',
+      label: 'Temperature',
+      controls: [
+        {
+          kind: 'slider',
+          id: 'temperature_c',
+          label: 'temperature',
+          field: 'temperature_c',
+          min: -40,
+          max: 85,
+          step: 0.5,
+          unit: '°C',
+        },
+      ],
+    },
+  ],
+
   hostCalls: {
     // ── lifecycle ──
     tile_sense_i_9_find: () => ({ scalar: 1 }), // 1 when the part ACKs (driver .c:141)
@@ -316,7 +437,9 @@ const sim: TileSim<State> = {
       nextState: { sleeping: 0, int_pin_cfg: 0x02, mag_mode: 0x08 },
     }),
     tile_sense_i_9_sleep: () => ({ nextState: { sleeping: 1 } }),
-    tile_sense_i_9_wake: () => ({ nextState: { sleeping: 0, last_drdy_ms: 0 } }),
+    tile_sense_i_9_wake: () => ({
+      nextState: { sleeping: 0, last_drdy_ms: 0 },
+    }),
     // DEVICE_RESET: ICM registers to reset values (PWR_MGMT_1 = 0x41 → asleep,
     // INT_PIN_CFG = 0x00 → no bypass). The AK09916 is a separate die: its mode
     // is untouched, but it can't be reached until init().
@@ -352,14 +475,16 @@ const sim: TileSim<State> = {
     }),
 
     // ── configuration ──
-    // The driver writes the whole register: range bits [2:1].
+    // Read-modify-write of FS_SEL [2:1] only; DLPF / FCHOICE are kept.
     tile_sense_i_9_set_accel_range: ({ args }) => ({
       nextState: { accel_range: (args[0] ?? 0) & 0x06 },
     }),
     tile_sense_i_9_set_gyro_range: ({ args }) => ({
       nextState: { gyro_range: (args[0] ?? 0) & 0x06 },
     }),
-    tile_sense_i_9_set_mag_mode: ({ args }) => ({ nextState: { mag_mode: (args[0] ?? 0) & 0x1f } }),
+    tile_sense_i_9_set_mag_mode: ({ args }) => ({
+      nextState: { mag_mode: (args[0] ?? 0) & 0x1f },
+    }),
     tile_sense_i_9_set_accel_odr: ({ args }) => ({
       nextState: { accel_divider: (args[0] ?? 0) & 0xfff },
     }),
@@ -402,10 +527,16 @@ const sim: TileSim<State> = {
     // ── interrupts ──
     // Flags supply bits 7..4; BYPASS_EN (bit 1) is preserved.
     tile_sense_i_9_int_config: ({ state, args }) => ({
-      nextState: { int_pin_cfg: ((args[0] ?? 0) & 0xf0) | (state.int_pin_cfg & BYPASS_EN) },
+      nextState: {
+        int_pin_cfg: ((args[0] ?? 0) & 0xf0) | (state.int_pin_cfg & BYPASS_EN),
+      },
     }),
-    tile_sense_i_9_int_data_ready: ({ args }) => ({ nextState: { int_dry_en: args[0] ? 1 : 0 } }),
-    tile_sense_i_9_int_wom: ({ args }) => ({ nextState: { int_wom_en: args[0] ? 1 : 0 } }),
+    tile_sense_i_9_int_data_ready: ({ args }) => ({
+      nextState: { int_dry_en: args[0] ? 1 : 0 },
+    }),
+    tile_sense_i_9_int_wom: ({ args }) => ({
+      nextState: { int_wom_en: args[0] ? 1 : 0 },
+    }),
     tile_sense_i_9_int_fifo_overflow: ({ args }) => ({
       nextState: { int_fifo_ovf_en: args[0] ? 1 : 0 },
     }),
@@ -464,8 +595,12 @@ const sim: TileSim<State> = {
         last_fifo_ms: -1,
       },
     }),
-    tile_sense_i_9_fifo_flush: () => ({ nextState: { fifo_bytes: 0, last_fifo_ms: -1 } }),
-    tile_sense_i_9_fifo_count: ({ state }) => ({ scalar: state.fifo_bytes & 0x1fff }),
+    tile_sense_i_9_fifo_flush: () => ({
+      nextState: { fifo_bytes: 0, last_fifo_ms: -1 },
+    }),
+    tile_sense_i_9_fifo_count: ({ state }) => ({
+      scalar: state.fifo_bytes & 0x1fff,
+    }),
     // Needs ≥ 12 bytes; reads them as [ax ay az gx gy gz] (the accel + gyro
     // layout). Otherwise the caller's array is left as it was.
     tile_sense_i_9_fifo_read_packet_flat: ({ state }) =>
@@ -484,7 +619,12 @@ const sim: TileSim<State> = {
       return {
         scalar: state.fault_inject ? 0 : 1,
         outScalars: { accel_pass: pass, gyro_pass: pass },
-        nextState: { accel_range: 0, gyro_range: 0, accel_divider: 0, gyro_divider: 0 },
+        nextState: {
+          accel_range: 0,
+          gyro_range: 0,
+          accel_divider: 0,
+          gyro_divider: 0,
+        },
       };
     },
     // Leaves the AK09916 powered down (self-test mode is single-shot).
@@ -510,10 +650,31 @@ const sim: TileSim<State> = {
       const thrLsb = Math.trunc(((args[0] ?? 0) * LSB_PER_G_2G) / 1000);
       return { scalar: delta2 > thrLsb * 2 * LSB_PER_G_2G ? 1 : 0 };
     },
-    // Both write their angle through a pointer the manifest declares no
-    // out-scalar for, so the twin can't fill it; the call itself returns void.
-    tile_sense_i_9_read_tilt_centi_degrees: () => undefined,
-    tile_sense_i_9_read_heading_centi_degrees: () => undefined,
+    // Angle between the axis and "up" (0..18000), the driver's integer math on
+    // raw counts: atan2(isqrt(other² + other²), axis).
+    tile_sense_i_9_read_tilt_centi_degrees_flat: ({ state, args }) => {
+      const a = accelRaw(state);
+      const axis = args[0] ?? 0;
+      const target = axis >= 0 && axis < 3 ? a[axis] : 0;
+      const oa = axis === 0 ? a[1] : a[0];
+      const ob = axis === 2 ? a[1] : a[2];
+      const perp = Math.floor(Math.sqrt(oa * oa + ob * ob));
+      const c = Math.max(-18000, Math.min(18000, atan2Centi(perp, target)));
+      return { outScalars: { out_centi_deg: c } };
+    },
+    // Heading of +X from magnetic north: atan2(−HY, HX) on AK09916 counts,
+    // normalised to 0..35999. No mag-axis remap (as the driver). Without
+    // BYPASS_EN the mag doesn't answer and the local is left untouched.
+    tile_sense_i_9_read_heading_centi_degrees_flat: ({ state }) => {
+      if (!magReachable(state)) return undefined;
+      const on = magMeasuring(state);
+      const mx = on ? magCount(state.mag_x_ut) : 0;
+      const my = on ? magCount(state.mag_y_ut) : 0;
+      let c = atan2Centi(-my, mx);
+      if (c < 0) c += 36000;
+      if (c >= 36000) c -= 36000;
+      return { outScalars: { out_centi_deg: c } };
+    },
 
     // ── DMP ──
     // dmp_start_quat9 needs dmp_load() first (driver .c:1333), which no program
@@ -551,8 +712,8 @@ const sim: TileSim<State> = {
     tile_sense_i_9_mag_self_test: 'inferred',
     tile_sense_i_9_fifo_read_packet_flat: 'inferred',
     tile_sense_i_9_get_int_status_fifo_watermark: 'inferred', // WM level not modeled
-    tile_sense_i_9_read_tilt_centi_degrees: 'inferred', // angle not deliverable
-    tile_sense_i_9_read_heading_centi_degrees: 'inferred',
+    tile_sense_i_9_read_tilt_centi_degrees_flat: 'canonical', // driver integer math
+    tile_sense_i_9_read_heading_centi_degrees_flat: 'inferred', // mag axis remap unverified
     tile_sense_i_9_dmp_start_quat9: 'inferred', // needs dmp_load (not exposed)
     tile_sense_i_9_dmp_read_quat9: 'inferred',
     tile_sense_i_9_dmp_data_ready: 'inferred',
@@ -643,7 +804,13 @@ const sim: TileSim<State> = {
     return {
       draw_ua: ua,
       rails: [
-        { name: 'V+', role: 'supply', v_mv: ctx?.padVoltage['10'] ?? 1800, i_ua: ua, pads: ['10'] },
+        {
+          name: 'V+',
+          role: 'supply',
+          v_mv: ctx?.padVoltage['10'] ?? 1800,
+          i_ua: ua,
+          pads: ['10'],
+        },
       ],
     };
   },
