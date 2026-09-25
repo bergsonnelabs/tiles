@@ -1,0 +1,287 @@
+{
+  "rev": "a",
+  "name": "T.C",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "configurable interrupt output (with an internal 4.7k pull up on the open-drain)",
+          "type": "digital",
+          "function": "RDY",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "additional external cap-touch input",
+          "type": "analog",
+          "function": "C0",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.71-3.5V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.5,
+      "min": 1.71,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "dataReady": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use RDY (data-ready) line",
+      "binding": {
+        "pad": "3",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "RDY_CONFIG"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "dataReady.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "RDY_CONFIG"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 18,
+  "headline": "capacitive touch",
+  "components": [
+    {
+      "url": "https://www.azoteq.com/product/iqs323/",
+      "part": "IQS323",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/18/Azoteq-IQ323.pdf",
+      "manufacturer": "Azoteq"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x44"
+          }
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:41:02.767Z",
+  "description": "Built around the Azoteq IQS323 ProxFusion controller, the Sense.T.C tile's entire top surface functions as a capacitive touch sensor, while a second input channel is available via one of the pads.\n\nThe IQS323 provides both proximity and touch detection with all signal processing on-chip, exposing processed results over I2C. Each channel reports 16-bit filtered counts, a 16-bit long-term average baseline, and binary proximity/touch states with configurable thresholds, debounce, and hysteresis. When configured as a slider across multiple tiles, the controller provides a 16-bit position output with on-chip gesture recognition including tap, swipe, flick, and hold.\n\nReport rates are configurable per power mode, from every 16ms in normal self-capacitive mode (125µA average current consumption) up to every 160ms in 4 µA ultra-low-power mode (160 ms). In addition, event-driven reporting can leave the host free between changes in state.",
+  "json_version": "0.7",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "The entire top surface of the tile connected to the C1 sensor input with a 470-ohm series resistor.",
+      "heading": "Sensing Surface",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "The C0 input on the IQS323 is directly connected to pad 8 of the tile, allowing for user configuration of a secondary capacitive touch input.",
+      "heading": "Secondary Input",
+      "image_url": ""
+    }
+  ]
+}
