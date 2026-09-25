@@ -1,0 +1,1672 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@92d73dd",
+  "file": "tile_sense_cap.h",
+  "brief": "Capacitive trackpad driver for the Sense.CAP tile (IQS7211A).",
+  "description": "@version 0.4.0\n\nAzoteq IQS7211A mutual-capacitance trackpad controller: up to 2-finger\nabsolute XY tracking, relative XY, per-channel touch status, built-in\ngesture engine (tap, press-and-hold, four-way swipe), and an Alternate\nLow-Power (ALP) channel for presence wake-up.\n\n**Surface configuration.** The trackpad's electrical geometry (Rx/Tx\ncount and mapping, conversion cycles, XY resolution, ATI target) is a\nproperty of the physical electrode surface. init() deliberately does\nNOT overwrite the chip's memory map — call\ntile_sense_cap_configure_surface() after init with a\nsense_cap_surface_t describing the attached surface, which writes the\ngeometry, packs the sensing cycles, sets the ATI target and runs\nre-ATI. The r0 2x3 surface (2 Rx strips x 3 Tx blocks) ships as the\nbuilt-in preset sense_cap_surface_2x3; setup_2x3() is the one-call\nform. Without a surface config the device runs on factory defaults\nand XY output is not meaningful.\n\nCommunication windows: the device only serves register data inside a\ncommunication window. In its default streaming mode a window opens every\nreport cycle and the part clock-stretches a master that arrives early\n(datasheet §11.9.2), so plain reads simply work. In event mode, in the\nlow-power modes, or with Comms Request enabled, they do not — the read\nreturns @ref IQS7211A_INVALID_RESPONSE (0xEEEE) instead. The driver\ntherefore retries every access behind an explicit comms request (write\n0x00 to 0xFF, wait, retry), the same shape as the IQS323 force-comms\ndance on Sense.T.C. One window serves one transaction — an I2C STOP\ncloses it again.\n\nThe 0xEEEE response is the sharp edge on this part: it is valid-looking\ndata with Comms Request, Event Mode, Manual Control and WDT bits all\nset. A read-modify-write that trusts it will write those bits back and\nstrand the device in request-only mode — recoverable only by power\ncycling the tile. Every helper here checks for it before writing.\n\nTwo communication modes:\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. **This is the required mode on r0\n    tiles fitted with the IQS7211A** — the board was designed for the\n    IQS7211E, whose A5 ball combines RDY+MCLR; on the A variant that\n    ball is MCLR only, so tile pad 3 is a hardware reset line (100k\n    pull-up on board), and the A's real RDY (ball C3) is unrouted.\n  - **RDY mode**: provide a rdy_pin in config. Usable once IQS7211E\n    parts are fitted (pad 3 then carries the combined RDY/MCLR line);\n    wire it to a Core pad and pass that pad number. An EXTI\n    falling-edge ISR sets a flag; process() only does I2C when set.\n\n\n\nDatasheet: Azoteq IQS7211A, Rev v1.3, April 2025\n\n@studio tile label=Sense.CAP icon=⬚\n\n@studio event name=touch_down mask=SENSE_CAP_EV_TOUCH_DOWN\n@studio event name=touch_up mask=SENSE_CAP_EV_TOUCH_UP\n@studio event name=tap mask=SENSE_CAP_EV_TAP\n@studio event name=double_tap mask=SENSE_CAP_EV_DOUBLE_TAP\n@studio event name=long_press mask=SENSE_CAP_EV_LONG_PRESS\n@studio event name=swipe mask=SENSE_CAP_EV_SWIPE_ANY\n@studio event name=drag mask=SENSE_CAP_EV_DRAG\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"ATI fine tuning\" section=config\n  The ATI *target* is part of the surface config, and re_ati() /\n  reseed() re-run auto-tuning at any time. The finer knobs — trackpad\n  and ALP ATI multipliers/dividers, compensation dividers and drift\n  limits (0x30-0x31, 0x33-0x3B) — are left at chip defaults, to be\n  revisited if re-ATI against the real surface proves insufficient.\n  Reachable through write_reg meanwhile.\n\n@studio unsupported severity=niche category=\"ALP fine tuning\" section=config\n  The ALP wake channel is configured by the surface config (electrode\n  selection, mutual sensing, count filter, ATI target) and its\n  threshold is settable at runtime. Still at chip defaults: the set/\n  clear debounce counts (0x56), the count-filter betas (0x70/0x71),\n  and the LPX auto-prox cycle setting. ALP count, LTA and output\n  status are readable at runtime.\n\n@studio unsupported severity=advanced category=\"XY filtering and trim\" section=config\n  Axis switch and X/Y flips are part of the surface config, and the\n  recommended MAV + dynamic-IIR filters are enabled there. The filter\n  *parameters* (0x64-0x66), finger-split factor and stationary-touch\n  threshold (0x67), and X/Y trim (0x68, 0x69) are not exposed —\n  surface-tuning knobs, left at chip defaults until real-finger\n  testing says otherwise.\n\n@studio unsupported severity=niche category=\"Analog hardware settings\" section=advanced\n  Main oscillator selection and adjustment, calibration-capacitor\n  selection (0x52), and trackpad/ALP charge-transfer frequency\n  (0x58/0x59) are not exposed. These are GUI-derived analog settings\n  for a specific electrode stack-up.\n\n@studio unsupported severity=niche category=\"Comms-request mode selection\" section=advanced\n  Config bit \"Comms Request EN\" (0x51 bit 4) chooses whether the device\n  clock-stretches a early master or requires an explicit window\n  request. The driver speaks both — it retries through a comms request\n  whenever a read comes back invalid — but does not expose a setter for\n  the bit itself, since the automatic fallback covers both settings.\n\n@studio unsupported severity=niche category=\"MCLR hardware reset\" section=lifecycle\n  Driver-deferred: on r0 tiles with the IQS7211A fitted, tile pad 3\n  carries the chip's MCLR (active-low reset, 100k pull-up on board) —\n  a Core pad wired there could hard-reset a comms-locked device, the\n  one failure the software reset cannot reach. Not yet exposed as an\n  API; software reset covers normal operation. (There is no\n  definitions/Sense-CAP-*.json yet; when one lands, this note should\n  be re-checked against the real pad table.)\n\n@studio unsupported severity=niche category=\"Tx short test\" section=advanced\n  The Tx short-test configuration (0x50 bit 15) is a production-line\n  electrode-fault test, out of scope for a runtime driver.",
+  "code_examples": [
+    {
+      "label": "Polling example (Cores SDK)",
+      "code": "  tile_t pad;\n  tile_sense_cap_init(core_tiles_pal(&core_i2c1), 0, &pad, NULL);\n  while (1) {\n      tile_sense_cap_process(&pad);\n      if (tile_sense_cap_get_num_fingers(&pad) > 0)\n          printf(\"x=%u y=%u\\n\", tile_sense_cap_get_finger_x(&pad, 0),\n                                tile_sense_cap_get_finger_y(&pad, 0));\n      core_delay_ms(20);\n  }"
+    },
+    {
+      "label": "Gesture callback example",
+      "code": "  void on_pad(tile_t *t, uint16_t info, void *ctx) {\n      uint16_t g = tile_sense_cap_get_gestures(t);\n      if (g & SENSE_CAP_GESTURE_SINGLE_TAP) tap();\n      if (g & SENSE_CAP_GESTURE_SWIPE_X_POS) next();\n  }\n\n  sense_cap_cfg_t cfg = {\n      .gestures = SENSE_CAP_GESTURE_SINGLE_TAP | SENSE_CAP_GESTURE_SWIPE_X_POS,\n      .on_event = on_pad,\n  };\n  tile_sense_cap_init(core_tiles_pal(&core_i2c1), 0, &pad, &cfg);"
+    }
+  ],
+  "studio_ready": true,
+  "studio_events": [
+    {
+      "name": "touch_down"
+    },
+    {
+      "name": "touch_up"
+    },
+    {
+      "name": "tap"
+    },
+    {
+      "name": "double_tap"
+    },
+    {
+      "name": "long_press"
+    },
+    {
+      "name": "swipe"
+    },
+    {
+      "name": "drag"
+    }
+  ],
+  "studio_unsupported": [
+    {
+      "severity": "advanced",
+      "category": "ATI fine tuning",
+      "brief": "The ATI *target* is part of the surface config, and re_ati() / reseed() re-run auto-tuning at any time. The finer knobs — trackpad and ALP ATI multipliers/dividers, compensation dividers and drift limits (0x30-0x31, 0x33-0x3B) — are left at chip defaults, to be revisited if re-ATI against the real surface proves insufficient. Reachable through write_reg meanwhile.",
+      "section": "config"
+    },
+    {
+      "severity": "niche",
+      "category": "ALP fine tuning",
+      "brief": "The ALP wake channel is configured by the surface config (electrode selection, mutual sensing, count filter, ATI target) and its threshold is settable at runtime. Still at chip defaults: the set/ clear debounce counts (0x56), the count-filter betas (0x70/0x71), and the LPX auto-prox cycle setting. ALP count, LTA and output status are readable at runtime.",
+      "section": "config"
+    },
+    {
+      "severity": "advanced",
+      "category": "XY filtering and trim",
+      "brief": "Axis switch and X/Y flips are part of the surface config, and the recommended MAV + dynamic-IIR filters are enabled there. The filter *parameters* (0x64-0x66), finger-split factor and stationary-touch threshold (0x67), and X/Y trim (0x68, 0x69) are not exposed — surface-tuning knobs, left at chip defaults until real-finger testing says otherwise.",
+      "section": "config"
+    },
+    {
+      "severity": "niche",
+      "category": "Analog hardware settings",
+      "brief": "Main oscillator selection and adjustment, calibration-capacitor selection (0x52), and trackpad/ALP charge-transfer frequency (0x58/0x59) are not exposed. These are GUI-derived analog settings for a specific electrode stack-up.",
+      "section": "advanced"
+    },
+    {
+      "severity": "niche",
+      "category": "Comms-request mode selection",
+      "brief": "Config bit \"Comms Request EN\" (0x51 bit 4) chooses whether the device clock-stretches a early master or requires an explicit window request. The driver speaks both — it retries through a comms request whenever a read comes back invalid — but does not expose a setter for the bit itself, since the automatic fallback covers both settings.",
+      "section": "advanced"
+    },
+    {
+      "severity": "niche",
+      "category": "MCLR hardware reset",
+      "brief": "Driver-deferred: on r0 tiles with the IQS7211A fitted, tile pad 3 carries the chip's MCLR (active-low reset, 100k pull-up on board) — a Core pad wired there could hard-reset a comms-locked device, the one failure the software reset cannot reach. Not yet exposed as an API; software reset covers normal operation. (There is no definitions/Sense-CAP-*.json yet; when one lands, this note should be re-checked against the real pad table.)",
+      "section": "lifecycle"
+    },
+    {
+      "severity": "niche",
+      "category": "Tx short test",
+      "brief": "The Tx short-test configuration (0x50 bit 15) is a production-line electrode-fault test, out of scope for a runtime driver.",
+      "section": "advanced"
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_CAP_VERSION_MAJOR",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_CAP_VERSION_MINOR",
+      "value": "4",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_CAP_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_I2C_ADDR",
+      "value": "0x56",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_PRODUCT_NUMBER",
+      "value": "763",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_INVALID_RESPONSE",
+      "value": "0xEEEE",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_CYCLE_PROX_BYTE",
+      "value": "0x05",
+      "description": "Fixed first byte of every cycle record",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_CHANNEL_NONE",
+      "value": "0xFF",
+      "description": "\"No channel allocated\" in a cycle slot",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_INFO_MODE_SHIFT",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_INFO_NUM_FINGERS_SHIFT",
+      "value": "8",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_GESTURE_ALL",
+      "value": "0x3F",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_DIR_LEFT",
+      "value": "0",
+      "description": "Toward -X",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_DIR_RIGHT",
+      "value": "1",
+      "description": "Toward +X",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_DIR_UP",
+      "value": "2",
+      "description": "Toward -Y",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_DIR_DOWN",
+      "value": "3",
+      "description": "Toward +Y",
+      "section": ""
+    },
+    {
+      "name": "IQS7211A_CTRL_MODE_SHIFT",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_NUM_FINGERS",
+      "value": "2",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_MAX_RX",
+      "value": "8",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_MAX_TX",
+      "value": "12",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_CAP_MAX_MAP",
+      "value": "12",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_cap_mode_t",
+      "brief": "Charging (power) mode — reported in Info Flags, selectable in manual control.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_CAP_MODE_ACTIVE",
+          "value": "0",
+          "description": "Full report rate"
+        },
+        {
+          "name": "SENSE_CAP_MODE_IDLE_TOUCH",
+          "value": "1",
+          "description": "Touch held, reduced rate"
+        },
+        {
+          "name": "SENSE_CAP_MODE_IDLE",
+          "value": "2",
+          "description": "No touch, reduced rate"
+        },
+        {
+          "name": "SENSE_CAP_MODE_LP1",
+          "value": "3",
+          "description": "Low power 1"
+        },
+        {
+          "name": "SENSE_CAP_MODE_LP2",
+          "value": "4",
+          "description": "Low power 2 (lowest)"
+        }
+      ]
+    },
+    {
+      "name": "sense_cap_finger_t",
+      "brief": "Finger slot for the absolute-XY getters.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_CAP_FINGER_1",
+          "value": "0",
+          "description": ""
+        },
+        {
+          "name": "SENSE_CAP_FINGER_2",
+          "value": "1",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "name": "sense_cap_phase_t",
+      "brief": "Phase of a touch event, iOS/Android style.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_CAP_TOUCH_DOWN",
+          "value": "0",
+          "description": "Finger arrived"
+        },
+        {
+          "name": "SENSE_CAP_TOUCH_MOVED",
+          "value": "1",
+          "description": "Position changed while down"
+        },
+        {
+          "name": "SENSE_CAP_TOUCH_UP",
+          "value": "2",
+          "description": "Finger left"
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_cap_touch_t",
+      "brief": "",
+      "description": "One touch event. Produced by process() from finger-state transitions;\nconsumed via the on_touch() callback or by polling next_touch_event().\nVelocities are in resolution-pixels per second, computed from the\nconfig-supplied millisecond clock (or an internal report-rate estimate\nwhen none was provided).",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "phase",
+          "description": "sense_cap_phase_t value."
+        },
+        {
+          "type": "uint8_t",
+          "name": "finger",
+          "description": "Finger slot, 0 or 1."
+        },
+        {
+          "type": "uint16_t",
+          "name": "x",
+          "description": "Position in the configured X resolution."
+        },
+        {
+          "type": "uint16_t",
+          "name": "y",
+          "description": "Position in the configured Y resolution."
+        },
+        {
+          "type": "int16_t",
+          "name": "dx",
+          "description": "X movement since the previous event."
+        },
+        {
+          "type": "int16_t",
+          "name": "dy",
+          "description": "Y movement since the previous event."
+        },
+        {
+          "type": "int16_t",
+          "name": "vx",
+          "description": "X velocity, pixels/second."
+        },
+        {
+          "type": "int16_t",
+          "name": "vy",
+          "description": "Y velocity, pixels/second."
+        },
+        {
+          "type": "uint16_t",
+          "name": "strength",
+          "description": "Touch strength at this event."
+        },
+        {
+          "type": "uint32_t",
+          "name": "t_ms",
+          "description": "Timestamp, driver clock."
+        }
+      ]
+    },
+    {
+      "name": "sense_cap_cfg_t",
+      "brief": "",
+      "description": "Optional init config. Pass NULL for defaults: polled mode, no callback,\nand the device's own settings left exactly as they are.\nEvery field is opt-in — a zero field means \"don't touch that register\".\nThis matters while the sensor surface is undefined: the driver must not\nimpose geometry it cannot know.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "rdy_pin",
+          "description": "Core pad for RDY. 0 = polled mode."
+        },
+        {
+          "type": "sense_cap_event_cb_t",
+          "name": "on_event",
+          "description": "Callback. NULL = no callback."
+        },
+        {
+          "type": "uint16_t",
+          "name": "gestures",
+          "description": "Gesture enable mask (SENSE_CAP_GESTURE_*). 0 = leave as-is."
+        },
+        {
+          "type": "uint16_t",
+          "name": "active_rate_ms",
+          "description": "Active-mode report rate. 0 = leave as-is."
+        },
+        {
+          "type": "uint8_t",
+          "name": "max_touches",
+          "description": "Max simultaneous fingers, 1 or 2. 0 = leave as-is."
+        },
+        {
+          "type": "uint8_t",
+          "name": "event_mode",
+          "description": "1 = event mode (comms only on events), 0 = leave as-is."
+        }
+      ]
+    },
+    {
+      "name": "sense_cap_surface_t",
+      "brief": "",
+      "description": "Electrical description of an electrode surface attached to the tile.\nPin numbers are the chip's Rx/Tx numbers, in trackpad order: rx_pins[0]\nis Rx row/column 0, and so on. Channel numbers follow the datasheet\nrule (§5.1.1): along the Rxs first, then to the next Tx. The sensing\ncycles are derived automatically — each cycle pairs one channel from\nprox block A (RX0-3) with one from block B (RX4-7) on the same Tx,\nso a surface that mixes blocks packs two channels per cycle.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "total_rx",
+          "description": "Rx electrode count, 1-8."
+        },
+        {
+          "type": "uint8_t",
+          "name": "total_tx",
+          "description": "Tx electrode count, 1-12."
+        },
+        {
+          "type": "uint8_t",
+          "name": "switch_xy",
+          "description": "1 = X along Txs, Y along Rxs."
+        },
+        {
+          "type": "uint8_t",
+          "name": "flip_x",
+          "description": "1 = invert X output."
+        },
+        {
+          "type": "uint8_t",
+          "name": "flip_y",
+          "description": "1 = invert Y output."
+        },
+        {
+          "type": "uint16_t",
+          "name": "x_res",
+          "description": "X output resolution (pixels)."
+        },
+        {
+          "type": "uint16_t",
+          "name": "y_res",
+          "description": "Y output resolution (pixels)."
+        },
+        {
+          "type": "uint16_t",
+          "name": "ati_target",
+          "description": "Trackpad ATI target (counts)."
+        },
+        {
+          "type": "uint8_t",
+          "name": "alp_enable",
+          "description": ""
+        },
+        {
+          "type": "uint16_t",
+          "name": "alp_ati_target",
+          "description": ""
+        },
+        {
+          "type": "uint16_t",
+          "name": "ati_base",
+          "description": ""
+        },
+        {
+          "type": "uint8_t",
+          "name": "touch_set_mult",
+          "description": ""
+        },
+        {
+          "type": "uint8_t",
+          "name": "touch_clear_mult",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_cap_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Tiles HAL handle (I2C bus)"
+        },
+        {
+          "name": "instance",
+          "description": "Device instance (only 0 exists — the address is fixed)"
+        }
+      ],
+      "notes": [],
+      "return": "1 if a device ACKs at 0x56, 0 if not",
+      "brief": "Probe the bus for an IQS7211A trackpad controller.",
+      "description": "",
+      "name": "tile_sense_cap_find"
+    },
+    {
+      "signature": "void tile_sense_cap_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_cap_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Tiles HAL handle (I2C bus)"
+        },
+        {
+          "name": "instance",
+          "description": "Device instance (only 0 exists)"
+        },
+        {
+          "name": "tile",
+          "description": "Tile handle to initialize"
+        },
+        {
+          "name": "cfg",
+          "description": "Optional config. NULL for defaults."
+        }
+      ],
+      "notes": [],
+      "brief": "Initialize the trackpad controller.",
+      "description": "Probes the bus, verifies the product number (763), caches the firmware\nversion, and acknowledges the power-on reset flag. Applies only the\noptional settings supplied in @p cfg — the chip's own configuration is\notherwise left untouched. Follow with configure_surface() (or\nsetup_2x3()) to program the electrode geometry.",
+      "name": "tile_sense_cap_init"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_configure_surface(tile_t *tile, const sense_cap_surface_t *surf)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        },
+        {
+          "name": "surf",
+          "description": "Surface description (see sense_cap_surface_2x3)"
+        }
+      ],
+      "notes": [],
+      "return": "1 if every register verified and re-ATI completed, 0 otherwise.",
+      "brief": "Program the electrode-surface geometry into the device.",
+      "description": "Writes the Rx/Tx totals and pin mapping, packs and writes the sensing-\ncycle allocation table (unused cycles cleared), sets XY resolution,\naxis orientation and the recommended XY filters, sets the ATI target,\nand finishes with a re-ATI against the new geometry. Every write is\nwindow-managed and verified.\n\nCall after init, before trusting any XY or touch output. The verified\ngeometry survives in the device until reset, so calling once per boot\nis sufficient.",
+      "name": "tile_sense_cap_configure_surface"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_setup_2x3(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "1 if configuration verified and re-ATI completed, 0 otherwise.",
+      "brief": "Configure the built-in r0 2x3 surface and run ATI.",
+      "description": "One-call form of configure_surface() with sense_cap_surface_2x3 —\nthe surface shipped with the r0 tile (2 Rx strips x 3 Tx blocks).",
+      "name": "tile_sense_cap_setup_2x3"
+    },
+    {
+      "signature": "void tile_sense_cap_on_touch(tile_t *tile, sense_cap_touch_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context passed to the callback"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the raw touch-event stream callback.",
+      "description": "Fires from process() for every DOWN / MOVED / UP transition, in\nmain-loop context. Pass NULL to disable.",
+      "name": "tile_sense_cap_on_touch"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_next_touch_event(tile_t *tile, sense_cap_touch_t *ev)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "ev",
+          "description": "Filled with the event when one was available"
+        }
+      ],
+      "notes": [],
+      "return": "1 if an event was returned, 0 if the queue is empty.",
+      "brief": "Pop the oldest queued touch event.",
+      "description": "Events queue in an 8-deep ring so a polling loop cannot miss the\ntransitions that happened between process() calls. Oldest events are\ndropped first on overflow.",
+      "name": "tile_sense_cap_next_touch_event"
+    },
+    {
+      "signature": "void tile_sense_cap_on_tap(tile_t *tile, sense_cap_tap_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the tap recognizer (single and double).",
+      "description": "",
+      "name": "tile_sense_cap_on_tap"
+    },
+    {
+      "signature": "void tile_sense_cap_on_long_press(tile_t *tile, sense_cap_hold_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the long-press recognizer.",
+      "description": "",
+      "name": "tile_sense_cap_on_long_press"
+    },
+    {
+      "signature": "void tile_sense_cap_on_swipe(tile_t *tile, sense_cap_swipe_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the swipe recognizer.",
+      "description": "Uses the chip's four-way swipe engine (enable the swipe gestures in\nthe init config), enriched with the tracked velocity.",
+      "name": "tile_sense_cap_on_swipe"
+    },
+    {
+      "signature": "void tile_sense_cap_on_drag(tile_t *tile, sense_cap_drag_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the drag (pan) recognizer.",
+      "description": "Fires on every movement once the finger travels beyond the tap\nradius, with per-event deltas — the Android onScroll / iOS pan.",
+      "name": "tile_sense_cap_on_drag"
+    },
+    {
+      "signature": "void tile_sense_cap_on_pinch(tile_t *tile, sense_cap_pinch_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context"
+        }
+      ],
+      "notes": [],
+      "brief": "Register the two-finger pinch recognizer.",
+      "description": "",
+      "name": "tile_sense_cap_on_pinch"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_touch_events(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Latched SENSE_CAP_EV_* bits; reading clears them.",
+      "brief": "Read and clear the accumulated touch-event bits.",
+      "description": "Every recognizer result since the previous call, as SENSE_CAP_EV_*\nbits — the polling counterpart to the callbacks, latched so nothing\nis missed between reads.",
+      "name": "tile_sense_cap_get_touch_events"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_was_tapped(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a tap completed, 0 otherwise.",
+      "brief": "Did a tap (single or double) complete since the last check?",
+      "description": "Consumes the tap bits from the same latch as get_touch_events().",
+      "name": "tile_sense_cap_was_tapped"
+    },
+    {
+      "signature": "int8_t tile_sense_cap_get_zone(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Zone number, or -1 when nothing is touched.",
+      "brief": "Which zone is currently touched?",
+      "description": "Zones are channel numbers (§5.1.1): for the 2x3 surface, column c /\nrow r is zone c*2 + r — top row 0/2/4 left to right, bottom row\n1/3/5. Computed from the tracked finger position.",
+      "name": "tile_sense_cap_get_zone"
+    },
+    {
+      "signature": "int8_t tile_sense_cap_zone_at(tile_t *tile, uint16_t x, uint16_t y)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "x",
+          "description": "X position in the configured resolution"
+        },
+        {
+          "name": "y",
+          "description": "Y position in the configured resolution"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Zone (channel) number, or -1 before configure_surface().",
+      "brief": "Which zone contains a given position?",
+      "description": "Pure geometry over the configured surface — use it inside tap/touch\ncallbacks, where the finger has already lifted and get_zone() would\nreport none (\"which button was tapped?\").",
+      "name": "tile_sense_cap_zone_at"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_is_zone_touched(tile_t *tile, uint8_t zone)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "zone",
+          "description": "Zone (channel) number, 0-31"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if that channel's touch bit is set (live read).",
+      "brief": "Is a specific zone's channel reporting touch?",
+      "description": "",
+      "name": "tile_sense_cap_is_zone_touched"
+    },
+    {
+      "signature": "void tile_sense_cap_get_position_pct(tile_t *tile, int32_t *x_pct, int32_t *y_pct)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "x_pct",
+          "description": "0-100 across X (or -1 with no finger); NULL ok"
+        },
+        {
+          "name": "y_pct",
+          "description": "0-100 across Y (or -1 with no finger); NULL ok"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Finger position as percentages, resolution-independent.",
+      "description": "",
+      "name": "tile_sense_cap_get_position_pct"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_wait_for_touch(tile_t *tile, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "timeout_ms",
+          "description": "Maximum wait"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 on touch, 0 on timeout.",
+      "brief": "Block until a finger touches the surface.",
+      "description": "Runs process() internally while waiting.",
+      "name": "tile_sense_cap_wait_for_touch"
+    },
+    {
+      "signature": "void tile_sense_cap_set_sensitivity(tile_t *tile, uint8_t level)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "level",
+          "description": "1-5; values outside the range are clamped."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "One-knob touch sensitivity.",
+      "description": "Maps 1 (least sensitive, firm touches only) to 5 (most sensitive,\nlight touches) onto the touch set/clear multiplier pairs.",
+      "name": "tile_sense_cap_set_sensitivity"
+    },
+    {
+      "signature": "void tile_sense_cap_process(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read the trackpad data block and update the cached state.",
+      "description": "Call from your main loop. Reads info flags, gestures, relative XY and\nboth finger slots in one burst, then fires the event callback.\nIn RDY mode returns immediately unless the RDY line has fired.",
+      "name": "tile_sense_cap_process"
+    },
+    {
+      "signature": "void tile_sense_cap_on_event(tile_t *tile, sense_cap_event_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "cb",
+          "description": "Callback function (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "description": "User context passed to the callback"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Register or change the event callback.",
+      "description": "",
+      "name": "tile_sense_cap_on_event"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_version_major(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "Major version from register 0x01",
+      "brief": "Read the device's firmware major version (cached at init).",
+      "description": "",
+      "name": "tile_sense_cap_get_version_major"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_version_minor(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "Minor version from register 0x02",
+      "brief": "Read the device's firmware minor version (cached at init).",
+      "description": "",
+      "name": "tile_sense_cap_get_version_minor"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_settings_version(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "Raw 16-bit settings version, or 0 if the tile is not ready",
+      "brief": "Read the settings-version label the device was programmed with.",
+      "description": "Register 0x74: high byte is the settings major version, low byte the\nminor. A designer stamps this when exporting a configured firmware from\nthe Azoteq GUI, so the host can confirm the part carries the intended\nsurface configuration (datasheet §10.1.1).",
+      "name": "tile_sense_cap_get_settings_version"
+    },
+    {
+      "signature": "void tile_sense_cap_reset(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Software-reset the device.",
+      "description": "The reset takes effect once the communication window closes\n(datasheet §9.3.2). Blocks for the device's boot time, then clears the\nreset indication. The tile returns to TILE_STATE_READY.",
+      "name": "tile_sense_cap_reset"
+    },
+    {
+      "signature": "void tile_sense_cap_ack_reset(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Clear the reset indication (Show Reset) flag.",
+      "description": "The device sets Show Reset on every boot. Acknowledging it means a\nlater Show Reset tells the host the part rebooted unexpectedly — a\nbrown-out or a device-watchdog reset.",
+      "name": "tile_sense_cap_ack_reset"
+    },
+    {
+      "signature": "void tile_sense_cap_sleep(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Force the device into its lowest-power mode (LP2).",
+      "description": "Takes manual control of mode switching. The trackpad keeps sensing at\nthe LP2 report rate; call wake() to hand control back to the device's\nautomatic mode machine. Sets TILE_STATE_SLEEPING.",
+      "name": "tile_sense_cap_sleep"
+    },
+    {
+      "signature": "void tile_sense_cap_wake(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Return to automatic mode switching, starting in Active mode.",
+      "description": "",
+      "name": "tile_sense_cap_wake"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_info_flags(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Info Flags (IQS7211A_INFO_* masks)",
+      "brief": "Read the cached Info Flags word.",
+      "description": "",
+      "name": "tile_sense_cap_get_info_flags"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_gestures(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Gesture bits (SENSE_CAP_GESTURE_* masks)",
+      "brief": "Read the cached gesture flags.",
+      "description": "Gesture bits are latched by the device for one report cycle, so read\nthem every process() call or they are missed.",
+      "name": "tile_sense_cap_get_gestures"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_get_num_fingers(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Finger count from the cached Info Flags",
+      "brief": "Number of fingers currently on the trackpad (0, 1 or 2).",
+      "description": "",
+      "name": "tile_sense_cap_get_num_fingers"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_finger_x(tile_t *tile, uint8_t finger)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "finger",
+          "description": "0 or 1 (SENSE_CAP_FINGER_1 / _2)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "X in trackpad units (0..X resolution)",
+      "brief": "Absolute X coordinate of a finger.",
+      "description": "Only meaningful while that slot holds a tracked finger — gate on\ncycle to the next (datasheet §7.2.6), so slot 0 stays slot 0 while it\nis down.\n\nThe raw register contents are returned as-is. An empty slot reads\n0xFFFF in practice (observed on hardware, 2026-08-04) but the\ndatasheet does not document that sentinel, so gate on the finger\ncount rather than testing for it.",
+      "name": "tile_sense_cap_get_finger_x"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_finger_y(tile_t *tile, uint8_t finger)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "finger",
+          "description": "0 or 1 (SENSE_CAP_FINGER_1 / _2)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Y in trackpad units (0..Y resolution)",
+      "brief": "Absolute Y coordinate of a finger.",
+      "description": "Same slot caveat as @ref tile_sense_cap_get_finger_x.",
+      "name": "tile_sense_cap_get_finger_y"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_finger_strength(tile_t *tile, uint8_t finger)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "finger",
+          "description": "0 or 1"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Touch strength in device units",
+      "brief": "Touch strength of a finger — the sum of its channels' deltas.",
+      "description": "Scales with the sensitivity setup, so it is a relative measure, not a\nforce reading. Same slot caveat as @ref tile_sense_cap_get_finger_x.",
+      "name": "tile_sense_cap_get_finger_strength"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_finger_area(tile_t *tile, uint8_t finger)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "finger",
+          "description": "0 or 1"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Number of channels associated with the finger",
+      "brief": "Contact area of a finger, in channels.",
+      "description": "Same slot caveat as @ref tile_sense_cap_get_finger_x.",
+      "name": "tile_sense_cap_get_finger_area"
+    },
+    {
+      "signature": "int16_t tile_sense_cap_get_relative_x(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Signed X delta in trackpad units",
+      "brief": "Relative X movement since the previous report.",
+      "description": "",
+      "name": "tile_sense_cap_get_relative_x"
+    },
+    {
+      "signature": "int16_t tile_sense_cap_get_relative_y(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Signed Y delta in trackpad units",
+      "brief": "Relative Y movement since the previous report.",
+      "description": "",
+      "name": "tile_sense_cap_get_relative_y"
+    },
+    {
+      "signature": "uint32_t tile_sense_cap_get_touch_status(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Bit n set = channel n touched",
+      "brief": "Read the 32-bit per-channel touch status (CH0..CH31).",
+      "description": "Live read, not cached — the touch-status words sit outside the data\nblock that process() burst-reads. Useful when unused trackpad channels\nare repurposed as discrete buttons (datasheet §10.4).",
+      "name": "tile_sense_cap_get_touch_status"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_is_touched(tile_t *tile, uint8_t channel)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "channel",
+          "description": "Channel number, 0..31"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if touched, 0 if not",
+      "brief": "Check whether a single trackpad channel reports touch.",
+      "description": "",
+      "name": "tile_sense_cap_is_touched"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_get_num_channels(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "total_rx * total_tx, or 0 before configure_surface().",
+      "brief": "Number of trackpad channels in the configured surface.",
+      "description": "",
+      "name": "tile_sense_cap_get_num_channels"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_channel_count(tile_t *tile, uint8_t channel)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "channel",
+          "description": "Channel number, 0-31"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Count value, or 0 for an out-of-range channel.",
+      "brief": "Read one channel's raw count from the extended memory map.",
+      "description": "Live read. Channel numbers follow the datasheet rule: along the Rxs\nfirst, then to the next Tx (for the 2x3 surface: Tx column n has\nchannels 2n and 2n+1, top and bottom row).",
+      "name": "tile_sense_cap_get_channel_count"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_channel_delta(tile_t *tile, uint8_t channel)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "channel",
+          "description": "Channel number, 0-31"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Delta value, or 0 for an out-of-range channel.",
+      "brief": "Read one channel's delta (count minus reference).",
+      "description": "Live read from the extended memory map. The delta is what the touch\nthreshold acts on — the primary signal for surface bring-up.",
+      "name": "tile_sense_cap_get_channel_delta"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_is_alp_active(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if the ALP channel reports prox/touch in the cached info flags",
+      "brief": "Check whether the ALP channel detects presence.",
+      "description": "",
+      "name": "tile_sense_cap_is_alp_active"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_read_channels(tile_t *tile, uint16_t *counts, uint16_t *deltas, uint8_t n)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "counts",
+          "description": "Out: `n` counts, or NULL to skip"
+        },
+        {
+          "name": "deltas",
+          "description": "Out: `n` deltas (signed, cast to int16_t), or NULL to skip"
+        },
+        {
+          "name": "n",
+          "description": "Channels to read, 1-32"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if every requested block came back valid, 0 otherwise.",
+      "brief": "Read every channel's count and delta in two bus transactions.",
+      "description": "get_channel_count() / get_channel_delta() each open their own\ncommunication window, so a per-channel sweep of a 6-channel surface\ncosts twelve window waits (~10 ms each at the fastest report rate).\nThis reads the count block and the delta block as two auto-incrementing\nbursts: two windows for the whole surface. Use it for any live view.",
+      "name": "tile_sense_cap_read_channels"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_alp_count(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "ALP count value (live read)",
+      "brief": "Read the raw ALP channel count.",
+      "description": "",
+      "name": "tile_sense_cap_get_alp_count"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_get_alp_lta(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "ALP LTA value (live read)",
+      "brief": "Read the ALP channel long-term average.",
+      "description": "",
+      "name": "tile_sense_cap_get_alp_lta"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_get_mode(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "sense_cap_mode_t value from the cached info flags",
+      "brief": "Current charging (power) mode of the device.",
+      "description": "",
+      "name": "tile_sense_cap_get_mode"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_has_ati_error(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if either the trackpad or the ALP ATI error flag is set",
+      "brief": "Report whether the most recent ATI run failed.",
+      "description": "An ATI error means the auto-tuning could not reach its target — with\nno sensor surface attached, this is the expected state.",
+      "name": "tile_sense_cap_has_ati_error"
+    },
+    {
+      "signature": "void tile_sense_cap_enable_gestures(tile_t *tile, uint16_t mask)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "mask",
+          "description": "OR of SENSE_CAP_GESTURE_* bits (0 disables all gestures)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set which gestures the device detects.",
+      "description": "",
+      "name": "tile_sense_cap_enable_gestures"
+    },
+    {
+      "signature": "void tile_sense_cap_set_tap_timing(tile_t *tile, uint16_t tap_ms, uint16_t hold_ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "tap_ms",
+          "description": "Maximum tap duration in ms"
+        },
+        {
+          "name": "hold_ms",
+          "description": "Press-and-hold duration in ms"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the tap and press-and-hold timing.",
+      "description": "A tap must lift within @p tap_ms and move less than the tap distance;\na press that stays down past @p hold_ms raises press-and-hold\n(datasheet §8.1).",
+      "name": "tile_sense_cap_set_tap_timing"
+    },
+    {
+      "signature": "void tile_sense_cap_set_swipe_timing(tile_t *tile, uint16_t swipe_ms, uint16_t x_dist, uint16_t y_dist)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "swipe_ms",
+          "description": "Maximum swipe duration in ms"
+        },
+        {
+          "name": "x_dist",
+          "description": "X distance threshold in trackpad units"
+        },
+        {
+          "name": "y_dist",
+          "description": "Y distance threshold in trackpad units"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the swipe timing and distance thresholds.",
+      "description": "A swipe must cover @p x_dist or @p y_dist trackpad units within",
+      "name": "tile_sense_cap_set_swipe_timing"
+    },
+    {
+      "signature": "void tile_sense_cap_set_report_rate(tile_t *tile, uint8_t mode, uint16_t ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "mode",
+          "description": "Which mode's rate to set (sense_cap_mode_t)"
+        },
+        {
+          "name": "ms",
+          "description": "Report period in milliseconds"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the report rate for one charging mode.",
+      "description": "",
+      "name": "tile_sense_cap_set_report_rate"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_set_poll_latency(tile_t *tile, uint16_t ms)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "ms",
+          "description": "Report period for all modes, in ms (minimum 5)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "1 if every mode's rate verified, 0 otherwise.",
+      "brief": "Bound how long a polled read can block.",
+      "description": "Without a RDY line the host cannot know when a communication window is\nopen, so every polled read clock-stretches until the part's NEXT report\ncycle. That is ~10 ms in Active but grows with each power mode, to\n~160 ms in LP2 — measured on hardware as a 130 ms stall per process()\ncall once an untouched surface had drifted down to LP2. A host with\nanything else to do (a radio, audio DMA, other tiles on the bus) cannot\nafford that.\n\nThis sets one report period for every mode, LP2 included, so a read\nblocks for at most `ms` whatever mode the part is in. The cost is\npower: the low-power modes stop saving anything, because their saving\nIS the slow cycle. Use it while polling responsively and restore the\nper-mode rates (set_report_rate) when idle — or fit RDY and use event\nmode, which needs neither.\n\nThe host's I2C timeout must exceed `ms`, or the stretch is cut short\nand the read fails into the driver's window-request retries (8 x 16 ms).",
+      "name": "tile_sense_cap_set_poll_latency"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_set_mode_timeout(tile_t *tile, uint8_t mode, uint16_t seconds)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "mode",
+          "description": "Mode to set the timeout for (Active, Idle-Touch, Idle or LP1)"
+        },
+        {
+          "name": "seconds",
+          "description": "Timeout in seconds (0 = never time out of that mode)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "1 if the write verified, 0 otherwise (bad mode, or no window).",
+      "brief": "Set the inactivity timeout that drops the device to the next mode.",
+      "description": "",
+      "name": "tile_sense_cap_set_mode_timeout"
+    },
+    {
+      "signature": "void tile_sense_cap_set_max_touches(tile_t *tile, uint8_t fingers)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "fingers",
+          "description": "1 or 2"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the maximum number of simultaneous fingers tracked (1 or 2).",
+      "description": "",
+      "name": "tile_sense_cap_set_max_touches"
+    },
+    {
+      "signature": "void tile_sense_cap_set_resolution(tile_t *tile, uint16_t x_res, uint16_t y_res)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "x_res",
+          "description": "X resolution in units"
+        },
+        {
+          "name": "y_res",
+          "description": "Y resolution in units"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the reported XY resolution of the trackpad.",
+      "description": "Absolute finger coordinates are scaled to 0..x_res and 0..y_res\n(datasheet §7.4). Meaningful only once a real surface exists.",
+      "name": "tile_sense_cap_set_resolution"
+    },
+    {
+      "signature": "void tile_sense_cap_set_touch_multipliers(tile_t *tile, uint8_t set_mult, uint8_t clear_mult)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "set_mult",
+          "description": "Touch-set multiplier, 0-255"
+        },
+        {
+          "name": "clear_mult",
+          "description": "Touch-clear multiplier, 0-255"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the touch set/clear threshold multipliers.",
+      "description": "A channel reports touch when its count rises above\nReference x (1 + multiplier/128) — §5.5.1. Smaller multiplier =\nmore sensitive. Distinct set and clear values give hysteresis.",
+      "name": "tile_sense_cap_set_touch_multipliers"
+    },
+    {
+      "signature": "void tile_sense_cap_set_alp_threshold(tile_t *tile, uint16_t threshold)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "threshold",
+          "description": "Count-delta threshold"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the ALP wake-channel output threshold.",
+      "description": "The ALP output asserts when the ALP count deviates from its LTA by\nmore than this delta (§5.5.2). Lower = wakes on lighter proximity.",
+      "name": "tile_sense_cap_set_alp_threshold"
+    },
+    {
+      "signature": "void tile_sense_cap_set_event_mode(tile_t *tile, uint8_t enable, uint16_t events)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "enable",
+          "description": "1 to enable event mode, 0 for streaming"
+        },
+        {
+          "name": "events",
+          "description": "Event sources to enable (IQS7211A_CFG_*_EVENT bits)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable event-mode communication.",
+      "description": "In event mode the device only opens a communication window when an\nenabled event occurs, instead of every cycle. Pair it with a RDY pin\nfor interrupt-driven operation; in polled mode the driver reads through\nthe device's clock stretching either way.\n\n                Pass 0 to leave the current event sources alone.",
+      "name": "tile_sense_cap_set_event_mode"
+    },
+    {
+      "signature": "void tile_sense_cap_set_watchdog(tile_t *tile, uint8_t enable)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "enable",
+          "description": "1 to enable, 0 to disable"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable the device's internal watchdog timer.",
+      "description": "The device watchdog triggers a full cold boot if its main loop stalls\n(datasheet §10.2). Independent of the Core's own watchdog.",
+      "name": "tile_sense_cap_set_watchdog"
+    },
+    {
+      "signature": "uint8_t tile_sense_cap_re_ati(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "1 if ATI completed without an error flag, 0 on error or timeout",
+      "brief": "Queue a re-ATI (auto-tuning) run and wait for it to finish.",
+      "description": "Re-runs auto-tuning on both the trackpad and the ALP channel against\nwhatever settings the device currently holds, then reports whether it\nconverged. Run this after the sensing environment changes.",
+      "name": "tile_sense_cap_re_ati"
+    },
+    {
+      "signature": "void tile_sense_cap_reseed(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Reseed the trackpad and ALP reference values.",
+      "description": "Snaps the references to the present counts, discarding any drift the\nlong-term average has accumulated (datasheet §5.4.3).",
+      "name": "tile_sense_cap_reseed"
+    },
+    {
+      "signature": "uint16_t tile_sense_cap_read_reg(tile_t *tile, uint8_t reg)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "reg",
+          "description": "Register address (0x00..0xFF)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "Register value, little-endian, 0 if the tile is not ready",
+      "brief": "Read a raw 16-bit register.",
+      "description": "The escape hatch for everything in the `@studio unsupported` list —\nnotably the geometry and ATI registers that a surface bring-up needs\nbefore this driver grows a typed API for them.",
+      "name": "tile_sense_cap_read_reg"
+    },
+    {
+      "signature": "void tile_sense_cap_write_reg(tile_t *tile, uint8_t reg, uint16_t value)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Tile handle"
+        },
+        {
+          "name": "reg",
+          "description": "Register address (0x00..0xFF)"
+        },
+        {
+          "name": "value",
+          "description": "Value to write, little-endian on the wire"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Write a raw 16-bit register.",
+      "description": "",
+      "name": "tile_sense_cap_write_reg"
+    }
+  ],
+  "source_file": "tile_sense_cap.h",
+  "version": "0.4.0",
+  "tile_family": "Sense",
+  "tile_name": "CAP",
+  "display_name": "Sense.CAP"
+}
