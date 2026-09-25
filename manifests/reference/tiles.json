@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@f07f598",
+  "source": "tiles@cd2d6a4",
   "tiles": [
     {
       "family": "Sense",
@@ -1119,8 +1119,50 @@
       "name": "M.3G",
       "rev": "a",
       "headline": "triaxial geomagnetic magnetometer",
-      "i2c": [],
-      "pads": {}
+      "i2c": [
+        {
+          "name": "I2C",
+          "default": "0x14",
+          "alt": []
+        }
+      ],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "INT",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
     },
     {
       "family": "Sense",

@@ -18,6 +18,7 @@ import driveP from './sims/drive_p';
 import senseTof from './sims/sense_tof';
 import senseAcp from './sims/sense_acp';
 import senseTC from './sims/sense_t_c';
+import senseM3G from './sims/sense_m_3g';
 import senseMic from './sims/sense_mic';
 import senseCap from './sims/sense_cap';
 import senseAdc6 from './sims/sense_adc_6';
@@ -69,6 +70,7 @@ export const twins: Record<string, AnyTileSim> = {
   'Sense.TOF': senseTof,
   'Sense.ACP': senseAcp,
   'Sense.T.C': senseTC,
+  'Sense.M.3G': senseM3G,
   'Sense.MIC': senseMic,
   'Sense.CAP': senseCap,
   'Sense.ADC.6': senseAdc6,

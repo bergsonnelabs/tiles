@@ -1447,6 +1447,13 @@ def main():
             "version": "2.4.0",
         },
         {
+            "path": ROOT / "drivers/tile_sense_m_3g.h",
+            "definition": ROOT / "definitions/Sense-M-3G-a.json",
+            "prefix": "tile_sense_m_3g",
+            "init": "tile_sense_m_3g_init",
+            "version": "1.0.0",
+        },
+        {
             "path": ROOT / "drivers/tile_sense_i_9.h",
             "definition": ROOT / "definitions/Sense-I-9-c.json",
             "prefix": "tile_sense_i_9",

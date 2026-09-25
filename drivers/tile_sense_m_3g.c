@@ -161,6 +161,7 @@ typedef struct {
     uint8_t axis_en;             /* Cached axis-enable mask */
     uint8_t avg;                 /* Cached averaging, for settling delays */
     uint8_t odr;                 /* Cached ODR, to pick FM vs FM_FAST */
+    uint8_t fm_primed;           /* A forced conversion has run since bring-up */
 } bmm350_state_t;
 
 static bmm350_state_t state[NUM_INSTANCES];
@@ -429,16 +430,17 @@ static void set_mode_direct(tile_t *tile, uint8_t mode)
     pmu_command(tile, mode, settle);
 }
 
-void tile_sense_m_3g_set_mode(tile_t *tile, uint8_t mode)
+void tile_sense_m_3g_set_mode(tile_t *tile, sense_m_3g_mode_t mode)
 {
     if (tile->state != TILE_STATE_READY && tile->state != TILE_STATE_SLEEPING)
         return;
 
     /* Forced mode is only reachable from suspend, and a normal-to-forced
      * request is silently ignored by the device [DS §5.1.4]. Park in
-     * suspend first whenever we are leaving normal mode. */
-    uint8_t current = read_reg(tile, BMM350_REG_PMU_CMD) & 0x0F;
-    if (current == BMM350_PMU_CMD_NM || current == BMM350_PMU_CMD_UPD_OAE)
+     * suspend first whenever we are leaving normal mode. PMU_CMD[3:0] is
+     * write-only [DS §8.6], so ask PMU_CMD_STATUS_0.pwr_mode_is_normal
+     * (bit 3) [DS §8.7] where we are. */
+    if ((read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) >> 3) & 1U)
         pmu_command(tile, BMM350_PMU_CMD_SUS, BMM350_GOTO_SUSPEND_MS);
 
     set_mode_direct(tile, mode);
@@ -466,10 +468,18 @@ uint8_t tile_sense_m_3g_trigger_measurement(tile_t *tile)
 
     /* FM_FAST is only valid at 25 Hz and above; below that the slow
      * forced mode is mandatory [DS §5.1.4]. Lower ODR enum = faster rate,
-     * so "25 Hz or faster" is odr <= ODR_25HZ. */
-    uint8_t cmd = (s->odr <= SENSE_M_3G_ODR_25HZ) ? BMM350_PMU_CMD_FM_FAST
-                                                  : BMM350_PMU_CMD_FM;
-    tile_sense_m_3g_set_mode(tile, cmd);
+     * so "25 Hz or faster" is odr <= ODR_25HZ. And the first forced
+     * trigger after init must be FM when more than 0.1 s has passed —
+     * which a program cannot know — so the first one always is. */
+    uint8_t cmd = (s->fm_primed && s->odr <= SENSE_M_3G_ODR_25HZ)
+                ? BMM350_PMU_CMD_FM_FAST : BMM350_PMU_CMD_FM;
+
+    /* INT_STATUS clears on read [DS §8.13]: drop a data-ready left over
+     * from earlier, so the poll below waits for THIS conversion. */
+    (void)read_reg(tile, BMM350_REG_INT_STATUS);
+
+    tile_sense_m_3g_set_mode(tile, (sense_m_3g_mode_t)cmd);
+    s->fm_primed = 1;
 
     /* The conversion runs to completion on its own; data-ready marks it. */
     for (uint8_t i = 0; i < 50; i++) {
@@ -495,12 +505,16 @@ uint8_t tile_sense_m_3g_magnetic_reset(tile_t *tile)
 
     uint8_t ok = 1;
 
+    /* Acknowledge check. PMU_CMD_STATUS_0[3:0] are status FLAGS (busy,
+     * ODR/AVG overwritten, normal mode) [DS §8.7], never the command, so
+     * comparing them with BR (7) / FGR (5) always failed. [API] reads the
+     * last command's value from bits [7:5] (reserved in the datasheet). */
     pmu_command(tile, BMM350_PMU_CMD_BR, BMM350_BR_MS);
-    if ((read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) & 0x0F) != BMM350_PMU_CMD_BR)
+    if ((read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) >> 5) != BMM350_PMU_CMD_BR)
         ok = 0;
 
     pmu_command(tile, BMM350_PMU_CMD_FGR, BMM350_FGR_MS);
-    if ((read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) & 0x0F) != BMM350_PMU_CMD_FGR)
+    if ((read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) >> 5) != BMM350_PMU_CMD_FGR)
         ok = 0;
 
     if (was_normal)
@@ -534,6 +548,8 @@ static uint8_t bring_up(tile_t *tile, bmm350_state_t *s)
         TILE_ON_ERROR(tile, "sense_m_3g: OTP download failed — data would be uncompensated");
         return 0;
     }
+
+    s->fm_primed = 0;
 
     /* Boot-time magnetic reset, so the transducer starts from a known
      * state and the CRST capacitor is charged [DS §5.1.5]. */
@@ -602,7 +618,7 @@ void tile_sense_m_3g_init(tiles_pal_t *hal, uint8_t instance,
         if (cfg->axes) s->axis_en = cfg->axes;
     }
 
-    tile_sense_m_3g_set_odr_averaging(tile, odr, avg);
+    tile_sense_m_3g_set_odr_averaging(tile, (sense_m_3g_odr_t)odr, (sense_m_3g_avg_t)avg);
     tile_sense_m_3g_set_axes(tile, s->axis_en);
 
     /* Data-ready mapping into INT_STATUS is what polling reads, so enable
@@ -739,7 +755,8 @@ uint32_t tile_sense_m_3g_get_sensortime(tile_t *tile)
  * Configuration
  * ================================================================ */
 
-void tile_sense_m_3g_set_odr_averaging(tile_t *tile, uint8_t odr, uint8_t averaging)
+void tile_sense_m_3g_set_odr_averaging(tile_t *tile, sense_m_3g_odr_t odr,
+                                       sense_m_3g_avg_t averaging)
 {
     if (tile->state != TILE_STATE_READY && tile->state != TILE_STATE_SLEEPING)
         return;
@@ -761,7 +778,27 @@ void tile_sense_m_3g_set_odr_averaging(tile_t *tile, uint8_t odr, uint8_t averag
               (uint8_t)((odr & 0x0F) | ((averaging & 0x03) << 4)));
 
     /* A new ODR/averaging pair only takes effect on an update command. */
+    uint8_t normal = (read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) >> 3) & 1U;
+    if (normal) (void)read_reg(tile, BMM350_REG_INT_STATUS);   /* clear old drdy */
     pmu_command(tile, BMM350_PMU_CMD_UPD_OAE, BMM350_UPD_OAE_MS);
+
+    /* Before another update may be issued, the busy flag must clear AND,
+     * in normal mode, the first sample at the new setting must arrive:
+     * busy alone can drop too early (PMU_CMD, UPD_OAE [DS §8.6]). Wait
+     * here so back-to-back calls are safe; up to one period at the new
+     * rate (640 ms at 1.5625 Hz) plus margin. */
+    for (uint8_t i = 0; i < 20 && (read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) & 1U); i++)
+        tile->hal->delay_ms(1);
+    if (normal) {
+        /* Period = 2.5 ms x 2^(code - 2): 400 Hz is 0x2, 1.5625 Hz is 0xA. */
+        uint8_t code = (odr < SENSE_M_3G_ODR_400HZ) ? SENSE_M_3G_ODR_400HZ
+                     : (odr > SENSE_M_3G_ODR_1_5625HZ) ? SENSE_M_3G_ODR_1_5625HZ : (uint8_t)odr;
+        uint32_t period_ms = ((5u << (code - SENSE_M_3G_ODR_400HZ)) + 1u) / 2u;
+        for (uint32_t t = 0; t < period_ms + 20; t++) {
+            if (read_reg(tile, BMM350_REG_INT_STATUS) & BMM350_INT_STATUS_DRDY) break;
+            tile->hal->delay_ms(1);
+        }
+    }
 }
 
 void tile_sense_m_3g_set_axes(tile_t *tile, uint8_t mask)

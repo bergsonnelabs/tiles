@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@0f3be8b",
+  "source": "tiles@cd2d6a4",
   "file": "tile_sense_m_3g.h",
   "brief": "Triaxial geomagnetic magnetometer driver for Sense.M.3G (BMM350).",
-  "description": "@version 0.9.0\n\nBosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from\n1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a\n24-bit sensor-time counter.\n\nOutput is integer nanotesla (nT) and milli-degrees Celsius, fully\ntemperature- and trim-compensated. 1000 nT = 1 uT; Earth's field is\nroughly 25000-65000 nT depending on where you are.\n\n## Where the compensation math comes from\n\nThe BMM350 datasheet (BST-BMM350-DS001-27, rev 1.27) deliberately does\nNOT publish the compensation formulas or the OTP trim-word layout — its\nchapter 7 is a single link to Bosch's SensorAPI, and every accuracy\nfigure in Table 3 is qualified \"after API compensation\". The data\nregisters hold *uncompensated* counts.\n\nThe OTP word map and the compensation chain implemented here are\ntherefore ported from Bosch Sensortec's BMM350_SensorAPI:\n\n  https://github.com/boschsensortec/BMM350_SensorAPI\n  Copyright (c) 2025 Bosch Sensortec GmbH, BSD-3-Clause\n\nPorted, not copied verbatim: the reference implementation is\nfloating-point, and this driver is integer-only per house style, so the\nchain runs in Q16.16 fixed point on int64 intermediates. Every ported\nconstant is marked `[API]` in the implementation, and everything marked\n`[DS]` is traceable to the datasheet instead. If you are changing the\ncompensation, check it against the upstream API, not the datasheet —\nthe datasheet cannot tell you whether it is right.\n\n## Power modes\n\nSuspend (the boot state, lowest power, settings retained), normal\n(free-running at the configured ODR), and forced (one conversion on\nrequest, then back to suspend). Forced mode is reachable only FROM\nsuspend — a normal-to-forced transition is ignored by the device, so\nset_mode() routes through suspend for you.\n\n\n\n## The dummy-byte rule\n\nEvery BMM350 I2C read returns TWO dummy bytes before the real data\n(datasheet §9.2.3), so an n-byte read must fetch n+2 and discard the\nfront. Verified on hardware. Miss it and every register is silently\nshifted by two — plausible-looking wrong values rather than an obvious\nfailure. All bus access in this driver goes through helpers that handle\nit; if you add a raw read, do the same.\n\nDatasheet: Bosch Sensortec BMM350, BST-BMM350-DS001-27\n\n@studio tile label=Sense.M.3G icon=🧭\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Self-test\" section=advanced\n  The BMM350 can inject a ~130 uT internal field to verify the X and Y\n  channels (datasheet §5.1.6). The datasheet describes the concept and\n  the pass criterion but not the register sequence, which lives in the\n  SensorAPI's self_test_config / TMR_SELFTEST_USER handling. Exposing\n  it means porting that sequence and validating it against a known\n  field. Driver-deferred, and the highest-value thing to add next.\n\n@studio unsupported severity=advanced category=\"OTP programming\" section=advanced\n  OTP write commands (DIR_PRGM, DIR_PRGM_1B, EXT_PRGM) are exposed by\n  the chip but are a factory-provisioning facility — programming OTP is\n  irreversible and would destroy the part's trim data. Read access is\n  used internally for compensation and available through get_otp_word.\n\n@studio unsupported severity=niche category=\"I3C interface and in-band interrupts\" section=advanced\n  Hardware-gated: the BMM350 supports I3C with in-band interrupts\n  (IBI), but Sense.M.3G is wired for I2C and the Core's I3C support is\n  not routed to this tile. INT_CTRL_IBI and the I3C error register are\n  consequently not exposed.\n\n@studio unsupported severity=niche category=\"Cross-axis coefficient override\" section=config\n  The cross-axis compensation coefficients are read from OTP and\n  applied automatically. There is no API to override them with values\n  from a system-level calibration; hard-iron and soft-iron correction\n  for a specific enclosure belongs above this driver anyway.",
+  "description": "@version 1.0.0\n\nBosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from\n1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a\n24-bit sensor-time counter.\n\nOutput is integer nanotesla (nT) and milli-degrees Celsius, fully\ntemperature- and trim-compensated. 1000 nT = 1 uT; Earth's field is\nroughly 25000-65000 nT depending on where you are.\n\n## Where the compensation math comes from\n\nThe BMM350 datasheet (BST-BMM350-DS001-27, rev 1.27) deliberately does\nNOT publish the compensation formulas or the OTP trim-word layout — its\nchapter 7 is a single link to Bosch's SensorAPI, and every accuracy\nfigure in Table 3 is qualified \"after API compensation\". The data\nregisters hold *uncompensated* counts.\n\nThe OTP word map and the compensation chain implemented here are\ntherefore ported from Bosch Sensortec's BMM350_SensorAPI:\n\n  https://github.com/boschsensortec/BMM350_SensorAPI\n  Copyright (c) 2025 Bosch Sensortec GmbH, BSD-3-Clause\n\nPorted, not copied verbatim: the reference implementation is\nfloating-point, and this driver is integer-only per house style, so the\nchain runs in Q16.16 fixed point on int64 intermediates. Every ported\nconstant is marked `[API]` in the implementation, and everything marked\n`[DS]` is traceable to the datasheet instead. If you are changing the\ncompensation, check it against the upstream API, not the datasheet —\nthe datasheet cannot tell you whether it is right.\n\n## Power modes\n\nSuspend (the boot state, lowest power, settings retained), normal\n(free-running at the configured ODR), and forced (one conversion on\nrequest, then back to suspend). Forced mode is reachable only FROM\nsuspend — a normal-to-forced transition is ignored by the device, so\nset_mode() routes through suspend for you.\n\n\n\n## The dummy-byte rule\n\nEvery BMM350 I2C read returns TWO dummy bytes before the real data\n(datasheet §9.2.3), so an n-byte read must fetch n+2 and discard the\nfront. Verified on hardware. Miss it and every register is silently\nshifted by two — plausible-looking wrong values rather than an obvious\nfailure. All bus access in this driver goes through helpers that handle\nit; if you add a raw read, do the same.\n\nDatasheet: Bosch Sensortec BMM350, BST-BMM350-DS001-27\n\n@studio tile label=Sense.M.3G icon=🧭\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Self-test\" section=advanced\n  The BMM350 can inject a ~130 uT internal field to verify the X and Y\n  channels (datasheet §5.1.6). The datasheet describes the concept and\n  the pass criterion but not the register sequence, which lives in the\n  SensorAPI's self_test_config / TMR_SELFTEST_USER handling. Exposing\n  it means porting that sequence and validating it against a known\n  field. Driver-deferred, and the highest-value thing to add next.\n\n@studio unsupported severity=advanced category=\"OTP programming\" section=advanced\n  OTP write commands (DIR_PRGM, DIR_PRGM_1B, EXT_PRGM) are exposed by\n  the chip but are a factory-provisioning facility — programming OTP is\n  irreversible and would destroy the part's trim data. Read access is\n  used internally for compensation and available through get_otp_word.\n\n@studio unsupported severity=niche category=\"I3C interface and in-band interrupts\" section=advanced\n  Hardware-gated: the BMM350 supports I3C with in-band interrupts\n  (IBI), but Sense.M.3G is wired for I2C and the Core's I3C support is\n  not routed to this tile. INT_CTRL_IBI and the I3C error register are\n  consequently not exposed.\n\n@studio unsupported severity=niche category=\"Cross-axis coefficient override\" section=config\n  The cross-axis compensation coefficients are read from OTP and\n  applied automatically. There is no API to override them with values\n  from a system-level calibration; hard-iron and soft-iron correction\n  for a specific enclosure belongs above this driver anyway.",
   "code_examples": [
     {
       "label": "Polled example (Cores SDK)",
@@ -44,13 +44,13 @@
   "defines": [
     {
       "name": "TILE_SENSE_M_3G_VERSION_MAJOR",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_SENSE_M_3G_VERSION_MINOR",
-      "value": "9",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -159,89 +159,110 @@
   ],
   "enums": [
     {
-      "name": "sense_m_3g_avg_t",
-      "brief": "",
-      "description": "Averaging / noise performance (PMU_CMD_AGGR_SET bits [5:4]).\nMore averaging means less noise and more current, and it caps the\nachievable ODR: 400 Hz needs AVG_NONE, 200 Hz allows up to AVG_2, and\n100 Hz up to AVG_4 (datasheet Table 5). set_odr_averaging() clamps an\nillegal pair rather than letting the device reject it.",
-      "members": [
-        {
-          "name": "SENSE_M_3G_AVG_NONE",
-          "value": "0x0",
-          "description": "1 sample  — \"low power\""
-        },
-        {
-          "name": "SENSE_M_3G_AVG_2",
-          "value": "0x1",
-          "description": "2 samples — \"regular power\""
-        },
-        {
-          "name": "SENSE_M_3G_AVG_4",
-          "value": "0x2",
-          "description": "4 samples — \"low noise\""
-        },
-        {
-          "name": "SENSE_M_3G_AVG_8",
-          "value": "0x3",
-          "description": "8 samples — \"ultra low noise\""
-        }
-      ]
-    },
-    {
       "name": "sense_m_3g_odr_t",
-      "brief": "Output data rate (PMU_CMD_AGGR_SET bits [3:0]).",
-      "description": "",
+      "brief": "",
+      "description": "Output data rate in normal mode (PMU_CMD_AGGR_SET bits [3:0], datasheet\n§8.4). A LOWER code is a FASTER rate. The highest rates cap averaging:\nsee sense_m_3g_avg_t.",
       "members": [
         {
           "name": "SENSE_M_3G_ODR_400HZ",
           "value": "0x2",
-          "description": ""
+          "description": "400 Hz (no averaging only) @studio value=400"
         },
         {
           "name": "SENSE_M_3G_ODR_200HZ",
           "value": "0x3",
-          "description": ""
+          "description": "200 Hz (averaging up to 2x) @studio value=200"
         },
         {
           "name": "SENSE_M_3G_ODR_100HZ",
           "value": "0x4",
-          "description": ""
+          "description": "100 Hz (averaging up to 4x) @studio value=100"
         },
         {
           "name": "SENSE_M_3G_ODR_50HZ",
           "value": "0x5",
-          "description": ""
+          "description": "50 Hz @studio value=50"
         },
         {
           "name": "SENSE_M_3G_ODR_25HZ",
           "value": "0x6",
-          "description": ""
+          "description": "25 Hz (driver default) @studio value=25"
         },
         {
           "name": "SENSE_M_3G_ODR_12_5HZ",
           "value": "0x7",
-          "description": ""
+          "description": "12.5 Hz @studio value=12.5"
         },
         {
           "name": "SENSE_M_3G_ODR_6_25HZ",
           "value": "0x8",
-          "description": ""
+          "description": "6.25 Hz @studio value=6.25"
         },
         {
           "name": "SENSE_M_3G_ODR_3_125HZ",
           "value": "0x9",
-          "description": ""
+          "description": "3.125 Hz @studio value=3.125"
         },
         {
           "name": "SENSE_M_3G_ODR_1_5625HZ",
           "value": "0xA",
-          "description": ""
+          "description": "1.5625 Hz @studio value=1.5625"
+        }
+      ]
+    },
+    {
+      "name": "sense_m_3g_avg_t",
+      "brief": "",
+      "description": "Averaging / noise performance (PMU_CMD_AGGR_SET bits [5:4]).\nMore averaging means less noise and more current, and it caps the\nachievable ODR: 400 Hz needs AVG_NONE, 200 Hz allows up to AVG_2, and\n100 Hz up to AVG_4 (datasheet Table 5). set_odr_averaging() clamps an\nillegal pair rather than letting the device reject it. Supply current\nscales roughly with averaging x ODR: 12 uA at 1.5625 Hz / 1 sample up\nto 455 uA at 400 Hz / 1 sample (datasheet Table 5, approximate).",
+      "members": [
+        {
+          "name": "SENSE_M_3G_AVG_NONE",
+          "value": "0x0",
+          "description": "1 sample (low power)"
+        },
+        {
+          "name": "SENSE_M_3G_AVG_2",
+          "value": "0x1",
+          "description": "2 samples (regular power)"
+        },
+        {
+          "name": "SENSE_M_3G_AVG_4",
+          "value": "0x2",
+          "description": "4 samples (low noise, driver default)"
+        },
+        {
+          "name": "SENSE_M_3G_AVG_8",
+          "value": "0x3",
+          "description": "8 samples (ultra low noise, 50 Hz or slower)"
         }
       ]
     },
     {
       "name": "sense_m_3g_mode_t",
-      "brief": "Power mode.",
-      "description": "",
-      "members": []
+      "brief": "",
+      "description": "Power mode: the PMU_CMD (0x06) command that enters it. Values equal the\nBMM350_PMU_CMD_* codes; written as literals so tools can read them.",
+      "members": [
+        {
+          "name": "SENSE_M_3G_MODE_SUSPEND",
+          "value": "0x00",
+          "description": "Suspend: no conversions, ~1.8 uA, settings kept"
+        },
+        {
+          "name": "SENSE_M_3G_MODE_NORMAL",
+          "value": "0x01",
+          "description": "Normal: free-running at the configured ODR"
+        },
+        {
+          "name": "SENSE_M_3G_MODE_FORCED",
+          "value": "0x03",
+          "description": "One conversion (full CRST recharge), then suspend"
+        },
+        {
+          "name": "SENSE_M_3G_MODE_FORCED_FAST",
+          "value": "0x04",
+          "description": "One conversion (fast CRST recharge; ODR 25 Hz or faster), then suspend"
+        }
+      ]
     }
   ],
   "structs": [
@@ -324,12 +345,7 @@
     },
     {
       "signature": "uint8_t tile_sense_m_3g_read(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -340,12 +356,7 @@
     },
     {
       "signature": "void tile_sense_m_3g_process(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -356,10 +367,6 @@
     {
       "signature": "void tile_sense_m_3g_on_data(tile_t *tile, sense_m_3g_data_cb_t cb, void *ctx)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "cb",
           "description": "Callback (NULL to disable)"
@@ -378,12 +385,7 @@
     },
     {
       "signature": "int32_t tile_sense_m_3g_get_x_nt(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -394,12 +396,7 @@
     },
     {
       "signature": "int32_t tile_sense_m_3g_get_y_nt(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -410,12 +407,7 @@
     },
     {
       "signature": "int32_t tile_sense_m_3g_get_z_nt(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -426,12 +418,7 @@
     },
     {
       "signature": "int32_t tile_sense_m_3g_get_temperature_mc(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -442,12 +429,7 @@
     },
     {
       "signature": "uint32_t tile_sense_m_3g_get_magnitude_nt(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -458,28 +440,18 @@
     },
     {
       "signature": "uint8_t tile_sense_m_3g_data_ready(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "1 if INT_STATUS reports data ready",
       "brief": "Check whether the device has a new sample waiting.",
-      "description": "",
+      "description": "Reads INT_STATUS, which clears the flag. Init configures the interrupt\nas PULSED, and in pulsed mode the flag also clears itself ~1.25 ms after\nthe sample (datasheet §5.5), so a loop polling less often than that\nmisses most samples. For polled use, call\nconfigure_interrupt(tile, 0, 0, 1, 1) to latch it until read.",
       "name": "tile_sense_m_3g_data_ready"
     },
     {
       "signature": "uint32_t tile_sense_m_3g_get_sensortime(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -489,12 +461,8 @@
       "name": "tile_sense_m_3g_get_sensortime"
     },
     {
-      "signature": "void tile_sense_m_3g_set_mode(tile_t *tile, uint8_t mode)",
+      "signature": "void tile_sense_m_3g_set_mode(tile_t *tile, sense_m_3g_mode_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "mode",
           "description": "Target mode (sense_m_3g_mode_t)"
@@ -504,17 +472,12 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Set the power mode.",
-      "description": "Forced mode is reachable only from suspend, so a request to enter it\nfrom normal mode is routed through suspend first. Each transition\nblocks for the settling time the device needs, which for suspend to\nforced depends on the averaging setting.",
+      "description": "Forced mode is reachable only from suspend, so a request to enter it\nfrom normal mode is routed through suspend first. Each transition\nblocks for the settling time the device needs, which for suspend to\nforced depends on the averaging setting.\n\nInit leaves the device in suspend, so nothing is measured until this\n(or wake(), or trigger_measurement()) is called.",
       "name": "tile_sense_m_3g_set_mode"
     },
     {
       "signature": "uint8_t tile_sense_m_3g_trigger_measurement(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -525,12 +488,7 @@
     },
     {
       "signature": "void tile_sense_m_3g_sleep(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -540,12 +498,7 @@
     },
     {
       "signature": "void tile_sense_m_3g_wake(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -555,12 +508,7 @@
     },
     {
       "signature": "void tile_sense_m_3g_reset(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -570,12 +518,7 @@
     },
     {
       "signature": "uint8_t tile_sense_m_3g_magnetic_reset(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -585,12 +528,8 @@
       "name": "tile_sense_m_3g_magnetic_reset"
     },
     {
-      "signature": "void tile_sense_m_3g_set_odr_averaging(tile_t *tile, uint8_t odr, uint8_t averaging)",
+      "signature": "void tile_sense_m_3g_set_odr_averaging(tile_t *tile, sense_m_3g_odr_t odr, sense_m_3g_avg_t averaging)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "odr",
           "description": "Output data rate (sense_m_3g_odr_t)"
@@ -611,12 +550,8 @@
       "signature": "void tile_sense_m_3g_set_axes(tile_t *tile, uint8_t mask)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "mask",
-          "description": "OR of BMM350_EN_X / _Y / _Z"
+          "description": "[0..7] OR of BMM350_EN_X (1) / _Y (2) / _Z (4)"
         }
       ],
       "notes": [],
@@ -629,10 +564,6 @@
     {
       "signature": "void tile_sense_m_3g_configure_interrupt(tile_t *tile, uint8_t enable, uint8_t active_high, uint8_t push_pull, uint8_t latched)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "enable",
           "description": "1 to drive the INT pin, 0 to leave it idle"
@@ -654,19 +585,15 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Configure the data-ready interrupt on the INT pin.",
-      "description": "",
+      "description": "Data-ready is always mapped into INT_STATUS. `latched` also decides\nhow long the INT_STATUS flag lives: latched holds it until read,\npulsed clears it after ~1.25 ms (datasheet §5.5). Note the datasheet\nmarks INT_CTRL.int_output_en reserved on A-Si silicon.",
       "name": "tile_sense_m_3g_configure_interrupt"
     },
     {
       "signature": "void tile_sense_m_3g_set_pad_drive(tile_t *tile, uint8_t drive)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "drive",
-          "description": "Drive strength, 0-7"
+          "description": "[0..7] Drive strength (reset value 7)"
         }
       ],
       "notes": [],
@@ -679,10 +606,6 @@
     {
       "signature": "void tile_sense_m_3g_set_i2c_watchdog(tile_t *tile, uint8_t enable, uint8_t long_wdt)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "enable",
           "description": "1 to enable, 0 to disable"
@@ -703,10 +626,6 @@
       "signature": "void tile_sense_m_3g_set_sensortime_always_on(tile_t *tile, uint8_t enable)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "enable",
           "description": "1 to keep counting in suspend and forced mode"
         }
@@ -720,12 +639,7 @@
     },
     {
       "signature": "uint8_t tile_sense_m_3g_get_error(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
@@ -736,30 +650,21 @@
     },
     {
       "signature": "uint8_t tile_sense_m_3g_get_pmu_status(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
-      "return": "PMU_CMD_STATUS_0: [3:0] last command, plus busy / normal-mode flags",
+      "return": "PMU_CMD_STATUS_0 (datasheet §8.7): bit 0 busy, bit 1 ODR",
       "brief": "Read the PMU command status register.",
-      "description": "",
+      "description": "overwritten, bit 2 averaging overwritten, bit 3 normal mode,\n        bit 4 illegal command. Bits [7:5] are reserved in the datasheet;\n        Bosch's SensorAPI reads the last command's value there.",
       "name": "tile_sense_m_3g_get_pmu_status"
     },
     {
       "signature": "uint16_t tile_sense_m_3g_get_otp_word(tile_t *tile, uint8_t word)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "word",
-          "description": "Word index, 0-31"
+          "description": "[0..31] Word index"
         }
       ],
       "notes": [],
@@ -774,12 +679,8 @@
       "signature": "int32_t tile_sense_m_3g_get_raw(tile_t *tile, uint8_t axis)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "axis",
-          "description": "0 = X, 1 = Y, 2 = Z, 3 = temperature"
+          "description": "[0..3] 0 = X, 1 = Y, 2 = Z, 3 = temperature"
         }
       ],
       "notes": [],
@@ -794,12 +695,8 @@
       "signature": "uint8_t tile_sense_m_3g_read_reg(tile_t *tile, uint8_t reg)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "reg",
-          "description": "Register address"
+          "description": "[0..127] Register address"
         }
       ],
       "notes": [],
@@ -814,16 +711,12 @@
       "signature": "void tile_sense_m_3g_write_reg(tile_t *tile, uint8_t reg, uint8_t value)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "reg",
-          "description": "Register address"
+          "description": "[0..127] Register address"
         },
         {
           "name": "value",
-          "description": "Value to write"
+          "description": "[0..255] Value to write"
         }
       ],
       "notes": [],
@@ -835,8 +728,46 @@
     }
   ],
   "source_file": "tile_sense_m_3g.h",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "tile_family": "Sense",
   "tile_name": "M.3G",
-  "display_name": "Sense.M.3G"
+  "display_name": "Sense.M.3G",
+  "vibe_settings": [
+    {
+      "label": "Output data rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_odr_averaging",
+      "param": "odr",
+      "kind": "choice",
+      "choices": [
+        "400 Hz (no averaging only)",
+        "200 Hz (averaging up to 2x)",
+        "100 Hz (averaging up to 4x)",
+        "50 Hz",
+        "25 Hz (driver default)",
+        "12.5 Hz",
+        "6.25 Hz",
+        "3.125 Hz",
+        "1.5625 Hz"
+      ],
+      "default": "25 Hz (driver default)",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Averaging",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_odr_averaging",
+      "param": "averaging",
+      "kind": "choice",
+      "choices": [
+        "1 sample (low power)",
+        "2 samples (regular power)",
+        "4 samples (low noise, driver default)",
+        "8 samples (ultra low noise, 50 Hz or slower)"
+      ],
+      "default": "4 samples (low noise, driver default)"
+    }
+  ]
 }
