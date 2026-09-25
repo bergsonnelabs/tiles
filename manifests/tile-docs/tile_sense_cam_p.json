@@ -1,13 +1,13 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@e3a9c64",
+  "source": "tiles@91a1e56",
   "file": "tile_sense_cam_p.h",
   "brief": "Ultra-low-power global-shutter camera driver for Sense.CAM.P (rev a).",
-  "description": "Embeds the PixArt PAG7920J3, a 320 x 240 monochrome global-shutter camera\nmodule with an integrated lens in a 2.94 x 2.44 x 2.11 mm cube. Registers\nare configured over I2C; image data comes out over SPI. The tile does not\nbreak out the 8-bit parallel bus, so SPI is the only image path.\n\nKey specifications:\n  - Array:      320 x 240 monochrome, 3.0 um pixels, global shutter\n  - Frame rate: up to 180 fps, 8-bit RAW\n  - Optics:     71.34 deg H x 53.72 deg V, 64 dB dynamic range\n  - Power:      0.76 mW @ QVGA 15 fps, 8.54 mW @ 180 fps, <100 uW motion detect\n  - Supply:     VDDMA 3.14-3.45 V (<=50 mV ripple), VDDIO 1.14-3.45 V\n\nDatasheet: https://www.bergsonne.io/tiles/sense/cam-p\nIC datasheet: PixArt PAG7920J3 (V0.8, L1033EN)\n\n\n@studio tile label=Sense.CAM.P icon=◉\n\n@par Three things that will bite anyone reimplementing this\n\n1. The vendor init tables MUST be applied verbatim. They set R_TG_En at\n   write 156 of section 8.1.3.4 and again at write 21 of 8.1.3.5, i.e. the\n   sensor starts 24 writes before configuration ends. Deferring the start\n   to tidy that up also relocates the undocumented 0xB0 = 0x01 (the final\n   line of 8.1.3.5) from after the start to before it, which silently\n   breaks the SPI mode switch. The part then accepts all 179 writes,\n   reports R_TG_En = 1, passes a config read-back across all four banks,\n   and never produces an image. Do not reorder these tables.\n\n2. SPI register access requires R_TG_En = 1. CheckID reads 0x0000 whenever\n   the sensor is stopped, so the SPI link must be brought up and verified\n   while it is running, before any mode change.\n\n3. Readout must be frame-locked. The output buffer is 4800 bytes and a\n   frame is delivered as several of them; starting mid-frame yields an\n   image rotated by whole buffers. Wait for Frame_Start (CPU_INT0_Status\n   bit 1) before taking the first one.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Motion detection\"\n  The PAG7920J3 has a proprietary on-chip motion-detection mode running at\n  80x60 under 100 uW, which is the tile's headline always-on feature.\n  Section 8.1.3.8 gives its init table. Driver-deferred, not a hardware\n  gap, and the highest-value thing to add next.\n\n@studio unsupported severity=common category=\"Manual exposure and gain\"\n  Auto-exposure and auto-gain run by default and hold mean brightness\n  constant. Section 9.3 defines manual control, which is needed for any\n  machine-vision use wanting repeatable radiometry. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Trigger mode\"\n  Section 8.4 allows one-frame-on-demand capture, with frame rate set by\n  the host's trigger interval. Note it does NOT relax the per-buffer\n  readout deadline — the frame is still emitted in one output cycle at the\n  sensor's own cadence. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Windowing, mirror and flip\"\n  Section 10 covers WOI, mirror/flip, skip and average. Only the fixed\n  320x240 and 160x120 (2x skip) modes are exposed. Driver-deferred.\n\n@studio unsupported severity=niche category=\"LED strobe control\"\n  The sensor can drive an external LED in sync with exposure via GPIO1\n  (R_expo_LED_* registers). The tile routes GPIO1 to a pad, so this is\n  driver-deferred rather than hardware-gated.\n\n@studio unsupported severity=niche category=\"Multi-sensor frame sync\"\n  Section 8.7 supports synchronising several sensors to a shared frame\n  clock. Driver-deferred.\n\n@studio unsupported severity=niche category=\"External clock input\"\n  Section 5.5 allows clocking the sensor from GPIO1 instead of its internal\n  oscillator (1/6/12/24/30 MHz). Driver-deferred; the internal clock is\n  used unconditionally.\n\n@studio unsupported severity=niche category=\"8-bit parallel image output\"\n  HARDWARE-GATED. The parallel bus needs PXD0-PXD7 plus PXCLK/HSYNC/VSYNC,\n  and the tile's 10-pad T44 package breaks out only the four SPI signals.\n  Not reachable on this tile at any driver revision.",
+  "description": "Embeds the PixArt PAG7920J3, a 320 x 240 monochrome global-shutter camera\nmodule with an integrated lens in a 2.94 x 2.44 x 2.11 mm cube. Registers\nare configured over I2C; image data comes out over SPI. The tile does not\nbreak out the 8-bit parallel bus, so SPI is the only image path.\n\nKey specifications:\n  - Array:      320 x 240 monochrome, 3.0 um pixels, global shutter\n  - Frame rate: 30 fps as configured by the vendor tables, 8-bit RAW. The\n                chip reaches 180 fps only on its parallel bus; over SPI\n                (25 MHz max) QVGA is bounded near 40 fps.\n  - Optics:     71.34 deg H x 53.72 deg V, 64 dB dynamic range\n  - Power:      datasheet figures are for parallel QVGA output (0.76 mW at\n                15 fps, 8.54 mW at 180 fps); SPI output is not characterized.\n                <100 uW in motion detect.\n  - Supply:     the tile takes 1.8-3.3 V on pad 10. VDDMA (3.14-3.45 V,\n                <=50 mV ripple) comes from an on-tile TPS610995 boost\n                (3.6 V) and TPS7A2033 LDO; VDDIO is pad 10 itself, so the\n                I/O thresholds follow the host's supply.\n  - Bus:        I2C for configuration; SPI mode 3, up to 25 MHz, for images.\n\nDatasheet: https://www.bergsonne.io/tiles/sense/cam-p\nIC datasheet: PixArt PAG7920J3 (V0.8, L1033EN)\n\n\n@studio tile label=Sense.CAM.P icon=◉\n\n@par Three things that will bite anyone reimplementing this\n\n1. The vendor init tables MUST be applied verbatim. They set R_TG_En at\n   write 156 of section 8.1.3.4 and again near the end of the resolution\n   table (write 21 of 8.1.3.5 for 320x240, write 53 of 8.1.3.6 for\n   160x120), i.e. the sensor starts before configuration ends. Deferring\n   the start to tidy that up also relocates the undocumented 0xB0 = 0x01\n   (the final line of both tables) from after the start to before it,\n   which silently breaks the SPI mode switch. The part then accepts every\n   write (179 at 320x240, 211 at 160x120), reports R_TG_En = 1, passes a\n   config read-back across all four banks, and never produces an image.\n   Do not reorder these tables. Some writes land on the running sensor and\n   need a retry; the driver retries each one.\n\n2. SPI register access requires R_TG_En = 1. CheckID reads 0x0000 whenever\n   the sensor is stopped, so the SPI link must be brought up and verified\n   while it is running, before any mode change.\n\n3. Readout must be frame-locked. The output buffer is 4800 bytes and a\n   frame is delivered as several of them; starting mid-frame yields an\n   image rotated by whole buffers. Wait for Frame_Start (CPU_INT0_Status\n   bit 1) before taking the first one.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Motion detection\"\n  The PAG7920J3 has a proprietary on-chip motion-detection mode running at\n  80x60 under 100 uW, which is the tile's headline always-on feature.\n  Section 8.1.3.8 gives its init table. Driver-deferred, not a hardware\n  gap, and the highest-value thing to add next.\n\n@studio unsupported severity=common category=\"Manual exposure and gain\"\n  Auto-exposure and auto-gain run by default and hold mean brightness\n  constant. Section 9.3 defines manual control, which is needed for any\n  machine-vision use wanting repeatable radiometry. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Trigger mode\"\n  Section 8.4 allows one-frame-on-demand capture, with frame rate set by\n  the host's trigger interval. Note it does NOT relax the per-buffer\n  readout deadline — the frame is still emitted in one output cycle at the\n  sensor's own cadence. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Windowing, mirror and flip\"\n  Section 10 covers WOI, mirror/flip, skip and average. Only the fixed\n  320x240 and 160x120 (2x skip) modes are exposed. Driver-deferred.\n\n@studio unsupported severity=niche category=\"LED strobe control\"\n  The sensor can drive an external LED in sync with exposure via GPIO1\n  (R_expo_LED_* registers). The tile routes GPIO1 to a pad, so this is\n  driver-deferred rather than hardware-gated.\n\n@studio unsupported severity=niche category=\"Multi-sensor frame sync\"\n  Section 8.7 supports synchronising several sensors to a shared frame\n  clock. Driver-deferred.\n\n@studio unsupported severity=niche category=\"External clock input\"\n  Section 5.5 allows clocking the sensor from GPIO1 instead of its internal\n  oscillator (1/6/12/24/30 MHz). Driver-deferred; the internal clock is\n  used unconditionally.\n\n@studio unsupported severity=common category=\"320x240 on a 40 KB Core\"\n  A QVGA frame is 76800 bytes and must be read in 4800-byte buffers, each\n  within a few ms. It cannot be buffered in a Core.ST.L4.1's 40 KB of SRAM\n  and tears if streamed over the Core's USB. Use 160x120 (19200 B) there;\n  320x240 needs a Core with >= 77 KB free (Core.ST.W5, Core.ST.H5.1) or DMA\n  to a faster sink. Core-gated, not a driver limit.\n\n@studio unsupported severity=common category=\"Low-power standby\"\n  R_TG_En = 0 drops the sensor to ~11 uA (Table 4) but also takes the SPI\n  register interface down, and the boost converter has no enable on a pad,\n  so the tile has no true off state. Hardware-gated for the boost;\n  driver-deferred for sensor standby.\n\n@studio unsupported severity=advanced category=\"GPIO1 frame interrupt\"\n  Section 8.6 can signal each ready buffer on GPIO1 (pad 2). The driver\n  polls CPU_INT0_Status over SPI instead. GPIO1 is also the LED strobe,\n  frame-sync and external-clock pin, so those features exclude each other.\n  Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Frame-rate control\"\n  The vendor tables fix 30 fps (R_Frame_Time = 400000 at 12 MHz, section\n  9.1). Slower rates would save power; faster ones are bounded by SPI.\n  Driver-deferred.\n\n@studio unsupported severity=niche category=\"8-bit parallel image output\"\n  HARDWARE-GATED. The parallel bus needs PXD0-PXD7 plus PXCLK/HSYNC/VSYNC,\n  and the tile's 10-pad T44 package breaks out only the four SPI signals.\n  Not reachable on this tile at any driver revision.",
   "code_examples": [
     {
       "label": "Quick start",
-      "code": "  #include \"core_tiles.h\"\n\n  static uint8_t frame[160 * 120];\n  tile_t cam;\n\n  sense_cam_p_cfg_t cfg = { .spi_cs = 9, .resolution = SENSE_CAM_P_RES_160x120 };\n  tile_sense_cam_p_init(core_tiles_pal(&core_i2c1), 0, &cam, &cfg);\n  if (tile_is_ready(&cam))\n      tile_sense_cam_p_capture(&cam, frame, sizeof(frame));"
+      "code": "  #include \"core_tiles.h\"\n\n  static uint8_t frame[160 * 120];\n  tile_t cam;\n\n  // One PAL carrying both buses: I2C for configuration, SPI for images.\n  // On a Core the SPI bus's own chip-select pad is used, so spi_cs is 0.\n  sense_cam_p_cfg_t cfg = { .spi_cs = 0, .resolution = SENSE_CAM_P_RES_160x120 };\n  tile_sense_cam_p_init(core_tiles_pal2(&core_i2c1, &core_spi1), 0, &cam, &cfg);\n  if (tile_is_ready(&cam))\n      tile_sense_cam_p_capture(&cam, frame, sizeof(frame));"
     }
   ],
   "studio_ready": true,
@@ -48,6 +48,26 @@
       "brief": "Section 5.5 allows clocking the sensor from GPIO1 instead of its internal oscillator (1/6/12/24/30 MHz). Driver-deferred; the internal clock is used unconditionally."
     },
     {
+      "severity": "common",
+      "category": "320x240 on a 40 KB Core",
+      "brief": "A QVGA frame is 76800 bytes and must be read in 4800-byte buffers, each within a few ms. It cannot be buffered in a Core.ST.L4.1's 40 KB of SRAM and tears if streamed over the Core's USB. Use 160x120 (19200 B) there; 320x240 needs a Core with >= 77 KB free (Core.ST.W5, Core.ST.H5.1) or DMA to a faster sink. Core-gated, not a driver limit."
+    },
+    {
+      "severity": "common",
+      "category": "Low-power standby",
+      "brief": "R_TG_En = 0 drops the sensor to ~11 uA (Table 4) but also takes the SPI register interface down, and the boost converter has no enable on a pad, so the tile has no true off state. Hardware-gated for the boost; driver-deferred for sensor standby."
+    },
+    {
+      "severity": "advanced",
+      "category": "GPIO1 frame interrupt",
+      "brief": "Section 8.6 can signal each ready buffer on GPIO1 (pad 2). The driver polls CPU_INT0_Status over SPI instead. GPIO1 is also the LED strobe, frame-sync and external-clock pin, so those features exclude each other. Driver-deferred."
+    },
+    {
+      "severity": "advanced",
+      "category": "Frame-rate control",
+      "brief": "The vendor tables fix 30 fps (R_Frame_Time = 400000 at 12 MHz, section 9.1). Slower rates would save power; faster ones are bounded by SPI. Driver-deferred."
+    },
+    {
       "severity": "niche",
       "category": "8-bit parallel image output",
       "brief": "HARDWARE-GATED. The parallel bus needs PXD0-PXD7 plus PXCLK/HSYNC/VSYNC, and the tile's 10-pad T44 package breaks out only the four SPI signals. Not reachable on this tile at any driver revision."
@@ -56,13 +76,13 @@
   "defines": [
     {
       "name": "TILE_SENSE_CAM_P_VERSION_MAJOR",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_SENSE_CAM_P_VERSION_MINOR",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -117,7 +137,7 @@
     {
       "name": "PAG7920_SPI_INT_STATUS",
       "value": "0x03",
-      "description": "Interrupt flags, write-to-clear.",
+      "description": "CPU_INT0_Status: write 0 to a bit to clear it (0xFE clears FB_Rdy).",
       "section": ""
     },
     {
@@ -229,7 +249,10 @@
         }
       ],
       "notes": [
-        "Blocks for ~250 ms. Requires both an I2C bus and an SPI bus on the PAL. Single-instance: the SPI CS and resolution are driver-global."
+        "Blocks for ~250 ms. Requires both an I2C bus and an SPI bus on the PAL. Single-instance: the SPI CS and resolution are driver-global.",
+        "Needs a PAL carrying both buses: on a Core, core_tiles_pal2(&i2c, &spi). A plain core_tiles_pal() is I2C-only or SPI-only and fails here with \"PAL has no SPI\". The SPI link is mode 3, up to 25 MHz.",
+        "Starts from a software reset rather than a power cycle, which section 8.1.3 asks for when changing resolution: the tile has no way to cut its own power, and the reset path is the one proven on the bench.",
+        "The vendor tables leave the sensor free-running at 30 fps (R_Frame_Time = 400000 at 12 MHz, datasheet section 9.1)."
       ],
       "brief": "Initialize the camera for SPI image output.",
       "description": "Verifies PartID, applies the vendor init tables verbatim for the requested\nresolution, then confirms the SPI link by reading CheckID. Pass cfg=NULL\nfor defaults (spi_cs 0, 160x120).",
@@ -307,9 +330,9 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "1 on a complete, non-overflowed frame; 0 otherwise.",
+      "return": "1 on a complete, non-overflowed frame; 0 on overflow, a timeout",
       "brief": "Capture one frame into a caller-supplied buffer.",
-      "description": "Frame-locks on Frame_Start, then reads the frame in 4800-byte buffers.\nThe caller owns the memory: 19200 bytes at 160x120, 76800 at 320x240.\n\nEach buffer must be serviced within roughly 3.4 ms at default timing, or\nFB_Ovf trips and the frame is void. Anything slow between buffers — a\nper-byte print, a slow link — will tear the image across several exposures.",
+      "description": "Frame-locks on Frame_Start, then reads the frame in 4800-byte buffers.\nThe caller owns the memory: 19200 bytes at 160x120, 76800 at 320x240.\n\nEach buffer must be serviced before the next one fills, or FB_Ovf trips\nand the frame is void: about 3.4 ms at 320x240 and 6.8 ms at 160x120 with\nthe vendor timing (section 7.3.6: 4800 / width x LineTime / 6 MHz). Anything slow between buffers — a\nper-byte print, a slow link — will tear the image across several exposures.\n\n        (no Frame_Start within 1 s, no buffer within 500 ms) or an SPI error.",
       "name": "tile_sense_cam_p_capture"
     },
     {
@@ -326,7 +349,7 @@
     }
   ],
   "source_file": "tile_sense_cam_p.h",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "tile_family": "Sense",
   "tile_name": "CAM.P",
   "display_name": "Sense.CAM.P"

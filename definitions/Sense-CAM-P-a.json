@@ -29,7 +29,7 @@
       },
       "functions": [
         {
-          "note": "",
+          "note": "LED strobe, frame interrupt, frame sync or external clock (one at a time); unused by the driver",
           "type": "digital",
           "function": "GPIO1",
           "direction": ""
@@ -46,7 +46,7 @@
       },
       "functions": [
         {
-          "note": "",
+          "note": "I2C address strap, latched 30 ms after power-up: floating 0x35 (default), to VDDIO 0x25, to GND 0x40. The broadcast address 0x60 always answers too.",
           "type": "digital",
           "function": "GPIO2",
           "direction": ""
@@ -171,7 +171,7 @@
       },
       "functions": [
         {
-          "note": "1.8-3.3V",
+          "note": "1.8-3.3V; also the I/O supply (VDDIO)",
           "type": "power",
           "function": "V+",
           "direction": "input"
@@ -184,14 +184,14 @@
       "max": 3.3,
       "min": 1.8,
       "type": "system",
-      "notes": "",
+      "notes": "V+ feeds the camera I/O (VDDIO) directly, and its 3.3 V analog supply through a TPS610995 boost (3.6 V) and TPS7A2033 LDO. About 0.7 mA while streaming at 30 fps from 3.3 V, about 1 mA from 1.8 V.",
       "gnd_pad": [
         "1"
       ],
       "function": "",
       "direction": "input",
       "is_required": true,
-      "max_current": "",
+      "max_current": "1.5mA",
       "positive_pad": [
         "10"
       ]
@@ -213,6 +213,18 @@
       "part": "PAG7920J3",
       "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/78/PixArt-PAG7920J3.pdf",
       "manufacturer": "PixArt"
+    },
+    {
+      "url": "https://www.ti.com/product/TPS61099",
+      "part": "TPS610995YFFT",
+      "datasheet": "https://www.ti.com/lit/ds/symlink/tps61099.pdf",
+      "manufacturer": "Texas Instruments"
+    },
+    {
+      "url": "https://www.ti.com/product/TPS7A20",
+      "part": "TPS7A2033PYCJR",
+      "datasheet": "https://www.ti.com/lit/ds/symlink/tps7a20.pdf",
+      "manufacturer": "Texas Instruments"
     }
   ],
   "interfaces": [
@@ -264,6 +276,7 @@
       "name": "SPI",
       "type": "SPI",
       "parameters": {
+        "mode": 3,
         "modes": [
           "slave"
         ],
@@ -297,9 +310,9 @@
       ]
     }
   ],
-  "updated_at": "2026-08-10T08:53:21.990Z",
-  "description": "An ultra-low-power machine-vision tile built around the PixArt PAG7920J3, a 320 × 240 monochrome global-shutter camera module with an integrated lens. It captures 8-bit RAW frames at up to 180 fps over SPI, with 3.0 µm pixels, a 71.3° × 53.7° field of view, and 64 dB of dynamic range. Configuration is over I2C. A proprietary on-chip motion-detection mode draws under 100 µW (compared to 760 µW for QVGA output at 15 fps) making the tile practical to leave always-on in a battery-powered system, with auto exposure and gain control, auto black cancellation, mirror/flip, windowing, LED strobe, and multi-sensor frame sync built in.\n\n",
-  "json_version": "0.7",
+  "updated_at": "2026-09-25T09:35:34.415Z",
+  "description": "An ultra-low-power machine-vision tile built around the PixArt PAG7920J3, a 320 × 240 monochrome global-shutter camera module with an integrated lens. It captures 8-bit RAW frames over SPI (30 fps as configured; the chip's 180 fps is a parallel-bus figure), with 3.0 µm pixels, a 71.3° × 53.7° field of view, and 64 dB of dynamic range. Configuration is over I2C. A proprietary on-chip motion-detection mode draws under 100 µW (compared to 760 µW for QVGA output at 15 fps) making the tile practical to leave always-on in a battery-powered system, with auto exposure and gain control, auto black cancellation, mirror/flip, windowing, LED strobe, and multi-sensor frame sync built in.\n\n",
+  "json_version": "0.8",
   "application_notes": [
     {
       "sort": 0,
