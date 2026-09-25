@@ -7,6 +7,7 @@
 export * from './tileSim';
 import type { TileSim } from './tileSim';
 
+import senseHr from './sims/sense_hr';
 import senseI6P6 from './sims/sense_i_6p6';
 import senseI9 from './sims/sense_i_9';
 import senseBp from './sims/sense_bp';
@@ -33,6 +34,7 @@ import { loads } from './generics/loads';
 import { switches } from './generics/switches';
 
 export {
+  senseHr,
   senseI6P6,
   senseI9,
   senseBp,
@@ -59,6 +61,7 @@ export type AnyTileSim = TileSim<any>;
 // tile name (matches TileSim.tile) → twin model. Driver tiles + passive generics
 // (battery, USB, …) share one registry; consumers don't care which is which.
 export const twins: Record<string, AnyTileSim> = {
+  'Sense.HR': senseHr,
   'Sense.I.6P6': senseI6P6,
   'Sense.I.9': senseI9,
   'Sense.BP': senseBp,
