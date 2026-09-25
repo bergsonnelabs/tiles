@@ -70,6 +70,12 @@
           "function": "LPUART1.RX",
           "direction": "",
           "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN+",
+          "direction": ""
         }
       ]
     },
@@ -128,7 +134,7 @@
           "af": 4,
           "note": "",
           "type": "digital",
-          "function": "USART2.CRS",
+          "function": "USART2.CTS",
           "direction": "",
           "interface": "USART2"
         },
@@ -208,6 +214,12 @@
           "function": "LPUART1.TX",
           "direction": "",
           "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN+",
+          "direction": ""
         }
       ]
     },
@@ -264,6 +276,12 @@
           "function": "LPUART1.RX",
           "direction": "",
           "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN+",
+          "direction": ""
         }
       ]
     },
@@ -393,6 +411,19 @@
           "function": "LPUART1.TX",
           "direction": "",
           "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN-",
+          "direction": ""
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP2.OUT",
+          "direction": ""
         }
       ]
     },
@@ -443,6 +474,12 @@
           "note": "",
           "type": "other",
           "function": "COMP1.IN-",
+          "direction": ""
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN-",
           "direction": ""
         }
       ]
@@ -601,6 +638,13 @@
           "note": "",
           "type": "system",
           "function": "SWCLK",
+          "direction": ""
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP2.OUT",
           "direction": ""
         }
       ]
@@ -820,6 +864,9 @@
               "af": 6,
               "value": "LPUART1.RX",
               "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
@@ -867,7 +914,7 @@
             },
             {
               "af": 4,
-              "value": "USART2.CRS",
+              "value": "USART2.CTS",
               "interface": "USART2"
             },
             {
@@ -922,6 +969,9 @@
               "af": 6,
               "value": "LPUART1.TX",
               "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
@@ -963,6 +1013,9 @@
               "af": 6,
               "value": "LPUART1.RX",
               "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
@@ -1062,6 +1115,13 @@
               "af": 6,
               "value": "LPUART1.TX",
               "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN-"
+            },
+            {
+              "af": 7,
+              "value": "COMP2.OUT"
             }
           ]
         },
@@ -1104,6 +1164,9 @@
             },
             {
               "value": "COMP1.IN-"
+            },
+            {
+              "value": "COMP2.IN-"
             }
           ]
         },
@@ -1200,6 +1263,10 @@
               "derived": {
                 "role": "system"
               }
+            },
+            {
+              "af": 7,
+              "value": "COMP2.OUT"
             }
           ]
         },
@@ -1549,7 +1616,7 @@
         {
           "pad": "3",
           "role": "bus",
-          "function": "USART2.CRS"
+          "function": "USART2.CTS"
         },
         {
           "pad": "4",
@@ -1639,7 +1706,7 @@
   "application_notes": [
     {
       "sort": 0,
-      "details": "The single-wire debug port is available on pads 13 (SWCLK) and 14 (SWDIO). While not absolutely required, it is often helpful to have the ability to hold pads 22 (NRST) low when connecting to the debugger. You can likely also use BOOT0 to help the debugger connect.",
+      "details": "The single-wire debug port is available on pads 13 (SWCLK) and 14 (SWDIO). While not absolutely required, it is often helpful to have the ability to hold pad 12 (NRST) low when connecting to the debugger. You can likely also use BOOT0 to help the debugger connect.",
       "heading": "Single-Wire Debug & Bootloading",
       "image_url": ""
     },

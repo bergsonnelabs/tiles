@@ -582,7 +582,7 @@
           "af": 0,
           "note": "",
           "type": "system",
-          "function": "TRACE.D1",
+          "function": "TRACE.D0",
           "direction": ""
         },
         {
@@ -907,13 +907,6 @@
           "function": "USB.DM",
           "direction": "bidirectional",
           "interface": "USB"
-        },
-        {
-          "af": 9,
-          "note": "",
-          "type": "other",
-          "function": "G2.IO1",
-          "direction": ""
         }
       ]
     },
@@ -988,8 +981,14 @@
           "interface": "SPI1"
         },
         {
+          "note": "",
+          "type": "analog",
+          "function": "ADC9",
+          "direction": "input"
+        },
+        {
           "af": 14,
-          "note": "break input to disable PWM output",
+          "note": "low-power timer output (PWM / one-pulse)",
           "type": "timer",
           "function": "LPTIM2.OUT",
           "direction": "output"
@@ -1605,7 +1604,7 @@
             },
             {
               "af": 0,
-              "value": "TRACE.D1",
+              "value": "TRACE.D0",
               "derived": {
                 "role": "system"
               }
@@ -1857,10 +1856,6 @@
               "af": 10,
               "value": "USB.DM",
               "interface": "USB"
-            },
-            {
-              "af": 9,
-              "value": "G2.IO1"
             }
           ]
         },
@@ -1911,6 +1906,12 @@
               "interface": "SPI1"
             },
             {
+              "value": "ADC9",
+              "derived": {
+                "role": "analog"
+              }
+            },
+            {
               "af": 14,
               "value": "LPTIM2.OUT",
               "derived": {
@@ -1950,13 +1951,13 @@
       "default": "medium",
       "options": [
         {
-          "label": "Low (8MHz, MSI)",
+          "label": "Low (16MHz, MSI; USB minimum)",
           "value": "low",
           "firmware_contract": [
             {
               "type": "clock",
               "source": "msi",
-              "sysclk_mhz": 8
+              "sysclk_mhz": 16
             }
           ]
         },
@@ -2398,7 +2399,7 @@
           "frequency_mhz": 48
         }
       ],
-      "boot_source": "hsi16"
+      "boot_source": "msi"
     },
     "button": {
       "kind": "button",
@@ -2760,7 +2761,7 @@
   "application_notes": [
     {
       "sort": 0,
-      "details": "Similar to the Core.U.1, when the chip is blank, it will default into the bootloader when connected over USB.  Once there is code in the program space, you need to hold the BOOT0 pin low during reset (either power-on or via the NRST pin) to enter the bootloader.  The physical button will also execute this behavior.",
+      "details": "Similar to the Core.ST.L4.1, when the chip is blank, it will default into the bootloader when connected over USB.  Once there is code in the program space, you need to hold the BOOT0 pin HIGH during reset (either power-on or via the NRST pin) to enter the bootloader.  The physical button will also execute this behavior.",
       "heading": "USB Bootloading",
       "image_url": ""
     },

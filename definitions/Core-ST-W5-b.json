@@ -584,6 +584,13 @@
           "type": "timer",
           "function": "TIM17.BKIN",
           "direction": "input"
+        },
+        {
+          "af": 9,
+          "note": "",
+          "type": "other",
+          "function": "G3.IO3",
+          "direction": ""
         }
       ]
     },
@@ -681,17 +688,10 @@
           "direction": ""
         },
         {
-          "af": 14,
+          "af": 1,
           "note": "",
-          "type": "timer",
-          "function": "TIM17.BKIN",
-          "direction": ""
-        },
-        {
-          "af": 9,
-          "note": "",
-          "type": "other",
-          "function": "G3.IO3",
+          "type": "digital",
+          "function": "IR_OUT",
           "direction": ""
         }
       ]
@@ -789,14 +789,14 @@
   ],
   "twin": {
     "score": 1,
-    "source": "// Digital twin for Core.ST.W5 (formerly Core.W) — the BLE MCU host board itself.\n//\n// A Core, not a peripheral: no tile driver, no host calls. The twin models the\n// board standards — STM32WBA55 power across run/sleep/stop/standby (LDO vs SMPS\n// regulator path), the BLE radio as a power state (the on-board Johanson 2450AT\n// chip antenna is RF-only, no pad), the on-board status LED, and the optional\n// I2C pull-ups.\n//\n// Power numbers: STM32WBA5xxx datasheet (DS14127 Rev 7, TYP @ 3.3 V / 25 °C),\n// MCU Tables 45/46/49/51/52/54 and BLE radio Table 37. Pad map per Core-W-b.json\n// (V+ pad 14, GND pad 1, I2C3 CLK/DAT pads 4/5).\nimport type { TileSim } from '../tileSim';\n\n// power_mode slider index → mode.\nconst MODES = ['run', 'sleep', 'stop0', 'stop1', 'standby'] as const;\n// sysclk slider index → MHz.\nconst CLOCKS = [16, 32, 100] as const;\n// ble_state slider index → activity.\nconst BLE = ['off', 'advertising', 'connected', 'tx', 'rx'] as const;\n\n// MCU core current (µA) by clock, per regulator path (LDO / SMPS).\nconst RUN_UA = { ldo: { 16: 910, 32: 2290, 100: 6160 }, smps: { 16: 450, 32: 1470, 100: 3350 } };\nconst SLEEP_UA = { ldo: { 16: 340, 32: 950, 100: 2140 }, smps: { 16: 220, 32: 820, 100: 1500 } };\n// Fixed low-power modes (µA) — SMPS path largely matches in deep stop/standby.\nconst FIXED_UA: Record<string, { ldo: number; smps: number }> = {\n  stop0: { ldo: 49, smps: 11 },\n  stop1: { ldo: 22.6, smps: 22.6 },\n  standby: { ldo: 0.37, smps: 0.37 },\n};\n// BLE radio adder (µA) on top of core current (Table 37, 0 dBm Tx / 1 Mbps Rx).\n// advertising/connected are duty-cycled averages (estimated — datasheet gives peaks only).\nconst RADIO_UA: Record<string, { ldo: number; smps: number }> = {\n  off: { ldo: 0, smps: 0 },\n  advertising: { ldo: 800, smps: 500 },\n  connected: { ldo: 1200, smps: 700 },\n  tx: { ldo: 10510, smps: 5540 },\n  rx: { ldo: 7910, smps: 5220 },\n};\n\nconst RAIL_MV = 3300;\nconst LED_R_OHM = 40; // R2 (schematic) — atypically low, see provenance\nconst LED_VF_MV = 1900;\n\ninterface State {\n  power_mode: number;\n  sysclk: number;\n  regulator: number; // 0 = LDO, 1 = SMPS\n  led_on: number; // on-board red LED (PB12, active-high)\n  ble_state: number;\n  i2c_pullups: number; // optional 2.2k pull-ups on I2C3 (pads 4/5)\n  [field: string]: number;\n}\n\nconst clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));\nconst modeOf = (s: State) => MODES[clamp(s.power_mode, 0, MODES.length - 1)];\nconst clockOf = (s: State) => CLOCKS[clamp(s.sysclk, 0, CLOCKS.length - 1)];\nconst bleOf = (s: State) => BLE[clamp(s.ble_state, 0, BLE.length - 1)];\nconst regOf = (s: State): 'ldo' | 'smps' => (s.regulator ? 'smps' : 'ldo');\n\nconst ledUa = (s: State) =>\n  s.led_on && RAIL_MV > LED_VF_MV ? Math.round(((RAIL_MV - LED_VF_MV) / LED_R_OHM) * 1000) : 0;\n\nfunction coreUa(s: State): number {\n  const reg = regOf(s);\n  const mode = modeOf(s);\n  if (mode === 'run') return RUN_UA[reg][clockOf(s)];\n  if (mode === 'sleep') return SLEEP_UA[reg][clockOf(s)];\n  return FIXED_UA[mode][reg];\n}\n// Radio only runs when the MCU is awake (run/sleep); deep-sleep modes drop it.\nfunction radioUa(s: State): number {\n  const mode = modeOf(s);\n  if (mode !== 'run' && mode !== 'sleep') return 0;\n  return RADIO_UA[bleOf(s)][regOf(s)];\n}\n\nconst sim: TileSim<State> = {\n  tile: 'Core.ST.W5',\n\n  defaultState: {\n    power_mode: 0, // run\n    sysclk: 1, // 32 MHz\n    regulator: 1, // SMPS (default firmware path)\n    led_on: 0,\n    ble_state: 0, // off\n    i2c_pullups: 1,\n  },\n\n  controls: [\n    {\n      type: 'slider',\n      field: 'power_mode',\n      label: 'Mode (0 run·1 sleep·2 stop0·3 stop1·4 standby)',\n      min: 0,\n      max: 4,\n      step: 1,\n    },\n    {\n      type: 'slider',\n      field: 'sysclk',\n      label: 'Clock (0:16·1:32·2:100 MHz)',\n      min: 0,\n      max: 2,\n      step: 1,\n    },\n    { type: 'toggle', field: 'regulator', label: 'SMPS regulator (off = LDO)' },\n    {\n      type: 'slider',\n      field: 'ble_state',\n      label: 'BLE (0 off·1 adv·2 conn·3 tx·4 rx)',\n      min: 0,\n      max: 4,\n      step: 1,\n    },\n    { type: 'toggle', field: 'led_on', label: 'On-board LED (PB12)' },\n    { type: 'toggle', field: 'i2c_pullups', label: 'I2C3 pull-ups populated' },\n  ],\n\n  hostCalls: {},\n\n  provenance: {\n    power: 'inferred', // MCU + Tx/Rx currents canonical (DS14127); adv/connected averages + LED estimated\n  },\n\n  // Optional 2.2k pull-ups idle I2C3 (pads 4 CLK / 5 DAT) high. LED (PB12) and the\n  // antenna (RF matching network) are internal — neither is a numbered pad.\n  padOutputs(state) {\n    const up = state.i2c_pullups ? 1 : 0;\n    return { 'I2C3.CLK': up, 'I2C3.DAT': up };\n  },\n\n  // Supply draw on V+ (pad 14) / GND (pad 1): MCU-mode + BLE radio + LED.\n  power(state) {\n    const ua = coreUa(state) + radioUa(state) + ledUa(state);\n    const ble = bleOf(state);\n    return {\n      draw_ua: Math.round(ua * 1000) / 1000,\n      rails: [\n        {\n          name: 'V+',\n          role: 'supply',\n          v_mv: RAIL_MV,\n          i_ua: Math.round(ua * 1000) / 1000,\n          pads: ['14'],\n          note: `STM32WBA55 ${modeOf(state)}/${regOf(state)}${ble !== 'off' ? ' +BLE ' + ble : ''}${state.led_on ? ' +LED' : ''}`,\n        },\n      ],\n    };\n  },\n};\n\nexport default sim;\n",
+    "source": "// Digital twin for Core.ST.W5 (formerly Core.W): the BLE MCU host board itself.\n//\n// A Core, not a peripheral: no tile driver, no host calls. The twin models the\n// board standards: STM32WBA55 power across run/sleep/stop/standby, the BLE radio\n// as a power state (the on-board Johanson 2450AT chip antenna is RF-only, no pad),\n// the on-board status LED, and the two software-switched I2C3 pull-ups.\n//\n// Regulator: LDO only. The tile schematic ties VDDSMPS and VLXSMPS to ground with\n// no SMPS inductor (DS14127 §3.12.1 caution for SMPS parts used in an LDO application),\n// so the SMPS figures in the datasheet do not apply to this board.\n//\n// Power numbers: STM32WBA5xxx datasheet (DS14127 Rev 7, TYP @ 3.3 V / 25 °C),\n// LDO rows of Tables 45/49/51/52/54 and BLE radio Table 37. Pad map per\n// Core-ST-W5-b.json (V+ pad 14, GND pad 1, I2C3 CLK/DAT pads 4/5). Board parts\n// per the tile schematic: red LED on PB12 through R2 = 40 Ω; R3 = 2.2k from PC15\n// to pad 4 (I2C3 SCL) and R4 = 2.2k from PC14 to pad 5 (I2C3 SDA).\nimport type { PowerCtx, TileSim } from '../tileSim';\n\n// power_mode slider index → mode.\nconst MODES = ['run', 'sleep', 'stop0', 'stop1', 'standby'] as const;\n// sysclk slider index → MHz: the tile's Clock knob (definition config.clock:\n// low 16 MHz HSI16, medium 32 MHz HSE [default], high 64 MHz PLL, max 100 MHz PLL).\nconst CLOCKS = [16, 32, 64, 100] as const;\n// ble_state slider index → activity.\nconst BLE = ['off', 'advertising', 'connected', 'tx', 'rx', 'tx_10dbm'] as const;\n\n// MCU current (µA) by clock on the LDO (T45 Run, T49 Sleep). 64 MHz has no row:\n// interpolated linearly between the 32 and 100 MHz points (both Range 1 + HSE).\nconst RUN_UA: Record<number, number> = {\n  16: 910,\n  32: 2290,\n  64: 4110,\n  100: 6160,\n};\nconst SLEEP_UA: Record<number, number> = {\n  16: 340,\n  32: 950,\n  64: 1510,\n  100: 2140,\n};\n// Fixed low-power modes (µA), LDO, 3.3 V.\nconst FIXED_UA: Record<string, number> = {\n  stop0: 49, // T51, SRAM2 + cache retained\n  stop1: 22.6, // T52, SRAM1 retained, ULPMEN = 1\n  standby: 0.37, // T54, all peripherals disabled, ULPMEN = 1\n};\n// Radio. Table 37 figures are the WHOLE device during Tx/Rx (\"including 2.4 GHz\n// RADIO subsystem and digital processing\"), LDO: they replace the core figure\n// rather than add to it. Advertising / connected are duty-cycled averages added\n// on top of the core (estimated: the datasheet gives only the active peaks, and\n// the real average depends on the interval the program picks).\nconst RADIO_TOTAL_UA: Record<string, number> = {\n  tx: 10510, // Tx 0 dBm\n  rx: 7910, // Rx 1 Mbps\n  tx_10dbm: 21150, // Tx +10 dBm\n};\nconst RADIO_AVG_UA: Record<string, number> = {\n  off: 0,\n  advertising: 800,\n  connected: 1200,\n};\n\nconst VDD_NOM_MV = 3300; // V+ when the pad isn't wired to a known rail\nconst VDD_MIN_MV = 1710; // DS14127 Table 31 (definition power[].min says 1.8 V)\nconst VDD_MAX_MV = 3600; // Table 31 operating max\nconst LED_R_OHM = 40; // R2 (schematic)\nconst LED_VF_MV = 1900; // red LED forward drop (assumed; LED part not in the BOM)\n// GPIO output resistance: VOH = VDD - 0.4 V at 8 mA .. VDD - 1.3 V at 20 mA\n// (DS14127 Table 77), ~55 Ω. With R2 at only 40 Ω the pin sets most of the current.\nconst PIN_R_OHM = 55;\n\ninterface State {\n  power_mode: number;\n  sysclk: number;\n  led_on: number; // on-board red LED (PB12, active-high)\n  ble_state: number;\n  i2c_pullups: number; // PC15/PC14 driven high: 2.2k pull-ups on pads 4/5 engaged\n  [field: string]: number;\n}\n\nconst clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));\nconst modeOf = (s: State) => MODES[clamp(s.power_mode, 0, MODES.length - 1)];\nconst clockOf = (s: State) => CLOCKS[clamp(s.sysclk, 0, CLOCKS.length - 1)];\nconst bleOf = (s: State) => BLE[clamp(s.ble_state, 0, BLE.length - 1)];\n// V+ from the wiring (pad 14) when it's on a resolved net, else nominal.\nconst vddOf = (ctx?: PowerCtx) => ctx?.padVoltage?.['14'] ?? VDD_NOM_MV;\n\n// LED current when lit: (VDD - Vf) across R2 plus the pin's output resistance.\nconst ledUa = (s: State, vdd: number) =>\n  s.led_on && modeOf(s) !== 'standby' && vdd > LED_VF_MV\n    ? Math.round(((vdd - LED_VF_MV) / (LED_R_OHM + PIN_R_OHM)) * 1000)\n    : 0;\n\n// MCU + radio (µA). The radio only runs while the MCU is awake (run/sleep).\nfunction mcuUa(s: State): number {\n  const mode = modeOf(s);\n  if (mode !== 'run' && mode !== 'sleep') return FIXED_UA[mode];\n  const core = mode === 'run' ? RUN_UA[clockOf(s)] : SLEEP_UA[clockOf(s)];\n  const ble = bleOf(s);\n  if (ble in RADIO_TOTAL_UA) return Math.max(core, RADIO_TOTAL_UA[ble]);\n  return core + RADIO_AVG_UA[ble];\n}\n\nconst sim: TileSim<State> = {\n  tile: 'Core.ST.W5',\n\n  defaultState: {\n    power_mode: 0, // run\n    sysclk: 1, // 32 MHz (Clock knob default \"medium\")\n    led_on: 0,\n    ble_state: 0, // off\n    i2c_pullups: 0, // PC14/PC15 reset to analog (Hi-Z): pull-ups disengaged\n  },\n\n  controls: [\n    {\n      type: 'slider',\n      field: 'power_mode',\n      label: 'Mode (0 run·1 sleep·2 stop0·3 stop1·4 standby)',\n      min: 0,\n      max: 4,\n      step: 1,\n    },\n    {\n      type: 'slider',\n      field: 'sysclk',\n      label: 'Clock (0:16·1:32·2:64·3:100 MHz)',\n      min: 0,\n      max: 3,\n      step: 1,\n    },\n    {\n      type: 'slider',\n      field: 'ble_state',\n      label: 'BLE (0 off·1 adv·2 conn·3 tx 0 dBm·4 rx·5 tx +10 dBm)',\n      min: 0,\n      max: 5,\n      step: 1,\n    },\n    { type: 'toggle', field: 'led_on', label: 'On-board LED (PB12)' },\n    {\n      type: 'toggle',\n      field: 'i2c_pullups',\n      label: '2.2k I2C3 pull-ups engaged (PC15/PC14 high)',\n    },\n  ],\n\n  hostCalls: {},\n\n  provenance: {\n    power: 'inferred', // MCU + Tx/Rx currents canonical (DS14127, LDO); adv/connected averages + LED estimated\n  },\n\n  // With PC15 / PC14 driven high the 2.2k resistors pull I2C3 (pad 4 CLK, pad 5\n  // DAT) high. LED (PB12) and the antenna are internal, not numbered pads.\n  padOutputs(state): Record<string, number> {\n    return state.i2c_pullups ? { '4': 1, '5': 1 } : {};\n  },\n\n  // Supply draw on V+ (pad 14) / GND (pad 1): MCU (+ radio) + LED.\n  power(state, ctx) {\n    const vdd = vddOf(ctx);\n    const on = vdd >= VDD_MIN_MV;\n    const ua = on ? mcuUa(state) + ledUa(state, vdd) : 0;\n    const i = Math.round(ua * 1000) / 1000;\n    const ble = bleOf(state);\n    return {\n      draw_ua: i,\n      rails: [\n        {\n          name: 'V+',\n          role: 'supply',\n          v_mv: vdd,\n          i_ua: i,\n          pads: ['14'],\n          note: on\n            ? `STM32WBA55 ${modeOf(state)}${ble !== 'off' ? ' +BLE ' + ble : ''}${state.led_on ? ' +LED' : ''}${vdd > VDD_MAX_MV ? ' (V+ above 3.6 V max)' : ''}`\n            : 'STM32WBA55 unpowered (V+ below 1.71 V)',\n        },\n      ],\n    };\n  },\n};\n\nexport default sim;\n",
     "status": "validated",
-    "updated_at": "2026-06-22T12:44:21.678Z"
+    "updated_at": "2026-09-25T02:52:22.540Z"
   },
   "power": [
     {
       "max": 3.6,
-      "min": 1.8,
+      "min": 1.71,
       "type": "system",
       "notes": "",
       "gnd_pad": [
@@ -1343,6 +1343,10 @@
               "derived": {
                 "role": "timer-input"
               }
+            },
+            {
+              "af": 9,
+              "value": "G3.IO3"
             }
           ]
         },
@@ -1416,15 +1420,11 @@
               }
             },
             {
-              "af": 14,
-              "value": "TIM17.BKIN",
+              "af": 1,
+              "value": "IR_OUT",
               "derived": {
-                "role": "timer-input"
+                "role": "gpio"
               }
-            },
-            {
-              "af": 9,
-              "value": "G3.IO3"
             }
           ]
         },
@@ -1526,6 +1526,39 @@
           ]
         }
       ]
+    },
+    "pullups": {
+      "kind": "multiselect",
+      "group": "Pull-ups",
+      "label": "Enable software pull-ups",
+      "default": [],
+      "options": [
+        {
+          "label": "Pad 4 pull-up (via PC15)",
+          "value": "pad4",
+          "firmware_contract": [
+            {
+              "pin": "PC15",
+              "mode": "output",
+              "type": "gpio",
+              "drive": "high"
+            }
+          ]
+        },
+        {
+          "label": "Pad 5 pull-up (via PC14)",
+          "value": "pad5",
+          "firmware_contract": [
+            {
+              "pin": "PC14",
+              "mode": "output",
+              "type": "gpio",
+              "drive": "high"
+            }
+          ]
+        }
+      ],
+      "description": "Drive the on-tile pull-up resistors via their control pins. Useful for high-speed I2C (or any time pads 4 / 5 need a pull-up) without adding external resistors."
     },
     "bootloader": {
       "kind": "multiselect",
@@ -2292,13 +2325,13 @@
       ]
     }
   ],
-  "updated_at": "2026-06-19T00:00:00.000Z",
+  "updated_at": "2026-09-25T02:51:13.375Z",
   "description": "The Core.W tile combines the powerful STM32WBA55 100-MHz 32-bit Cortex-M33 processor together with an integrated 2.4GHz antenna on double-size T48 (4.0 x 8.0 mm) SMD package.  The tile provides a user-configurable combination of: SW debug & bootloading; 1MB flash & 128KB SRAM; wireless communications (BLE 5.4, Thread, Matter, Zigbee, proprietary); two FM+ (1MHz) I2C ports; two SPI ports; one USART; five 12-bit 2.5Msps ADC inputs (16-bit with oversampling); many timers; ten capacitive touch inputs; one serial-audio interface; IR output; and an on-board LED",
-  "json_version": "0.39",
+  "json_version": "0.40",
   "application_notes": [
     {
       "sort": 0,
-      "details": "The single-wire debug port is available on pads 13 (SWCLK) and 14 (SWDIO). While not absolutely required, it is often helpful to have the ability to hold pads 22 (NRST) low when connecting to the debugger. You can likely also use BOOT0 to help the debugger connect.",
+      "details": "The single-wire debug port is available on pads 13 (SWCLK) and 12 (SWDIO). While not absolutely required, it is often helpful to have the ability to hold pad 16 (NRST) low when connecting to the debugger. You can likely also use BOOT0 to help the debugger connect.",
       "heading": "Single-Wire Debug & Bootloading",
       "image_url": ""
     },
