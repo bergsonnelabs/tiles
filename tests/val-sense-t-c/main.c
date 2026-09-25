@@ -36,6 +36,8 @@ int main(void)
 
     /* ---- Configuration ---- */
     tile_sense_t_c_set_thresholds(&touch, SENSE_T_C_CH_SURFACE, 50, 100);
+    tile_sense_t_c_set_touch_threshold(&touch, 40);
+    tile_sense_t_c_set_prox_threshold(&touch, 20);
     tile_sense_t_c_set_power_mode(&touch, SENSE_T_C_POWER_LOW);
     tile_sense_t_c_enable_events(&touch, IQS323_STATUS_TOUCH_EVENT |
                                           IQS323_STATUS_PROX_EVENT);

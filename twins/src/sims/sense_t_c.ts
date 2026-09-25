@@ -6,22 +6,23 @@
 // capacitance). This is a DOUBLE-SIDED tile: the IC + passives are on the
 // bottom; the ENTIRE TOP SURFACE is the self-cap electrode for channel CH1 (via
 // a 470Ω series R), and CH0 is a second external electrode brought out to pad 8.
-// CH2 exists in the chip but is unpopulated on this tile. A single surface
-// cannot form a slider, so slider and gesture reads stay at rest.
+// CH2 exists in the chip but is not routed on this tile, and init disables it.
+// A single surface cannot form a slider, so slider and gesture reads stay at rest.
 //
 // Pad map (Sense-T-C-a.json): GND (1), RDY (3, open-drain output, on-tile 4.7k
-// pull-up), I2C (4/5), C0 external electrode (8), V+ (10).
+// pull-up and 100 nF to GND), I2C (4/5), C0 external electrode (8), V+ (10).
 //
 // Model: a finger near / on an electrode (the controls) lowers that channel's
 // counts — self-capacitance counts DECREASE with touch (datasheet §5.7) — and the
-// chip compares (LTA − counts) against the channel's prox / touch thresholds.
+// chip compares (LTA − counts) against the channel's prox threshold (absolute
+// counts, A.16) and touch threshold (threshold/256 × LTA, A.17).
 // The LTA follows the counts while a channel is idle; ATI / reseed snap it.
 //
 // The driver CACHES the System Status word: process() reads it, and
 // get_status / is_touched / is_prox / is_touched_any report that cached copy —
 // so a program that never calls process() never sees a touch, exactly as on
 // hardware. Counts, LTA, delta, slider and gestures are live register reads.
-import type { TileSim } from '../tileSim';
+import type { PowerCtx, TileSim } from '../tileSim';
 
 interface State {
   // ── the world (controls) ──
@@ -116,7 +117,7 @@ const MODE_NAME = ['NP', 'LP', 'ULP', 'Halt'];
 type ChKey<F extends string> = `ch${0 | 1 | 2}_${F}`;
 const key = <F extends string>(ch: number, f: F) => `ch${ch}_${f}` as ChKey<F>;
 
-/** What the electrode physically does to the counts. CH2 is unpopulated. */
+/** What the electrode physically does to the counts. CH2 is not routed. */
 function countsOf(s: State, ch: number): number {
   if (ch === 0) return COUNTS_REST - (s.ch0_touched ? TOUCH_DROP : s.ch0_prox ? PROX_DROP : 0);
   if (ch === 1) return COUNTS_REST - (s.ch1_touched ? TOUCH_DROP : s.ch1_prox ? PROX_DROP : 0);
@@ -126,13 +127,15 @@ const ltaOf = (s: State, ch: number) => s[key(ch, 'lta')];
 /** (LTA − counts): positive with a finger (self-cap, non-inverted logic). */
 const drop = (s: State, ch: number) => ltaOf(s, ch) - countsOf(s, ch);
 
-/** Per-channel prox / touch bits, from the thresholds (datasheet §5.7). */
+/** Per-channel prox / touch bits, from the thresholds (datasheet §5.7, A.16,
+ * A.17): prox is absolute counts, touch is threshold/256 of the LTA. */
 function channelBits(s: State): number {
   let bits = 0;
-  for (let ch = 0; ch < CHANNELS; ch++) {
+  // CH2 is disabled by init (no electrode), so it never reports.
+  for (let ch = 0; ch < 2; ch++) {
     const d = drop(s, ch);
     if (d > s[key(ch, 'prox_th')]) bits |= chProxBit(ch);
-    if (d > s[key(ch, 'touch_th')]) bits |= chTouchBit(ch);
+    if (d > Math.floor((s[key(ch, 'touch_th')] * ltaOf(s, ch)) / 256)) bits |= chTouchBit(ch);
   }
   return bits;
 }
@@ -154,10 +157,10 @@ const validCh = (ch: number) => ch >= 0 && ch < CHANNELS;
 const sim: TileSim<State> = {
   tile: 'Sense.T.C',
 
-  // State AFTER init with no cfg: soft reset + ACK, events = TOUCH | PROX,
-  // System Control = AUTO power with bit 7 clear (STREAMING), re-ATI done.
-  // Thresholds / rates are the chip's own settings (not written by the driver);
-  // the values here are the modeled working point.
+  // State AFTER init with no cfg: soft reset + ACK, CH0 / CH1 on their own
+  // electrodes and CH2 off, Azoteq's EV-kit settings (prox 20, touch 40,
+  // counts filter 0x0202, NP 16 / LP 60 / ULP 160 / Halt 3000 ms, timeout
+  // 2000 ms), events = TOUCH | PROX, AUTO power, re-ATI, then EVENT mode.
   defaultState: {
     ch0_touched: 0,
     ch1_touched: 0,
@@ -178,30 +181,30 @@ const sim: TileSim<State> = {
     sleeping: 0,
 
     power_mode: PM_AUTO,
-    comm_mode: 0,
+    comm_mode: 1,
     events_enable: ST_TOUCH_EVENT | ST_PROX_EVENT,
-    counts_filter: 0,
+    counts_filter: 0x0202,
     np_rate_ms: 16,
     lp_rate_ms: 60,
     ulp_rate_ms: 160,
     halt_rate_ms: 3000,
     power_timeout_ms: 2000,
-    ch0_prox_th: 15,
-    ch0_touch_th: 60,
+    ch0_prox_th: 20,
+    ch0_touch_th: 40,
     ch0_ati_setup: 0,
     ch0_conv_freq: 0,
     ch0_mode: 0,
     ch0_ref_id: 0,
     ch0_compensation: COMPENSATION_NOMINAL,
-    ch1_prox_th: 15,
-    ch1_touch_th: 60,
+    ch1_prox_th: 20,
+    ch1_touch_th: 40,
     ch1_ati_setup: 0,
     ch1_conv_freq: 0,
     ch1_mode: 0,
     ch1_ref_id: 0,
     ch1_compensation: COMPENSATION_NOMINAL,
-    ch2_prox_th: 15,
-    ch2_touch_th: 60,
+    ch2_prox_th: 20,
+    ch2_touch_th: 40,
     ch2_ati_setup: 0,
     ch2_conv_freq: 0,
     ch2_mode: 0,
@@ -219,6 +222,25 @@ const sim: TileSim<State> = {
     { type: 'toggle', field: 'ch0_prox', label: 'Approach C0 (prox)' },
   ],
 
+  // What a finger does: approach or touch either electrode.
+  stimuli: [
+    {
+      id: 'finger',
+      label: 'Finger',
+      controls: [
+        {
+          kind: 'toggle',
+          id: 'touch_surface',
+          label: 'Touch top surface',
+          fields: ['ch1_touched'],
+        },
+        { kind: 'toggle', id: 'near_surface', label: 'Hand near surface', fields: ['ch1_prox'] },
+        { kind: 'toggle', id: 'touch_c0', label: 'Touch pad 8 electrode', fields: ['ch0_touched'] },
+        { kind: 'toggle', id: 'near_c0', label: 'Near pad 8 electrode', fields: ['ch0_prox'] },
+      ],
+    },
+  ],
+
   hostCalls: {
     // ── lifecycle ──
     tile_sense_t_c_find: () => ({ scalar: 1 }),
@@ -226,11 +248,12 @@ const sim: TileSim<State> = {
     tile_sense_t_c_process: ({ state }) => ({ nextState: process(state) }),
     // The callback fires from process(); nothing to hold in state.
     tile_sense_t_c_on_event: () => undefined,
+    // Halt; power_mode keeps the host's choice, which wake() restores.
     tile_sense_t_c_sleep: () => ({
-      nextState: { power_mode: PM_HALT, sleeping: 1, ready: 0 },
+      nextState: { sleeping: 1, ready: 0 },
     }),
     tile_sense_t_c_wake: () => ({
-      nextState: { power_mode: PM_NORMAL, sleeping: 0, ready: 1 },
+      nextState: { sleeping: 0, ready: 1 },
     }),
 
     // ── status: the driver's cached copy ──
@@ -275,7 +298,9 @@ const sim: TileSim<State> = {
     },
     // No slider / gestures on a single surface: the registers sit at rest.
     tile_sense_t_c_get_slider: () => ({ scalar: 0 }),
-    tile_sense_t_c_read_slider_pct: () => ({ scalar: 1 }),
+    // Slider Resolution (0x93) is 0 until a slider is configured, so the driver
+    // returns 0 and leaves out_pct alone.
+    tile_sense_t_c_read_slider_pct: () => ({ scalar: 0 }),
     tile_sense_t_c_get_gestures: () => ({ scalar: 0 }),
     tile_sense_t_c_wait_for_gesture: () => ({ scalar: 0 }),
 
@@ -291,11 +316,25 @@ const sim: TileSim<State> = {
       if (touch) next[key(ch, 'touch_th')] = touch;
       return { nextState: next };
     },
-    tile_sense_t_c_set_power_mode: ({ state, args }) => ({
-      nextState: { power_mode: arg(args, 0, state.power_mode) & 0x07 },
-    }),
+    // All enabled channels (CH0, CH1); 0 is ignored.
+    tile_sense_t_c_set_touch_threshold: ({ args }) => {
+      const th = arg(args, 0, 0) & 0xff;
+      return th ? { nextState: { ch0_touch_th: th, ch1_touch_th: th } } : undefined;
+    },
+    tile_sense_t_c_set_prox_threshold: ({ args }) => {
+      const th = arg(args, 0, 0) & 0xff;
+      return th ? { nextState: { ch0_prox_th: th, ch1_prox_th: th } } : undefined;
+    },
+    // Modes 6 and 7 are reserved; the driver ignores them.
+    tile_sense_t_c_set_power_mode: ({ state, args }) => {
+      const mode = arg(args, 0, state.power_mode);
+      return mode >= PM_NORMAL && mode <= PM_AUTO_NO_ULP
+        ? { nextState: { power_mode: mode } }
+        : undefined;
+    },
+    // Events Enable: only bits 0-4 and 6 are defined (A.33).
     tile_sense_t_c_enable_events: ({ args }) => ({
-      nextState: { events_enable: arg(args, 0, 0) & 0xffff },
+      nextState: { events_enable: arg(args, 0, 0) & 0x5f },
     }),
     // Re-ATI: the chip re-tunes and reseeds, so every LTA lands on its counts.
     tile_sense_t_c_ati: ({ state }) => ({
@@ -355,7 +394,7 @@ const sim: TileSim<State> = {
       return field ? { nextState: { [field]: ms } } : undefined;
     },
     tile_sense_t_c_set_power_timeout: ({ args }) => ({
-      nextState: { power_timeout_ms: arg(args, 0, 2000) & 0xffff },
+      nextState: { power_timeout_ms: Math.min(65000, arg(args, 0, 2000) & 0xffff) },
     }),
     tile_sense_t_c_get_compensation: ({ state, args }) => {
       const ch = chArg(args);
@@ -394,7 +433,10 @@ const sim: TileSim<State> = {
     tile_sense_t_c_get_delta: 'canonical', // counts − LTA, int16; negative on self-cap touch
     tile_sense_t_c_set_power_mode: 'canonical', // SYSTEM_CONTROL[6:4]
     tile_sense_t_c_set_comm_mode: 'canonical', // SYSTEM_CONTROL bit 7 (1 = event)
-    tile_sense_t_c_set_thresholds: 'canonical', // written only when non-zero
+    tile_sense_t_c_set_thresholds: 'canonical', // written only when non-zero; touch is x/256 of LTA
+    tile_sense_t_c_set_touch_threshold: 'canonical', // A.17 on CH0 + CH1
+    tile_sense_t_c_set_prox_threshold: 'canonical', // A.16 on CH0 + CH1
+    tile_sense_t_c_enable_events: 'canonical', // 0xD3, defined bits only
     tile_sense_t_c_reseed: 'canonical', // SYSTEM_CONTROL.RESEED: LTA → counts
     tile_sense_t_c_set_report_rate: 'canonical', // 0xC1-0xC4, ms, capped 3000
     tile_sense_t_c_set_power_timeout: 'canonical', // 0xC5, ms
@@ -404,13 +446,15 @@ const sim: TileSim<State> = {
     tile_sense_t_c_get_counts: 'inferred', // ~512 at rest, finger drops are modeled
     tile_sense_t_c_ati: 'inferred',
     tile_sense_t_c_wait_for_touch: 'inferred',
-    // hallucinated — not usable on this single-surface tile, or opaque
-    tile_sense_t_c_get_slider: 'hallucinated',
-    tile_sense_t_c_read_slider_pct: 'hallucinated',
-    tile_sense_t_c_get_gestures: 'hallucinated',
-    tile_sense_t_c_wait_for_gesture: 'hallucinated',
+    // no slider or gestures unless the program configures them (§9: Slider
+    // Resolution and Gesture Enable are 0 after reset; init leaves them)
+    tile_sense_t_c_get_slider: 'inferred',
+    tile_sense_t_c_read_slider_pct: 'inferred', // resolution 0 → returns 0
+    tile_sense_t_c_get_gestures: 'inferred',
+    tile_sense_t_c_wait_for_gesture: 'inferred',
+    // hallucinated — the register file isn't modeled beyond a few registers
     tile_sense_t_c_read_reg: 'hallucinated',
-    power: 'canonical', // datasheet §3.4 per-mode current (AUTO's stepping is inferred)
+    power: 'inferred', // datasheet §3.4 per-mode current is for 3 self-cap channels at the EV-kit rates; the tile runs 2, and AUTO's stepping is modeled
   },
 
   // Each tick: idle channels' LTA follows the counts; prox/touch changes latch
@@ -441,7 +485,8 @@ const sim: TileSim<State> = {
     if (state.power_mode === PM_AUTO || state.power_mode === PM_AUTO_NO_ULP) {
       const idle = anyActive ? 0 : t - state.idle_since_t;
       const timeout = state.power_timeout_ms;
-      if (idle < timeout) mode = PM_NORMAL;
+      // A timeout of 0 keeps the chip in normal power (datasheet §5.3).
+      if (timeout === 0 || idle < timeout) mode = PM_NORMAL;
       else if (idle < 2 * timeout || state.power_mode === PM_AUTO_NO_ULP) mode = PM_LOW;
       else mode = PM_ULP;
     }
@@ -449,10 +494,10 @@ const sim: TileSim<State> = {
     return update;
   },
 
-  // RDY (pad 3): open-drain, asserted LOW (shown 1 = asserted). In streaming
-  // mode (the driver's init) the chip opens a comm window every report cycle, so
-  // RDY is pulsing continuously; in event mode it asserts only for an enabled
-  // event, until the host reads status. Halt / not-ready: quiet.
+  // RDY (pad 3): open-drain, asserted LOW (shown 1 = asserted). In event mode
+  // (the driver's init) it asserts only for an enabled event, until the host
+  // reads status; in streaming mode the chip opens a window every report cycle,
+  // so RDY pulses continuously. Halt / not-ready: quiet.
   padOutputs(state) {
     if (state.sleeping) return { '3': 0 };
     if (state.comm_mode === 0) return { '3': 1 };
@@ -460,9 +505,13 @@ const sim: TileSim<State> = {
   },
 
   // Electrical: a pure load on V+ (pad 10) / GND (pad 1). Draw follows the
-  // effective power mode (datasheet §3.4, self-cap, 3.3 V).
-  power(state) {
-    const mode = state.power_mode <= PM_HALT ? state.power_mode : state.active_mode;
+  // effective power mode (datasheet §3.4, self-cap; the same at 1.8 and 3.3 V).
+  power(state, ctx?: PowerCtx) {
+    const mode = state.sleeping
+      ? PM_HALT
+      : state.power_mode <= PM_HALT
+        ? state.power_mode
+        : state.active_mode;
     const ua = MODE_UA[mode] ?? MODE_UA[PM_NORMAL]!;
     return {
       draw_ua: ua,
@@ -470,10 +519,10 @@ const sim: TileSim<State> = {
         {
           name: 'V+',
           role: 'supply',
-          v_mv: 3300,
+          v_mv: ctx?.padVoltage?.['10'] ?? 3300,
           i_ua: ua,
           pads: ['10'],
-          note: `IQS323 ${MODE_NAME[mode] ?? 'NP'}${state.power_mode >= PM_AUTO ? ' (auto)' : ''}`,
+          note: `IQS323 ${MODE_NAME[mode] ?? 'NP'}${!state.sleeping && state.power_mode >= PM_AUTO ? ' (auto)' : ''}`,
         },
       ],
     };

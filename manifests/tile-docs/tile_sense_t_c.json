@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@ed24fdf",
+  "source": "tiles@4c565e2",
   "file": "tile_sense_t_c.h",
   "brief": "Capacitive touch/proximity driver for the Sense.T.C tile (IQS323).",
-  "description": "@version 1.3.0\n\nAzoteq IQS323 ProxFusion controller with self-capacitive touch sensing.\nThe tile's entire top surface is a touch electrode (CH1/CRx1), and a\nsecond channel (CH0/CRx0) is available via pad 8 for external sensors.\n\nTwo communication modes:\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required.\n  - **RDY mode**: provide a rdy_pin in config. EXTI falling-edge ISR\n    sets a flag; process() only does I2C when the flag is set.\n    Lower latency, less wasted I2C traffic.\n\nEvent callback: register an on_event callback to be notified of\ntouch, proximity, slider, and gesture changes without polling\nindividual status functions.\n\n\n\n\nSlider note: slider functionality requires multiple channels enabled\n(e.g. two Sense.T.C tiles chained, or pad 8 connected to an external\nelectrode). A single tile surface alone cannot produce a slider output.\n\nDatasheet: Azoteq IQS323, Rev v1.11, August 2025\n\n@studio tile label=Sense.T.C icon=◕\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Per-gesture threshold tuning\" section=config\n  IQS323 gesture timing (tap touch/release time, hold duration,\n  swipe distance, flick velocity) is packed across several\n  GESTURE_* registers with chip-specific encodings. The driver\n  reports gesture events but doesn't surface a typed API for\n  timing / threshold tuning — closing this properly needs a\n  dedicated pass with Azoteq's gesture-config guide. Raw\n  write_reg works for advanced users in the interim.\n\n@studio unsupported severity=niche category=\"Per-channel timeout / OutA event-indicator\" section=advanced\n  Channel-timeout disable bits (auto-reseed on timeout) and the\n  OutA pin's event-indicator output mode aren't exposed. Most\n  applications don't need them; raw write_reg covers the niche\n  cases that do.",
+  "description": "@version 1.4.0\n\nAzoteq IQS323 ProxFusion controller with self-capacitive touch sensing.\nThe tile's entire top surface is a touch electrode (CH1/CRx1), and a\nsecond channel (CH0/CRx0) is available via pad 8 for external sensors.\n\ninit() soft-resets the chip and configures it: CH1 on the surface\nelectrode (CRx1/CTx1) and CH0 on pad 8 (CRx0/CTx0), self-capacitance,\nprox 20 / touch 40, Azoteq's EV-kit filters and report rates (NP 16 ms,\nLP 60, ULP 160, Halt 3000, auto step-down after 2 s), AUTO power, ATI,\nthen I2C event mode. The chip's own reset values leave every threshold,\nrate and filter at 0 and point all three channels at CRx0, so none of\nthis is optional. If the chip resets later (brown-out, watchdog),\nprocess() sees the reset event and configures it again.\n\nTwo ways to drive process():\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. Each call forces a communication\n    window (about 15 ms).\n  - **RDY mode**: provide a rdy_pin in config. EXTI falling-edge ISR\n    sets a flag; process() only does I2C when the flag is set, which in\n    event mode means a touch or prox change. Lower latency, far less\n    I2C traffic.\n\nEvent callback: register an on_event callback to be notified of\ntouch, proximity, slider, and gesture changes without polling\nindividual status functions.\n\n\n\n\nSlider note: a slider needs at least two channels on the SAME IQS323\n(the surface CH1 plus an electrode on pad 8 / CH0; CH2 is not routed),\nconfigured through the slider registers (0x90-0x98) with write_reg.\nTwo separate tiles cannot form one slider: each has its own controller.\nA single tile surface alone cannot produce a slider output.\n\nDatasheet: Azoteq IQS323, Rev v1.11, August 2025\n\n@studio tile label=Sense.T.C icon=◕\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Per-gesture threshold tuning\" section=config\n  IQS323 gesture timing (tap touch/release time, hold duration,\n  swipe distance, flick velocity) is packed across several\n  GESTURE_* registers with chip-specific encodings. The driver\n  reports gesture events but doesn't surface a typed API for\n  timing / threshold tuning — closing this properly needs a\n  dedicated pass with Azoteq's gesture-config guide. Raw\n  write_reg works for advanced users in the interim.\n\n@studio unsupported severity=niche category=\"Per-channel timeout / OutA event-indicator\" section=advanced\n  Channel-timeout disable bits (auto-reseed on timeout) and the\n  OutA pin's event-indicator output mode aren't exposed. Most\n  applications don't need them; raw write_reg covers the niche\n  cases that do. OutA is also not routed on this tile (HW-gated).\n\n@studio unsupported severity=niche category=\"Mutual-capacitance / inductive sensing\" section=advanced\n  The chip can run mutual-capacitance (Tx/Rx pairs) and inductive\n  channels. HW-gated: the tile routes one self-cap electrode per\n  channel (surface on CRx1, pad 8 on CRx0) and no TxA; CRx2 is not\n  routed. The driver configures self-capacitance only.\n\n@studio unsupported severity=niche category=\"Hardware reset (MCLR)\" section=advanced\n  Pad 3 is RDY/MCLR: pulling it low outside a window hard-resets the\n  chip. Driver-deferred: the driver uses the soft reset and the pad\n  only as the RDY input. The on-tile 100 nF on the pin slows any\n  host-driven pulse.\n\n@studio unsupported severity=advanced category=\"Release UI (long-touch release)\" section=advanced\n  The tile's IQS323-001 includes the Release UI: an activation LTA\n  that lets a long-held touch or prox release cleanly (registers\n  0x20-0x25, 0xD4, Sensor Setup bit 6). Driver-deferred; write_reg\n  reaches it. The Movement UI is a different build (IQS323-A01), not\n  on this tile.",
   "code_examples": [
     {
       "label": "Simple polling example (Cores SDK)",
@@ -29,7 +29,25 @@
     {
       "severity": "niche",
       "category": "Per-channel timeout / OutA event-indicator",
-      "brief": "Channel-timeout disable bits (auto-reseed on timeout) and the OutA pin's event-indicator output mode aren't exposed. Most applications don't need them; raw write_reg covers the niche cases that do.",
+      "brief": "Channel-timeout disable bits (auto-reseed on timeout) and the OutA pin's event-indicator output mode aren't exposed. Most applications don't need them; raw write_reg covers the niche cases that do. OutA is also not routed on this tile (HW-gated).",
+      "section": "advanced"
+    },
+    {
+      "severity": "niche",
+      "category": "Mutual-capacitance / inductive sensing",
+      "brief": "The chip can run mutual-capacitance (Tx/Rx pairs) and inductive channels. HW-gated: the tile routes one self-cap electrode per channel (surface on CRx1, pad 8 on CRx0) and no TxA; CRx2 is not routed. The driver configures self-capacitance only.",
+      "section": "advanced"
+    },
+    {
+      "severity": "niche",
+      "category": "Hardware reset (MCLR)",
+      "brief": "Pad 3 is RDY/MCLR: pulling it low outside a window hard-resets the chip. Driver-deferred: the driver uses the soft reset and the pad only as the RDY input. The on-tile 100 nF on the pin slows any host-driven pulse.",
+      "section": "advanced"
+    },
+    {
+      "severity": "advanced",
+      "category": "Release UI (long-touch release)",
+      "brief": "The tile's IQS323-001 includes the Release UI: an activation LTA that lets a long-held touch or prox release cleanly (registers 0x20-0x25, 0xD4, Sensor Setup bit 6). Driver-deferred; write_reg reaches it. The Movement UI is a different build (IQS323-A01), not on this tile.",
       "section": "advanced"
     }
   ],
@@ -42,7 +60,7 @@
     },
     {
       "name": "TILE_SENSE_T_C_VERSION_MINOR",
-      "value": "3",
+      "value": "4",
       "description": "",
       "section": ""
     },
@@ -79,7 +97,7 @@
     {
       "name": "SENSE_T_C_CH2",
       "value": "2",
-      "description": "CRx2/CTx2/Bias",
+      "description": "CRx2/CTx2 -- not routed on this tile; always disabled",
       "section": ""
     },
     {
@@ -91,6 +109,12 @@
     {
       "name": "IQS323_STATUS_POWER_SHIFT",
       "value": "14",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "IQS323_EVENTS_DEFINED",
+      "value": "0x005F",
       "description": "",
       "section": ""
     },
@@ -150,12 +174,12 @@
         {
           "name": "SENSE_T_C_COMM_STREAM",
           "value": "0",
-          "description": "Continuous reporting at the configured power-mode rate"
+          "description": "Continuous reporting at the configured power-mode rate (the chip's reset default)"
         },
         {
           "name": "SENSE_T_C_COMM_EVENT",
           "value": "1",
-          "description": "RDY pulses only on enabled events (default)"
+          "description": "RDY pulses only on enabled events (what init() selects)"
         }
       ]
     }
@@ -179,17 +203,17 @@
         {
           "type": "uint8_t",
           "name": "channels",
-          "description": "Channel enable bitmask (bit 0=CH0, 1=CH1, 2=CH2). 0 = factory default (all enabled)."
+          "description": "Channel enable bitmask (bit 0 = CH0 pad 8, bit 1 = CH1 surface). 0 = both. CH2 is not routed and always off."
         },
         {
           "type": "uint8_t",
           "name": "prox_threshold",
-          "description": "Proximity threshold (factory default ~4)."
+          "description": "Proximity threshold, delta counts (0 = default 20)."
         },
         {
           "type": "uint8_t",
           "name": "touch_threshold",
-          "description": "Touch threshold (factory default ~8)."
+          "description": "Touch threshold, x/256 of the LTA (0 = default 40)."
         }
       ]
     }
@@ -210,7 +234,7 @@
       "notes": [],
       "return": "1 if found, 0 if not",
       "brief": "Probe the bus for an IQS323 touch controller.",
-      "description": "",
+      "description": "Instance 0 is 0x44 (order code IQS323-001, this tile); instance 1 is\n0x58 (IQS323-002). The address is fixed by the order code, not a strap.",
       "name": "tile_sense_t_c_find"
     },
     {
@@ -235,17 +259,12 @@
       ],
       "notes": [],
       "brief": "Initialize the touch controller.",
-      "description": "Soft resets, configures CH1 (surface) for self-capacitive touch,\nsets proximity/touch thresholds, runs ATI.",
+      "description": "Soft resets, then configures the chip (see the file header): channels,\nthresholds, filters, report rates, AUTO power, ATI, event mode. Takes\nroughly 0.5-2 s, most of it ATI and the forced communication windows.",
       "name": "tile_sense_t_c_init"
     },
     {
       "signature": "void tile_sense_t_c_process(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "events",
@@ -256,10 +275,6 @@
     {
       "signature": "void tile_sense_t_c_on_event(tile_t *tile, sense_t_c_event_cb_t cb, void *ctx)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "cb",
           "description": "Callback function (NULL to disable)"
@@ -282,8 +297,8 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
-      "brief": "Enter low-power sleep mode.",
-      "description": "",
+      "brief": "Enter low-power sleep mode (Halt, about 2 µA).",
+      "description": "The chip stops sensing; process() does nothing until wake().",
       "name": "tile_sense_t_c_sleep"
     },
     {
@@ -293,8 +308,16 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Wake from sleep mode.",
-      "description": "",
+      "description": "Restores the power mode last chosen with set_power_mode() (init: AUTO).",
       "name": "tile_sense_t_c_wake"
+    },
+    {
+      "signature": "void tile_sense_t_c_reset(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "brief": "Soft-reset the IQS323 (System Control bit 1).",
+      "description": "All registers return to their reset values (thresholds, report rates\nand filters 0, every channel on CRx0) and the tile leaves the READY\nstate. Call init() again afterwards.",
+      "name": "tile_sense_t_c_reset"
     },
     {
       "signature": "uint16_t tile_sense_t_c_get_status(tile_t *tile)",
@@ -312,56 +335,86 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "brief": "Read the cached Gesture Status word from the last process() call.",
+      "brief": "Read the Gesture Status word (a live read, not cached).",
       "description": "",
       "name": "tile_sense_t_c_get_gestures"
     },
     {
       "signature": "uint8_t tile_sense_t_c_is_touched(tile_t *tile, uint8_t channel)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] 0 = pad 8 electrode, 1 = tile surface, 2 = not routed"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
+      "return": "1 if touched, 0 otherwise",
       "brief": "Check if the given channel is currently touched.",
-      "description": "",
+      "description": "Reads the cached System Status from the last process() call.",
       "name": "tile_sense_t_c_is_touched"
     },
     {
       "signature": "uint8_t tile_sense_t_c_is_prox(tile_t *tile, uint8_t channel)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] 0 = pad 8 electrode, 1 = tile surface, 2 = not routed"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
+      "return": "1 if in proximity, 0 otherwise",
       "brief": "Check if the given channel currently reports proximity.",
-      "description": "",
+      "description": "Reads the cached System Status from the last process() call.",
       "name": "tile_sense_t_c_is_prox"
     },
     {
       "signature": "uint16_t tile_sense_t_c_get_counts(tile_t *tile, uint8_t channel)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] Channel"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "brief": "Read the raw counts value for a channel.",
-      "description": "",
+      "return": "Filtered counts, or 0 for a bad channel",
+      "brief": "Read the filtered counts value for a channel (0x13/0x15/0x17).",
+      "description": "Self-capacitance counts DROP when a finger approaches.",
       "name": "tile_sense_t_c_get_counts"
     },
     {
       "signature": "uint16_t tile_sense_t_c_get_lta(tile_t *tile, uint8_t channel)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] Channel"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
+      "return": "LTA baseline in counts",
       "brief": "Read the long-term average (LTA) for a channel.",
       "description": "",
       "name": "tile_sense_t_c_get_lta"
     },
     {
       "signature": "int16_t tile_sense_t_c_get_delta(tile_t *tile, uint8_t channel)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] Channel"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
+      "return": "counts - LTA; negative when a finger is near a self-cap channel",
       "brief": "Read the delta (counts - LTA) for a channel.",
       "description": "",
       "name": "tile_sense_t_c_get_delta"
@@ -372,33 +425,87 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
+      "return": "Slider position",
       "brief": "Read the slider position (if a slider is configured).",
-      "description": "",
+      "description": "Raw Slider Position register (0x12): 0..Slider Resolution (0x93).\nStays 0 until a slider is configured (see the slider note above).",
       "name": "tile_sense_t_c_get_slider"
     },
     {
       "signature": "void tile_sense_t_c_set_thresholds(tile_t *tile, uint8_t channel, uint8_t prox_thresh, uint8_t touch_thresh)",
-      "params": [],
+      "params": [
+        {
+          "name": "channel",
+          "description": "[0..2] Channel"
+        },
+        {
+          "name": "prox_thresh",
+          "description": "[0..255] Prox threshold, delta counts (0 = unchanged)"
+        },
+        {
+          "name": "touch_thresh",
+          "description": "[0..255] Touch threshold, x/256 of LTA (0 = unchanged)"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Set proximity and touch thresholds for a channel.",
-      "description": "",
+      "description": "Prox is an absolute delta in counts (A.16, written with 4/4 debounce);\ntouch is relative, threshold/256 of the LTA (A.17). A 0 leaves that\nregister unchanged. Azoteq's EV-kit uses prox 20, touch 40. These\nper-channel values are lost if the chip resets (process() re-applies the\nall-channel thresholds from init / set_touch_threshold / set_prox_threshold).",
       "name": "tile_sense_t_c_set_thresholds"
     },
     {
+      "signature": "void tile_sense_t_c_set_touch_threshold(tile_t *tile, uint8_t threshold)",
+      "params": [
+        {
+          "name": "threshold",
+          "description": "[1..255] x/256 of the LTA (default 40, about 16 %)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the touch threshold on every enabled channel.",
+      "description": "The touch threshold is relative: a touch registers when the counts drop\nby threshold/256 of the channel's baseline (A.17). Lower is more\nsensitive (a touch through thicker covers); higher rejects near misses.\nKept by the driver, so it survives a chip reset. 0 is ignored.",
+      "name": "tile_sense_t_c_set_touch_threshold"
+    },
+    {
+      "signature": "void tile_sense_t_c_set_prox_threshold(tile_t *tile, uint8_t threshold)",
+      "params": [
+        {
+          "name": "threshold",
+          "description": "[1..255] delta counts (default 20)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the proximity threshold on every enabled channel.",
+      "description": "Proximity is an absolute drop in counts (A.16), written with Azoteq's\n4/4 debounce. Lower detects a hand from further away. Kept by the\ndriver, so it survives a chip reset. 0 is ignored.",
+      "name": "tile_sense_t_c_set_prox_threshold"
+    },
+    {
       "signature": "void tile_sense_t_c_set_power_mode(tile_t *tile, sense_t_c_power_mode_t mode)",
-      "params": [],
+      "params": [
+        {
+          "name": "mode",
+          "description": "Power mode (System Control bits 6-4); init selects AUTO"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the device power mode.",
-      "description": "",
+      "description": "AUTO steps from normal to low and ultra-low power after the power\ntimeout without activity, and back on a touch (datasheet §5.3).\nTypical draw (3 self-cap channels, EV-kit rates): normal 125 µA, low\n37.5 µA, ultra-low 4 µA, halt 2 µA. Values above 5 are ignored.",
       "name": "tile_sense_t_c_set_power_mode"
     },
     {
       "signature": "void tile_sense_t_c_enable_events(tile_t *tile, uint16_t mask)",
-      "params": [],
+      "params": [
+        {
+          "name": "mask",
+          "description": "Event bits (IQS323_STATUS_*_EVENT); init enables touch + prox"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -420,10 +527,6 @@
       "signature": "void tile_sense_t_c_set_ati_setup(tile_t *tile, uint8_t channel, uint16_t value)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "channel",
           "description": "0–2"
         },
@@ -443,10 +546,6 @@
       "signature": "void tile_sense_t_c_set_counts_filter(tile_t *tile, uint16_t beta)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "beta",
           "description": "Raw 16-bit Counts Filter Betas register value"
         }
@@ -461,10 +560,6 @@
     {
       "signature": "void tile_sense_t_c_set_conversion_freq(tile_t *tile, uint8_t channel, uint16_t value)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "channel",
           "description": "0–2"
@@ -484,10 +579,6 @@
     {
       "signature": "void tile_sense_t_c_set_channel_mode(tile_t *tile, uint8_t channel, sense_t_c_channel_mode_t mode, uint8_t reference_id)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "channel",
           "description": "0–2"
@@ -512,10 +603,6 @@
       "signature": "void tile_sense_t_c_set_comm_mode(tile_t *tile, sense_t_c_comm_mode_t mode)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "mode",
           "description": "Event or streaming"
         }
@@ -524,17 +611,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Switch between event-mode and streaming-mode I²C.",
-      "description": "Event mode (default) waits for the RDY line to assert before\ncommunication; lowest power, lowest CPU overhead. Streaming mode\nreports samples at every report-rate tick regardless of activity;\nhigher current, lower latency. Use streaming for continuous logging\nor for hosts that can't handle interrupt-driven I²C cleanly.",
+      "description": "Event mode opens a communication window (RDY low) only for an enabled\nevent (touch or prox change, a reset); lowest power, lowest CPU\noverhead. init() selects event mode. Streaming mode opens one every\nreport cycle; the chip then waits up to the I2C timeout (200 ms) for\nthe host each time, so use it only with the RDY pin and a host that\nservices every window (continuous logging of counts).",
       "name": "tile_sense_t_c_set_comm_mode"
     },
     {
       "signature": "uint8_t tile_sense_t_c_is_touched_any(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -546,10 +628,6 @@
     {
       "signature": "uint8_t tile_sense_t_c_wait_for_touch(tile_t *tile, uint32_t timeout_ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "timeout_ms",
           "description": "Maximum time to wait, in milliseconds"
@@ -567,10 +645,6 @@
       "signature": "uint16_t tile_sense_t_c_wait_for_gesture(tile_t *tile, uint32_t timeout_ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "timeout_ms",
           "description": "Maximum time to wait, in milliseconds"
         }
@@ -587,10 +661,6 @@
       "signature": "uint8_t tile_sense_t_c_read_slider_pct(tile_t *tile, uint8_t *out_pct)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "out_pct",
           "description": "Pointer to receive the percentage (0–100)"
         }
@@ -600,22 +670,37 @@
       "studio_section": "runtime",
       "return": "1 on success, 0 on read failure (out_pct unmodified)",
       "brief": "Read the slider position scaled to 0–100 percent.",
-      "description": "The IQS323 slider register reports a 10-bit position in the range\n0–1023. This helper integer-scales it to a 0–100 percentage and\nstores the result through `out_pct`. Returns 0 if the read\nreturned an invalid (out-of-window) response — `out_pct` is\nuntouched in that case so callers can keep the previous value.\n\nLike @ref tile_sense_t_c_get_slider, this requires a valid slider\nconfiguration (multi-channel — two Sense.T.C tiles chained, or\npad 8 wired to a second electrode). A single tile surface alone\ncannot produce a slider output.",
+      "description": "The IQS323 slider position runs 0..Slider Resolution (register\n0x93, datasheet §7.4). This helper reads both and integer-scales\nthe position to 0–100 through `out_pct`. Returns 0 if either read\nreturned an invalid (out-of-window) response, or if the resolution\nis 0 (no slider configured): `out_pct` is untouched in that case so\ncallers can keep the previous value.\n\nLike @ref tile_sense_t_c_get_slider, this requires a valid slider\nconfiguration on this chip (the surface plus an electrode on pad 8).\nA single tile surface alone cannot produce a slider output.",
       "name": "tile_sense_t_c_read_slider_pct"
     },
     {
       "signature": "uint16_t tile_sense_t_c_read_reg(tile_t *tile, uint8_t reg)",
-      "params": [],
+      "params": [
+        {
+          "name": "reg",
+          "description": "[0..255] Register address (datasheet §9 memory map)"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
+      "return": "Register value, 0xEEEE if no comms window opened",
       "brief": "Read a raw 16-bit IQS323 register.",
       "description": "",
       "name": "tile_sense_t_c_read_reg"
     },
     {
       "signature": "void tile_sense_t_c_write_reg(tile_t *tile, uint8_t reg, uint16_t value)",
-      "params": [],
+      "params": [
+        {
+          "name": "reg",
+          "description": "[0..255] Register address (datasheet §9 memory map)"
+        },
+        {
+          "name": "value",
+          "description": "16-bit value"
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
@@ -625,12 +710,7 @@
     },
     {
       "signature": "void tile_sense_t_c_reseed(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -641,10 +721,6 @@
     {
       "signature": "void tile_sense_t_c_set_report_rate(tile_t *tile, sense_t_c_power_mode_t mode, uint16_t ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "mode",
           "description": "Which power mode's rate to set (NORMAL/LOW/ULTRA_LOW/HALT)."
@@ -658,35 +734,27 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the report rate (conversion interval) for a power mode.",
-      "description": "Writes the per-mode report-rate register (NP 0xC1 / LP 0xC2 / ULP 0xC3\n/ HALT 0xC4) in plain milliseconds (clamped 0-3000). This is the tile's\nheadline power/latency knob — faster rate = lower latency, higher\ncurrent. Only the four reporting modes have a rate; AUTO/AUTO_NO_ULP\nare ignored.",
+      "description": "Writes the per-mode report-rate register (NP 0xC1 / LP 0xC2 / ULP 0xC3\n/ HALT 0xC4) in plain milliseconds (clamped 0-3000). This is the tile's\nheadline power/latency knob — faster rate = lower latency, higher\ncurrent. Only the four reporting modes have a rate; AUTO/AUTO_NO_ULP\nare ignored. init() writes Azoteq's EV-kit values, NP 16 ms, LP 60 ms,\nULP 160 ms, Halt 3000 ms (the chip's reset value is 0 for all four).\nThese are lost if the chip resets; process() restores the defaults.",
       "name": "tile_sense_t_c_set_report_rate"
     },
     {
       "signature": "void tile_sense_t_c_set_power_timeout(tile_t *tile, uint16_t ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "ms",
-          "description": "Inactivity timeout in milliseconds (0-65000, 0 = off)."
+          "description": "[0..65000] Inactivity timeout in milliseconds (0 = off)."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the auto power-mode step-down timeout.",
-      "description": "Writes POWER_TIMEOUT (0xC5) in milliseconds. In AUTO / AUTO_NO_ULP the\nchip steps down a power mode after this much inactivity; 0 disables\nauto step-down.",
+      "description": "Writes POWER_TIMEOUT (0xC5) in milliseconds. In AUTO / AUTO_NO_ULP the\nchip steps down a power mode after this much inactivity; 0 disables\nauto step-down. init() writes Azoteq's EV-kit 2000 ms (the chip's reset\nvalue is 0).",
       "name": "tile_sense_t_c_set_power_timeout"
     },
     {
       "signature": "uint16_t tile_sense_t_c_get_compensation(tile_t *tile, uint8_t channel)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "channel",
           "description": "0-2."
@@ -703,10 +771,6 @@
     {
       "signature": "void tile_sense_t_c_set_compensation(tile_t *tile, uint8_t channel, uint16_t value, uint8_t divider)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "channel",
           "description": "0-2."
@@ -729,8 +793,79 @@
     }
   ],
   "source_file": "tile_sense_t_c.h",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "tile_family": "Sense",
   "tile_name": "T.C",
-  "display_name": "Sense.T.C"
+  "display_name": "Sense.T.C",
+  "vibe_settings": [
+    {
+      "label": "Touch threshold",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_touch_threshold",
+      "param": "threshold",
+      "kind": "number",
+      "range": [
+        1,
+        255
+      ],
+      "default": 40
+    },
+    {
+      "label": "Proximity threshold",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_prox_threshold",
+      "param": "threshold",
+      "kind": "number",
+      "range": [
+        1,
+        255
+      ],
+      "default": 20
+    },
+    {
+      "label": "Power mode",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_power_mode",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Normal power mode",
+        "Low power mode",
+        "Ultra-low power mode",
+        "Halt (lowest power)",
+        "Auto power mode switching",
+        "Auto mode, skip ultra-low power"
+      ],
+      "default": "Auto power mode switching"
+    },
+    {
+      "label": "I2C reporting",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_comm_mode",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "Continuous reporting at the configured power-mode rate (the chip's reset default)",
+        "RDY pulses only on enabled events (what init() selects)"
+      ],
+      "default": "RDY pulses only on enabled events (what init() selects)"
+    },
+    {
+      "label": "Idle time before low power",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_power_timeout",
+      "param": "ms",
+      "kind": "number",
+      "range": [
+        0,
+        65000
+      ],
+      "default": 2000
+    }
+  ]
 }
