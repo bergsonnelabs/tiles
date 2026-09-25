@@ -37,11 +37,13 @@ const ST_VALID = 1 << 0;
 const ST_SAMPLING = 1 << 1;
 const ST_CALIBRATED = 1 << 2;
 
-// STM32L011 datasheet: Run mode at 32 MHz from HSI16+PLL, VCORE 1.8 V,
-// 4.7 mA typ. The ADC adds 40 uA on VDDA at 10 ksps rising to 200 uA at
-// 1.14 Msps; the default settings sweep 6 channels 800 times a second, so
-// about 4.8 ksps and the low end of that range.
-const RUN_UA = 4700;
+// STM32L011 datasheet (Table 22): Run mode from flash at 32 MHz on HSI,
+// Range 1, 5.4 mA typ (5.9 max); the firmware's main loop never sleeps. The
+// ADC's asynchronous clock keeps HSI16 on, which the datasheet puts at
+// 100 uA. The ADC adds 40 uA on VDDA at 10 ksps rising to 200 uA at
+// 1.14 Msps (Table 54); the default settings sweep 6 channels 800 times a
+// second, so about 4.8 ksps and the low end of that range.
+const RUN_UA = 5400 + 100;
 const ADC_UA_AT_10KSPS = 40;
 const ADC_UA_AT_1140KSPS = 200;
 
@@ -190,16 +192,19 @@ const sim: TileSim<State> = {
 
   hostCalls: {
     tile_sense_adc_6_find: () => ({ scalar: 1 }),
-    tile_sense_adc_6_init: () => ({ scalar: 0 }),
+    // init reads the supply once: the tile measures it at its own power-up.
+    tile_sense_adc_6_init: ({ state }) => ({
+      scalar: 0,
+      nextState: { read_supply_mv: Math.round(state.supply_mv) },
+    }),
 
     // One transaction fetches status, sequence and all six channels, so the
-    // set is coherent by construction; the driver latches it (plus the supply)
-    // and every getter below reads that copy.
+    // set is coherent by construction; the driver latches it and every getter
+    // below reads that copy.
     tile_sense_adc_6_update: ({ state }) => {
       const next: Partial<State> = {
         read_status: ST_VALID | ST_SAMPLING | ST_CALIBRATED,
         read_seq: state.seq & 0xff,
-        read_supply_mv: Math.round(state.supply_mv),
       };
       for (let ch = 0; ch < CHANNELS; ch++) next[READS[ch]!] = chMv(state, ch);
       return { scalar: 1, nextState: next };

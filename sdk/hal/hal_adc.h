@@ -106,6 +106,7 @@ typedef struct {
 
     /* VREFINT calibration cache — computed lazily on first read_mv call */
     uint32_t              vdda_mv;       /* 0 = not yet measured */
+    bool                  vdda_calibrated; /* vdda_mv came from VREFINT, not the 3.3 V fallback */
 
     /* External trigger, applied by hal_adc_start_dma. Edge NONE means
      * free-running continuous mode, which is the historic behavior. */

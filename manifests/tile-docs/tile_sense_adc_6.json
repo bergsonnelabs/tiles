@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@f07f598",
+  "source": "tiles@69a297c",
   "file": "tile_sense_adc_6.h",
   "brief": "Six-channel ADC input driver for the Sense.ADC.6 tile.",
-  "description": "@version 1.0.0\n\nSense.ADC.6 turns six analog inputs into calibrated millivolt readings\nserved over I2C, so a host reads voltages instead of managing an ADC.\nAll sampling, filtering and timing happen on the tile. It sweeps the six\nchannels continuously at a paced rate and publishes a filtered set at a\nconfigurable output rate, 100 Hz by default.\n\nEvery published set is coherent: all six channels come from the same\ninstant, never a mix of old and new, and each set carries a sequence\nnumber so a host can tell a fresh reading from a repeat. Readings span\n0 V to the tile's own supply and are calibrated against an internal\nreference, so they track the rail rather than assuming it. The supply is\nreadable too, which doubles as the full-scale value.\n\nChannels map to pads in order:\n\n  CH0 pad 2   CH1 pad 3   CH2 pad 6\n  CH3 pad 7   CH4 pad 8   CH5 pad 9\n\nInputs accept source impedances up to roughly 30-50 kOhm; above that,\nadd a buffer or an RC at the input. Output rate (1-250 Hz), sweeps\naveraged per period (1-32) and filter-window length are all settable at\nruntime and can be stored on the tile to survive a reboot.\n\n\nOutput rate and filtering are configurable at runtime. The averaging\nwindow doubles as mains rejection, because a boxcar over N periods\nnulls every multiple of rate/N:\n\n  100 Hz, window 1   default, 10 ms average\n  100 Hz, window 2   20 ms average, nulls 50 Hz\n  120 Hz, window 2   16.7 ms average, nulls 60 Hz\n   10 Hz, window 1   100 ms average, nulls both\n\nThe default (100 Hz, window 1) passes 50 Hz at only -3.9 dB, so pick\na rejection setting if the sensor leads can pick up mains.\n\nSeveral tiles share a bus. Each needs its own address, stored on the\ntile with tile_sense_adc_6_set_address(), which takes effect at its\nnext power-up. Read the settings back any time: they are live values,\nnot a copy of what you asked for.\n\nPoll a little faster than the output rate and use the sequence number\nto spot repeats, since the tile's clock and yours drift apart by a\npercent or so.\n\n@studio tile label=Sense.ADC.6 icon=∿\n\n@studio unsupported severity=common category=\"Raw counts / ratiometric output\" section=runtime\n  Readings are calibrated millivolts only. For a divider powered from\n  the tile's own rail, a ratio of full scale would cancel supply\n  variation exactly and be more accurate than millivolts. Needs a\n  format setting on the tile.\n\n@studio unsupported severity=advanced category=\"Sampling-time control\" section=config\n  The ADC's per-sample acquisition time is fixed. Exposing it would\n  let high-impedance sources (above ~50 kOhm) settle properly.\n\n@studio unsupported severity=advanced category=\"Data-ready output\" section=events\n  No interrupt line: every pad is taken by the six inputs, the bus and\n  power, so a host must poll. Reading the sequence number tells you\n  whether a set is new.\n\n@studio unsupported severity=niche category=\"Synchronized sampling across tiles\" section=advanced\n  Each tile free-runs on its own clock, so several tiles on one bus\n  drift apart by a percent or so and their samples are not aligned in\n  time. An I2C general-call latch would fix it.\n\n@studio unsupported severity=niche category=\"Per-channel enable\" section=config\n  All six channels are always sampled. Disabling unused ones would\n  shorten each sweep and save power.",
+  "description": "@version 1.1.0\n\nSense.ADC.6 turns six analog inputs into calibrated millivolt readings\nserved over I2C, so a host reads voltages instead of managing an ADC.\nAll sampling, filtering and timing happen on the tile. It sweeps the six\nchannels continuously at a paced rate and publishes a filtered set at a\nconfigurable output rate, 100 Hz by default.\n\nEvery published set is coherent: all six channels come from the same\ninstant, never a mix of old and new, and each set carries a sequence\nnumber so a host can tell a fresh reading from a repeat. Readings span\n0 V to the tile's own supply, which the tile measures against its\ninternal reference once, at power-up, and uses as full scale. The\nsupply is readable too. A rail that moves after power-up is not\ntracked; power the tile from a steady supply, or reset it after a change.\n\nChannels map to pads in order:\n\n  CH0 pad 2   CH1 pad 3   CH2 pad 6\n  CH3 pad 7   CH4 pad 8   CH5 pad 9\n\nInputs accept source impedances up to roughly 30-50 kOhm (each\nsample is taken over about 10 us); above that, add a buffer or an RC at\nthe input. CH1 and CH4 are the MCU's fast channels, specified down to\na 1.65 V supply; the others need at least 1.75 V. Output rate (1-250 Hz), sweeps\naveraged per period (1-32) and filter-window length are all settable at\nruntime and can be stored on the tile to survive a reboot.\n\n\nOutput rate and filtering are configurable at runtime. The averaging\nwindow doubles as mains rejection, because a boxcar over N periods\nnulls every multiple of rate/N:\n\n  100 Hz, window 1   default, 10 ms average\n  100 Hz, window 2   20 ms average, nulls 50 Hz\n  120 Hz, window 2   16.7 ms average, nulls 60 Hz\n   10 Hz, window 1   100 ms average, nulls both\n\nThe default (100 Hz, window 1) passes 50 Hz at only -3.9 dB, so pick\na rejection setting if the sensor leads can pick up mains.\n\nSeveral tiles share a bus. Each needs its own address, stored on the\ntile with tile_sense_adc_6_set_address(), which takes effect at its\nnext power-up. Instances 0-3 are 0x28-0x2B; any other address is\nreached with cfg.address. Read the settings back any time: they are live values,\nnot a copy of what you asked for.\n\nPoll a little faster than the output rate and use the sequence number\nto spot repeats, since the tile's clock and yours drift apart by a\npercent or so.\n\n@studio tile label=Sense.ADC.6 icon=∿\n\n@studio unsupported severity=common category=\"Raw counts / ratiometric output\" section=runtime\n  Readings are calibrated millivolts only. For a divider powered from\n  the tile's own rail, a ratio of full scale would cancel supply\n  variation exactly and be more accurate than millivolts. Needs a\n  format setting on the tile.\n\n@studio unsupported severity=advanced category=\"Sampling-time control\" section=config\n  The ADC's per-sample acquisition time is fixed. Exposing it would\n  let high-impedance sources (above ~50 kOhm) settle properly.\n\n@studio unsupported severity=advanced category=\"Data-ready output\" section=events\n  No interrupt line: every pad is taken by the six inputs, the bus and\n  power, so a host must poll. Reading the sequence number tells you\n  whether a set is new.\n\n@studio unsupported severity=niche category=\"Synchronized sampling across tiles\" section=advanced\n  Each tile free-runs on its own clock, so several tiles on one bus\n  drift apart by a percent or so and their samples are not aligned in\n  time. An I2C general-call latch would fix it.\n\n@studio unsupported severity=niche category=\"Per-channel enable\" section=config\n  All six channels are always sampled. Disabling unused ones would\n  shorten each sweep and save power.",
   "code_examples": [
     {
       "label": "Typical use (Cores SDK)",
@@ -52,7 +52,7 @@
     },
     {
       "name": "TILE_SENSE_ADC_6_VERSION_MINOR",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -102,6 +102,18 @@
       "name": "SENSE_ADC_6_WINDOW_MAX",
       "value": "2",
       "description": "periods averaged",
+      "section": ""
+    },
+    {
+      "name": "SENSE_ADC_6_SWEEPS_MAX",
+      "value": "32",
+      "description": "oversamp x window, the tile's sample ring",
+      "section": ""
+    },
+    {
+      "name": "SENSE_ADC_6_SWEEP_HZ_MAX",
+      "value": "8000",
+      "description": "rate x oversamp, sweeps per second",
       "section": ""
     }
   ],
@@ -256,7 +268,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "The tile's measured supply in millivolts, which is also the full-scale input voltage.",
-      "description": "",
+      "description": "Measured by the tile once, at its power-up; the driver reads it at init.",
       "name": "tile_sense_adc_6_supply_mv"
     },
     {
@@ -280,7 +292,7 @@
       "studio_section": "config",
       "return": "1 if applied, 0 if rejected",
       "brief": "Set output rate and averaging.",
-      "description": "Applied as a set, because the three only make sense together. Takes\neffect within one output period; readings are marked invalid until\nthe filter has refilled, so you never average across the change.\n\nLimits: oversamp x window at most 32 sweeps, and rate x oversamp at\nmost 8000 sweeps per second. Out-of-range combinations are rejected\nand the tile keeps running as it was.",
+      "description": "Applied as a set, because the three only make sense together. The\ntile restarts acquisition within a few milliseconds; readings are\nmarked invalid until the filter has refilled (window output periods),\nso you never average across the change. Live only: save() stores it.\n\nLimits: oversamp x window at most 32 sweeps, and rate x oversamp at\nmost 8000 sweeps per second. Out-of-range combinations are rejected\n(without touching the bus) and the tile keeps running as it was.",
       "name": "tile_sense_adc_6_set_rate"
     },
     {
@@ -321,7 +333,7 @@
       "studio_section": "config",
       "return": "1 on success, 0 on failure",
       "brief": "Store the current settings on the tile so they survive a power cycle.",
-      "description": "Writes the tile's non-volatile memory, which holds the bus for up to\nabout 30 ms and only writes what actually changed. Do it on a bench,\nnot while other tiles are being polled on the same bus.",
+      "description": "Stores the live rate, oversamp and window, plus the address staged for\nthe next power-up (unchanged unless set_address() staged a new one).\nWrites the tile's non-volatile memory, which holds the bus for up to\nabout 30 ms and only writes what actually changed. Do it on a bench,\nnot while other tiles are being polled on the same bus.",
       "name": "tile_sense_adc_6_save"
     },
     {
@@ -337,7 +349,7 @@
       "studio_section": "advanced",
       "return": "1 if stored, 0 if rejected or the write failed",
       "brief": "Give the tile a new I2C address, stored permanently.",
-      "description": "For several tiles on one bus. The new address takes effect at the\ntile's NEXT POWER-UP, not immediately, so this handle keeps working\nuntil then. Address one tile at a time: they all ship on the same\ndefault address, so give each its own before putting them on a shared\nbus.",
+      "description": "For several tiles on one bus. The new address takes effect at the\ntile's NEXT POWER-UP, not immediately, so this handle keeps working\nuntil then. Address one tile at a time: they all ship on the same\ndefault address, so give each its own before putting them on a shared\nbus. Storing the address also stores the current rate settings, as\nsave() does.",
       "name": "tile_sense_adc_6_set_address"
     },
     {
@@ -356,8 +368,59 @@
     }
   ],
   "source_file": "tile_sense_adc_6.h",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "tile_family": "Sense",
   "tile_name": "ADC.6",
-  "display_name": "Sense.ADC.6"
+  "display_name": "Sense.ADC.6",
+  "vibe_settings": [
+    {
+      "label": "Output rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_rate",
+      "param": "rate_hz",
+      "kind": "number",
+      "range": [
+        1,
+        250
+      ],
+      "default": 100
+    },
+    {
+      "label": "Averaging window (periods)",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_rate",
+      "param": "window",
+      "kind": "number",
+      "range": [
+        1,
+        2
+      ],
+      "default": 1
+    },
+    {
+      "label": "Sweeps per period",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_rate",
+      "param": "oversamp",
+      "kind": "number",
+      "range": [
+        1,
+        32
+      ],
+      "default": 8
+    }
+  ],
+  "vibe_rules": [
+    {
+      "function": "set_rate",
+      "message": "Sweeps per period times the averaging window can't exceed 32, the size of the tile's sample buffer. Lower one of them."
+    },
+    {
+      "function": "set_rate",
+      "message": "Output rate times sweeps per period can't exceed 8000 sweeps a second. Lower the rate or the sweeps per period."
+    }
+  ]
 }

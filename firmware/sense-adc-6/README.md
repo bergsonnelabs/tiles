@@ -23,12 +23,12 @@ the tile has once I2C1 claims pads 4 and 5.
 |-----|-----------|-----------------|
 | 1   | GND       | ground          |
 | 2   | ADC3      | **CH0**         |
-| 3   | ADC0      | **CH1** (fast channel) |
+| 3   | ADC0      | **CH1** (fast channel: in spec down to 1.65 V) |
 | 4   | I2C1.CLK  | host bus        |
 | 5   | I2C1.DAT  | host bus        |
 | 6   | ADC1      | **CH2**         |
 | 7   | ADC2      | **CH3**         |
-| 8   | ADC5      | **CH4** (fast channel) |
+| 8   | ADC5      | **CH4** (fast channel: in spec down to 1.65 V) |
 | 9   | ADC8      | **CH5**         |
 | 10  | V+        | supply          |
 | 11  | BOOT0     | reserved        |
@@ -50,8 +50,8 @@ straight into a `uint16_t` array.
 | Offset | Name     | Notes                                          |
 |--------|----------|------------------------------------------------|
 | 0x00   | WHO_AM_I | `0x6D`, constant                               |
-| 0x01   | VERSION  | `0x12` = v1.2                                  |
-| 0x02   | STATUS   | bit0 valid, bit1 DMA running, bit2 VDDA calibrated |
+| 0x01   | VERSION  | `0x13` = v1.3                                  |
+| 0x02   | STATUS   | bit0 valid, bit1 DMA running, bit2 VDDA measured (clear = 3.3 V fallback) |
 | 0x03   | SEQ      | increments per published set, wraps at 255     |
 | 0x04   | CH0 mV   | pad 2                                          |
 | 0x06   | CH1 mV   | pad 3                                          |
@@ -59,7 +59,7 @@ straight into a `uint16_t` array.
 | 0x0A   | CH3 mV   | pad 7                                          |
 | 0x0C   | CH4 mV   | pad 8                                          |
 | 0x0E   | CH5 mV   | pad 9                                          |
-| 0x10   | VDDA mV  | measured supply, for host sanity checks        |
+| 0x10   | VDDA mV  | supply, measured once at power-up              |
 | 0x12   | ADDR_CUR | address this hub is answering on right now     |
 | 0x13   | ADDR_SET | **writable** — staged address                  |
 | 0x14   | COMMIT   | **writable** — save to EEPROM                  |
@@ -194,7 +194,16 @@ architectural decision here, not a default.
   goes out. That is what makes a burst read coherent.
 - VDDA is measured once at startup, **before** DMA starts. A VREFINT
   conversion under a running DMA rewrites the channel selection, which is
-  how the first silicon run failed.
+  how the first silicon run failed. So VDDA mV is a power-up value: a rail
+  that moves later is not tracked until the next reset.
+- The sampling time is set explicitly to 160.5 ADC cycles (about 10 us at
+  the 16 MHz HSI16 ADC clock) after VDDA is measured. The L0 has one
+  sampling time for all channels, and until v1.3 it only reached 160.5 as
+  a side effect of the VDDA measurement. Channels other than CH1 and CH4
+  need VDDA of at least 1.75 V to be in spec (STM32L011 datasheet,
+  Table 54); CH1 and CH4 are fast channels, specified down to 1.65 V.
+- Averages round to nearest (v1.3; earlier builds truncated, reading
+  half a count low).
 
 ## Build and flash
 
@@ -207,7 +216,7 @@ Flash over SWD with the CoreProbe (pads 13/14). The project Makefile's
 probe-rs:
 
 ```bash
-probe-rs download --probe 1209:da01 --chip STM32L011K4 --protocol swd build/l0-adc-mux.elf
+probe-rs download --probe 1209:da01 --chip STM32L011K4 --protocol swd build/sense-adc-6.elf
 ```
 
 ```bash
@@ -218,7 +227,7 @@ The L011 has no USB, so there is no DFU path.
 
 ## Status
 
-v1.2 builds clean at 6440 bytes flash and 820 bytes of static RAM (`size`
+v1.3 builds clean at 6560 bytes flash and 824 bytes of static RAM (`size`
 also counts the linker's 768-byte heap + stack reservation in bss).
 About 1.2 KB is left for stack; nothing uses the heap.
 

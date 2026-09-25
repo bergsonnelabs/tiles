@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_adc_6.h
  * @brief  Six-channel ADC input driver for the Sense.ADC.6 tile.
- * @version 1.0.0
+ * @version 1.1.0
  *
  * Sense.ADC.6 turns six analog inputs into calibrated millivolt readings
  * served over I2C, so a host reads voltages instead of managing an ADC.
@@ -12,17 +12,20 @@
  * Every published set is coherent: all six channels come from the same
  * instant, never a mix of old and new, and each set carries a sequence
  * number so a host can tell a fresh reading from a repeat. Readings span
- * 0 V to the tile's own supply and are calibrated against an internal
- * reference, so they track the rail rather than assuming it. The supply is
- * readable too, which doubles as the full-scale value.
+ * 0 V to the tile's own supply, which the tile measures against its
+ * internal reference once, at power-up, and uses as full scale. The
+ * supply is readable too. A rail that moves after power-up is not
+ * tracked; power the tile from a steady supply, or reset it after a change.
  *
  * Channels map to pads in order:
  *
  *   CH0 pad 2   CH1 pad 3   CH2 pad 6
  *   CH3 pad 7   CH4 pad 8   CH5 pad 9
  *
- * Inputs accept source impedances up to roughly 30-50 kOhm; above that,
- * add a buffer or an RC at the input. Output rate (1-250 Hz), sweeps
+ * Inputs accept source impedances up to roughly 30-50 kOhm (each
+ * sample is taken over about 10 us); above that, add a buffer or an RC at
+ * the input. CH1 and CH4 are the MCU's fast channels, specified down to
+ * a 1.65 V supply; the others need at least 1.75 V. Output rate (1-250 Hz), sweeps
  * averaged per period (1-32) and filter-window length are all settable at
  * runtime and can be stored on the tile to survive a reboot.
  *
@@ -53,7 +56,8 @@
  *
  * Several tiles share a bus. Each needs its own address, stored on the
  * tile with tile_sense_adc_6_set_address(), which takes effect at its
- * next power-up. Read the settings back any time: they are live values,
+ * next power-up. Instances 0-3 are 0x28-0x2B; any other address is
+ * reached with cfg.address. Read the settings back any time: they are live values,
  * not a copy of what you asked for.
  *
  * Poll a little faster than the output rate and use the sequence number
@@ -103,7 +107,7 @@ extern "C" {
  * ================================================================ */
 
 #define TILE_SENSE_ADC_6_VERSION_MAJOR  1
-#define TILE_SENSE_ADC_6_VERSION_MINOR  0
+#define TILE_SENSE_ADC_6_VERSION_MINOR  1
 #define TILE_SENSE_ADC_6_VERSION_PATCH  0
 
 /* ================================================================
@@ -124,11 +128,13 @@ extern "C" {
 #define SENSE_ADC_6_RATE_MAX      250   /**< output rate, Hz */
 #define SENSE_ADC_6_OVERSAMP_MAX  32    /**< sweeps averaged per period */
 #define SENSE_ADC_6_WINDOW_MAX    2     /**< periods averaged */
+#define SENSE_ADC_6_SWEEPS_MAX    32    /**< oversamp x window, the tile's sample ring */
+#define SENSE_ADC_6_SWEEP_HZ_MAX  8000  /**< rate x oversamp, sweeps per second */
 
 /** Status bits from tile_sense_adc_6_status(). */
 #define SENSE_ADC_6_ST_VALID      (1U << 0)  /**< readings are current */
 #define SENSE_ADC_6_ST_SAMPLING   (1U << 1)  /**< acquisition running */
-#define SENSE_ADC_6_ST_CALIBRATED (1U << 2)  /**< supply reference measured */
+#define SENSE_ADC_6_ST_CALIBRATED (1U << 2)  /**< supply measured against VREFINT (clear: 3.3 V assumed; tile firmware 1.3+) */
 
 /* ================================================================
  * Configuration
@@ -235,6 +241,8 @@ uint8_t tile_sense_adc_6_status(tile_t *tile);
  * @brief  The tile's measured supply in millivolts, which is also the
  *         full-scale input voltage.
  *
+ * Measured by the tile once, at its power-up; the driver reads it at init.
+ *
  * @studio expose category=tile name=supply_mv returns=int section=runtime
  */
 uint16_t tile_sense_adc_6_supply_mv(tile_t *tile);
@@ -246,15 +254,21 @@ uint16_t tile_sense_adc_6_supply_mv(tile_t *tile);
 /**
  * @brief  Set output rate and averaging.
  *
- * Applied as a set, because the three only make sense together. Takes
- * effect within one output period; readings are marked invalid until
- * the filter has refilled, so you never average across the change.
+ * Applied as a set, because the three only make sense together. The
+ * tile restarts acquisition within a few milliseconds; readings are
+ * marked invalid until the filter has refilled (window output periods),
+ * so you never average across the change. Live only: save() stores it.
  *
  * Limits: oversamp x window at most 32 sweeps, and rate x oversamp at
  * most 8000 sweeps per second. Out-of-range combinations are rejected
- * and the tile keeps running as it was.
+ * (without touching the bus) and the tile keeps running as it was.
  *
  * @studio expose category=tile name=set_rate returns=bool section=config
+ * @studio control rate_hz label="Output rate" tier=basic default=100 unit=Hz
+ * @studio control window label="Averaging window (periods)" tier=basic default=1
+ * @studio control oversamp label="Sweeps per period" tier=advanced default=8
+ * @studio require expr="oversamp * window <= 32" message="Sweeps per period times the averaging window can't exceed 32, the size of the tile's sample buffer. Lower one of them."
+ * @studio require expr="rate_hz * oversamp <= 8000" message="Output rate times sweeps per period can't exceed 8000 sweeps a second. Lower the rate or the sweeps per period."
  * @param  rate_hz   [1..250] Output rate in Hz.
  * @param  oversamp  [1..32] Sweeps averaged per output period.
  * @param  window    [1..2] Output periods averaged. 2 halves the null frequency.
@@ -285,6 +299,8 @@ uint8_t tile_sense_adc_6_get_window(tile_t *tile);
  * @brief  Store the current settings on the tile so they survive a
  *         power cycle.
  *
+ * Stores the live rate, oversamp and window, plus the address staged for
+ * the next power-up (unchanged unless set_address() staged a new one).
  * Writes the tile's non-volatile memory, which holds the bus for up to
  * about 30 ms and only writes what actually changed. Do it on a bench,
  * not while other tiles are being polled on the same bus.
@@ -305,7 +321,8 @@ uint8_t tile_sense_adc_6_save(tile_t *tile);
  * tile's NEXT POWER-UP, not immediately, so this handle keeps working
  * until then. Address one tile at a time: they all ship on the same
  * default address, so give each its own before putting them on a shared
- * bus.
+ * bus. Storing the address also stores the current rate settings, as
+ * save() does.
  *
  * @studio expose category=tile name=set_address returns=bool section=advanced
  * @param  addr  [8..119] New 7-bit address. 0x08 to 0x77.

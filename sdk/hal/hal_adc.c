@@ -401,7 +401,7 @@ hal_status_t hal_adc_init(hal_adc_t *adc, ADC_TypeDef *instance,
     instance->CFGR1 = LL_ADC_CFGR1_OVRMOD;   /* overwrite on overrun */
     /* Apply resolution to CFGR1[4:3] */
     MOD_BITS(instance->CFGR1, 0x3UL << 3, _res_encode(res) << 3);
-    instance->CFGR2 = 0;  /* PCLK synchronous (no async clock) */
+    instance->CFGR2 = 0;  /* CKMODE=00: asynchronous ADCCLK, HSI16 (RM0377 §13.3.5) */
 
     ll_adc_calibrate(instance);
 
@@ -497,9 +497,8 @@ hal_status_t hal_adc_init(hal_adc_t *adc, ADC_TypeDef *instance,
 hal_status_t hal_adc_add_channel(hal_adc_t *adc, uint8_t channel,
                                  hal_adc_samp_t samp)
 {
-    if (adc->n_channels >= HAL_ADC_MAX_CHANNELS) return HAL_ERROR;
-
-    /* Check if channel already registered; update samp if so */
+    /* Check if channel already registered; update samp if so (a full
+     * table must still accept that). */
     for (uint8_t i = 0; i < adc->n_channels; i++) {
         if (adc->channels[i].channel == channel) {
             adc->channels[i].samp = samp;
@@ -507,6 +506,7 @@ hal_status_t hal_adc_add_channel(hal_adc_t *adc, uint8_t channel,
             return HAL_OK;
         }
     }
+    if (adc->n_channels >= HAL_ADC_MAX_CHANNELS) return HAL_ERROR;
 
     adc->channels[adc->n_channels].channel = channel;
     adc->channels[adc->n_channels].samp    = samp;
@@ -652,13 +652,22 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
 #else
     uint16_t vref_cal = _cal_read(VREFINT_CAL_ADDR);
 
-    if (vref_raw == 0 || vref_cal == 0 || vref_cal >= 0xFFF) return 3300UL;
-
-    /* VDDA = VREFINT_CAL_VDD_MV * vref_cal / vref_raw */
-    uint32_t vdda = (VREFINT_CAL_VDD_MV * (uint32_t)vref_cal) / (uint32_t)vref_raw;
-    /* Outside every Core's supply range means a bad read (wrong channel,
-     * sampling too short): report nominal rather than a nonsense VDDA. */
-    if (vdda < 1600UL || vdda > 3700UL) vdda = 3300UL;
+    /* A bad read or missing calibration falls back to nominal 3.3 V, and
+     * still goes through the channel cleanup and the cache below: an
+     * early return here used to leave VREFINT in the scan list and the
+     * fallback uncached. */
+    uint32_t vdda = 3300UL;
+    bool calibrated = false;
+    if (vref_raw != 0 && vref_cal != 0 && vref_cal < 0xFFF) {
+        /* VDDA = VREFINT_CAL_VDD_MV * vref_cal / vref_raw */
+        uint32_t v = (VREFINT_CAL_VDD_MV * (uint32_t)vref_cal) / (uint32_t)vref_raw;
+        /* Outside every Core's supply range means a bad read (wrong
+         * channel, sampling too short): keep nominal instead. */
+        if (v >= 1600UL && v <= 3700UL) {
+            vdda = v;
+            calibrated = true;
+        }
+    }
 #endif
 
     /* Remove the channel if we added it ourselves */
@@ -681,6 +690,11 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
      * VDDA and threw it away. That meant "prime VDDA before DMA" never
      * primed, and the first raw_to_mv call converted mid-DMA. */
     adc->vdda_mv = vdda;
+#if defined(STM32H523xx)
+    adc->vdda_calibrated = false;
+#else
+    adc->vdda_calibrated = calibrated;
+#endif
     return vdda;
 }
 
