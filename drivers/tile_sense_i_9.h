@@ -192,6 +192,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* Bank 2 registers */
 #define ICM20948_REG_GYRO_SMPLRT      0x00
 #define ICM20948_REG_GYRO_CONFIG      0x01
+#define ICM20948_REG_GYRO_CONFIG_2    0x02  /**< Gyro self-test enables [5:3] + LP averaging */
 #define ICM20948_REG_ACCEL_SMPLRT_H   0x10
 #define ICM20948_REG_ACCEL_SMPLRT_L   0x11
 #define ICM20948_REG_ACCEL_INTEL_CTRL 0x12  /**< WoM enable + mode */
@@ -454,7 +455,7 @@ void tile_sense_i_9_set_mag_mode(tile_t* tile, sense_i_9_mag_mode_t mode);
  *   divider = 44  →   25 Hz
  *
  * @param  tile     Pointer to tile handle
- * @param  divider  11-bit sample rate divider (0–4095)
+ * @param  divider  [0..4095] 12-bit ACCEL_SMPLRT_DIV (DS-000189 §10.11)
  */
 void tile_sense_i_9_set_accel_odr(tile_t* tile, uint16_t divider);
 
@@ -462,10 +463,11 @@ void tile_sense_i_9_set_accel_odr(tile_t* tile, uint16_t divider);
  * @brief  Set the gyroscope output data rate.
  * @studio expose category=tile name=set_gyro_odr section=runtime
  *
- * ODR = 1100 / (1 + divider) Hz.
+ * ODR = 1125 / (1 + divider) Hz (DS-000189 Table 16; divider only applies
+ * while the DLPF is on, which init and set_gyro_range leave enabled).
  *
  * @param  tile     Pointer to tile handle
- * @param  divider  8-bit sample rate divider (0–255)
+ * @param  divider  [0..255] 8-bit GYRO_SMPLRT_DIV
  */
 void tile_sense_i_9_set_gyro_odr(tile_t* tile, uint8_t divider);
 
@@ -841,8 +843,7 @@ uint8_t tile_sense_i_9_mag_self_test(tile_t* tile);
 /* the ICM-20948 datasheet to detect a flip or read a heading.     */
 /*                                                                  */
 /* All conversions are integer-only so they run cheaply on the     */
-/* Cortex-M0+ in Core.ST.L4 / Core.ST.W5 without pulling in the soft-FP    */
-/* library.                                                         */
+/* Cores without pulling in soft-float code.                       */
 /* ============================================================== */
 
 /**
@@ -857,9 +858,9 @@ uint8_t tile_sense_i_9_mag_self_test(tile_t* tile);
  * tilted-but-mostly-up orientations also count as face-up.
  *
  * @note  Assumes the accel range is the default ±2 g configured by
- *        @ref tile_sense_i_9_init. If the range was changed, the
- *        thresholds remain proportional (band is in fractions of
- *        full-scale) so behaviour is unaffected.
+ *        @ref tile_sense_i_9_init. The thresholds are raw counts fixed
+ *        for ±2 g (1 g = 16384 LSB), so after set_accel_range to ±4 g
+ *        or wider this never returns 1.
  *
  * @param  tile  Initialized tile handle
  * @return 1 if face-up, 0 otherwise
@@ -893,8 +894,9 @@ uint8_t tile_sense_i_9_is_face_down(tile_t* tile);
  * comparison: it checks the squared deviation against the squared
  * threshold to avoid a square root.
  *
- * @note  Assumes ±2 g range (init default). Other ranges still work
- *        but the noise floor scales with full-scale.
+ * @note  Assumes ±2 g range (init default): 1 g is taken as 16384 LSB.
+ *        After set_accel_range the result is wrong (at ±4 g a resting
+ *        tile reads as 0.5 g, i.e. "moving" for thresholds < 500 mg).
  *
  * @param  tile          Initialized tile handle
  * @param  threshold_mg  Deviation from 1 g, in milli-g
@@ -905,13 +907,15 @@ uint8_t tile_sense_i_9_is_moving(tile_t* tile, uint16_t threshold_mg);
 /**
  * @brief  Read the tilt of one accel axis vs gravity, in centi-degrees.
  *
- * @studio expose category=tile name=read_tilt_centi_degrees section=runtime
- *
  * Returns the angle (in 0.01° units) between the requested axis and
- * the gravity vector. Range is −18000..+18000 centi-degrees
- * (−180.00°..+180.00°). Computed from `atan2(other_components,
- * axis)` using an integer approximation; absolute accuracy is
- * roughly ±1° in the noise-free case.
+ * the measured +1 g reaction vector (the "up" direction when at rest).
+ * Range is 0..18000 centi-degrees (0.00°..180.00°); the value is never
+ * negative. Computed from `atan2(|other_components|, axis)` using an
+ * integer approximation; worst-case error about 0.15° in the
+ * noise-free case.
+ *
+ * @note  Semantics differ from Sense.I.6P6's read_tilt_centi_degrees,
+ *        which returns the axis's elevation above horizontal (−90..+90°).
  *
  * Axis selector:
  *   0 = X axis (pitch around Y, with the chip lying on its back)
@@ -920,15 +924,28 @@ uint8_t tile_sense_i_9_is_moving(tile_t* tile, uint16_t threshold_mg);
  *
  * @param  tile           Initialized tile handle
  * @param  axis           0/1/2 selecting X, Y, or Z
- * @param  out_centi_deg  Output tilt in 0.01° units (signed)
+ * @param  out_centi_deg  Output tilt in 0.01° units (0..18000)
  */
 void tile_sense_i_9_read_tilt_centi_degrees(tile_t* tile, uint8_t axis,
                                             int16_t* out_centi_deg);
 
 /**
- * @brief  Read a compass heading from the magnetometer, in centi-degrees.
+ * @brief  Angle between one accel axis and "up", in 0.01° (int32 out).
  *
- * @studio expose category=tile name=read_heading_centi_degrees section=runtime
+ * Flat-output variant of read_tilt_centi_degrees(): same computation; the angle is written through an int32_t so Studio's
+ * out-scalar locals (32-bit) receive it without a width mismatch.
+ *
+ * @studio expose category=tile name=read_tilt_centi_degrees section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ * @param  tile           Initialized tile handle.
+ * @param  axis           [0..2] 0 = X, 1 = Y, 2 = Z.
+ * @param  out_centi_deg  Output: angle between the axis and "up", 0.01° (0..18000).
+ */
+void tile_sense_i_9_read_tilt_centi_degrees_flat(tile_t* tile, uint8_t axis,
+                                                 int32_t* out_centi_deg);
+
+/**
+ * @brief  Read a compass heading from the magnetometer, in centi-degrees.
  *
  * Returns the bearing of the +X axis relative to magnetic north in
  * 0.01° units, range 0..35999 (0.00°..359.99°). 0° means +X is
@@ -952,11 +969,28 @@ void tile_sense_i_9_read_tilt_centi_degrees(tile_t* tile, uint8_t axis,
  *           sensor in its final enclosure before relying on the
  *           heading.
  *
+ * @warning  The AK09916 axes are not the accel/gyro axes (DS-000189
+ *           Figure 13); the driver applies no remap yet. Bench-unverified.
+ *
  * @param  tile           Initialized tile handle
  * @param  out_centi_deg  Output heading in 0.01° units (0..35999)
  */
 void tile_sense_i_9_read_heading_centi_degrees(tile_t* tile,
                                                uint16_t* out_centi_deg);
+
+/**
+ * @brief  Compass heading of +X from magnetic north, in 0.01° (int32 out).
+ *
+ * Flat-output variant of read_heading_centi_degrees(): same computation; the heading is written through an int32_t so Studio's
+ * out-scalar locals (32-bit) receive it without a width mismatch.
+ *
+ * @studio expose category=tile name=read_heading_centi_degrees section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ * @param  tile           Initialized tile handle.
+ * @param  out_centi_deg  Output: heading of +X from magnetic north, 0.01° (0..35999).
+ */
+void tile_sense_i_9_read_heading_centi_degrees_flat(tile_t* tile,
+                                                    int32_t* out_centi_deg);
 
 /**
  * @brief  Block until a Wake-on-Motion event fires, or timeout.

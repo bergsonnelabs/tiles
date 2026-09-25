@@ -222,15 +222,20 @@ uint8_t tile_sense_i_9_data_ready(tile_t* tile)
 
 void tile_sense_i_9_set_accel_range(tile_t* tile, sense_i_9_accel_range_t range)
 {
+    /* ACCEL_CONFIG: [5:3] DLPFCFG, [2:1] FS_SEL, [0] FCHOICE (DS-000189
+     * §10.15). Touch only FS_SEL: a whole-register write cleared FCHOICE,
+     * bypassing the DLPF and the sample-rate divider (4.5 kHz, unfiltered). */
     set_bank(tile, ICM20948_BANK_2);
-    icm_write(tile, ICM20948_REG_ACCEL_CONFIG, (uint8_t)range);
+    icm_modify(tile, ICM20948_REG_ACCEL_CONFIG, 0x06, (uint8_t)range);
     set_bank(tile, ICM20948_BANK_0);
 }
 
 void tile_sense_i_9_set_gyro_range(tile_t* tile, sense_i_9_gyro_range_t range)
 {
+    /* GYRO_CONFIG_1: [5:3] DLPFCFG, [2:1] FS_SEL, [0] FCHOICE (§10.2).
+     * Same read-modify-write as the accel setter. */
     set_bank(tile, ICM20948_BANK_2);
-    icm_write(tile, ICM20948_REG_GYRO_CONFIG, (uint8_t)range);
+    icm_modify(tile, ICM20948_REG_GYRO_CONFIG, 0x06, (uint8_t)range);
     set_bank(tile, ICM20948_BANK_0);
 }
 
@@ -572,8 +577,9 @@ uint8_t tile_sense_i_9_self_test(tile_t* tile,
     set_bank(tile, ICM20948_BANK_2);
     /* ACCEL_CONFIG_2: bits [4:2] = AX/AY/AZ_ST_EN, [1:0] DEC3 = 0 */
     icm_write(tile, ICM20948_REG_ACCEL_CONFIG_2, 0x1C);
-    /* GYRO_CONFIG sets self-test enable in bits [7:5]: XG_ST | YG_ST | ZG_ST */
-    icm_write(tile, ICM20948_REG_GYRO_CONFIG, (uint8_t)(0xE0 | 0x01));
+    /* Gyro self-test enables live in GYRO_CONFIG_2 [5:3] = X/Y/Z GYRO_CTEN
+     * (DS-000189 §10.3). GYRO_CONFIG_1 bits [7:6] are reserved. */
+    icm_write(tile, ICM20948_REG_GYRO_CONFIG_2, 0x38);
     set_bank(tile, ICM20948_BANK_0);
     hal->delay_ms(50);  /* Datasheet: ≥ 20 ms for the response to settle */
 
@@ -590,7 +596,7 @@ uint8_t tile_sense_i_9_self_test(tile_t* tile,
     /* --- Disengage self-test --- */
     set_bank(tile, ICM20948_BANK_2);
     icm_write(tile, ICM20948_REG_ACCEL_CONFIG_2, 0x00);
-    icm_write(tile, ICM20948_REG_GYRO_CONFIG, 0x01);
+    icm_write(tile, ICM20948_REG_GYRO_CONFIG_2, 0x00);
     set_bank(tile, ICM20948_BANK_0);
 
     /* --- Compute responses (LSBs at ±2 g / ±250 dps) and compare --- */
@@ -695,8 +701,11 @@ static int32_t atan2_centi(int32_t y, int32_t x)
             /* atan(t) ≈ t * (4500 - (|t|*1000 - 1000) * (14 + 4 * |t|*1000 / 1000) / 1000)
              * Done in fixed-point with t scaled by 1000. */
             int32_t t = (int32_t)(((int64_t)ay * 1000) / ax);          /* t * 1000, 0..1000 */
-            int32_t corr = ((t - 1000) * (14000 + 4 * t)) / 1000;       /* small correction */
-            angle_centi = (t * 4500 - t * corr / 1000) / 1000;
+            int32_t corr = ((t - 1000) * (14000 + 4 * t)) / 1000;       /* (t-1)(14+4t), x1000 */
+            /* centideg = 100·t·(45 − (t−1)(14+4t)) with t scaled by 1000:
+             * the correction term is t·corr/10 (was /1000, which dropped
+             * it 100× and left a ~4° linear-atan error). */
+            angle_centi = (t * 4500 - t * corr / 10) / 1000;
             if (angle_centi < 0)    angle_centi = 0;
             if (angle_centi > 4500) angle_centi = 4500;
         }
@@ -704,7 +713,7 @@ static int32_t atan2_centi(int32_t y, int32_t x)
         /* |y/x| > 1: angle = 90 - atan(|x/y|) */
         int32_t t = (int32_t)(((int64_t)ax * 1000) / ay);
         int32_t corr = ((t - 1000) * (14000 + 4 * t)) / 1000;
-        int32_t inner = (t * 4500 - t * corr / 1000) / 1000;
+        int32_t inner = (t * 4500 - t * corr / 10) / 1000;
         if (inner < 0)    inner = 0;
         if (inner > 4500) inner = 4500;
         angle_centi = 9000 - inner;
@@ -787,14 +796,19 @@ void tile_sense_i_9_read_tilt_centi_degrees(tile_t* tile, uint8_t axis,
     int64_t s = (int64_t)other_a * other_a + (int64_t)other_b * other_b;
     int32_t perp = 0;
     if (s > 0) {
-        int32_t r = 1;
-        /* a few Newton iterations is enough for 16-bit inputs */
-        for (uint8_t i = 0; i < 12; i++) {
-            int32_t q = (int32_t)(s / r);
-            r = (r + q) / 2;
-            if (r == 0) { r = 1; break; }
+        /* Integer sqrt by Newton's method, iterated to convergence. The
+         * previous fixed 12 iterations from r = 1 had not converged for
+         * s above ~2000² (1 g at ±2 g is 16384²), overstating `perp` up
+         * to ~4× and skewing the angle by tens of degrees. Starting at
+         * r = s (or a bound above sqrt) the sequence falls monotonically
+         * to floor(sqrt(s)). */
+        int64_t r = s;
+        int64_t x = (s + 1) / 2;
+        while (x < r) {
+            r = x;
+            x = (r + s / r) / 2;
         }
-        perp = r;
+        perp = (int32_t)r;
     }
 
     int32_t centi = atan2_centi(perp, target);
@@ -827,6 +841,22 @@ void tile_sense_i_9_read_heading_centi_degrees(tile_t* tile,
     if (centi >= 36000)   centi -= 36000;
 
     *out_centi_deg = (uint16_t)centi;
+}
+
+void tile_sense_i_9_read_tilt_centi_degrees_flat(tile_t* tile, uint8_t axis,
+                                                 int32_t* out_centi_deg)
+{
+    int16_t v = 0;
+    tile_sense_i_9_read_tilt_centi_degrees(tile, axis, &v);
+    if (out_centi_deg) *out_centi_deg = (int32_t)v;
+}
+
+void tile_sense_i_9_read_heading_centi_degrees_flat(tile_t* tile,
+                                                    int32_t* out_centi_deg)
+{
+    uint16_t v = 0;
+    tile_sense_i_9_read_heading_centi_degrees(tile, &v);
+    if (out_centi_deg) *out_centi_deg = (int32_t)v;
 }
 
 uint8_t tile_sense_i_9_wait_for_motion(tile_t* tile, uint32_t timeout_ms)
