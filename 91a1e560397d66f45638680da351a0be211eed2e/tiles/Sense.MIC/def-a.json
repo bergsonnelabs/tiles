@@ -1,0 +1,276 @@
+{
+  "rev": "a",
+  "name": "MIC",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "reference analog audio output",
+          "type": "analog",
+          "function": "AOUT",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "2.7-3.6V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.6,
+      "min": 2.7,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "analogOut": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use AOUT analog output",
+      "binding": {
+        "pad": "6",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "AOUT_EN"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "ADC",
+                  "capabilities": [
+                    "analog-input"
+                  ]
+                },
+                "tag": "analogOut.attached",
+                "from": {
+                  "pad": "6",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "AOUT_EN"
+            }
+          ]
+        }
+      ],
+      "description": "Pad 6 carries the chip's filtered analog audio output. Opt in to read it via a Core ADC pad in addition to the I2C digital path."
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 19,
+  "headline": "I2C-output MEMS microphone",
+  "components": [
+    {
+      "url": "https://www.analog.com/en/products/max11645.html",
+      "part": "MAX11645",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/19/unknown-MAX11645.pdf",
+      "manufacturer": "Maxim"
+    },
+    {
+      "url": "https://www.sameskydevices.com/product/resource/cmm-2718at-42316-tr.pdf",
+      "part": "CMM-2718AT-42316-TR",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/19/Same_Sky-CMM-2718AT-42316-TR.pdf",
+      "manufacturer": "Same Sky"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x36"
+          }
+        ],
+        "max_clock_speed": "1.7MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-06-22T07:38:59.397Z",
+  "description": "The Sense.MIC combines a PUI Audio AMM-2742-T-R omnidirectional MEMS microphone with the MAX11645 12-bit ADC. The microphone covers 20 Hz to 20 kHz with 59 dB SNR and 123 dB acoustic overload point. The ADC samples at up to 94.4 ksps and can operate a I2C speeds up to 1.7MHz, thereby fully covering the microphone's bandwidth. Suited for voice detection, sound-level monitoring, and audio recording applications.",
+  "json_version": "0.6",
+  "application_notes": []
+}

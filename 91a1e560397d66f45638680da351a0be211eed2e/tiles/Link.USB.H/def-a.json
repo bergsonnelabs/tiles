@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "USB.H",
+  "pads": [],
+  "power": [],
+  "family": "Link",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 56,
+  "headline": "USB2 high-speed transceiver",
+  "components": [
+    {
+      "url": "",
+      "part": "USB332x",
+      "datasheet": "",
+      "manufacturer": "Microchip"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-03-02T10:36:29.904Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}
