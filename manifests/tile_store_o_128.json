@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@a5cb41d",
+  "source": "tiles@bc1921a",
   "tile": "Store.O.128",
   "palette": {
     "label": "Store.O.128",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_store_o_128",
     "header": "tile_store_o_128.h",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "handle": {
     "type": "tile_t",
@@ -110,15 +110,18 @@
       "params": [
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "Byte address (0 .. capacity-1)."
         },
         {
           "name": "buf",
-          "type": "?uint8_t*"
+          "type": "?uint8_t*",
+          "description": "Output buffer."
         },
         {
           "name": "len",
-          "type": "int"
+          "type": "int",
+          "description": "Number of bytes."
         }
       ],
       "returns": "void",
@@ -178,15 +181,18 @@
       "params": [
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "Start address (0 .. capacity-1)."
         },
         {
           "name": "buf",
-          "type": "?const uint8_t*"
+          "type": "?const uint8_t*",
+          "description": "Data to program."
         },
         {
           "name": "len",
-          "type": "int"
+          "type": "int",
+          "description": "Byte count."
         }
       ],
       "returns": "void",
@@ -200,11 +206,12 @@
       "symbol": "tile_store_o_128_erase_sector",
       "header": "tile_store_o_128.h",
       "category": "tile",
-      "description": "Erase the 4 KB sector containing `addr` (and wait).",
+      "description": "Erase the 4 KB sector containing `addr` (and wait, up to 0.5 s).",
       "params": [
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "Any address inside the sector (low 12 bits ignored)."
         }
       ],
       "returns": "void",
@@ -218,11 +225,12 @@
       "symbol": "tile_store_o_128_erase_block",
       "header": "tile_store_o_128.h",
       "category": "tile",
-      "description": "Erase the 64 KB block containing `addr` (and wait).",
+      "description": "Erase the 64 KB block containing `addr` (and wait, up to 3 s).",
       "params": [
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "Any address inside the block (low 16 bits ignored)."
         }
       ],
       "returns": "void",
@@ -236,7 +244,7 @@
       "symbol": "tile_store_o_128_erase_chip",
       "header": "tile_store_o_128.h",
       "category": "tile",
-      "description": "Erase the entire chip (and wait).",
+      "description": "Erase the entire chip (and wait; typ 60 s, max 300 s).",
       "params": [],
       "returns": "void",
       "receiver": "tile_t*"
@@ -269,7 +277,7 @@
       "symbol": "tile_store_o_128_deep_power_down",
       "header": "tile_store_o_128.h",
       "category": "tile",
-      "description": "Enter Deep Power-Down (lowest standby current; commands ignored).",
+      "description": "Enter Deep Power-Down (typ 2 µA; every command except release is ignored).",
       "params": [],
       "returns": "void",
       "receiver": "tile_t*"
