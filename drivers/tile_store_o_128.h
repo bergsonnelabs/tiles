@@ -9,7 +9,20 @@
  * Platform-agnostic: uses the framework's raw SPI transaction primitive
  * (`tiles_pal_t.spi_transfer`) so command + 24-bit address + data fit one CS
  * assertion. A platform that doesn't implement spi_transfer yet leaves it NULL;
- * every call here guards against that and reports an error rather than faulting.
+ * every call here guards against that (init reports an error; later calls
+ * return 0 / do nothing) rather than faulting.
+ *
+ * Supply is 1.7-2.0 V only (datasheet §9, VCC). VIH max is VCC + 0.4 V, so
+ * the SPI lines must be driven at the tile's 1.8 V rail, not 3.3 V.
+ *
+ * Sidebands: the AT25QL128A ships with QE = 1 (datasheet §7.7, factory
+ * default), so WP (pad 6) and HOLD (pad 9) act as IO2/IO3 and their
+ * WP/HOLD functions are inactive in single-lane SPI. Neither pin has an
+ * internal pull-up (datasheet Table 1); the tile fits a 47 kΩ pull-up on WP
+ * only, HOLD is not pulled.
+ *
+ * Timing (datasheet Table 26, max): tPP 5 ms, tSE 0.4 s, tBE2 2.5 s,
+ * tCE 300 s. READ (0x03) is limited to 50 MHz SCK; FAST_READ (0x0B) to 104 MHz.
  *
  * Quick start:
  * @code
@@ -31,6 +44,21 @@
  *   The AT25QL128A supports Dual/Quad SPI and QPI (≤4 data lines). This driver
  *   drives standard single-lane SPI only; quad modes need a quad-capable SPI
  *   transfer in the platform layer (driver-deferred, not chip-gated).
+ *
+ * @studio unsupported severity=advanced category="Block protection / status register write"
+ *   No Write Status Register (0x01/0x31) support: BP/TB/SEC/CMP block
+ *   protection, SRP lock modes and the QE bit can't be changed. Factory
+ *   default is nothing protected, so program/erase work out of the box
+ *   (driver-deferred).
+ *
+ * @studio unsupported severity=niche category="32 KB block erase"
+ *   The chip also erases 32 KB blocks (0x52); the driver exposes only 4 KB
+ *   sector, 64 KB block and chip erase (driver-deferred).
+ *
+ * @studio unsupported severity=niche category="Suspend / resume, reset, OTP, SFDP"
+ *   Erase/program suspend-resume (0x75/0x7A), software reset (0x66/0x99),
+ *   the 4 kbit one-time-programmable security register and the SFDP table
+ *   are not exposed (driver-deferred).
  */
 
 #ifndef INC_TILE_STORE_O_128_H_
@@ -43,7 +71,7 @@ TILES_CHECK_VERSION(1, 0);
 
 /* ---- Driver version ---- */
 #define TILE_STORE_O_128_VERSION_MAJOR  1
-#define TILE_STORE_O_128_VERSION_MINOR  0
+#define TILE_STORE_O_128_VERSION_MINOR  1
 #define TILE_STORE_O_128_VERSION_PATCH  0
 
 /* ---- Device geometry ---- */
@@ -131,7 +159,14 @@ void tile_store_o_128_read(tile_t* tile, uint32_t addr, uint8_t* buf, uint16_t l
 
 /**
  * @brief  Fast-read `len` bytes from `addr` (FAST_READ 0x0B, 1 dummy byte).
+ *
+ * Same result as tile_store_o_128_read(); use it when the SPI clock is above
+ * the 50 MHz READ (0x03) limit (FAST_READ runs to 104 MHz).
+ *
  * @studio expose category=tile name=fast_read section=runtime
+ * @param  addr  Byte address (0 .. capacity-1).
+ * @param  buf   Output buffer.
+ * @param  len   Number of bytes.
  */
 void tile_store_o_128_fast_read(tile_t* tile, uint32_t addr, uint8_t* buf, uint16_t len);
 
@@ -146,8 +181,11 @@ void tile_store_o_128_write_enable(tile_t* tile);
 /**
  * @brief  Program up to one page (≤256 B) within a single page boundary.
  *
- * Issues Write-Enable, programs, and waits for completion. The caller must keep
- * the write inside one 256-byte page (addr & 0xFF) + len ≤ 256.
+ * Issues Write-Enable, programs, and waits for completion (up to 10 ms;
+ * tPP max 5 ms). The caller must keep the write inside one 256-byte page:
+ * (addr & 0xFF) + len ≤ 256. Bytes past the page end wrap to the start of
+ * the same page (chip behavior), so use tile_store_o_128_write() for
+ * unaligned spans. Programming only clears bits: erase first.
  *
  * @studio expose category=tile name=page_program section=runtime
  * @param  addr  Start address.
@@ -158,24 +196,32 @@ void tile_store_o_128_page_program(tile_t* tile, uint32_t addr, const uint8_t* b
 
 /**
  * @brief  Program an arbitrary-length span, splitting across page boundaries.
+ *
+ * Programming only clears bits (1 → 0); erase the covering sector(s) first.
+ *
  * @studio expose category=tile name=write section=runtime
+ * @param  addr  Start address (0 .. capacity-1).
+ * @param  buf   Data to program.
+ * @param  len   Byte count.
  */
 void tile_store_o_128_write(tile_t* tile, uint32_t addr, const uint8_t* buf, uint32_t len);
 
 /**
- * @brief  Erase the 4 KB sector containing `addr` (and wait).
+ * @brief  Erase the 4 KB sector containing `addr` (and wait, up to 0.5 s).
  * @studio expose category=tile name=erase_sector section=runtime
+ * @param  addr  Any address inside the sector (low 12 bits ignored).
  */
 void tile_store_o_128_erase_sector(tile_t* tile, uint32_t addr);
 
 /**
- * @brief  Erase the 64 KB block containing `addr` (and wait).
+ * @brief  Erase the 64 KB block containing `addr` (and wait, up to 3 s).
  * @studio expose category=tile name=erase_block section=runtime
+ * @param  addr  Any address inside the block (low 16 bits ignored).
  */
 void tile_store_o_128_erase_block(tile_t* tile, uint32_t addr);
 
 /**
- * @brief  Erase the entire chip (and wait).
+ * @brief  Erase the entire chip (and wait; typ 60 s, max 300 s).
  * @studio expose category=tile name=erase_chip section=runtime
  */
 void tile_store_o_128_erase_chip(tile_t* tile);
@@ -191,7 +237,7 @@ uint8_t tile_store_o_128_wait_ready(tile_t* tile, uint32_t timeout_ms);
 /* ---- power ---- */
 
 /**
- * @brief  Enter Deep Power-Down (lowest standby current; commands ignored).
+ * @brief  Enter Deep Power-Down (typ 2 µA; every command except release is ignored).
  * @studio expose category=tile name=deep_power_down section=lifecycle
  */
 void tile_store_o_128_deep_power_down(tile_t* tile);

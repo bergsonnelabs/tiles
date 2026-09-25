@@ -7,9 +7,10 @@
 // GND pad 1.
 //
 // Identity + command/status semantics are canonical (datasheet/driver). Actual
-// stored bytes aren't modeled (read/program return/accept no real array data), and
-// the per-mode supply currents are representative AT25QL128A figures, so the power
-// layer is inferred. Program/erase calls block in the driver: each does
+// stored bytes aren't modeled (read/program return/accept no real array data).
+// Per-mode supply currents are the AT25QL128A typical figures (datasheet Table 24
+// and feature list); read current rises with SCK (7 mA max at 1 MHz, 20 mA max
+// at 104 MHz), so the read figure is the 5 mA typical. Program/erase calls block in the driver: each does
 // write_enable → command → wait_ready before returning (tile_store_o_128.c:162-220),
 // so by the time the firmware sees the call return the part is idle again (WIP and
 // WEL both clear on completion). Only write_enable leaves a latched state.
@@ -29,12 +30,14 @@ const MODE_DPD = 4;
 
 const UVLO_MV = 1710;
 
-// representative AT25QL128A supply currents by mode (µA)
-const I_STANDBY_UA = 12;
-const I_READ_UA = 10_000;
-const I_PROGRAM_UA = 20_000;
-const I_ERASE_UA = 25_000;
-const I_DPD_UA = 1;
+// AT25QL128A typical supply currents by mode (µA), datasheet Table 24:
+// ICC1 standby 10 µA, ICC3 read 5 mA typ (feature list), ICC5 page program
+// 15 mA, ICC6/7 erase 15 mA, ICC2 deep power-down 2 µA.
+const I_STANDBY_UA = 10;
+const I_READ_UA = 5_000;
+const I_PROGRAM_UA = 15_000;
+const I_ERASE_UA = 15_000;
+const I_DPD_UA = 2;
 
 interface State {
   mode: number; // 0 standby, 1 read, 2 program, 3 erase, 4 deep power-down
@@ -124,7 +127,7 @@ const sim: TileSim<State> = {
     tile_store_o_128_fast_read: 'inferred',
     tile_store_o_128_page_program: 'inferred',
     tile_store_o_128_write: 'inferred',
-    power: 'inferred', // mode topology canonical; per-mode currents representative
+    power: 'canonical', // per-mode typical currents from datasheet Table 24
   },
 
   // Data out on pad 5 (SPI.MISO / QSPI.IO1) while reading. The part has no

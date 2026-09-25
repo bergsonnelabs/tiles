@@ -1521,7 +1521,7 @@ def main():
             "definition": ROOT / "definitions/Store-O-128-a.json",
             "prefix": "tile_store_o_128",
             "init": "tile_store_o_128_init",
-            "version": "1.0.0",
+            "version": "1.1.0",
         },
     ]
 

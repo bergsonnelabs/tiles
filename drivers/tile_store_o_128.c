@@ -103,6 +103,7 @@ void tile_store_o_128_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
 
 uint32_t tile_store_o_128_read_jedec_id(tile_t* tile)
 {
+    if (!has_spi(tile)) return 0;
     uint8_t id[3] = { 0, 0, 0 };
     flash_read_reg(tile, AT25QL128A_CMD_RDID, id, 3);
     return ((uint32_t)id[0] << 16) | ((uint32_t)id[1] << 8) | id[2];
@@ -111,6 +112,7 @@ uint32_t tile_store_o_128_read_jedec_id(tile_t* tile)
 uint8_t tile_store_o_128_read_status(tile_t* tile)
 {
     uint8_t sr = 0;
+    if (!has_spi(tile)) return 0;
     flash_read_reg(tile, AT25QL128A_CMD_RDSR1, &sr, 1);
     return sr;
 }
@@ -128,6 +130,7 @@ uint32_t tile_store_o_128_get_capacity(tile_t* tile)
 
 uint8_t tile_store_o_128_wait_ready(tile_t* tile, uint32_t timeout_ms)
 {
+    if (!has_spi(tile)) return 0;
     while (timeout_ms > 0) {
         if (!tile_store_o_128_is_busy(tile)) return 1;
         tile->hal->delay_ms(1);
@@ -156,6 +159,7 @@ void tile_store_o_128_fast_read(tile_t* tile, uint32_t addr, uint8_t* buf, uint1
 
 void tile_store_o_128_write_enable(tile_t* tile)
 {
+    if (!has_spi(tile)) return;
     flash_cmd(tile, AT25QL128A_CMD_WREN);
 }
 
@@ -172,7 +176,8 @@ void tile_store_o_128_page_program(tile_t* tile, uint32_t addr,
 
     tile_store_o_128_write_enable(tile);
     tile->hal->spi_transfer(tile->hal->handle, tile->id, tx, (uint16_t)(n + len), NULL, 0);
-    tile_store_o_128_wait_ready(tile, 10);  /* tPP ≤ ~3 ms */
+    if (!tile_store_o_128_wait_ready(tile, 10))  /* tPP max 5 ms (Table 26) */
+        TILE_ON_ERROR(tile, "page_program: timeout");
 }
 
 void tile_store_o_128_write(tile_t* tile, uint32_t addr, const uint8_t* buf, uint32_t len)
@@ -198,17 +203,18 @@ static void flash_erase(tile_t* tile, uint8_t cmd, uint32_t addr, uint32_t timeo
     uint8_t n = addr_hdr(hdr, cmd, addr);
     tile_store_o_128_write_enable(tile);
     tile->hal->spi_transfer(tile->hal->handle, tile->id, hdr, n, NULL, 0);
-    tile_store_o_128_wait_ready(tile, timeout_ms);
+    if (!tile_store_o_128_wait_ready(tile, timeout_ms))
+        TILE_ON_ERROR(tile, "erase: timeout");
 }
 
 void tile_store_o_128_erase_sector(tile_t* tile, uint32_t addr)
 {
-    flash_erase(tile, AT25QL128A_CMD_SE, addr, 500);  /* tSE ≤ ~400 ms */
+    flash_erase(tile, AT25QL128A_CMD_SE, addr, 500);  /* tSE max 0.4 s (Table 26) */
 }
 
 void tile_store_o_128_erase_block(tile_t* tile, uint32_t addr)
 {
-    flash_erase(tile, AT25QL128A_CMD_BE, addr, 3000);  /* tBE ≤ ~2 s */
+    flash_erase(tile, AT25QL128A_CMD_BE, addr, 3000);  /* tBE2 max 2.5 s (Table 26) */
 }
 
 void tile_store_o_128_erase_chip(tile_t* tile)
@@ -216,17 +222,21 @@ void tile_store_o_128_erase_chip(tile_t* tile)
     if (tile->state != TILE_STATE_READY) return;
     tile_store_o_128_write_enable(tile);
     flash_cmd(tile, AT25QL128A_CMD_CE);
-    tile_store_o_128_wait_ready(tile, 200000);  /* tCE can be ~100 s */
+    /* tCE typ 60 s, max 300 s (Table 26); allow a margin over the max. */
+    if (!tile_store_o_128_wait_ready(tile, 320000))
+        TILE_ON_ERROR(tile, "erase_chip: timeout");
 }
 
 void tile_store_o_128_deep_power_down(tile_t* tile)
 {
+    if (!has_spi(tile)) return;
     flash_cmd(tile, AT25QL128A_CMD_DP);
     tile->state = TILE_STATE_SLEEPING;
 }
 
 void tile_store_o_128_release(tile_t* tile)
 {
+    if (!has_spi(tile)) return;
     flash_cmd(tile, AT25QL128A_CMD_RDP);
     tile->hal->delay_ms(1);
     if (tile->state == TILE_STATE_SLEEPING) tile->state = TILE_STATE_READY;
