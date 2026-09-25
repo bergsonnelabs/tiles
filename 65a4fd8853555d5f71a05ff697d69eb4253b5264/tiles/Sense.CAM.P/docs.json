@@ -1,0 +1,333 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@e3a9c64",
+  "file": "tile_sense_cam_p.h",
+  "brief": "Ultra-low-power global-shutter camera driver for Sense.CAM.P (rev a).",
+  "description": "Embeds the PixArt PAG7920J3, a 320 x 240 monochrome global-shutter camera\nmodule with an integrated lens in a 2.94 x 2.44 x 2.11 mm cube. Registers\nare configured over I2C; image data comes out over SPI. The tile does not\nbreak out the 8-bit parallel bus, so SPI is the only image path.\n\nKey specifications:\n  - Array:      320 x 240 monochrome, 3.0 um pixels, global shutter\n  - Frame rate: up to 180 fps, 8-bit RAW\n  - Optics:     71.34 deg H x 53.72 deg V, 64 dB dynamic range\n  - Power:      0.76 mW @ QVGA 15 fps, 8.54 mW @ 180 fps, <100 uW motion detect\n  - Supply:     VDDMA 3.14-3.45 V (<=50 mV ripple), VDDIO 1.14-3.45 V\n\nDatasheet: https://www.bergsonne.io/tiles/sense/cam-p\nIC datasheet: PixArt PAG7920J3 (V0.8, L1033EN)\n\n\n@studio tile label=Sense.CAM.P icon=◉\n\n@par Three things that will bite anyone reimplementing this\n\n1. The vendor init tables MUST be applied verbatim. They set R_TG_En at\n   write 156 of section 8.1.3.4 and again at write 21 of 8.1.3.5, i.e. the\n   sensor starts 24 writes before configuration ends. Deferring the start\n   to tidy that up also relocates the undocumented 0xB0 = 0x01 (the final\n   line of 8.1.3.5) from after the start to before it, which silently\n   breaks the SPI mode switch. The part then accepts all 179 writes,\n   reports R_TG_En = 1, passes a config read-back across all four banks,\n   and never produces an image. Do not reorder these tables.\n\n2. SPI register access requires R_TG_En = 1. CheckID reads 0x0000 whenever\n   the sensor is stopped, so the SPI link must be brought up and verified\n   while it is running, before any mode change.\n\n3. Readout must be frame-locked. The output buffer is 4800 bytes and a\n   frame is delivered as several of them; starting mid-frame yields an\n   image rotated by whole buffers. Wait for Frame_Start (CPU_INT0_Status\n   bit 1) before taking the first one.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Motion detection\"\n  The PAG7920J3 has a proprietary on-chip motion-detection mode running at\n  80x60 under 100 uW, which is the tile's headline always-on feature.\n  Section 8.1.3.8 gives its init table. Driver-deferred, not a hardware\n  gap, and the highest-value thing to add next.\n\n@studio unsupported severity=common category=\"Manual exposure and gain\"\n  Auto-exposure and auto-gain run by default and hold mean brightness\n  constant. Section 9.3 defines manual control, which is needed for any\n  machine-vision use wanting repeatable radiometry. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Trigger mode\"\n  Section 8.4 allows one-frame-on-demand capture, with frame rate set by\n  the host's trigger interval. Note it does NOT relax the per-buffer\n  readout deadline — the frame is still emitted in one output cycle at the\n  sensor's own cadence. Driver-deferred.\n\n@studio unsupported severity=advanced category=\"Windowing, mirror and flip\"\n  Section 10 covers WOI, mirror/flip, skip and average. Only the fixed\n  320x240 and 160x120 (2x skip) modes are exposed. Driver-deferred.\n\n@studio unsupported severity=niche category=\"LED strobe control\"\n  The sensor can drive an external LED in sync with exposure via GPIO1\n  (R_expo_LED_* registers). The tile routes GPIO1 to a pad, so this is\n  driver-deferred rather than hardware-gated.\n\n@studio unsupported severity=niche category=\"Multi-sensor frame sync\"\n  Section 8.7 supports synchronising several sensors to a shared frame\n  clock. Driver-deferred.\n\n@studio unsupported severity=niche category=\"External clock input\"\n  Section 5.5 allows clocking the sensor from GPIO1 instead of its internal\n  oscillator (1/6/12/24/30 MHz). Driver-deferred; the internal clock is\n  used unconditionally.\n\n@studio unsupported severity=niche category=\"8-bit parallel image output\"\n  HARDWARE-GATED. The parallel bus needs PXD0-PXD7 plus PXCLK/HSYNC/VSYNC,\n  and the tile's 10-pad T44 package breaks out only the four SPI signals.\n  Not reachable on this tile at any driver revision.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core_tiles.h\"\n\n  static uint8_t frame[160 * 120];\n  tile_t cam;\n\n  sense_cam_p_cfg_t cfg = { .spi_cs = 9, .resolution = SENSE_CAM_P_RES_160x120 };\n  tile_sense_cam_p_init(core_tiles_pal(&core_i2c1), 0, &cam, &cfg);\n  if (tile_is_ready(&cam))\n      tile_sense_cam_p_capture(&cam, frame, sizeof(frame));"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "common",
+      "category": "Motion detection",
+      "brief": "The PAG7920J3 has a proprietary on-chip motion-detection mode running at 80x60 under 100 uW, which is the tile's headline always-on feature. Section 8.1.3.8 gives its init table. Driver-deferred, not a hardware gap, and the highest-value thing to add next."
+    },
+    {
+      "severity": "common",
+      "category": "Manual exposure and gain",
+      "brief": "Auto-exposure and auto-gain run by default and hold mean brightness constant. Section 9.3 defines manual control, which is needed for any machine-vision use wanting repeatable radiometry. Driver-deferred."
+    },
+    {
+      "severity": "advanced",
+      "category": "Trigger mode",
+      "brief": "Section 8.4 allows one-frame-on-demand capture, with frame rate set by the host's trigger interval. Note it does NOT relax the per-buffer readout deadline — the frame is still emitted in one output cycle at the sensor's own cadence. Driver-deferred."
+    },
+    {
+      "severity": "advanced",
+      "category": "Windowing, mirror and flip",
+      "brief": "Section 10 covers WOI, mirror/flip, skip and average. Only the fixed 320x240 and 160x120 (2x skip) modes are exposed. Driver-deferred."
+    },
+    {
+      "severity": "niche",
+      "category": "LED strobe control",
+      "brief": "The sensor can drive an external LED in sync with exposure via GPIO1 (R_expo_LED_* registers). The tile routes GPIO1 to a pad, so this is driver-deferred rather than hardware-gated."
+    },
+    {
+      "severity": "niche",
+      "category": "Multi-sensor frame sync",
+      "brief": "Section 8.7 supports synchronising several sensors to a shared frame clock. Driver-deferred."
+    },
+    {
+      "severity": "niche",
+      "category": "External clock input",
+      "brief": "Section 5.5 allows clocking the sensor from GPIO1 instead of its internal oscillator (1/6/12/24/30 MHz). Driver-deferred; the internal clock is used unconditionally."
+    },
+    {
+      "severity": "niche",
+      "category": "8-bit parallel image output",
+      "brief": "HARDWARE-GATED. The parallel bus needs PXD0-PXD7 plus PXCLK/HSYNC/VSYNC, and the tile's 10-pad T44 package breaks out only the four SPI signals. Not reachable on this tile at any driver revision."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_CAM_P_VERSION_MAJOR",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_CAM_P_VERSION_MINOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_CAM_P_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_I2C_ADDR_FLOAT",
+      "value": "0x35",
+      "description": "GPIO2 floating (tile default).",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_I2C_ADDR_HIGH",
+      "value": "0x25",
+      "description": "GPIO2 tied to VDDIO.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_I2C_ADDR_GND",
+      "value": "0x40",
+      "description": "GPIO2 tied to GND.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_I2C_ADDR_BROADCAST",
+      "value": "0x60",
+      "description": "Always live, strap-independent.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_PART_ID",
+      "value": "0x7920",
+      "description": "Expected PartID.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_RD_BIT",
+      "value": "0x80",
+      "description": "Bit 7 of byte 0: 1 = read. Addr is 7-bit.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_IMG_RD_EN",
+      "value": "0x02",
+      "description": "1 = grant access to the output buffer.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_INT_STATUS",
+      "value": "0x03",
+      "description": "Interrupt flags, write-to-clear.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_CHECKID_L",
+      "value": "0x06",
+      "description": "0x5A",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_CHECKID_H",
+      "value": "0x07",
+      "description": "0xA5",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_IMG_DATA",
+      "value": "0x40",
+      "description": "Image burst source.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_SPI_CHECK_ID",
+      "value": "0xA55A",
+      "description": "Expected CheckID; 0 unless running.",
+      "section": ""
+    },
+    {
+      "name": "PAG7920_BUFFER_BYTES",
+      "value": "4800",
+      "description": "Output buffer size. A frame is delivered in units of this.",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_cam_p_res_t",
+      "brief": "@brief  Capture resolution.",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_CAM_P_RES_160x120",
+          "value": "0",
+          "description": "19200 B/frame, analog 2x skip."
+        },
+        {
+          "name": "SENSE_CAM_P_RES_320x240",
+          "value": "1",
+          "description": "76800 B/frame, full array."
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_cam_p_cfg_t",
+      "brief": "Driver configuration.",
+      "description": "SPI.CS pad (tile pad 8), passed straight to the PAL's SPI calls.\n       It is separate from tile->id, which holds the I2C address.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "spi_cs",
+          "description": "CS identifier for the PAL SPI calls."
+        },
+        {
+          "type": "sense_cam_p_res_t",
+          "name": "resolution",
+          "description": "Capture resolution."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_cam_p_find(tiles_pal_t* hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        }
+      ],
+      "notes": [],
+      "return": "1 if the device ACKs, 0 otherwise",
+      "brief": "Check whether a PAG7920J3 is present on the I2C bus.",
+      "description": "",
+      "name": "tile_sense_cam_p_find"
+    },
+    {
+      "signature": "void tile_sense_cam_p_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile, const sense_cam_p_cfg_t* cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        },
+        {
+          "name": "tile",
+          "description": "Pointer to tile handle (populated by this function)"
+        },
+        {
+          "name": "cfg",
+          "description": "Optional config, or NULL for defaults"
+        }
+      ],
+      "notes": [
+        "Blocks for ~250 ms. Requires both an I2C bus and an SPI bus on the PAL. Single-instance: the SPI CS and resolution are driver-global."
+      ],
+      "brief": "Initialize the camera for SPI image output.",
+      "description": "Verifies PartID, applies the vendor init tables verbatim for the requested\nresolution, then confirms the SPI link by reading CheckID. Pass cfg=NULL\nfor defaults (spi_cs 0, 160x120).",
+      "name": "tile_sense_cam_p_init"
+    },
+    {
+      "signature": "uint16_t tile_sense_cam_p_part_id(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "0x7920 for a healthy PAG7920J3, 0 on a bus error.",
+      "brief": "Read the 16-bit part identifier over I2C.",
+      "description": "",
+      "name": "tile_sense_cam_p_part_id"
+    },
+    {
+      "signature": "uint16_t tile_sense_cam_p_spi_id(tile_t* tile)",
+      "params": [],
+      "notes": [
+        "Returns 0x0000 whenever the sensor is stopped — the SPI register interface is only alive while R_TG_En = 1."
+      ],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "0xA55A when the SPI link is up, 0 otherwise.",
+      "brief": "Read the SPI-side identifier, confirming the SPI link is usable.",
+      "description": "",
+      "name": "tile_sense_cam_p_spi_id"
+    },
+    {
+      "signature": "uint16_t tile_sense_cam_p_width(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "160 or 320.",
+      "brief": "Frame width in pixels for the configured resolution.",
+      "description": "",
+      "name": "tile_sense_cam_p_width"
+    },
+    {
+      "signature": "uint16_t tile_sense_cam_p_height(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "120 or 240.",
+      "brief": "Frame height in pixels for the configured resolution.",
+      "description": "",
+      "name": "tile_sense_cam_p_height"
+    },
+    {
+      "signature": "uint32_t tile_sense_cam_p_frame_bytes(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "19200 or 76800.",
+      "brief": "Number of bytes one frame occupies (width x height, 8-bit RAW).",
+      "description": "",
+      "name": "tile_sense_cam_p_frame_bytes"
+    },
+    {
+      "signature": "uint8_t tile_sense_cam_p_capture(tile_t* tile, uint8_t* dst, uint32_t len)",
+      "params": [
+        {
+          "name": "dst",
+          "description": "Destination buffer."
+        },
+        {
+          "name": "len",
+          "description": "Size of dst; must be >= tile_sense_cam_p_frame_bytes()."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 on a complete, non-overflowed frame; 0 otherwise.",
+      "brief": "Capture one frame into a caller-supplied buffer.",
+      "description": "Frame-locks on Frame_Start, then reads the frame in 4800-byte buffers.\nThe caller owns the memory: 19200 bytes at 160x120, 76800 at 320x240.\n\nEach buffer must be serviced within roughly 3.4 ms at default timing, or\nFB_Ovf trips and the frame is void. Anything slow between buffers — a\nper-byte print, a slow link — will tear the image across several exposures.",
+      "name": "tile_sense_cam_p_capture"
+    },
+    {
+      "signature": "void tile_sense_cam_p_reset(tile_t* tile)",
+      "params": [],
+      "notes": [
+        "Leaves the sensor unconfigured; call init again afterwards."
+      ],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Trigger a software reset (section 5.6.2) and return to defaults.",
+      "description": "Preferred over a power cycle for repeatable tests: the tile carries ~15.7 uF\nof bulk and at the camera's microamp idle draw that rail can take seconds to\nfall below the power-on-reset threshold, so an unplug/replug may not reset\nthe part at all.",
+      "name": "tile_sense_cam_p_reset"
+    }
+  ],
+  "source_file": "tile_sense_cam_p.h",
+  "version": "0.1.0",
+  "tile_family": "Sense",
+  "tile_name": "CAM.P",
+  "display_name": "Sense.CAM.P"
+}

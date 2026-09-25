@@ -1,0 +1,257 @@
+{
+  "rev": "a",
+  "name": "BB",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "1.8-5.5V",
+          "type": "power",
+          "function": "VIN",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "5V0",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "3V3",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "1V8",
+          "direction": "output"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 5.5,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "3"
+      ]
+    },
+    {
+      "max": 1.8,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 3.3,
+      "min": 3.3,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "",
+      "positive_pad": [
+        "9"
+      ]
+    },
+    {
+      "max": 5,
+      "min": 5,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "",
+      "positive_pad": [
+        "8"
+      ]
+    }
+  ],
+  "family": "Power",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 42,
+  "headline": "multi-output buck-boost regulator",
+  "components": [
+    {
+      "url": "",
+      "part": "TPS63901",
+      "datasheet": "",
+      "manufacturer": "Texas Instruments"
+    },
+    {
+      "url": "",
+      "part": "TPS7A20",
+      "datasheet": "",
+      "manufacturer": "Texas Instruments"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-09-12T12:06:58.645Z",
+  "description": "",
+  "json_version": "0.4",
+  "application_notes": []
+}
