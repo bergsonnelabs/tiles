@@ -185,7 +185,7 @@ g_pfnVectors:
     .word USB_IRQHandler            /* 67: USB */
     .word DMA2_Channel6_IRQHandler  /* 68: DMA2 Channel 6 */
     .word DMA2_Channel7_IRQHandler  /* 69: DMA2 Channel 7 */
-    .word 0                         /* 70: Reserved */
+    .word LPUART1_IRQHandler        /* 70: LPUART1 (RM0394 Table 51) */
     .word QUADSPI_IRQHandler        /* 71: QuadSPI */
     .word I2C3_EV_IRQHandler        /* 72: I2C3 Event */
     .word I2C3_ER_IRQHandler        /* 73: I2C3 Error */
@@ -324,6 +324,9 @@ g_pfnVectors:
     .thumb_set LPTIM2_IRQHandler, Default_Handler
     .weak USB_IRQHandler
     .thumb_set USB_IRQHandler, Default_Handler
+
+    .weak LPUART1_IRQHandler
+    .thumb_set LPUART1_IRQHandler, Default_Handler
     .weak DMA2_Channel6_IRQHandler
     .thumb_set DMA2_Channel6_IRQHandler, Default_Handler
     .weak DMA2_Channel7_IRQHandler

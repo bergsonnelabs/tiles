@@ -11,10 +11,9 @@
  */
 #include "hal_sai.h"
 
-/* GPDMA-based SAI capture: W5 / H5 only. The L4 (L422) has the SAI peripheral
- * but no GPDMA (classic DMA only), so this GPDMA path can't build there; L0 has
- * no SAI. Empty translation unit on L4/L0. */
-#if defined(STM32WBA55xx) || defined(STM32H523xx)
+/* SAI capture: W5 only — the only Core with an SAI (the L011, L422 and H523
+ * have none; see ll_sai.h). Empty translation unit elsewhere. */
+#if defined(STM32WBA55xx)
 
 /* SAI1 GPDMA hardware request line (RM0493 Table; SAI1_A). */
 #define HAL_SAI_GPDMA_REQ_SAI1_A 17u

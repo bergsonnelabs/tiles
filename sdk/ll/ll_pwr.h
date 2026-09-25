@@ -233,13 +233,17 @@ static inline void ll_pwr_standby(void)
  * ============================================================ */
 
 /**
- * Enter Low-Power Run mode on STM32L0.
- * Call AFTER switching SYSCLK to MSI ≤ 1.048MHz.
- * Lowers Vcore to the low-power regulator; active current ~8µA.
+ * Enter Low-power run mode on STM32L0 (RM0377 §6.3.4). Preconditions, all the
+ * caller's: SYSCLK at or below MSI range 1 (~131 kHz), core in voltage range
+ * 2, and no voltage-range change while it is on. It puts the regulator in
+ * low-power mode by setting LPSDSR and LPRUN together. No generated clock
+ * level uses it: the old "low" level set LPRUN at 1 MHz, which is out of spec
+ * (and without LPSDSR, so it never took effect).
  */
 static inline void ll_pwr_lp_run_enable(void)
 {
 #if defined(STM32L011xx)
+    SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 0));   /* CR: LPSDSR */
     SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 14));  /* CR: LPRUN */
 #endif
 }

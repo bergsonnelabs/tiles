@@ -6,8 +6,8 @@
  * is just the registers. Transcribed from the CMSIS device header
  * (stm32wba55xx.h) — offsets/masks are authoritative.
  *
- * SAI is available on Core.ST.W5 (one SAI), Core.ST.L4, Core.ST.H5.
- * NOT on Core.ST.L0 (no SAI peripheral).
+ * SAI is available on Core.ST.W5 (one SAI) only. The L011, L422 and H523
+ * have no SAI peripheral.
  *
  * On the WBA55 only **SAI1 sub-block A** can run the PDM controller
  * (HAL_SAI_Init enforces SAI1_Block_A + MASTER_RX + FREE_PROTOCOL for PDM).
@@ -45,18 +45,17 @@ typedef struct {
 /* Instances (SAI1 on APB2 @ 0x40015400 for WBA55)                 */
 /* -------------------------------------------------------------- */
 
+/* Only the WBA55 has an SAI. The STM32L422 (RM0394: SAI1 is on the L43x/L44x
+ * and up, e.g. the RCC_CCIPR.SAI1SEL footnote) and the STM32H523 have none,
+ * and 0x40015400 is not an SAI on either, so no SAI1 is defined there: code
+ * that uses it fails to compile instead of writing to whatever lives there. */
 #if defined(STM32WBA55xx)
   #define SAI1          ((SAI_TypeDef *)0x40015400UL)
   #define SAI1_Block_A  ((SAI_Block_TypeDef *)0x40015404UL)
   #define SAI1_Block_B  ((SAI_Block_TypeDef *)0x40015424UL)
-#elif defined(STM32L422xx)
-  #define SAI1          ((SAI_TypeDef *)0x40015400UL)
-  #define SAI1_Block_A  ((SAI_Block_TypeDef *)0x40015404UL)
-  #define SAI1_Block_B  ((SAI_Block_TypeDef *)0x40015424UL)
-#elif defined(STM32H523xx)
-  #define SAI1          ((SAI_TypeDef *)0x40015400UL)
-  #define SAI1_Block_A  ((SAI_Block_TypeDef *)0x40015404UL)
-  #define SAI1_Block_B  ((SAI_Block_TypeDef *)0x40015424UL)
+  #define LL_SAI_AVAILABLE 1
+#else
+  #define LL_SAI_AVAILABLE 0
 #endif
 
 /* -------------------------------------------------------------- */

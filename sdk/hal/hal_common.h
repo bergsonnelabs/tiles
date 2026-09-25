@@ -111,6 +111,14 @@ static inline void hal_nvic_disable_irq(uint32_t irqn)
     ((volatile uint32_t *)0xE000E180UL)[irqn >> 5] = 1UL << (irqn & 0x1F);
 }
 
+/**
+ * Set an interrupt's priority LEVEL, 0 (highest) to 15. The helper shifts it
+ * into the implemented priority bits: [7:4] on the M4/M33 (16 levels), [7:6]
+ * on the M0+ (4 levels: 0-3 -> 0, 4-7 -> 1, 8-11 -> 2, 12-15 -> 3). Pass the
+ * level, not a register value: 0x30 or 0x40 shifted into 8 bits is 0, the
+ * highest priority, which is what the timer, UART, USB and H5 RTC callers
+ * got until 2026-09-25.
+ */
 static inline void hal_nvic_set_priority(uint32_t irqn, uint8_t priority)
 {
 #if defined(__ARM_ARCH_6M__)

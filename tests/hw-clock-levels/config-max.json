@@ -1,0 +1,10 @@
+{
+  "core": "Core.ST.L4.1",
+  "clock": "max",
+  "bootloader": "rom",
+  "iwdg": {
+    "enabled": true,
+    "timeout_ms": 5000
+  },
+  "pads": {}
+}

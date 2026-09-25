@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@4b95d38",
+  "source": "tiles@6f27e78",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
@@ -39,10 +39,35 @@
       "layer": "core"
     },
     {
+      "name": "core_stop_until_on_change_timeout",
+      "signature": "core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge, uint32_t timeout_ms)",
+      "returns": "int",
+      "brief": "Enter Stop mode until a GPIO edge on the given pad, or until `timeout_ms` has passed (0 = no timeout). Configures the pad as input, arms its EXTI, enters Stop, and restores clocks on wake. If the watchdog is running, wakes every half timeout to feed it and goes back to sleep. Already at the wake level: EXTI latches only edges that happen after it is armed, so a line that is already at its wake level — a sensor INT held low until serviced, for EDGE_FALLING — would never wake the Core. After arming, this reads the pad and returns 1 at once if it is already low (EDGE_FALLING) or high (EDGE_RISING). EDGE_BOTH always waits for a change.",
+      "params": [
+        {
+          "name": "pad",
+          "ctype": "uint8_t",
+          "description": "Tile pad number"
+        },
+        {
+          "name": "edge",
+          "ctype": "uint32_t",
+          "description": "EDGE_FALLING, EDGE_RISING, or EDGE_BOTH"
+        },
+        {
+          "name": "timeout_ms",
+          "ctype": "uint32_t",
+          "description": "Longest time to stay asleep, measured on the RTC; 0 waits"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_stop_until_on_change",
       "signature": "core_stop_until_on_change(uint8_t pad, uint32_t edge)",
       "returns": "void",
-      "brief": "Enter Stop mode until a GPIO edge occurs on the given pad. Configures the pad as input, enables EXTI, enters Stop, and restores clocks on wake. Returns after the edge is detected (right away if the pad can't take an edge interrupt). If the watchdog is running, wakes every half timeout to feed it and goes back to sleep.",
+      "brief": "Enter Stop mode until a GPIO edge occurs on the given pad (no timeout). Returns right away if the pad can't take an edge interrupt, or if it is already at the level the edge wakes on (see core_stop_until_on_change_timeout()). If the watchdog is running, wakes every half timeout to feed it and goes back to sleep.",
       "params": [
         {
           "name": "pad",

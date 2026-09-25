@@ -137,6 +137,38 @@ typedef struct {
  * Calibration
  * ============================================================ */
 
+#if defined(STM32L011xx)
+/**
+ * L0 ADC clock (RM0377 §13.3.5). fADC limits per voltage range: 16 / 8 / 4 MHz
+ * in range 1 / 2 / 3 (STM32L011 DS Table 54); below 3.5 MHz LFMEN must be set.
+ *  - HSI16 running: the asynchronous clock (CKMODE = 00), HSI16 / 1 in range 1
+ *    and / 2 in range 2 (PRESC, ADC_CCR[21:18]). This is the path the ADC
+ *    always used, and the only one at the HSI16 clock levels.
+ *  - HSI16 off (the MSI levels; HSI16 can't even run in range 3): the ADC had
+ *    no clock at all there and every conversion timed out. It now takes PCLK
+ *    / 2 (CKMODE = 01, any duty cycle), or PCLK / 4 if / 2 is over the limit.
+ * Must be called with the ADC disabled (ADEN = 0), before calibration.
+ */
+static inline void ll_adc_l0_clock_config(ADC_TypeDef *adc, uint32_t pclk_hz)
+{
+    uint32_t vos = (REG32(0x40007000UL) >> 11) & 0x3UL;              /* PWR_CR.VOS */
+    uint32_t fmax = (vos == 1u) ? 16000000u : (vos == 2u) ? 8000000u : 4000000u;
+    uint32_t fadc;
+    if (REG32(0x40021000UL) & (1UL << 2)) {                          /* RCC_CR.HSI16RDYF */
+        uint32_t presc = (vos == 1u) ? 0x0UL : 0x1UL;                /* /1 or /2 */
+        MOD_BITS(adc->CFGR2, 0x3UL << 30, 0x0UL << 30);              /* CKMODE: async */
+        MOD_BITS(ADC_CCR, 0xFUL << 18, presc << 18);
+        fadc = presc ? 8000000u : 16000000u;
+    } else {
+        uint32_t mode = (pclk_hz / 2u <= fmax) ? 0x1UL : 0x2UL;      /* PCLK/2 or /4 */
+        MOD_BITS(adc->CFGR2, 0x3UL << 30, mode << 30);
+        fadc = pclk_hz / (mode == 0x1UL ? 2u : 4u);
+    }
+    if (fadc < 3500000u) SET_BITS(ADC_CCR, (1UL << 25));             /* LFMEN */
+    else                 CLR_BITS(ADC_CCR, (1UL << 25));
+}
+#endif
+
 /**
  * Run ADC self-calibration. Must be called before enabling ADC.
  * ADC must be disabled (ADEN=0).
@@ -173,7 +205,12 @@ static inline void ll_adc_init(ADC_TypeDef *adc, uint32_t smpr)
     /* L0: simple ADC — CFGR2 has clock config */
     adc->CR = 0;
     adc->CFGR1 = 0;                        /* 12-bit, single conversion */
-    adc->CFGR2 = 0;                        /* PCLK synchronous */
+    adc->CFGR2 = 0;
+#if defined(SYSCLK_HZ)
+    ll_adc_l0_clock_config(adc, SYSCLK_HZ);  /* APB undivided in generated projects */
+#else
+    ll_adc_l0_clock_config(adc, 16000000u);  /* no clock known here: hal_adc_init passes it */
+#endif
     adc->SMPR = smpr;                       /* Single SMPR register for all channels */
 
     /* Calibrate */

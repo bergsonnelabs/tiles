@@ -985,7 +985,7 @@ void hal_usb_cdc_init(void)
     ll_usb_power_on();
 
     /* Enable USB interrupt */
-    hal_nvic_set_priority(HAL_IRQ_USB, 0x30);
+    hal_nvic_set_priority(HAL_IRQ_USB, 3);   /* level 3 (the helper shifts it) */
     hal_nvic_enable_irq(HAL_IRQ_USB);
 
     /* Initial interrupt mask — just RESET for now.
@@ -1973,7 +1973,7 @@ void hal_usb_cdc_init(void)
     ll_usb_drd_power_on();
 
     /* Enable USB interrupt */
-    hal_nvic_set_priority(HAL_IRQ_USB, 0x30);
+    hal_nvic_set_priority(HAL_IRQ_USB, 3);   /* level 3 (the helper shifts it) */
     hal_nvic_enable_irq(HAL_IRQ_USB);
 
     /* Initial interrupt mask — just RESET for now */

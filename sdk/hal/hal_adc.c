@@ -401,7 +401,11 @@ hal_status_t hal_adc_init(hal_adc_t *adc, ADC_TypeDef *instance,
     instance->CFGR1 = LL_ADC_CFGR1_OVRMOD;   /* overwrite on overrun */
     /* Apply resolution to CFGR1[4:3] */
     MOD_BITS(instance->CFGR1, 0x3UL << 3, _res_encode(res) << 3);
-    instance->CFGR2 = 0;  /* CKMODE=00: asynchronous ADCCLK, HSI16 (RM0377 §13.3.5) */
+    instance->CFGR2 = 0;
+    /* Clock: HSI16 async when it runs, else PCLK/2 or /4; LFMEN below 3.5 MHz
+     * (ll_adc_l0_clock_config). Generated projects run APB undivided, so
+     * PCLK = sysclk_hz. The MSI levels had no ADC clock at all before. */
+    ll_adc_l0_clock_config(instance, sysclk_hz);
 
     ll_adc_calibrate(instance);
 

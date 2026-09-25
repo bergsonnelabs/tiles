@@ -69,20 +69,31 @@ extern void core_clock_init(void);
  *  - before entry, FLASH_ACR.LATENCY >= 1 (§7.3.3) and RAMCFG_M1CR/M2CR
  *    WSC >= 1 (§6.3.4), which range 2 at 16 MHz needs;
  *  - after core_clock_init() is back in range 1, HDIV5 (and any 0-WS SRAM
- *    setting) is restored. The 2.4 GHz radio needs HDIV5 clear (§12.4.6), and
- *    the BLE stack clears RCC_CFGR4 at start-up.
+ *    setting) is restored. The 2.4 GHz radio needs HDIV5 clear (§12.4.6);
+ *    core_clock_init() owns RCC_CFGR4 (HPRE5 keeps hclk5 <= 32 MHz on the
+ *    PLL levels), and the BLE stack no longer touches it.
  * core_clock_init() reprograms the flash latency for the configured clock. */
 #define CORE_W5_RCC_CFGR4     REG32(RCC_BASE + 0x200UL)   /* RM0493 §12.8.51 */
 #define CORE_W5_HDIV5         (1UL << 4)
 #define CORE_W5_RAMCFG_M1CR   REG32(0x40026000UL)          /* RM0493 §6.6.1 */
 #define CORE_W5_RAMCFG_M2CR   REG32(0x40026040UL)          /* RM0493 §6.6.4 */
 #define CORE_W5_RAMCFG_WSC    (0x7UL << 16)
+#define CORE_W5_RCC_AHB1ENR   REG32(RCC_BASE + 0x088UL)    /* RM0493 §12.8.20 */
+#define CORE_W5_RAMCFGEN      (1UL << 17)
+
+/* RAMCFG reads as 0 and drops writes while its bus clock is off. */
+static inline void _core_w5_ramcfg_clk_on(void)
+{
+    SET_BITS(CORE_W5_RCC_AHB1ENR, CORE_W5_RAMCFGEN);
+    (void)CORE_W5_RCC_AHB1ENR;
+}
 #define CORE_W5_PWR_VOSR      REG32(PWR_BASE + 0x0CUL)     /* RM0493 §11.10.4 */
 
 typedef struct { uint32_t hdiv5, m1_wsc, m2_wsc; } core_stop1_ctx_t;
 
 static inline void _core_stop1_enter_prep(core_stop1_ctx_t *c)
 {
+    _core_w5_ramcfg_clk_on();
     c->hdiv5  = CORE_W5_RCC_CFGR4 & CORE_W5_HDIV5;
     c->m1_wsc = CORE_W5_RAMCFG_M1CR & CORE_W5_RAMCFG_WSC;
     c->m2_wsc = CORE_W5_RAMCFG_M2CR & CORE_W5_RAMCFG_WSC;
@@ -152,6 +163,48 @@ static inline void _core_rtc_wake_disarm(void)
 }
 
 /*
+ * Alarm A shares the RTC wakeup vector on the WBA (RTC_IRQn 2 carries both)
+ * and on the L0 (RTC_IRQn 2; the alarm reaches it through EXTI line 17, the
+ * wakeup timer through line 20). core_rtc_set_alarm() always sets ALRAIE, so
+ * once an alarm has matched, its request (level, held by ALRAF) pends that
+ * vector again the moment the loop below clears it: every WFI returned at
+ * once and the rest of a core_stop_for() ran as a busy-wait in Run mode.
+ * While the vector is ours (the application hasn't enabled it), the alarm's
+ * path into it is masked for the sleep: ALRAIE on the WBA (RTC_CR bit 12,
+ * RM0493 §36.6.7), EXTI IMR line 17 on the L0 (RM0377 §12.5.1). ALRAF still
+ * sets, so core_rtc_alarm_fired() reports the match afterwards. The L4 has a
+ * separate RTC_Alarm vector (41) and needs nothing.
+ */
+static inline uint32_t _core_stop_alarm_mask(void)
+{
+#if defined(STM32WBA55xx)
+    if (!(RTC_CR & LL_RTC_CR_ALRAIE)) return 0;
+    ll_rtc_unlock();
+    CLR_BITS(RTC_CR, LL_RTC_CR_ALRAIE);
+    ll_rtc_lock();
+    return 1;
+#elif defined(STM32L011xx)
+    if (!(REG32(EXTI_BASE + 0x00UL) & (1UL << 17))) return 0;
+    CLR_BITS(REG32(EXTI_BASE + 0x00UL), (1UL << 17));        /* IMR: line 17 */
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+static inline void _core_stop_alarm_unmask(uint32_t masked)
+{
+    if (!masked) return;
+#if defined(STM32WBA55xx)
+    ll_rtc_unlock();
+    SET_BITS(RTC_CR, LL_RTC_CR_ALRAIE);
+    ll_rtc_lock();
+#elif defined(STM32L011xx)
+    SET_BITS(REG32(EXTI_BASE + 0x00UL), (1UL << 17));
+#endif
+}
+
+/*
  * Sleep in Stop until the armed RTC wakeup timer fires (rtc != 0) and/or an
  * interrupt handler sets *edge. Returns 1 when *edge ended it.
  *
@@ -175,6 +228,7 @@ static inline int _core_stop_wait(int rtc, volatile uint8_t *edge)
 {
     int by_edge = 0;
     int rtc_irq_was_on = ll_nvic_irq_enabled(LL_RTC_WKUP_IRQn);
+    uint32_t alarm_masked = (rtc && !rtc_irq_was_on) ? _core_stop_alarm_mask() : 0;
     uint32_t pm = ll_irq_save();
 
     for (;;) {
@@ -209,6 +263,9 @@ static inline int _core_stop_wait(int rtc, volatile uint8_t *edge)
         ll_nvic_clear_pending(LL_RTC_WKUP_IRQn);
         if (rtc_irq_was_on) ll_nvic_enable_irq(LL_RTC_WKUP_IRQn);
     }
+    /* Back on; a pend it raises now stays pending with the vector masked,
+     * and the next Stop masks it again. */
+    _core_stop_alarm_unmask(alarm_masked);
     ll_irq_restore(pm);
     return by_edge;
 }
@@ -265,7 +322,7 @@ static inline void core_stop_for(uint32_t seconds)
      *      Note: line 17 = RTC (non-secure, all events), line 19 = TAMP.
      *      RTC is a "direct" EXTI event — only IMR needed, no RTSR. */
     /* H5: EXTI line 17 = RTC non-secure (direct event, IMR only) */
-    ll_nvic_set_priority(2, 0x30);  /* RTC_IRQn = 2 */
+    ll_nvic_set_priority(2, 3);     /* RTC_IRQn = 2, level 3 (the helper shifts it) */
     ll_nvic_enable_irq(2);
     SET_BITS(REG32(EXTI_BASE + 0x80UL), (1UL << 17));  /* IMR1: line 17 */
 
@@ -325,53 +382,112 @@ static inline void core_stop_for(uint32_t seconds)
 #endif
 }
 
+/* True when `pad` already sits at the level `edge` wakes on: low for
+ * EDGE_FALLING, high for EDGE_RISING. EDGE_BOTH has no wake level. */
+static inline int _core_stop_pad_at_wake_level(uint8_t pad, uint32_t edge)
+{
+    if (edge == EDGE_FALLING) return core_pad_read(pad) == 0;
+    if (edge == EDGE_RISING)  return core_pad_read(pad) != 0;
+    return 0;
+}
+
 /**
- * Enter Stop mode until a GPIO edge occurs on the given pad.
- * Configures the pad as input, enables EXTI, enters Stop, and restores
- * clocks on wake. Returns after the edge is detected (right away if the pad
- * can't take an edge interrupt). If the watchdog is running, wakes every half
- * timeout to feed it and goes back to sleep.
+ * Enter Stop mode until a GPIO edge on the given pad, or until `timeout_ms`
+ * has passed (0 = no timeout). Configures the pad as input, arms its EXTI,
+ * enters Stop, and restores clocks on wake. If the watchdog is running, wakes
+ * every half timeout to feed it and goes back to sleep.
+ *
+ * Already at the wake level: EXTI latches only edges that happen after it is
+ * armed, so a line that is already at its wake level — a sensor INT held low
+ * until serviced, for EDGE_FALLING — would never wake the Core. After arming,
+ * this reads the pad and returns 1 at once if it is already low (EDGE_FALLING)
+ * or high (EDGE_RISING). EDGE_BOTH always waits for a change.
+ *
+ * @param pad         Tile pad number
+ * @param edge        EDGE_FALLING, EDGE_RISING, or EDGE_BOTH
+ * @param timeout_ms  Longest time to stay asleep, measured on the RTC; 0 waits
+ *                    for the edge however long it takes.
+ * @return 1 = woken by the pad (or it was already at the wake level),
+ *         0 = timed out, -1 = the pad can't take an edge interrupt, or
+ *         (Core.ST.H5 only) a non-zero timeout, which isn't implemented there.
+ */
+static inline int core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge,
+                                                    uint32_t timeout_ms)
+{
+#if defined(STM32H523xx)
+    if (timeout_ms) return -1;
+    core_pad_on_change(pad, edge, (hal_callback_t)0, (void *)0);
+    if (_core_stop_pad_at_wake_level(pad, edge)) return 1;
+
+    ll_pwr_stop();
+
+    core_clock_init();
+    return 1;
+#else
+    uint32_t t0 = _systick_ticks, slept = 0, mark = 0, tick_ms = 0;
+    uint32_t chunk = core_watchdog_sleep_chunk_ms();
+    int use_rtc = (chunk != 0) || (timeout_ms != 0);
+    int woke = 0;
+    core_stop1_ctx_t s1;
+
+    _core_stop_pad_edge = 0;
+    if (core_pad_on_change(pad, edge, _core_stop_pad_cb, (void *)0) != HAL_OK)
+        return -1;
+    /* Armed: an edge from here on is latched. Now the level. */
+    if (_core_stop_pad_at_wake_level(pad, edge))
+        return 1;
+
+    _core_stop1_enter_prep(&s1);
+    if (use_rtc) {
+        ll_rtc_ensure();
+        /* Time on the RTC calendar, as core_stop_for() measures it. One
+         * calendar tick short of the timeout counts as done. */
+        tick_ms = 1000UL / ((RTC_PRER & 0x7FFFUL) + 1UL) + 1UL;
+        ll_rtc_resync();
+        mark = ll_rtc_ms_of_day();
+        for (;;) {
+            uint32_t ms = chunk ? chunk : 65536000UL;       /* 16-bit reload at 1 Hz */
+            if (timeout_ms) {
+                if (slept + tick_ms > timeout_ms) break;    /* timed out */
+                if (timeout_ms - slept < ms) ms = timeout_ms - slept;
+            }
+            core_watchdog_feed();
+            _core_rtc_wake_arm(ms);
+            woke = _core_stop_wait(1, &_core_stop_pad_edge);
+            ll_rtc_resync();                 /* calendar shadows are stale after Stop */
+            uint32_t now = ll_rtc_ms_of_day();
+            slept += (now + 86400000UL - mark) % 86400000UL;
+            mark = now;
+            if (woke) break;
+        }
+        _core_rtc_wake_disarm();
+        core_watchdog_feed();
+    } else {
+        (void)_core_stop_wait(0, &_core_stop_pad_edge);
+        woke = 1;
+    }
+
+    core_clock_init();
+    _core_stop1_exit_restore(&s1);
+    if (use_rtc) ll_rtc_resync();        /* the RTC only runs if we started it */
+    _systick_ticks += t0 + slept;        /* without an RTC nothing measured the sleep */
+    return woke;
+#endif
+}
+
+/**
+ * Enter Stop mode until a GPIO edge occurs on the given pad (no timeout).
+ * Returns right away if the pad can't take an edge interrupt, or if it is
+ * already at the level the edge wakes on (see
+ * core_stop_until_on_change_timeout()). If the watchdog is running, wakes
+ * every half timeout to feed it and goes back to sleep.
  *
  * @param pad   Tile pad number
  * @param edge  EDGE_FALLING, EDGE_RISING, or EDGE_BOTH
  */
 static inline void core_stop_until_on_change(uint8_t pad, uint32_t edge)
 {
-#if defined(STM32H523xx)
-    core_pad_on_change(pad, edge, (hal_callback_t)0, (void *)0);
-
-    ll_pwr_stop();
-
-    core_clock_init();
-#else
-    uint32_t t0 = _systick_ticks, slept = 0;
-    uint32_t chunk = core_watchdog_sleep_chunk_ms();
-    core_stop1_ctx_t s1;
-
-    _core_stop_pad_edge = 0;
-    if (core_pad_on_change(pad, edge, _core_stop_pad_cb, (void *)0) != HAL_OK)
-        return;
-
-    _core_stop1_enter_prep(&s1);
-    if (chunk) {
-        ll_rtc_ensure();
-        for (;;) {
-            core_watchdog_feed();
-            _core_rtc_wake_arm(chunk);
-            if (_core_stop_wait(1, &_core_stop_pad_edge)) break;
-            slept += chunk;
-        }
-        _core_rtc_wake_disarm();
-        core_watchdog_feed();
-    } else {
-        (void)_core_stop_wait(0, &_core_stop_pad_edge);
-    }
-
-    core_clock_init();
-    _core_stop1_exit_restore(&s1);
-    if (chunk) ll_rtc_resync();          /* the RTC only runs if we started it */
-    _systick_ticks += t0 + slept;        /* the unfinished last chunk isn't counted */
-#endif
+    (void)core_stop_until_on_change_timeout(pad, edge, 0);
 }
 
 /**

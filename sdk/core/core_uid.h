@@ -59,7 +59,13 @@ static inline void core_uid_read(uint32_t out[3])
     const volatile uint32_t *uid = (const volatile uint32_t *)CORE_UID_BASE;
     out[0] = uid[0];
     out[1] = uid[1];
+#if defined(STM32L011xx)
+    /* The L0's third word is not contiguous: offsets 0x00, 0x04 and 0x14
+     * (0x1FF80064), RM0377 §28.2. Offset 0x08 is not part of the ID. */
+    out[2] = uid[5];
+#else
     out[2] = uid[2];
+#endif
 }
 
 /**

@@ -38,10 +38,9 @@ typedef struct {
                                   The Ring MIC tile is on CK2/D2 → data_line=2, clock_line=2. */
 } hal_sai_pdm_config_t;
 
-/* GPDMA-typed handle + capture API: W5 / H5 only (matches hal_sai.c). The L4
- * has SAI but no GPDMA, so these GPDMA_Channel_TypeDef / ll_gpdma_node_t
- * declarations don't apply and won't compile there; L0 has no SAI. */
-#if defined(STM32WBA55xx) || defined(STM32H523xx)
+/* Handle + capture API: W5 only (matches hal_sai.c). The L011, L422 and H523
+ * have no SAI peripheral. */
+#if defined(STM32WBA55xx)
 
 /**
  * SAI capture handle. Allocate in SRAM (the embedded LLI node must be a
@@ -91,6 +90,6 @@ void hal_sai_capture_stop(hal_sai_t *s);
 /** @brief  GPDMA channel ISR body — call from the channel's IRQ handler. */
 void hal_sai_irq_handler(hal_sai_t *s);
 
-#endif /* STM32WBA55xx || STM32H523xx */
+#endif /* STM32WBA55xx */
 
 #endif /* HAL_SAI_H */

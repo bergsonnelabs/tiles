@@ -16,7 +16,7 @@
 #include "ll_rcc.h"
 #include "ll_gpio.h"
 #include "ll_systick.h"
-{% if clock_config.lp_run or clock_config.needs_vos %}
+{% if clock_config.lp_run or clock_config.needs_vos or clock_config.vos_range %}
 #include "ll_pwr.h"
 {% endif %}
 {% if i2c_buses %}
@@ -242,6 +242,183 @@ hal_dac_t core_dac = { GPIO{{ dac_pad.port }}, {{ dac_pad.pin }}, 2 };
 
 void core_clock_init(void)
 {
+{% if mcu.define == "STM32L011xx" %}
+    /* STM32L011, RM0377. Runs from reset (MSI 2.1 MHz, voltage range 2, 0 WS)
+     * and again after every Stop (wakes on MSI at the range set here; the
+     * voltage range is kept). Target: {{ clock_config.source }} {{ clock_config.sysclk_hz }} Hz,
+     * voltage range {{ clock_config.vos_range }}, flash latency per Table 14. */
+    ll_rcc_pwr_clk_enable();
+
+    /* The PLL can only be reconfigured while it is off (§7.2.4). */
+    if (((REG32(RCC_BASE + RCC_CFGR_OFFSET) >> RCC_CFGR_SWS_SHIFT) & 0x3UL) == LL_RCC_SYSCLK_PLL) {
+        ll_rcc_hsi16_enable();
+        while (!ll_rcc_hsi16_ready())
+            ;
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSI16);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSI16);
+        ll_rcc_pll_disable();
+    }
+{% if clock_config.source == "msi" %}
+{% if clock_config.vos_range == 3 %}
+
+    /* MSI first, then range 3 (clock down before range down, §6.1.7). Range 3:
+     * <= 4.2 MHz at 0 WS, no HSI16, no flash/EEPROM writes (core_nvm raises
+     * the range around an EEPROM write). */
+    ll_rcc_msi_set_range({{ clock_config.msi_range }});
+    while (!ll_rcc_msi_ready())
+        ;
+    ll_rcc_set_sysclk(LL_RCC_SYSCLK_MSI);
+    ll_rcc_wait_sysclk(LL_RCC_SYSCLK_MSI);
+    ll_flash_set_latency(ll_flash_latency_for_range({{ clock_config.sysclk_mhz_ceil }}, 3));
+    ll_pwr_set_vos(3);
+{% else %}
+
+    /* Range {{ clock_config.vos_range }} first (range up before clock up, §6.1.7), then MSI. */
+    ll_pwr_set_vos({{ clock_config.vos_range }});
+    ll_rcc_msi_set_range({{ clock_config.msi_range }});
+    while (!ll_rcc_msi_ready())
+        ;
+    ll_rcc_set_sysclk(LL_RCC_SYSCLK_MSI);
+    ll_rcc_wait_sysclk(LL_RCC_SYSCLK_MSI);
+    ll_flash_set_latency(ll_flash_latency_for_range({{ clock_config.sysclk_mhz_ceil }}, {{ clock_config.vos_range }}));
+{% endif %}
+{% if clock_config.hsi16_kernel %}
+
+    /* I2C1's kernel clock is HSI16 (RCC_CCIPR.I2C1SEL, set in core_pads_init)
+     * so 400 kHz works at this MSI level. Stop turns HSI16 off (HSI16KERON is
+     * left clear, RM0377 §7.3.1), so it is started here, which runs again on
+     * every wake. Costs ~100 µA while running (DS: IDD(HSI16)). */
+    ll_rcc_hsi16_enable();
+    while (!ll_rcc_hsi16_ready())
+        ;
+{% endif %}
+{% else %}
+
+    /* Range 1 before the clock goes up (§6.1.7): up to 32 MHz, 0 WS <= 16 MHz. */
+    ll_pwr_set_vos(1);
+    {
+        uint32_t ws = ll_flash_latency_for_range({{ clock_config.sysclk_mhz_ceil }}, 1);
+        if (ll_flash_get_latency() < ws)
+            ll_flash_set_latency(ws);
+
+        /* Below VDD 2.0 V each SYSCLK step must be under 4x with 5 µs between
+         * steps (§6.1.4; this Core runs from 1.8 V up): MSI 2.1 -> 4.2 MHz ->
+         * HSI16{{ " -> PLL" if clock_config.pll else "" }}. */
+        ll_rcc_msi_set_range(LL_RCC_MSI_RANGE_4MHZ);
+        while (!ll_rcc_msi_ready())
+            ;
+        for (volatile uint32_t d = 0; d < 20u; d++)
+            ;
+        ll_rcc_hsi16_enable();
+        while (!ll_rcc_hsi16_ready())
+            ;
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSI16);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSI16);
+{% if clock_config.pll %}
+        for (volatile uint32_t d = 0; d < 20u; d++)
+            ;
+
+        /* PLL: 16 MHz x{{ clock_config.pll.n }} = VCO {{ 16 * clock_config.pll.n }} MHz (<= 96 in range 1, §7.2.4), /{{ clock_config.pll.r }} = {{ clock_config.sysclk_mhz }} MHz */
+        ll_rcc_pll_config(LL_RCC_PLLSRC_HSI16, {{ clock_config.pll.m }}, {{ clock_config.pll.n }}, {{ clock_config.pll.r }});
+        ll_rcc_pll_enable();
+        while (!ll_rcc_pll_ready())
+            ;
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_PLL);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_PLL);
+{% endif %}
+        ll_flash_set_latency(ws);
+    }
+{% endif %}
+
+{% elif mcu.define == "STM32WBA55xx" %}
+    /* STM32WBA55, RM0493. Runs from reset and again after every Stop 1; both
+     * leave SYSCLK on HSI16 in voltage range 2 with 1 WS (flash and SRAM) and
+     * hclk5 = SYSCLK / 2 (HDIV5). Target: {{ clock_config.source }} {{ clock_config.sysclk_mhz }} MHz in
+     * range {{ clock_config.vos_range }}. */
+    ll_rcc_pwr_clk_enable();
+
+    /* PLL settings can only change while it is off (§12.4.3). */
+    if (((REG32(RCC_BASE + RCC_CFGR_OFFSET) >> RCC_CFGR_SWS_SHIFT) & 0x3UL) == LL_RCC_SYSCLK_PLL) {
+        ll_rcc_hsi16_enable();
+        while (!ll_rcc_hsi16_ready())
+            ;
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSI16);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSI16);
+    }
+{% if clock_config.vos_range == 2 %}
+
+    /* HSI16 in range 2 (Table 99: SYSCLK <= 16 MHz, hclk5 <= 8 MHz). Order per
+     * §12.4.6: HDIV5 set, switch to HSI16, then range 2. Flash 1 WS (Table 41:
+     * range 2 has 0 WS only up to 8 MHz) and SRAM 1 WS (Table 36: 0 WS only up
+     * to 12 MHz). The PLL must be off in range 2 (§12.4.3). */
+    ll_rcc_hsi16_enable();
+    while (!ll_rcc_hsi16_ready())
+        ;
+    ll_rcc_set_hdiv5(1);
+    {
+        uint32_t ws = ll_flash_latency_for_range(16, 2);
+        if (ll_flash_get_latency() < ws)
+            ll_flash_set_latency(ws);
+        SET_BITS(REG32(RCC_BASE + 0x088UL), 1UL << 17);  /* RCC_AHB1ENR.RAMCFGEN (§12.8.20): RAMCFG drops writes without it */
+        (void)REG32(RCC_BASE + 0x088UL);
+        if (!(REG32(0x40026000UL) & (0x7UL << 16)))   /* RAMCFG_M1CR.WSC, RM0493 §6.6.1 */
+            MOD_BITS(REG32(0x40026000UL), 0x7UL << 16, 1UL << 16);
+        if (!(REG32(0x40026040UL) & (0x7UL << 16)))   /* RAMCFG_M2CR.WSC, §6.6.4 */
+            MOD_BITS(REG32(0x40026040UL), 0x7UL << 16, 1UL << 16);
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSI16);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSI16);
+        if (ll_rcc_pll_ready())
+            ll_rcc_pll_disable();
+        ll_pwr_set_vos(2);
+        ll_flash_set_latency(ws);
+    }
+{% else %}
+
+    /* Range 1 before the clock goes up (§12.4.6): SYSCLK up to 100 MHz,
+     * hclk5 up to 32 MHz. */
+    ll_pwr_set_vos(1);
+    ll_rcc_hse_enable();
+    while (!ll_rcc_hse_ready())
+        ;
+    {
+        uint32_t ws = ll_flash_latency_for_range({{ clock_config.sysclk_mhz }}, 1);
+        if (ll_flash_get_latency() < ws)
+            ll_flash_set_latency(ws);
+{% if clock_config.pll %}
+
+        /* PLL1: HSE 32 MHz /{{ clock_config.pll.m }} = {{ (32 / clock_config.pll.m) | round(1) }} MHz (4-16 MHz) x{{ clock_config.pll.n }} = VCO {{ (32 / clock_config.pll.m * clock_config.pll.n) | int }} MHz (128-544),
+         * /{{ clock_config.pll.r }} = {{ clock_config.sysclk_mhz }} MHz. */
+        if (ll_rcc_pll_ready())
+            ll_rcc_pll_disable();
+        ll_rcc_pll_config(LL_RCC_PLLSRC_HSE, {{ clock_config.pll.m }}, {{ clock_config.pll.n }}, {{ clock_config.pll.r }});
+        ll_rcc_pll_enable();
+        while (!ll_rcc_pll_ready())
+            ;
+
+        /* hclk5 = SYSCLK / {{ clock_config.hpre5 }} = {{ (clock_config.sysclk_mhz / clock_config.hpre5) | round(1) }} MHz (<= 32), written before the
+         * switch (§12.4.6). The SYSCLK step from 16 MHz is more than 43 MHz
+         * (Table 99), so the switch goes through the pll1rclk prescaler. */
+        ll_rcc_set_hpre5({{ clock_config.hpre5 }});
+        ll_rcc_pll1_rclkpre_divide();
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_PLL);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_PLL);
+        ll_rcc_pll1_rclkpre_release();
+{% else %}
+
+        /* HSE32 direct: 16 -> 32 MHz is inside the 43 MHz step (Table 99). */
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSE);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSE);
+        if (ll_rcc_pll_ready())
+            ll_rcc_pll_disable();
+{% endif %}
+        ll_flash_set_latency(ws);
+    }
+    /* hclk5 undivided in range 1: {{ "HPRE5 sets it on the PLL; HDIV5 applies if SYSCLK falls back to HSE/HSI" if clock_config.pll else "32 MHz, the range 1 limit" }}.
+     * The radio needs HDIV5 clear (§12.4.6). */
+    ll_rcc_set_hdiv5(0);
+{% endif %}
+
+{% else %}
 {% if clock_config.pll %}
 {% if clock_config.needs_vos %}
     /* ---- Voltage scaling for high-speed operation ---- */
@@ -313,22 +490,20 @@ void core_clock_init(void)
     ll_rcc_set_sysclk(LL_RCC_SYSCLK_HSE);
     ll_rcc_wait_sysclk(LL_RCC_SYSCLK_HSE);
 {% elif clock_config.source == "msi" %}
-    /* Configure MSI to {{ clock_config.sysclk_mhz }}MHz */
-{% if clock_config.msi_range != "LL_RCC_MSI_RANGE_2MHZ" %}
-    ll_rcc_msi_set_range({{ clock_config.msi_range }});
-    while (!ll_rcc_msi_ready())
-        ;
-{% else %}
-    /* MSI range 5 (~2.097MHz) is the L0 reset default — no change needed */
-{% endif %}
-    ll_flash_set_latency(ll_flash_latency_for_mhz({{ clock_config.sysclk_mhz }}));
-    ll_rcc_set_sysclk(LL_RCC_SYSCLK_MSI);
-    ll_rcc_wait_sysclk(LL_RCC_SYSCLK_MSI);
-{% if clock_config.lp_run %}
-    /* Enter Low-Power Run mode (Vcore low-power regulator, ~8µA active) */
-    ll_rcc_pwr_clk_enable();
-    ll_pwr_lp_run_enable();
-{% endif %}
+    /* Configure MSI to {{ clock_config.sysclk_mhz }}MHz. SYSCLK is already MSI at reset, so a
+     * range change is a clock change: raise the wait states BEFORE it and
+     * lower them after (RM0394 §3.3.3). */
+    {
+        uint32_t ws = ll_flash_latency_for_mhz({{ clock_config.sysclk_mhz }});
+        if (ll_flash_get_latency() < ws)
+            ll_flash_set_latency(ws);
+        ll_rcc_msi_set_range({{ clock_config.msi_range }});
+        while (!ll_rcc_msi_ready())
+            ;
+        ll_rcc_set_sysclk(LL_RCC_SYSCLK_MSI);
+        ll_rcc_wait_sysclk(LL_RCC_SYSCLK_MSI);
+        ll_flash_set_latency(ws);
+    }
 {% elif clock_config.source == "hsi48" %}
     ll_rcc_hsi48_enable();
     while (!ll_rcc_hsi48_ready())
@@ -339,6 +514,7 @@ void core_clock_init(void)
 {% endif %}
 {% endif %}
 
+{% endif %}
     /* ---- Bus prescalers ---- */
     ll_rcc_set_ahb_div({{ clock_config.ahb_div }});
     ll_rcc_set_apb1_div({{ clock_config.apb1_div }});
@@ -427,6 +603,16 @@ void core_pads_init(void)
 {% endif %}
 {% else %}
     /* No pads configured in config.json */
+{% endif %}
+{% if pullup_pins %}
+
+    /* ---- On-tile pull-ups (config.json "pullups"): drive the control pins ---- */
+{% for p in pullup_pins %}
+    /* {{ p.label }}: P{{ p.port }}{{ p.pin }} {{ "high" if p.high else "low" }} */
+    ll_rcc_gpio_clk_enable(GPIO{{ p.port }});
+    ll_gpio_config_output(GPIO{{ p.port }}, {{ p.pin }});
+    {{ "ll_gpio_set" if p.high else "ll_gpio_clear" }}(GPIO{{ p.port }}, 1UL << {{ p.pin }});
+{% endfor %}
 {% endif %}
 {% if sai_kernel_clk == "hsi16" %}
 

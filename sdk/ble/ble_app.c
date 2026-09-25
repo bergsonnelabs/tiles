@@ -9,9 +9,17 @@
 #include <string.h>
 #include "app_common.h"         /* Must come first — defines MAX, MIN, etc. */
 #include "core_config.h"
+
+/* The 2.4 GHz radio needs voltage range 1 (RM0493 §12.4.6); the "low" clock
+ * level (HSI16, 16 MHz) runs in range 2. coregen refuses the combination when
+ * config.json enables BLE; this catches a BLE_ENABLED=1 build that bypasses it. */
+#if defined(SYSCLK_HZ) && (SYSCLK_HZ < 32000000UL)
+#error "BLE needs clock medium or higher (the radio needs voltage range 1; clock low is HSI16 in range 2)"
+#endif
 #include "ll_common.h"
 #include "ll_rcc.h"
 #include "ll_pwr.h"
+#include "ll_rtc.h"
 #include "blestack.h"
 #include "auto/ble_gap_aci.h"
 #include "auto/ble_gatt_aci.h"
@@ -188,18 +196,39 @@ static void ble_host_task(void)
  * HSE tuning from OTP
  * ============================================================ */
 
-/* OTP memory on WBA55 */
-#define OTP_AREA_BASE   0x0BFA0000UL
+/* OTP on the WBA55: 512 B at 0x0BF90000 (FLASH_OTP_BASE / FLASH_OTP_SIZE in
+ * the CubeWBA CMSIS header; core_otp.h uses the same). This pointed at
+ * 0x0BFA0000, which isn't the OTP — hence the old "not accessible" TODO. */
+#define OTP_AREA_BASE   0x0BF90000UL
+#define OTP_AREA_SIZE   512u
 
-/* RCC_ECSCR1 at offset 0x210: HSETRIM bits [21:16] */
+/* RCC_ECSCR1 at offset 0x210: HSETRIM bits [21:16] (RM0493 §12.8.53) */
 #define RCC_ECSCR1      REG32(RCC_BASE + 0x210UL)
+
+/* Default HSE load-capacitor trim when the OTP holds none. Kept at the value
+ * the stack has shipped with; changing it needs a frequency measurement. */
+#define HSE_TRIM_DEFAULT  0x0Cu
+
+/* ST's OTP record (CubeWBA otp.h, OTP_Data_s): 16-byte quad-word slots,
+ *   [0..7] additional data, [8..13] BD address, [14] hsetune, [15] index.
+ * OTP_Read(0) takes the LAST slot whose index byte is 0 (later writes
+ * supersede earlier ones). A blank slot reads 0xFF throughout. */
+static int otp_hsetune(uint8_t *out)
+{
+    for (uint32_t off = OTP_AREA_SIZE; off >= 16u; off -= 16u) {
+        const volatile uint8_t *slot = (const volatile uint8_t *)(OTP_AREA_BASE + off - 16u);
+        if (slot[15] == 0x00u && slot[14] <= 0x3Fu) {
+            *out = slot[14];
+            return 1;
+        }
+    }
+    return 0;
+}
 
 static void config_hse_tuning(void)
 {
-    /* Apply default HSE trim (0x0C).
-     * TODO: read from OTP once we find the correct non-secure OTP address.
-     * 0x0BFA0000 is not accessible — may need secure access or different base. */
-    uint8_t hsetune = 0x0C;
+    uint8_t hsetune = HSE_TRIM_DEFAULT;
+    (void)otp_hsetune(&hsetune);          /* factory/board trim if programmed */
 
     /* Write HSE trim: RCC_ECSCR1 register, HSETRIM bits [21:16] */
     MOD_BITS(RCC_ECSCR1, 0x3FUL << 16, ((uint32_t)(hsetune & 0x3F)) << 16);
@@ -223,9 +252,14 @@ uint8_t  ble_app_pairing_enabled = 0;         /* default: pairing disabled */
 
 void ble_app_init(void)
 {
-    /* 0. Ensure AHB5 clock divider is 1 (no division). */
-    #define RCC_CFGR4  REG32(RCC_BASE + 0x200UL)
-    RCC_CFGR4 = 0x00000000;
+    /* 0. The radio needs range 1 with hclk5 undivided by HDIV5 (RM0493
+     *    §12.4.6). core_clock_init() already does this for every level BLE
+     *    builds at (coregen refuses BLE with clock "low"). This used to write
+     *    RCC_CFGR4 = 0, which also zeroed HPRE5: on the PLL levels that put
+     *    hclk5 at 64 / 100 MHz (limit 32) and changed HPRE5 while SYSCLK ran
+     *    from the PLL, which RM0493 §12.8.51 forbids. Only HDIV5 is touched. */
+    if (ll_pwr_get_vos() == 1u)
+        ll_rcc_set_hdiv5(0);
 
     /* 0b. Enable instruction cache (1-way mode) */
     {
@@ -261,6 +295,18 @@ void ble_app_init(void)
         RNG_CR_REG = (1UL << 2);
     }
 
+    /* 2a. The RTC is the SDK's (core_rtc / core_stop_for): a 1 Hz calendar on
+     *     LSI, left as it is if it already runs. The BLE timer server runs on
+     *     LPTIM2 + SysTick (stm32_timer_if.c), not the RTC. This used to put
+     *     the RTC in "binary mode" by setting RTC_CR bits 9:8 — which are
+     *     ALRBE:ALRAE, so it enabled both alarms (BIN is RTC_ICSR[9:8],
+     *     RM0493 §36.6.4) — and set PRER to PREDIV_A 31 / PREDIV_S 0, a 1 kHz
+     *     calendar "second" that broke core_rtc time and the RTC-measured
+     *     core_stop_for until the next ll_rtc_init. It runs before the radio
+     *     sleep clock below: if RTCSEL holds another source, ll_rtc_init()
+     *     resets the backup domain, which also clears RADIOSTSEL and LSI1. */
+    ll_rtc_ensure();
+
     /* 2. Radio sleep clock setup — HSE/1024.
      *    Register dump of working CubeWBA project confirms RADIOSTSEL=0b10
      *    (HSE/1024) despite its code saying RCC_RADIOSTCLKSOURCE_LSI —
@@ -269,29 +315,6 @@ void ble_app_init(void)
     ll_rcc_lsi1_enable_wait();  /* LSI1 still needed by link layer */
     ll_rcc_set_radio_sleep_clk(LL_RCC_RADIOSLEEPSOURCE_LSI);
 
-    /* 2b. Enable RTC APB clock and init in binary-only mode.
-     *     Working project uses RTC for BLE timer server timing. */
-    ll_rcc_apb7_clk_enable((1UL << 21));  /* RTCAPBEN */
-    /* Set RTCSEL = LSI (bits [9:8] = 0b10) — use MOD_BITS to avoid touching RADIOSTSEL */
-    MOD_BITS(REG32(RCC_BASE + 0xF0UL), 0x3UL << 8, 0x2UL << 8);
-
-    /* Init RTC in binary-only mode */
-    {
-        #define RTC_NS_ADDR  (PERIPH_BASE + 0x06007800UL)  /* 0x46007800 (APB7 domain) */
-        volatile uint32_t *wpr  = (volatile uint32_t *)(RTC_NS_ADDR + 0x24);
-        volatile uint32_t *icsr = (volatile uint32_t *)(RTC_NS_ADDR + 0x0C);
-        volatile uint32_t *prer = (volatile uint32_t *)(RTC_NS_ADDR + 0x10);
-        volatile uint32_t *cr   = (volatile uint32_t *)(RTC_NS_ADDR + 0x18);
-
-        *wpr = 0xCA;  /* unlock */
-        *wpr = 0x53;
-        *icsr |= (1UL << 7);  /* INIT=1 */
-        for (volatile uint32_t t = 100000; t && !(*icsr & (1UL << 6)); t--) ;
-        *cr |= (0x3UL << 8);  /* BIN=11 (binary-only) */
-        *prer = (31UL << 16);  /* PREDIV_A=31, PREDIV_S=0 */
-        *icsr &= ~(1UL << 7);  /* exit init */
-        *wpr = 0xFF;  /* re-lock */
-    }
 
     /* 3. Initialize sequencer */
     UTIL_SEQ_Init();
@@ -358,17 +381,39 @@ void ble_app_init(void)
 
     BleStack_Init(&params);
 
-    /* Set BD address from device UID96 — unique per board.
-     * UID is at 0x0BF90700 (FLASH_ENGY_BASE + 0x200 on WBA55). */
+    /* Public BD address from the IEEE 64-bit unique ID (DESIG_UID64R1/R2 at
+     * 0x0BF90A00, RM0493 §44.1.11-12), the way CubeWBA builds it:
+     *   [47:24] STID, ST's IEEE company ID (OUI 00:80:E1)
+     *   [23:16] DEVID, [15:0] low 16 bits of the device number (DEVNUM)
+     * The old address took bytes of the 96-bit UID (wafer / lot number), so
+     * its top 24 bits were not anyone's OUI: an unregistered "public" address
+     * that could collide with a real vendor's. This one is in ST's registered
+     * block, keeps the public address type the GAP/advertising/pairing calls
+     * below already use, and is stable per chip. ST's note: a shipping
+     * product should use its own OUI (or a static random address). */
     {
-        volatile uint32_t *uid = (volatile uint32_t *)0x0BF90700UL;
+        const volatile uint32_t *uid64 = (const volatile uint32_t *)0x0BF90A00UL;
+        uint32_t devnum = uid64[0];            /* UID64R1: DEVNUM[31:0] */
+        uint32_t r2     = uid64[1];            /* UID64R2: STID[23:0] << 8 | DEVID */
         uint8_t bd_addr[6];
-        bd_addr[0] = (uint8_t)(uid[0]);
-        bd_addr[1] = (uint8_t)(uid[0] >> 8);
-        bd_addr[2] = (uint8_t)(uid[0] >> 16);
-        bd_addr[3] = (uint8_t)(uid[1]);
-        bd_addr[4] = (uint8_t)(uid[1] >> 8);
-        bd_addr[5] = (uint8_t)(uid[1] >> 16);
+        if (devnum != 0xFFFFFFFFUL) {
+            bd_addr[0] = (uint8_t)(devnum);
+            bd_addr[1] = (uint8_t)(devnum >> 8);
+            bd_addr[2] = (uint8_t)(r2);            /* DEVID */
+            bd_addr[3] = (uint8_t)(r2 >> 8);       /* STID, LSB first */
+            bd_addr[4] = (uint8_t)(r2 >> 16);
+            bd_addr[5] = (uint8_t)(r2 >> 24);
+        } else {
+            /* Unprogrammed UID64 (not expected on production parts): keep the
+             * previous UID96-derived bytes so the board still has an address. */
+            const volatile uint32_t *uid = (const volatile uint32_t *)0x0BF90700UL;
+            bd_addr[0] = (uint8_t)(uid[0]);
+            bd_addr[1] = (uint8_t)(uid[0] >> 8);
+            bd_addr[2] = (uint8_t)(uid[0] >> 16);
+            bd_addr[3] = (uint8_t)(uid[1]);
+            bd_addr[4] = (uint8_t)(uid[1] >> 8);
+            bd_addr[5] = (uint8_t)(uid[1] >> 16);
+        }
         aci_hal_write_config_data(0x00 /* CONFIG_DATA_PUBADDR_OFFSET */, 6, bd_addr);
     }
 

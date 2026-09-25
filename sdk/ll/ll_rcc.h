@@ -148,18 +148,19 @@ static inline int ll_rcc_msi_ready(void)
 #define LL_RCC_MSI_RANGE_4MHZ    0x6UL   /* 4.194304 MHz */
 
 /** Configure MSI range on STM32L0 (RCC_ICSCR[15:13]).
- *  Only modifies MSIRANGE — preserves MSITRIM calibration value. */
+ *  Only modifies MSIRANGE — preserves the MSI/HSI16 calibration and trim
+ *  fields around it (MSITRIM is ICSCR[31:24], MSICAL [23:16], RM0377 §7.3.2). */
 static inline void ll_rcc_msi_set_range(uint32_t range)
 {
-    /* Only change MSIRANGE[15:13], preserve everything else
-     * including MSITRIM[12:8] which holds factory calibration. */
     MOD_BITS(REG32(RCC_BASE + 0x04UL), 0x7UL << 13, range << 13);
 }
 
-/** Poll until MSI is stable (CR: MSIRDY, bit 1). */
+/** Poll until MSI is stable. On the L0 MSIRDY is RCC_CR bit 9 (MSION is bit
+ *  8, RM0377 §7.3.1); bit 1 is HSI16KERON, which reads 0, so polling it hung
+ *  every MSI range change. */
 static inline int ll_rcc_msi_ready(void)
 {
-    return (REG32(RCC_BASE + 0x00UL) & (1UL << 1)) != 0;
+    return (REG32(RCC_BASE + 0x00UL) & (1UL << 9)) != 0;
 }
 
 #endif /* MSI */
@@ -231,44 +232,75 @@ static inline int ll_rcc_hsi48_ready(void)
  * Flash wait states
  * ============================================================ */
 
+/* LATENCY field of FLASH_ACR. The L0 has one bit (bit 0; bits 1-6 are
+ * PRFTEN, SLEEP_PD, RUN_PD, DISAB_BUF, PRE_READ — RM0377 §3.7.1), so a 4-bit
+ * mask there would clear the prefetch and power-down settings. */
+#if defined(STM32L011xx)
+  #define LL_FLASH_LATENCY_MASK  0x1UL
+#else
+  #define LL_FLASH_LATENCY_MASK  0xFUL
+#endif
+
 /**
  * Set flash read latency (wait states).
  * Must be set BEFORE increasing SYSCLK, or AFTER decreasing it.
- *
- * Typical values for VDD >= 2.7V:
- *   L0:   0 WS ≤ 16MHz, 1 WS ≤ 32MHz
- *   L4:   0 WS ≤ 16MHz, 1 WS ≤ 32MHz, 2 WS ≤ 48MHz, 3 WS ≤ 64MHz, 4 WS ≤ 80MHz
- *   WBA:  0 WS ≤ 32MHz, 1 WS ≤ 64MHz, 2 WS ≤ 96MHz, 3 WS ≤ 100MHz
- *   H5:   0 WS ≤ 32MHz, 1 WS ≤ 64MHz, 2 WS ≤ 96MHz, ... 5 WS ≤ 250MHz
+ * See ll_flash_latency_for_range() for the tables.
  */
 static inline void ll_flash_set_latency(uint32_t wait_states)
 {
-    MOD_BITS(FLASH_ACR, 0xFUL, wait_states);
+    MOD_BITS(FLASH_ACR, LL_FLASH_LATENCY_MASK, wait_states);
     /* Wait until the new latency is effective */
     uint32_t timeout = 100000;
-    while ((FLASH_ACR & 0xFUL) != wait_states && --timeout)
+    while ((FLASH_ACR & LL_FLASH_LATENCY_MASK) != wait_states && --timeout)
         ;
 }
 
+/** Current flash read latency (wait states). */
+static inline uint32_t ll_flash_get_latency(void)
+{
+    return FLASH_ACR & LL_FLASH_LATENCY_MASK;
+}
+
 /**
- * Calculate required flash wait states from SYSCLK frequency.
+ * Flash wait states for an HCLK of `mhz` (rounded up) in voltage range
+ * `range` (1 = the highest-performance range).
+ *
+ *   L0  (RM0377 Table 14): range 1: 0 WS <= 16, 1 WS <= 32 MHz
+ *                          range 2: 0 WS <= 8,  1 WS <= 16 MHz
+ *                          range 3: 0 WS up to its 4.2 MHz limit
+ *   L4  (RM0394 Table 9):  range 1: 0/1/2/3/4 WS <= 16/32/48/64/80 MHz
+ *                          range 2: 0/1/2/3 WS <= 6/12/18/26 MHz
+ *   WBA (RM0493 Table 41, LPM = 0):
+ *                          range 1: 0/1/2/3 WS <= 32/64/96/100 MHz
+ *                          range 2: 0 WS <= 8, 1 WS <= 16 MHz
+ *   H5: range argument ignored (ll_flash_latency_for_mhz table).
  */
-static inline uint32_t ll_flash_latency_for_mhz(uint32_t mhz)
+static inline uint32_t ll_flash_latency_for_range(uint32_t mhz, uint32_t range)
 {
 #if defined(STM32L011xx)
-    return (mhz > 16) ? 1 : 0;
+    if (range == 1) return (mhz > 16) ? 1 : 0;
+    if (range == 2) return (mhz > 8) ? 1 : 0;
+    return 0;
 #elif defined(STM32L422xx)
+    if (range == 2) {
+        if (mhz <= 6)  return 0;
+        if (mhz <= 12) return 1;
+        if (mhz <= 18) return 2;
+        return 3;
+    }
     if (mhz <= 16) return 0;
     if (mhz <= 32) return 1;
     if (mhz <= 48) return 2;
     if (mhz <= 64) return 3;
     return 4;  /* up to 80 MHz */
 #elif defined(STM32WBA55xx)
+    if (range == 2) return (mhz > 8) ? 1 : 0;
     if (mhz <= 32) return 0;
     if (mhz <= 64) return 1;
     if (mhz <= 96) return 2;
     return 3;  /* up to 100 MHz */
 #elif defined(STM32H523xx)
+    (void)range;
     if (mhz <= 32) return 0;
     if (mhz <= 64) return 1;
     if (mhz <= 96) return 2;
@@ -276,8 +308,19 @@ static inline uint32_t ll_flash_latency_for_mhz(uint32_t mhz)
     if (mhz <= 160) return 4;
     return 5;  /* up to 250 MHz */
 #else
+    (void)mhz; (void)range;
     return 0;
 #endif
+}
+
+/**
+ * Flash wait states for SYSCLK `mhz` in the highest voltage range (range 1 on
+ * L0/L4/WBA). The WBA and L0 generated clock setup uses
+ * ll_flash_latency_for_range(), which also covers their lower ranges.
+ */
+static inline uint32_t ll_flash_latency_for_mhz(uint32_t mhz)
+{
+    return ll_flash_latency_for_range(mhz, 1);
 }
 
 /* ============================================================
@@ -357,9 +400,12 @@ static inline void ll_rcc_pll_config(uint32_t src, uint32_t m, uint32_t n, uint3
        DIVR: [8:0] PLL1N-1, [30:24] PLL1R-1
        (PLL1M_Pos=8, PLL1REN_Pos=18, PLL1RGE_Pos=2 per stm32wba55xx.h CMSIS header) */
     {
-        /* PLL1RGE: VCO input frequency range. RGE=0b00→4-8MHz, 0b01→8-16MHz, 0b10→16-32MHz */
+        /* PLL1RGE[3:2], RM0493 §12.8.7: 00/01/10 = ref_ck 4-8 MHz, 11 = 8-16 MHz.
+         * (This wrote 01 for 8-16 MHz and 10 for 16-32 MHz, which isn't a legal
+         * PLL input at all — ref_ck is 4-16 MHz, §12.4.3.) Matches the CubeWBA
+         * HAL: 11 above 8 MHz, else 00. */
         uint32_t vco_mhz = (src == LL_RCC_PLLSRC_HSE) ? (32 / m) : (16 / m);
-        uint32_t rge = (vco_mhz > 16) ? 0x2UL : (vco_mhz > 8) ? 0x1UL : 0x0UL;
+        uint32_t rge = (vco_mhz > 8) ? 0x3UL : 0x0UL;
         uint32_t cfgr = src
                       | (rge << 2)         /* PLL1RGE */
                       | ((m - 1) << 8)     /* PLL1M */
@@ -400,15 +446,14 @@ static inline void ll_rcc_pll_config(uint32_t src, uint32_t m, uint32_t n, uint3
  * Must be called after ll_rcc_pll_config() and before ll_rcc_pll_enable().
  *   vco_input_mhz: VCO input = source_mhz / M
  *
- * WBA55 PLL1CFGR[12:11] PLL1RGE: 00 = 4–8 MHz, 10 = 8–16 MHz
+ * WBA55 PLL1CFGR[3:2]   PLL1RGE: 00/01/10 = 4–8 MHz, 11 = 8–16 MHz
  * H5    PLL1CFGR[4:3]   PLL1RGE: 00 = 1–2 MHz, 01 = 2–4 MHz, 10 = 4–8 MHz, 11 = 8–16 MHz
  */
 static inline void ll_rcc_pll_set_input_range(uint32_t vco_input_mhz)
 {
 #if defined(STM32WBA55xx)
-    /* PLL1CFGR[3:2] = PLL1RGE: 00→4-8MHz, 01→8-16MHz, 10→16-32MHz
-     * (PLL1RGE_Pos=2 per stm32wba55xx.h CMSIS header) */
-    uint32_t rge = (vco_input_mhz > 16) ? 0x2UL : (vco_input_mhz > 8) ? 0x1UL : 0x0UL;
+    /* PLL1CFGR[3:2] = PLL1RGE: 00/01/10 = 4-8 MHz, 11 = 8-16 MHz (RM0493 §12.8.7) */
+    uint32_t rge = (vco_input_mhz > 8) ? 0x3UL : 0x0UL;
     MOD_BITS(REG32(RCC_BASE + 0x28UL), 0x3UL << 2, rge << 2);
 #elif defined(STM32H523xx)
     uint32_t rge = (vco_input_mhz > 8) ? 0x3UL : (vco_input_mhz > 4) ? 0x2UL :
@@ -460,6 +505,16 @@ static inline int ll_rcc_pll_enable_timeout(uint32_t retries)
         if (--retries == 0) return 0;
     }
     return 1;
+}
+
+/** Disable the main PLL and wait until it has stopped (PLLRDY = 0). It must
+ *  not be the SYSCLK source. PLL settings can only be written while it is off. */
+static inline void ll_rcc_pll_disable(void)
+{
+    CLR_BITS(REG32(RCC_BASE + 0x00UL), (1UL << 24));  /* CR: PLLON / PLL1ON */
+    uint32_t timeout = 100000;
+    while (ll_rcc_pll_ready() && --timeout)
+        ;
 }
 
 /**
@@ -565,7 +620,16 @@ static inline void ll_rcc_set_ahb_div(uint32_t div)
 #elif defined(STM32L422xx)
     MOD_BITS(REG32(RCC_BASE + 0x08UL), 0xFUL << 4, val << 4);    /* CFGR HPRE */
 #elif defined(STM32WBA55xx)
-    MOD_BITS(REG32(RCC_BASE + 0x1CUL), 0xFUL << 8, val << 8);    /* CFGR1 HPRE */
+    /* RM0493 §12.8.5: HPRE is RCC_CFGR2[2:0] (3 bits: 0xx = /1, 100 = /2,
+     * 101 = /4, 110 = /8, 111 = /16). CFGR1[23:4] is reserved; this used to
+     * write CFGR1[11:8]. Every generated project divides by 1, so the old
+     * write was a harmless zero, but a divider would have gone nowhere. */
+    {
+        uint32_t v3 = (div >= 16) ? 0x7UL : (div >= 8) ? 0x6UL : (div >= 4) ? 0x5UL
+                    : (div >= 2) ? 0x4UL : 0x0UL;
+        (void)val;
+        MOD_BITS(REG32(RCC_BASE + 0x20UL), 0x7UL << 0, v3 << 0);  /* CFGR2 HPRE */
+    }
 #elif defined(STM32H523xx)
     MOD_BITS(REG32(RCC_BASE + 0x1CUL), 0xFUL << 8, val << 8);    /* CFGR1 HPRE */
 #endif
@@ -590,7 +654,7 @@ static inline void ll_rcc_set_apb1_div(uint32_t div)
 #elif defined(STM32L422xx)
     MOD_BITS(REG32(RCC_BASE + 0x08UL), 0x7UL << 8, val << 8);    /* CFGR PPRE1 */
 #elif defined(STM32WBA55xx)
-    MOD_BITS(REG32(RCC_BASE + 0x1CUL), 0x7UL << 12, val << 12);  /* CFGR1 PPRE1 */
+    MOD_BITS(REG32(RCC_BASE + 0x20UL), 0x7UL << 4, val << 4);    /* CFGR2 PPRE1 (RM0493 §12.8.5) */
 #elif defined(STM32H523xx)
     MOD_BITS(REG32(RCC_BASE + 0x1CUL), 0x7UL << 12, val << 12);  /* CFGR1 PPRE1 */
 #endif
@@ -615,7 +679,7 @@ static inline void ll_rcc_set_apb2_div(uint32_t div)
 #elif defined(STM32L422xx)
     MOD_BITS(REG32(RCC_BASE + 0x08UL), 0x7UL << 11, val << 11);  /* CFGR PPRE2 */
 #elif defined(STM32WBA55xx)
-    MOD_BITS(REG32(RCC_BASE + 0x20UL), 0x7UL << 4, val << 4);    /* CFGR2 PPRE2 */
+    MOD_BITS(REG32(RCC_BASE + 0x20UL), 0x7UL << 8, val << 8);    /* CFGR2 PPRE2 (RM0493 §12.8.5; was PPRE1's [6:4]) */
 #elif defined(STM32H523xx)
     MOD_BITS(REG32(RCC_BASE + 0x20UL), 0x7UL << 4, val << 4);    /* CFGR2 PPRE2 */
 #endif
@@ -742,11 +806,13 @@ static inline void ll_rcc_ahb5_clk_sleep_disable(void)
  * (ll_pwr.h pulls in only ll_common.h, so there is no cycle here.) */
 #include "ll_pwr.h"
 
-/** Get radio power mode (PWR_SR1 bits [2:1]) */
+/** Get the 2.4 GHz radio operating mode: PWR_RADIOSCR.MODE[1:0] (offset
+ *  0x100, RM0493 §11.10.24): 00 deep sleep, 01 sleep, 1x active. This read
+ *  PWR_SR1 bits [2:1], which are SBF:STOPF, so it never reported "active";
+ *  CubeWBA's LL_PWR_GetRadioMode() reads RADIOSCR. */
 static inline uint32_t ll_pwr_get_radio_mode(void)
 {
-    /* PWR_SR1 at offset 0x04, RADIOST bits [2:1] */
-    return (REG32(PWR_BASE + 0x04UL) >> 1) & 0x3UL;
+    return REG32(PWR_BASE + 0x100UL) & 0x3UL;
 }
 
 #define LL_PWR_RADIO_ACTIVE_MODE    0x2UL
@@ -913,6 +979,7 @@ static inline void ll_rcc_set_usb_clk_source(uint32_t src)
   #define LL_APB1_TIM2      (1UL << 0)
   #define LL_APB1_USART2    (1UL << 17)
   #define LL_APB1_I2C1      (1UL << 21)
+  #define LL_APB1_LPUART1   (1UL << 18)
   #define LL_APB1_LPTIM1    (1UL << 31)
   /* APB2 */
   #define LL_APB2_TIM21     (1UL << 2)
@@ -1014,6 +1081,95 @@ static inline void ll_pwr_set_vos(uint32_t range)
         ;
 }
 
+/** Current voltage range: 1 or 2 (PWR_VOSR.VOS). Needs the PWR clock. */
+static inline uint32_t ll_pwr_get_vos(void)
+{
+    return (REG32(PWR_BASE + 0x0CUL) & (1UL << 16)) ? 1UL : 2UL;
+}
+
+/* ---- AHB5 (radio bus) clock, RM0493 §12.4.6 / §12.8.51 ----
+ * hclk5 must never exceed 32 MHz (range 1) and must be <= 8 MHz with HDIV5
+ * set before entering range 2. HPRE5 divides SYSCLK when it comes from the
+ * PLL and must be written BEFORE the switch to the PLL (it takes effect with
+ * the switch; writes are ignored, and must not be made, while SWS = PLL).
+ * HDIV5 divides by 2 when SYSCLK is HSI16 or HSE32. The 2.4 GHz radio needs
+ * range 1, hclk5 >= 16 MHz and HDIV5 clear. */
+#define LL_RCC_CFGR4         REG32(RCC_BASE + 0x200UL)
+#define LL_RCC_CFGR4_HDIV5   (1UL << 4)
+
+/** Set HPRE5 for a PLL SYSCLK: div = 1, 2, 3, 4 or 6. */
+static inline void ll_rcc_set_hpre5(uint32_t div)
+{
+    uint32_t v = (div >= 6) ? 0x7UL : (div == 4) ? 0x6UL : (div == 3) ? 0x5UL
+               : (div == 2) ? 0x4UL : 0x0UL;
+    MOD_BITS(LL_RCC_CFGR4, 0x7UL, v);
+    (void)LL_RCC_CFGR4;              /* read back before any range change */
+}
+
+/** HDIV5: 1 = hclk5 is SYSCLK / 2 (HSI16/HSE32 SYSCLK), 0 = not divided. */
+static inline void ll_rcc_set_hdiv5(int on)
+{
+    if (on) SET_BITS(LL_RCC_CFGR4, LL_RCC_CFGR4_HDIV5);
+    else    CLR_BITS(LL_RCC_CFGR4, LL_RCC_CFGR4_HDIV5);
+    (void)LL_RCC_CFGR4;
+}
+
+/* ---- pll1rclk SYSCLK prescaler (PLL1CFGR bits 22:20, RM0493 §12.8.7) ----
+ * A SYSCLK increase may be at most 43 MHz in one step (RM0493 Table 99). The
+ * switch to the PLL goes through the prescaler: select it (divided) before
+ * setting SW = PLL, then release it; hardware steps up to the undivided clock
+ * and sets PLL1RCLKPRERDY. This is the CubeWBA HAL_RCC_ClockConfig sequence
+ * (2-step division, whatever the PLL frequency). */
+#define LL_RCC_PLL1CFGR              REG32(RCC_BASE + 0x28UL)
+#define LL_RCC_PLL1CFGR_RCLKPRE      (1UL << 20)
+#define LL_RCC_PLL1CFGR_RCLKPRESTEP  (1UL << 21)
+#define LL_RCC_PLL1CFGR_RCLKPRERDY   (1UL << 22)
+
+/** Divide pll1rclk on its way to SYSCLK (2-step division). */
+static inline void ll_rcc_pll1_rclkpre_divide(void)
+{
+    MOD_BITS(LL_RCC_PLL1CFGR, LL_RCC_PLL1CFGR_RCLKPRESTEP | LL_RCC_PLL1CFGR_RCLKPRE,
+             LL_RCC_PLL1CFGR_RCLKPRE);
+}
+
+/** Release the pll1rclk prescaler and wait for the undivided clock. */
+static inline void ll_rcc_pll1_rclkpre_release(void)
+{
+    CLR_BITS(LL_RCC_PLL1CFGR, LL_RCC_PLL1CFGR_RCLKPRE);
+    uint32_t timeout = 100000;
+    while (!(LL_RCC_PLL1CFGR & LL_RCC_PLL1CFGR_RCLKPRERDY) && --timeout)
+        ;
+}
+
+#elif defined(STM32L011xx)
+
+#include "ll_pwr.h"
+
+/**
+ * Set the L0 core voltage range (PWR_CR.VOS[12:11], RM0377 §6.1.5):
+ *   1 = 1.8 V (up to 32 MHz, needs VDD >= 1.71 V), 2 = 1.5 V (up to 16 MHz,
+ *   the reset value), 3 = 1.2 V (up to 4.2 MHz; no flash/EEPROM program or
+ *   erase, no HSI16 as system clock, PLL VCO <= 24 MHz).
+ * Raise the range before raising the clock; lower the clock before lowering
+ * the range. The system clock stops until VOSF clears. Needs the PWR clock.
+ */
+static inline void ll_pwr_set_vos(uint32_t range)
+{
+    uint32_t timeout = 100000;
+    while ((REG32(PWR_BASE + 0x04UL) & (1UL << 4)) && --timeout)   /* CSR.VOSF */
+        ;
+    MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x3UL << 11, (range & 0x3UL) << 11);
+    timeout = 100000;
+    while ((REG32(PWR_BASE + 0x04UL) & (1UL << 4)) && --timeout)
+        ;
+}
+
+/** Current L0 voltage range (1, 2 or 3). */
+static inline uint32_t ll_pwr_get_vos(void)
+{
+    return (REG32(PWR_BASE + 0x00UL) >> 11) & 0x3UL;
+}
+
 #elif defined(STM32H523xx)
 
 #ifndef PWR_BASE
@@ -1103,5 +1259,21 @@ static inline void ll_rcc_set_sai_clk_source(uint32_t source)
 }
 
 #endif /* STM32WBA55xx I2C clock source */
+
+#if defined(STM32L011xx)
+
+/* I2C1 kernel clock (RCC_CCIPR 0x4C, I2C1SEL[13:12], RM0377 §7.3.19). */
+#define LL_RCC_I2C_CLK_PCLK     0x0UL
+#define LL_RCC_I2C_CLK_SYSCLK   0x1UL
+#define LL_RCC_I2C_CLK_HSI16    0x2UL
+
+/** Set the I2C1 kernel clock source (i2c_num must be 1; the L011 has only I2C1). */
+static inline void ll_rcc_set_i2c_clk_source(uint32_t i2c_num, uint32_t source)
+{
+    if (i2c_num == 1)
+        MOD_BITS(REG32(RCC_BASE + 0x4CUL), 0x3UL << 12, (source & 0x3UL) << 12);
+}
+
+#endif /* STM32L011xx I2C clock source */
 
 #endif /* LL_RCC_H */

@@ -49,8 +49,10 @@ static inline void core_rng_init(void)
     ll_rcc_hsi48_enable();
     while (!ll_rcc_hsi48_ready())
         ;
-    /* Select HSI48 as RNG clock: RCC_CCIPR bits [29:28] = 0b10 (HSI48) */
-    MOD_BITS(REG32(RCC_BASE + 0x88UL), 0x3UL << 28, 0x2UL << 28);
+    /* RNG clock = the 48 MHz clock, CLK48SEL = RCC_CCIPR[27:26]; 00 = HSI48
+     * (RM0394 §6.4.27), the same selection USB uses. This used to write
+     * [29:28], ADCSEL, which the L41x/L42x don't have. */
+    MOD_BITS(REG32(RCC_BASE + 0x88UL), 0x3UL << 26, 0x0UL << 26);
 #elif defined(STM32H523xx)
     /* H5 RNG is clocked from HSI48. Enable it if not already running
      * (USB init may have already enabled it). */

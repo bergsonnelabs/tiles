@@ -72,12 +72,20 @@ MCU_DB = {
         "cpu_flag": "-mcpu=cortex-m0plus",
         "fpu": None,
         "max_sysclk_mhz": 32,
+        # RM0377 §7.2.4 / §7.3.3 (RCC_CFGR PLLMUL, PLLDIV): no input divider,
+        # multiplier from a fixed set, output /2 /3 /4. Input 2-24 MHz, VCO at
+        # most 96 MHz in range 1 (48 in range 2, 24 in range 3), SYSCLK <= 32.
+        # (These limits were copied from the L4: "max" ran the VCO at 128 MHz.)
         "pll": {
-            "m_range": (1, 4),      # DIV1-DIV4
-            "n_range": (8, 86),
+            "m_range": (1, 1),
+            "n_values": [3, 4, 6, 8, 12, 16, 24, 32, 48],
             "r_values": [2, 3, 4],
-            "vco_min_mhz": 96,
-            "vco_max_mhz": 344,
+            "in_min_mhz": 2,
+            "in_max_mhz": 24,
+            "vco_min_mhz": 0,
+            "vco_max_mhz": 96,
+            "out_max_mhz": 32,
+            "prefer_low_vco": True,
         },
     },
     "STM32L422TB": {
@@ -102,12 +110,23 @@ MCU_DB = {
         "cpu_flag": "-mcpu=cortex-m33",
         "fpu": "fpv5-sp-d16",
         "max_sysclk_mhz": 100,
+        # RM0493 §12.4.3 / §12.8.7: ref_ck 4-16 MHz, VCO 128-544 MHz, pll1rclk
+        # <= 100 MHz, and a PLL1R division factor is forbidden when
+        # VCO / (2 x TRUNC(R / 2)) exceeds that maximum (so R = 3 at a 300 MHz
+        # VCO, what the solver used to pick for 100 MHz, is out). Lowest VCO
+        # first: the RM recommends it, and it is what CubeWBA uses (100 MHz =
+        # 32 / 4 x 25 / 2, VCO 200 MHz).
         "pll": {
             "m_range": (1, 8),
             "n_range": (4, 512),
             "r_values": [1, 2, 3, 4, 5, 6, 7, 8],
+            "in_min_mhz": 4,
+            "in_max_mhz": 16,
             "vco_min_mhz": 128,
             "vco_max_mhz": 544,
+            "out_max_mhz": 100,
+            "r_trunc_rule": True,
+            "prefer_low_vco": True,
         },
     },
     "STM32H523HE": {
@@ -132,23 +151,37 @@ def solve_pll(source_mhz, target_mhz, pll_spec):
     """Find PLL M/N/R values to get from source_mhz to target_mhz.
 
     Returns (m, n, r) tuple or None if no valid combination exists.
-    Prefers solutions with VCO closest to the middle of the valid range
-    (best jitter performance) and lowest M (widest PLL bandwidth).
+    By default prefers the VCO closest to the middle of the valid range
+    (best jitter performance) and lowest M (widest PLL bandwidth); a spec
+    with "prefer_low_vco" takes the lowest legal VCO instead (lowest power).
+
+    Optional spec keys (defaults keep the L4 / H5 behavior unchanged):
+      n_values       explicit multiplier set instead of n_range (L0 PLLMUL)
+      in_min_mhz /   PLL input (source / M) limits; default 1-16 MHz
+        in_max_mhz
+      out_max_mhz    ceiling on the PLL output
+      r_trunc_rule   WBA rule: R is forbidden when VCO / (2 x (R // 2))
+                     exceeds out_max_mhz (RM0493 §12.8.7)
     """
     m_min, m_max = pll_spec["m_range"]
-    n_min, n_max = pll_spec["n_range"]
+    n_values = pll_spec.get("n_values")
+    if n_values is None:
+        n_min, n_max = pll_spec["n_range"]
     r_values = pll_spec["r_values"]
     vco_min = pll_spec["vco_min_mhz"]
     vco_max = pll_spec["vco_max_mhz"]
     vco_mid = (vco_min + vco_max) / 2
+    in_min = pll_spec.get("in_min_mhz", 1)
+    in_max = pll_spec.get("in_max_mhz", 16)
+    out_max = pll_spec.get("out_max_mhz")
+    prefer_low = pll_spec.get("prefer_low_vco", False)
 
     best = None
     best_score = float("inf")
 
     for m in range(m_min, m_max + 1):
         pll_input = source_mhz / m
-        # PLL input should be 1-16 MHz typically
-        if pll_input < 1 or pll_input > 16:
+        if pll_input < in_min or pll_input > in_max:
             continue
 
         for r in r_values:
@@ -156,12 +189,17 @@ def solve_pll(source_mhz, target_mhz, pll_spec):
             n_exact = target_mhz * m * r / source_mhz
             n = round(n_exact)
 
-            if n < n_min or n > n_max:
+            if n_values is not None:
+                if n not in n_values:
+                    continue
+            elif n < n_min or n > n_max:
                 continue
 
             # Check we hit the target exactly
             actual = source_mhz / m * n / r
             if abs(actual - target_mhz) > 0.01:
+                continue
+            if out_max is not None and actual > out_max + 0.01:
                 continue
 
             # Check VCO range
@@ -169,8 +207,16 @@ def solve_pll(source_mhz, target_mhz, pll_spec):
             if vco < vco_min or vco > vco_max:
                 continue
 
-            # Score: prefer VCO near middle of range, then lowest M
-            score = abs(vco - vco_mid) + m * 0.01
+            if pll_spec.get("r_trunc_rule"):
+                half = 2 * (r // 2)
+                if half == 0 or vco / half > out_max + 0.01:
+                    continue
+
+            if prefer_low:
+                score = vco + m * 0.01
+            else:
+                # Prefer VCO near middle of range, then lowest M
+                score = abs(vco - vco_mid) + m * 0.01
             if score < best_score:
                 best = (m, n, r)
                 best_score = score
@@ -431,6 +477,29 @@ def validate_project_config(config, tile, pad_map, mcu=None):
                 f"Options: {', '.join(available)}"
             )
 
+    # Core.ST.L4: USB is always on (CDC console, 1200-baud DFU touch, serial
+    # update), so its D+/D- pads can't be anything else. Assigning SPI1 /
+    # USART1 / TIM1 / GPIO there silently fought the USB peripheral for PA11 /
+    # PA12 (pads 6/7 on L4.1, 16/17 on L4.2).
+    if mcu and mcu.get("define") == "STM32L422xx":
+        for pad_num, assigned_func in pins.items():
+            info = pad_lookup.get(pad_num)
+            if not info:
+                continue
+            usb_fn = next((f for f in info["all_functions"] if f in ("USB.DP", "USB.DM")), None)
+            if usb_fn and not str(assigned_func).startswith("USB."):
+                errors.append(
+                    f"Pad {pad_num}: '{assigned_func}' can't be used — pad {pad_num} is "
+                    f"{'USB D+' if usb_fn == 'USB.DP' else 'USB D-'} (P{info['port']}{info['pin']}), "
+                    f"and USB is always on on this Core (USB serial, DFU and serial "
+                    f"update). Use another pad."
+                )
+
+    # On-tile pull-ups switched by a GPIO (tile config "pullups", a DB-owned
+    # multiselect; Core.ST.L4.1 has pad 4 via PA9 and pad 5 via PC15).
+    for msg in validate_pullups(config, tile, pad_map):
+        errors.append(msg)
+
     # Validate interface configs reference real interfaces
     iface_names = {i["name"] for i in tile.get("interfaces", [])}
     for iface_name in config.get("interfaces", {}):
@@ -618,13 +687,112 @@ def build_timer_config(config, pad_map):
     return timer_pads
 
 
+# ---- GPIO-switched on-tile pull-ups ----
+
+def _pin_name(pin):
+    m = re.match(r'^P([A-H])(\d+)$', str(pin))
+    return (m.group(1), int(m.group(2))) if m else (None, None)
+
+
+def tile_pullup_options(tile):
+    """The tile's `config.pullups` options as dicts:
+    {value, label, pad (str or None), pins: [(port, pin, drive)]}."""
+    knob = (tile.get("config") or {}).get("pullups") or {}
+    out = []
+    for opt in knob.get("options", []) or []:
+        value = str(opt.get("value", ""))
+        m = re.match(r'^pad(\d+)$', value) or re.search(r'[Pp]ad (\d+)', str(opt.get("label", "")))
+        pins = []
+        for fc in opt.get("firmware_contract") or []:
+            if fc.get("type") != "gpio":
+                continue
+            port, pin = _pin_name(fc.get("pin"))
+            if port is None:
+                continue
+            pins.append((port, pin, fc.get("drive", "high")))
+        out.append({"value": value, "label": opt.get("label", value),
+                    "pad": m.group(1) if m else None, "pins": pins})
+    return out
+
+
+def validate_pullups(config, tile, pad_map):
+    """Errors for the project's "pullups" list."""
+    errors = []
+    want = config.get("pullups")
+    if want is None:
+        return errors
+    if not isinstance(want, list):
+        return [f"pullups: expected a list of option names, got {want!r}"]
+    opts = {o["value"]: o for o in tile_pullup_options(tile)}
+    if not opts and want:
+        return [f"pullups: this Core has no switchable pull-ups (tile config has no 'pullups' option)"]
+    pad_gpio = {p["number"]: (p["port"], p["pin"]) for p in pad_map if p["port"]}
+    assigned = config.get("pads", config.get("pins", {}))
+    for v in want:
+        o = opts.get(str(v))
+        if o is None:
+            errors.append(f"pullups: '{v}' is not an option here. Options: {', '.join(sorted(opts))}")
+            continue
+        for port, pin, _ in o["pins"]:
+            for pad_num in assigned:
+                if pad_gpio.get(pad_num) == (port, pin):
+                    errors.append(f"pullups: '{v}' drives P{port}{pin}, which pad {pad_num} "
+                                  f"is assigned to ({assigned[pad_num]})")
+    return errors
+
+
+def build_pullup_config(config, tile, i2c_buses):
+    """GPIO writes for the enabled pull-ups, plus a warning for fast I2C on a
+    pad whose on-tile pull-up is available but off."""
+    opts = tile_pullup_options(tile)
+    want = set(str(v) for v in (config.get("pullups") or []))
+    pins = []
+    for o in opts:
+        if o["value"] in want:
+            for port, pin, drive in o["pins"]:
+                pins.append({"label": o["label"], "value": o["value"], "port": port,
+                             "pin": pin, "high": drive != "low"})
+    assigned = config.get("pads", config.get("pins", {}))
+    speed = {b["instance"]: b.get("speed", 400000) for b in i2c_buses}
+    for o in opts:
+        if o["value"] in want or not o["pad"]:
+            continue
+        fn = str(assigned.get(o["pad"], ""))
+        m = re.match(r'^(I2C\d+)\.(CLK|DAT)$', fn)
+        if m and speed.get(m.group(1), 0) >= 400000:
+            eprint(f"  WARNING: pad {o['pad']} is {fn} at {speed[m.group(1)] // 1000} kHz with only "
+                   f"the MCU's internal pull-up (~40 kOhm), too weak for that speed on most buses. "
+                   f"This Core has an on-tile pull-up for it: add \"{o['value']}\" to "
+                   f"\"pullups\" in config.json, or fit external pull-ups.")
+    return pins
+
+
+# Exact MSI frequencies. The L0's MSI ranges are powers of two of 32.768 kHz
+# (RM0377 §7.2.3): "1 MHz" is 1.048576 MHz, "2 MHz" is 2.097152 MHz. SYSCLK_HZ
+# used to say 1000000 / 2000000, so SysTick (and every baud rate) ran ~5% fast
+# at those levels. The L4's MSI ranges are whole MHz (RM0394 §6.2.3).
+L0_MSI_HZ = {1: 1048576, 2: 2097152, 4: 4194304}
+
+# WBA hclk5 (radio AHB) ceiling in range 1 and the HPRE5 dividers
+# (RM0493 Table 99, §12.8.51).
+WBA_HCLK5_MAX_MHZ = 32
+WBA_HPRE5_DIVS = (1, 2, 3, 4, 6)
+
+
+def _project_uses_i2c(config):
+    pads = config.get("pads", config.get("pins", {}))
+    return any(re.match(r'^I2C\d+\.(CLK|DAT)$', str(f)) for f in pads.values())
+
+
 def build_clock_config(config, tile, mcu):
     """Build resolved clock configuration from a performance level.
 
     Accepts a performance level string ("low", "medium", "high", "max")
     which is resolved from the tile JSON's config.clock select knob.
 
-    Auto-calculates PLL M/N/R if the target frequency requires it.
+    Auto-calculates PLL M/N/R if the target frequency requires it, and picks
+    the voltage range, flash wait states and bus dividers each part's
+    reference manual requires for it (see the per-family notes below).
     """
     sources, configurations, knob_default = resolve_clock_block(tile)
     level = config.get("clock", knob_default)
@@ -642,6 +810,34 @@ def build_clock_config(config, tile, mcu):
     resolved = configs[level]
     source = resolved["source"]
     target_mhz = resolved["sysclk_mhz"]
+    define = mcu["define"]
+    part = tile['components'][0]['part']
+
+    # ---- Per-family level adjustments (build notices go to stderr) ----
+    if define == "STM32L422xx" and source == "msi" and target_mhz < 10:
+        # RM0394 §46.4: the USB needs an APB clock of at least 10 MHz, APB
+        # can't run faster than HCLK, and every L4 build turns USB on. The
+        # next MSI range up is 16 MHz (RM0394 §6.2.3).
+        eprint(f"  NOTE: clock '{level}' runs MSI at 16 MHz, not {target_mhz} MHz, on the "
+               f"{part}: USB is always on and needs APB >= 10 MHz (RM0394 §46.4). "
+               f"'low' and 'medium' are the same clock on this Core.")
+        target_mhz = 16
+
+    ble_on = bool((config.get("ble") or {}).get("enabled"))
+    if define == "STM32WBA55xx" and ble_on and target_mhz <= 16:
+        eprint(f"  ERROR: BLE needs clock medium or higher. Clock '{level}' runs HSI16 "
+               f"in voltage range 2, and the 2.4 GHz radio needs range 1 with an "
+               f"undivided hclk5 of 16-32 MHz (RM0493 §12.4.6). Set \"clock\": \"medium\".")
+        sys.exit(1)
+
+    if resolved.get("lp_run"):
+        # RM0377 §6.3.4: Low-power run needs SYSCLK <= MSI range 1 (~131 kHz)
+        # and LPSDSR. At this level's MSI frequency it is out of spec, so it
+        # is ignored; the level runs in voltage range 3 instead (below).
+        eprint(f"  NOTE: clock '{level}' asks for Low-power run, which the {part} allows "
+               f"only at <= 131 kHz (RM0377 §6.3.4). Running it as normal Run mode "
+               f"in the lowest voltage range that fits.")
+
     print(f"  Clock: {level} → {source} @ {target_mhz}MHz")
 
     # Find frequency for the selected source.
@@ -659,12 +855,12 @@ def build_clock_config(config, tile, mcu):
     if target_mhz != source_mhz and pll_config is None:
         max_mhz = mcu.get("max_sysclk_mhz", 80)
         if target_mhz > max_mhz:
-            eprint(f"  ERROR: sysclk_mhz={target_mhz} exceeds max {max_mhz}MHz for {tile['components'][0]['part']}")
+            eprint(f"  ERROR: sysclk_mhz={target_mhz} exceeds max {max_mhz}MHz for {part}")
             sys.exit(1)
 
         pll_spec = mcu.get("pll")
         if pll_spec is None:
-            eprint(f"  ERROR: PLL not available on {tile['components'][0]['part']}, cannot reach {target_mhz}MHz from {source}={source_mhz}MHz")
+            eprint(f"  ERROR: PLL not available on {part}, cannot reach {target_mhz}MHz from {source}={source_mhz}MHz")
             sys.exit(1)
 
         result = solve_pll(source_mhz, target_mhz, pll_spec)
@@ -677,16 +873,48 @@ def build_clock_config(config, tile, mcu):
         vco = source_mhz / m * n
         print(f"  PLL: {source_mhz}MHz ÷{m} ×{n} ÷{r} = {target_mhz}MHz (VCO={vco:.0f}MHz)")
 
-    # LP Run mode (STM32L0 only): ultra-low-power run at MSI ≤ 1MHz
-    lp_run = resolved.get("lp_run", False)
+    # Exact SYSCLK in Hz
+    if define == "STM32L011xx" and source == "msi":
+        if target_mhz not in L0_MSI_HZ:
+            eprint(f"  ERROR: No L0 MSI range for {target_mhz}MHz")
+            sys.exit(1)
+        sysclk_hz = L0_MSI_HZ[target_mhz]
+    else:
+        sysclk_hz = int(target_mhz * 1000000)
+    sysclk_mhz_ceil = -(-sysclk_hz // 1000000)
 
-    # Voltage scaling: WBA55 needs Range 1 for >16MHz; H5 needs scale 0-3
+    # Voltage range (vos_range) — L0 and WBA; H5 keeps needs_vos/vos_value.
+    #  L0 (RM0377 §6.1.4, Tables 14/33/43): range 1 up to 32 MHz, range 2 up
+    #  to 16 MHz, range 3 up to 4.2 MHz with no HSI16 and no flash/EEPROM
+    #  program or erase. The L0 boots in range 2 and nothing used to change
+    #  it, so 16 MHz ran with 0 WS and 32 MHz ran in range 2 (limit 16 MHz).
+    #  "low" takes range 3 unless HSI16 has to run (I2C kernel clock);
+    #  "medium" stays in range 2 (the reset range); HSI16/PLL take range 1.
+    #  WBA (RM0493 Table 99): HSI16 at 16 MHz is range 2 (1 WS, hclk5 / 2);
+    #  anything faster, and the radio, is range 1.
     needs_vos = False
     vos_value = 1  # default for WBA55
-    if mcu["define"] == "STM32WBA55xx" and target_mhz > 16:
-        needs_vos = True
-        vos_value = 1  # Range 1
-    elif mcu["define"] == "STM32H523xx" and target_mhz > 32:
+    vos_range = None
+    hsi16_kernel = False
+    hpre5 = None
+    if define == "STM32L011xx":
+        hsi16_kernel = _project_uses_i2c(config)
+        if source == "msi":
+            vos_range = 3 if (level == "low" and sysclk_hz <= 4200000) else 2
+            if vos_range == 3 and hsi16_kernel:
+                vos_range = 2
+                eprint(f"  NOTE: clock '{level}': I2C1 runs from HSI16 (~100 µA while running) "
+                       f"is set up), which voltage range 3 can't run (RM0377 Table 43), so "
+                       f"this build uses range 2.")
+        else:
+            vos_range = 1
+    elif define == "STM32WBA55xx":
+        vos_range = 2 if (source == "hsi16" and target_mhz <= 16) else 1
+        needs_vos = vos_range == 1
+        vos_value = 1
+        if pll_config:
+            hpre5 = next(d for d in WBA_HPRE5_DIVS if target_mhz / d <= WBA_HCLK5_MAX_MHZ)
+    elif define == "STM32H523xx" and target_mhz > 32:
         needs_vos = True
         # H5 VOS register encoding (inverted from scale number):
         # VOS=00(0)→Scale3(32MHz), 01(1)→Scale2(100MHz), 10(2)→Scale1(150MHz), 11(3)→Scale0(250MHz)
@@ -710,17 +938,23 @@ def build_clock_config(config, tile, mcu):
         sys.exit(1)
 
     return {
+        "level": level,
         "source": source,
         "source_mhz": source_mhz,
         "sysclk_mhz": target_mhz,
+        "sysclk_hz": sysclk_hz,
+        "sysclk_mhz_ceil": sysclk_mhz_ceil,
         "pll": pll_config,
         "msi_range": msi_range,
-        "lp_run": lp_run,
+        "lp_run": False,
         "ahb_div": 1,
         "apb1_div": 1,
         "apb2_div": 1,
         "needs_vos": needs_vos,
         "vos_value": vos_value,
+        "vos_range": vos_range,
+        "hsi16_kernel": hsi16_kernel,
+        "hpre5": hpre5,
     }
 
 
@@ -1004,9 +1238,10 @@ def build_i2c_config(config, mcu, clock_config):
     sysclk_mhz = clock_config["sysclk_mhz"]
     iface_cfg = config.get("interfaces", {})
 
-    # On WBA55, I2C kernel clock is hardware-routed to HSI16 (16MHz) regardless of SYSCLK.
+    # On WBA55 and L011, the I2C kernel clock is routed to HSI16 (16MHz) regardless
+    # of SYSCLK (the L0 so 400 kHz works at the 1-2 MHz MSI levels too).
     # H523 uses SYSCLK as I2C kernel clock — TIMINGR constants now exist for 144/240MHz.
-    _hsi16_i2c_parts = {"STM32WBA55xx"}
+    _hsi16_i2c_parts = {"STM32WBA55xx", "STM32L011xx"}
     i2c_clk_mhz = 16 if family_define in _hsi16_i2c_parts else sysclk_mhz
 
     # Detect which I2C buses are referenced in pad assignments
@@ -1065,6 +1300,7 @@ def build_i2c_config(config, mcu, clock_config):
             "clk_mask": clk_mask,
             "timing": timing,
             "pullups": pullups,
+            "speed": speed,
         })
 
     return i2c_buses
@@ -1836,6 +2072,7 @@ def generate(tile_path, output_dir, config_path=None):
         ctx["config_file"] = os.path.basename(config_path)
         ctx["i2c_buses"] = build_i2c_config(project, mcu, ctx["clock_config"])
         ctx["i2c_pullups"] = {bus["instance"]: bus["pullups"] for bus in ctx["i2c_buses"]}
+        ctx["pullup_pins"] = build_pullup_config(project, tile, ctx["i2c_buses"])
         ctx["spi_buses"] = build_spi_config(project, mcu, pad_map)
         ctx["usart_buses"] = build_usart_config(project, mcu)
         ctx["pwm_timers"] = build_pwm_config(project, mcu)
@@ -1844,9 +2081,10 @@ def generate(tile_path, output_dir, config_path=None):
         # Null means "no tick configured" → coregen emits a no-op stub.
         _timer_cfg = project.get("timer", {})
         ctx["studio_tick_ms"] = _timer_cfg.get("tick_ms")
-        # On WBA55, route I2C kernel clock to HSI16 (hardware constraint).
+        # On WBA55 and L011, route I2C kernel clock to HSI16 (the L0 so 400 kHz
+        # works at every clock level; RCC_CCIPR.I2C1SEL, RM0377 §7.3.19).
         # H523 uses SYSCLK — TIMINGR constants now cover 16/48/144/240MHz.
-        _hsi16_i2c_parts = {"STM32WBA55xx"}
+        _hsi16_i2c_parts = {"STM32WBA55xx", "STM32L011xx"}
         ctx["i2c_kernel_clk"] = "hsi16" if mcu["define"] in _hsi16_i2c_parts else None
         ctx["i2c_kernel_clk_mhz"] = 16 if mcu["define"] in _hsi16_i2c_parts else None
         # SAI kernel clock: if any pad carries a SAI1 function (PDM mic capture),
