@@ -130,6 +130,10 @@ static inline void ll_pwr_stop(void)
     /* L0: Set LPSDSR for low-power in Stop, clear PDDS for Stop (not Standby) */
     CLR_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 1));   /* CR: PDDS=0 → Stop */
     SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 0));   /* CR: LPSDSR → low-power regulator */
+    /* RM0377 Table 39: Stop is entered only with WUF = 0 in PWR_CSR. An RTC
+     * wakeup sets WUF, so without this every Stop after the first one was
+     * silently skipped. CWUF clears it within 2 system clocks. */
+    SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 2));   /* CR: CWUF */
 
 #elif defined(STM32L422xx)
     /* L4: Enter Stop 1 mode (good balance of power vs wake time)
@@ -137,7 +141,9 @@ static inline void ll_pwr_stop(void)
     MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x1UL);
 
 #elif defined(STM32WBA55xx)
-    /* WBA: CR1 LPMS[2:0] = 001 → Stop 1 */
+    /* WBA: CR1 LPMS[2:0] = 001 → Stop 1. Stop 1 exits on HSI16 in voltage
+     * range 2: FLASH and SRAM wait states must be >= 1 before entry and
+     * HDIV5 comes back set (RM0493 §11.7.7) — core_power.h handles both. */
     MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x1UL);
 
 #elif defined(STM32H523xx)
@@ -153,6 +159,31 @@ static inline void ll_pwr_stop(void)
 
     /* After waking: clear SLEEPDEEP */
     CLR_BITS(SCB_SCR, SCB_SCR_SLEEPDEEP);
+}
+
+/* ============================================================
+ * Wakeup flags
+ * ============================================================ */
+
+/**
+ * Clear the PWR wake-up flags (wake-up pins and, on the L0, the combined
+ * WUF). Stop (L0) and Standby (all) are skipped while one is set.
+ */
+static inline void ll_pwr_clear_wakeup_flags(void)
+{
+#if defined(STM32L011xx)
+    SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 2));   /* CR: CWUF */
+#elif defined(STM32L422xx)
+    /* PWR_SCR is at 0x18 (RM0394 §5.4.7): CWUF1..5 = bits 0-4. 0x14 is the
+     * read-only PWR_SR2, which is what this used to write. */
+    REG32(PWR_BASE + 0x18UL) = 0x1FUL;
+#elif defined(STM32H523xx)
+    REG32(PWR_BASE + 0x40UL) = 0x1F;                  /* WUSCR: clear all WUF */
+#elif defined(STM32WBA55xx)
+    /* PWR_WUSCR is at 0x48 (RM0493 §11.10.15): CWUF1..8 = bits 0-7. 0x14 is
+     * PWR_WUCR1 — writing 0x1F there ENABLED wake-up pins 1-5. */
+    REG32(PWR_BASE + 0x48UL) = 0xFFUL;
+#endif
 }
 
 /* ============================================================
@@ -178,22 +209,15 @@ static inline void ll_pwr_standby(void)
     MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x3UL);
 
 #elif defined(STM32WBA55xx)
-    MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x3UL);
+    /* CR1 LPMS[2:0] = 10x → Standby (RM0493 §11.10.1). 011 is reserved. */
+    MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x4UL);
 
 #elif defined(STM32H523xx)
     MOD_BITS(REG32(PWR_BASE + 0x00UL), 0x7UL, 0x3UL);
 #endif
 
-    /* Clear wakeup flags */
-#if defined(STM32L011xx)
-    SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 2));   /* CR: CWUF */
-#elif defined(STM32L422xx)
-    REG32(PWR_BASE + 0x14UL) = 0x1F;                  /* SCR: clear all WUF */
-#elif defined(STM32H523xx)
-    REG32(PWR_BASE + 0x40UL) = 0x1F;                  /* WUSCR: clear all WUF */
-#elif defined(STM32WBA55xx)
-    REG32(PWR_BASE + 0x14UL) = 0x1F;                  /* WUSCR: clear WUF */
-#endif
+    /* Clear wakeup flags (Standby is not entered while one is set) */
+    ll_pwr_clear_wakeup_flags();
 
     SET_BITS(SCB_SCR, SCB_SCR_SLEEPDEEP);
     __asm volatile ("dsb" ::: "memory");
@@ -203,10 +227,6 @@ static inline void ll_pwr_standby(void)
     while (1)
         ;
 }
-
-/* ============================================================
- * Wakeup flags
- * ============================================================ */
 
 /* ============================================================
  * Low-Power Run mode (STM32L0 only)
@@ -224,7 +244,10 @@ static inline void ll_pwr_lp_run_enable(void)
 #endif
 }
 
-/** Check if we woke from standby */
+/**
+ * Check if we woke from standby. The flag is not cleared by a system reset,
+ * so it stays set across later resets until ll_pwr_clear_standby_flag().
+ */
 static inline int ll_pwr_woke_from_standby(void)
 {
 #if defined(STM32L011xx)
@@ -234,7 +257,8 @@ static inline int ll_pwr_woke_from_standby(void)
 #elif defined(STM32H523xx)
     return (REG32(PWR_BASE + 0x04UL) & (1UL << 6)) != 0;  /* PMSR: SBF (bit 6) */
 #elif defined(STM32WBA55xx)
-    return (REG32(PWR_BASE + 0x10UL) & (1UL << 8)) != 0;  /* SR1: SBF */
+    /* PWR_SR at 0x38, SBF = bit 2 (RM0493 §11.10.12). 0x10 is PWR_SVMCR. */
+    return (REG32(PWR_BASE + 0x38UL) & (1UL << 2)) != 0;
 #endif
 }
 
@@ -244,11 +268,13 @@ static inline void ll_pwr_clear_standby_flag(void)
 #if defined(STM32L011xx)
     SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 3));   /* CR: CSBF */
 #elif defined(STM32L422xx)
-    SET_BITS(REG32(PWR_BASE + 0x14UL), (1UL << 8));   /* SCR: CSBF */
+    /* PWR_SCR (0x18, write-only): CSBF = bit 8 (RM0394 §5.4.7). */
+    REG32(PWR_BASE + 0x18UL) = (1UL << 8);
 #elif defined(STM32H523xx)
     SET_BITS(REG32(PWR_BASE + 0x00UL), (1UL << 7));   /* PMCR: CSSF (clears SBF+STOPF) */
 #elif defined(STM32WBA55xx)
-    SET_BITS(REG32(PWR_BASE + 0x14UL), (1UL << 8));
+    /* PWR_SR (0x38): writing CSSF (bit 0) clears SBF and STOPF (RM0493 §11.10.12). */
+    REG32(PWR_BASE + 0x38UL) = (1UL << 0);
 #endif
 }
 

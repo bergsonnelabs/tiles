@@ -44,7 +44,10 @@
     "timer.oneshot": "",
     "timer.encoder": "",
     "timer.lptim": "",
-    "timer.wdog": "verified",
+    "timer.wdog": {
+      "status": "compile",
+      "note": "Starved-refresh reset verified earlier, but the timeout assumed a 32 kHz LSI; the L0's is 37 kHz nominal (26-56 kHz, DS table 39), so the 5 s watchdog fired at ~4.3 s. Prescaler scaled per family (LL_LSI_HZ), fixed 2026-09-25 (RM0377), awaiting bench. Not calibrated against HSI16, so the timeout still varies part to part."
+    },
     "adc.raw": "verified",
     "adc.mv": {
       "status": "partial",
@@ -76,19 +79,28 @@
     "power.sleep": "verified",
     "power.stop": {
       "status": "compile",
-      "note": "core_stop_for() hangs — RTC/LSI init CSR offset fixed (0x50), but wakeup still not firing"
+      "note": "The hang was not the wakeup path: the LSI helpers set LSEON (RCC_CSR bit 8) and waited forever on LSERDY; LSE/LSI bits were swapped. Fixed 2026-09-25 (register map per RM0377 §7.3.20; WUF cleared before each Stop per Table 39; RTC wake vector enabled under PRIMASK; sleeps in fed chunks while the watchdog runs, which the L0 cannot freeze in Stop), awaiting bench (tests/hw-sleep-cycle)"
     },
-    "power.standby": "compile",
-    "power.rtc_wake": "compile",
-    "power.exti_wake": "compile",
+    "power.standby": {
+      "status": "compile",
+      "note": "Same LSI fix as power.stop, plus WUTF cleared before entry (RM0377 Table 40). Refuses (HAL_ERROR) a Standby longer than half the watchdog timeout, since the L0 IWDG keeps running in Standby. Fixed 2026-09-25, awaiting bench"
+    },
+    "power.rtc_wake": {
+      "status": "compile",
+      "note": "RTC wakeup timer on LSI (37 kHz nominal), EXTI line 20 + NVIC vector 2. Fixed 2026-09-25 (RM0377), awaiting bench (tests/hw-sleep-cycle)"
+    },
+    "power.exti_wake": {
+      "status": "compile",
+      "note": "core_stop_until_on_change now waits for the pad edge itself and wakes to feed a running watchdog. Reworked 2026-09-25, awaiting bench"
+    },
     "power.wkup_wake": "",
     "power.rtc_alarm": {
       "status": "compile",
-      "note": "LL+Core Alarm A implemented. Not yet hw-tested on Core.ST.L0"
+      "note": "Alarm A (ALRMAR 0x1C, ALRAWF) was unreachable while the RTC clock init hung on the LSE. Fixed 2026-09-25 (register map per RM0377 §7.3.20 / §22.7), awaiting bench (tests/hw-sleep-cycle T2)"
     },
     "power.backup": {
       "status": "compile",
-      "note": "5 backup registers (BKP0-4) at RTC+0x50. Not yet hw-tested on Core.ST.L0"
+      "note": "5 backup registers (RTC_BKP0R-4R at RTC+0x50, RM0377 §22.7.20); the RTC-clock bring-up they need hung on the LSE. Fixed 2026-09-25, awaiting bench (tests/hw-sleep-cycle T1)"
     },
     "security.rng": "na",
     "security.aes": "na",

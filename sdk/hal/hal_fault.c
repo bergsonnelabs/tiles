@@ -26,6 +26,13 @@
 #include "hal_dfu.h"
 #endif
 
+/* Reboot into DFU after a fault only where a DFU path exists (USB Cores:
+ * hal_dfu.h defines DFU_MAGIC_ADDR). "bootloader": "rom" on a Core.ST.L0 /
+ * Core.ST.W5 sets ROM_DFU as well, and used to fail to compile here. */
+#if (defined(APP_OFFSET) || defined(ROM_DFU)) && defined(DFU_MAGIC_ADDR)
+  #define HAL_FAULT_DFU_REBOOT 1
+#endif
+
 /* ---- User callback ---- */
 
 static hal_fault_callback_t _fault_cb;
@@ -162,7 +169,7 @@ static void fault_blink(int n, uint32_t on_ticks, uint32_t off_ticks)
     }
 }
 
-#if !defined(APP_OFFSET) && !defined(ROM_DFU)
+#if !defined(HAL_FAULT_DFU_REBOOT)
 static void fault_sos(void) __attribute__((noreturn));
 static void fault_sos(void)
 {
@@ -240,7 +247,7 @@ static void fault_handler(hal_fault_type_t type, uint32_t *stack)
     fault_usb_puts("\r\nSOS...\r\n");
 #endif
 
-#if defined(APP_OFFSET) || defined(ROM_DFU)
+#if defined(HAL_FAULT_DFU_REBOOT)
     /* DFU recovery: blink SOS once so the fault is visible, then reboot
      * into the bootloader.  This prevents a hard fault from permanently
      * bricking a board that has no BOOT0 or SWD access. */

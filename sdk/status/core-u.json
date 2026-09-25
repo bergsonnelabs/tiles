@@ -42,7 +42,10 @@
       "status": "verified",
       "note": "TIM15 PWM → EXTI loopback verified on Core.ST.L4.2 (projects/timers-pwmg_u2)"
     },
-    "timer.stepdir": { "status": "verified", "note": "DM320T + NEMA 11 over STEP/DIR at 3.3 V, 8 us pulses (projects/RealReeler, 2026-09-08)" },
+    "timer.stepdir": {
+      "status": "verified",
+      "note": "DM320T + NEMA 11 over STEP/DIR at 3.3 V, 8 us pulses (projects/RealReeler, 2026-09-08)"
+    },
     "timer.capture": {
       "status": "verified",
       "note": "TIM2 32-bit capture measuring TIM15 PWM period — 499995 us @ 2 Hz (projects/timers-pwmg_u2)"
@@ -82,31 +85,31 @@
     },
     "power.stop": {
       "status": "verified",
-      "note": "Stop 1 + RTC wakeup + clock recovery to 80MHz PLL (projects/power-test)"
+      "note": "Two back-to-back 10 s stop_for with a 5 s IWDG running, no watchdog reset. Wake flag now cleared in RTC_SCR 0x5C (was RTC_TSDR 0x34, RM0394 §35.6.20); sleeps in watchdog-safe chunks. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.standby": {
       "status": "verified",
-      "note": "Standby + RTC wakeup, full reset on wake (projects/power-test)"
+      "note": "Standby wake plus woke_from_standby() clear (T6/T7); refuses a Standby longer than half the watchdog timeout (T5). PWR_SCR is 0x18, not 0x14 (RM0394 §5.4.7). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.rtc_wake": {
       "status": "verified",
-      "note": "LSI RTC wakeup from Stop and Standby (projects/power-test)"
+      "note": "LSI RTC wakeup from Stop and Standby; WUTF cleared in RTC_SCR, wake vector enabled under PRIMASK. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.exti_wake": {
-      "status": "verified",
-      "note": "Falling edge on pad 10 wakes from Stop 1 + clock recovery (projects/power-test)"
+      "status": "compile",
+      "note": "Pad-edge wake from Stop 1 was verified (projects/power-test); core_stop_until_on_change now waits for the edge itself and wakes to feed a running watchdog. Reworked 2026-09-25, awaiting bench"
     },
     "power.wkup_wake": {
-      "status": "verified",
-      "note": "core_standby_until_on_change(8, EDGE_FALLING) verified on Core.ST.L4.2 (projects/power-test)"
+      "status": "compile",
+      "note": "core_standby_until_on_change(8, EDGE_FALLING) verified on Core.ST.L4.2 (projects/power-test); its wake-flag clear moved to PWR_SCR 0x18, and it now returns without sleeping while the watchdog runs. Fixed 2026-09-25, awaiting bench"
     },
     "power.rtc_alarm": {
-      "status": "partial",
-      "note": "LL+Core Alarm A implemented. ALRMAR writes read back 0 on test L422 — hw investigation needed. RTC time set/get and ticking verified (tests/val-backup-rng-alarm-u)"
+      "status": "verified",
+      "note": "Alarm A at 0x40 on the L422's newer RTC (RM0394 §35); fired at 2980 ms for a 3 s alarm (T2). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.backup": {
-      "status": "partial",
-      "note": "Core API implemented. BKPxR writes read back 0 on test L422 — same root cause as alarm (hw investigation). All access bits correct (DBP, RTCEN, WPR)"
+      "status": "verified",
+      "note": "TAMP_BKPxR at 0x40003400 + 0x100 (RM0394 §36.6.8); write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "security.rng": {
       "status": "verified",

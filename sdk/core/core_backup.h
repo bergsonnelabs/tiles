@@ -4,8 +4,8 @@
  * 32-bit registers that persist through resets and Standby mode.
  * Useful for crash counters, boot flags, and state preservation.
  *
- * Count: Core.ST.L0 has 5 registers (0–4), all others have 32 (0–31).
- * Retained as long as VBAT or VDD is present.
+ * Count: Core.ST.L0 has 5 registers (0–4, inside the RTC), all others have
+ * 32 (0–31, in the TAMP block). Retained as long as VBAT or VDD is present.
  *
  * Usage:
  *   core_backup_write(0, 0xDEADBEEF);   // store a value
@@ -40,32 +40,26 @@
 #endif
 
 /**
- * Ensure the RTC/backup register clock domain is accessible.
- * On L0/L4 the backup registers live inside the RTC peripheral block,
- * so RTCEN (and a clock source) must be active for reads AND writes.
- * On WBA/H5 they're in TAMP, which only needs PWR+DBP.
+ * Ensure the backup registers are reachable.
+ *   L0: RTC_BKPxR live inside the RTC (RM0377 §22.7.20), so the RTC clock
+ *       must be selected, enabled and running (LSI; never the LSE here).
+ *   L4 (L422): TAMP_BKPxR (RM0394 §36.6.8) on the RTC APB clock; the RTC
+ *       kernel clock is brought up too, as before, in case nothing else has.
+ *   WBA: TAMP_BKPxR (RM0493 §37.6.18) need RCC_APB7ENR.RTCAPBEN, which is
+ *       off at reset — without it TAMP read 0 and ignored writes unless the
+ *       BLE stack happened to have set it.
+ *   H5: TAMP on RCC_APB3ENR.RTCAPBEN.
+ * All of them need PWR + DBP for writes.
  */
 static inline void _core_backup_ensure_clk(void)
 {
     ll_rcc_pwr_clk_enable();
     ll_pwr_enable_backup_access();
 
-#if defined(STM32L011xx)
-    /* L0: RTCEN in RCC_CSR bit 18 */
-    if (!(REG32(RCC_BASE + 0x50UL) & (1UL << 18))) {
-        ll_rcc_lsi_enable();
-        while (!ll_rcc_lsi_ready()) ;
-        ll_rcc_rtc_set_source(2);
-        ll_rcc_rtc_enable();
-    }
-#elif defined(STM32L422xx)
-    /* L4: RTCEN in RCC_BDCR bit 15 */
-    if (!(REG32(RCC_BASE + 0x90UL) & (1UL << 15))) {
-        ll_rcc_lsi_enable();
-        while (!ll_rcc_lsi_ready()) ;
-        ll_rcc_rtc_set_source(2);
-        ll_rcc_rtc_enable();
-    }
+#if defined(STM32L011xx) || defined(STM32L422xx)
+    ll_rtc_clock_ensure();               /* includes the bus clock on the L4 */
+#elif defined(STM32WBA55xx)
+    ll_rtc_bus_clk_enable();             /* APB7ENR: RTCAPBEN */
 #elif defined(STM32H523xx)
     SET_BITS(REG32(RCC_BASE + 0xA8UL), (1UL << 21));  /* APB3ENR: RTCAPBEN */
 #endif

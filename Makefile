@@ -486,9 +486,11 @@ GEN_OBJS = $(GEN_SOURCES:.c=.o)
 # Core-layer sources compiled into every build (the rest of core_* is
 # header-only): core_led.c owns the heartbeat state the SysTick handler
 # drives, core_pdm.c the PDM decimator, core_stepper.c the STEP/DIR pulse
-# generator's ISR state. (core_ble.o stays BLE-gated, below.)
+# generator's ISR state, core_watchdog.c the running watchdog's timeout
+# (which core_power.h sleeps around). (core_ble.o stays BLE-gated, below.)
 CORE_OBJS = $(BUILD_DIR)/sdk/core/core_led.o $(BUILD_DIR)/sdk/core/core_pdm.o \
-            $(BUILD_DIR)/sdk/core/core_stepper.o $(BUILD_DIR)/sdk/core/core_scope.o
+            $(BUILD_DIR)/sdk/core/core_stepper.o $(BUILD_DIR)/sdk/core/core_scope.o \
+            $(BUILD_DIR)/sdk/core/core_watchdog.o
 OBJECTS  = $(C_OBJS) $(ASM_OBJS) $(HAL_OBJS) $(CORE_OBJS) $(GEN_OBJS)
 
 ifeq ($(TILES_ENABLED),1)
@@ -619,6 +621,11 @@ $(BUILD_DIR)/sdk/core/core_stepper.o: $(SDK_DIR)sdk/core/core_stepper.c $(GEN_HE
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sdk/core/core_scope.o: $(SDK_DIR)sdk/core/core_scope.c $(GEN_HEADERS)
+	$(Q)mkdir -p $(dir $@)
+	$(LOG) "  CC    $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sdk/core/core_watchdog.o: $(SDK_DIR)sdk/core/core_watchdog.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@

@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@2a1a847",
+  "source": "tiles@4b95d38",
   "category": "backup",
   "label": "Core.Backup",
   "icon": "◫",
@@ -13,7 +13,7 @@
       "name": "_core_backup_ensure_clk",
       "signature": "_core_backup_ensure_clk(void)",
       "returns": "void",
-      "brief": "Ensure the RTC/backup register clock domain is accessible. On L0/L4 the backup registers live inside the RTC peripheral block, so RTCEN (and a clock source) must be active for reads AND writes. On WBA/H5 they're in TAMP, which only needs PWR+DBP.",
+      "brief": "Ensure the backup registers are reachable. L0: RTC_BKPxR live inside the RTC (RM0377 §22.7.20), so the RTC clock must be selected, enabled and running (LSI; never the LSE here). L4 (L422): TAMP_BKPxR (RM0394 §36.6.8) on the RTC APB clock; the RTC kernel clock is brought up too, as before, in case nothing else has. WBA: TAMP_BKPxR (RM0493 §37.6.18) need RCC_APB7ENR.RTCAPBEN, which is off at reset — without it TAMP read 0 and ignored writes unless the BLE stack happened to have set it. H5: TAMP on RCC_APB3ENR.RTCAPBEN. All of them need PWR + DBP for writes.",
       "params": [],
       "studio_exposed": false,
       "layer": "core"

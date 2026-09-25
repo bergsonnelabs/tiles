@@ -1,26 +1,31 @@
 /**
  * ll_iwdg.h — Low-level Independent Watchdog
  *
- * The IWDG is clocked from LSI (~32kHz) and runs independently
- * of the main clock. Once started, it cannot be stopped — only
- * the MCU reset will disable it. The register layout is identical
- * across all STM32 families.
+ * The IWDG is clocked from LSI (LL_LSI_HZ: 32 kHz nominal, 37 kHz on
+ * the L0) and runs independently of the main clock. Once started, it
+ * cannot be stopped — only the MCU reset will disable it. The register
+ * layout is identical across all STM32 families.
+ *
+ * It keeps counting in Stop and Standby: on the L4 and WBA with the option
+ * bytes as shipped (IWDG_STOP / IWDG_STDBY = 1), and always on the L0, whose
+ * freeze-in-low-power capability was removed (RM0377 revision history).
+ * core_power.h sleeps in watchdog-safe chunks because of this.
  *
  * If the watchdog is not refreshed before the timeout, it resets
  * the MCU. Use this for fault recovery in deployed systems.
  *
  * Timeout calculation:
- *   timeout_ms = (reload + 1) * prescaler / 32000 * 1000
+ *   timeout_ms = (reload + 1) * prescaler * 1000 / LL_LSI_HZ
  *
  * Prescaler values: 4, 8, 16, 32, 64, 128, 256
  * Reload range: 0-4095 (12-bit)
  *
- * Common configurations:
- *   1s:   prescaler=32, reload=999   → 32ms × 1000 = 1000ms
+ * Common configurations (32 kHz LSI; the helpers below scale for the L0):
+ *   1s:   prescaler=32, reload=999   → 1ms × 1000 = 1000ms
  *   2s:   prescaler=32, reload=1999
  *   5s:   prescaler=64, reload=2499
  *   10s:  prescaler=256, reload=1249
- *   28s:  prescaler=256, reload=4095  (maximum)
+ *   28s:  prescaler=256, reload=4095  (maximum; ~28.3 s on the L0)
  */
 
 #ifndef LL_IWDG_H
@@ -45,7 +50,7 @@
 #define LL_IWDG_KEY_RELOAD  0xAAAAUL   /* Refresh the watchdog (feed the dog) */
 #define LL_IWDG_KEY_START   0xCCCCUL   /* Start the watchdog (irreversible!) */
 
-/* ---- Prescaler values ---- */
+/* ---- Prescaler values (tick times at 32 kHz; ~14 % shorter on the L0) ---- */
 
 #define LL_IWDG_PSC_4       0x0UL      /* LSI / 4   = ~8kHz    → 0.125ms/tick */
 #define LL_IWDG_PSC_8       0x1UL      /* LSI / 8   = ~4kHz    → 0.25ms/tick  */
@@ -110,28 +115,32 @@ static inline void ll_iwdg_refresh(void)
  * Convenience: common timeout values
  * ============================================================ */
 
+/* Reload values scale with the per-family LSI nominal (ll_common.h), so these
+ * are the same registers as before at 32 kHz (999 / 1999 / 2499 / 1249) and
+ * correct on the 37 kHz L0 instead of ~14 % short. */
+
 /** Start IWDG with ~1 second timeout */
 static inline void ll_iwdg_init_1s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_32, 999);
+    ll_iwdg_init(LL_IWDG_PSC_32, (1UL * LL_LSI_HZ) / 32UL - 1UL);
 }
 
 /** Start IWDG with ~2 second timeout */
 static inline void ll_iwdg_init_2s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_32, 1999);
+    ll_iwdg_init(LL_IWDG_PSC_32, (2UL * LL_LSI_HZ) / 32UL - 1UL);
 }
 
 /** Start IWDG with ~5 second timeout */
 static inline void ll_iwdg_init_5s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_64, 2499);
+    ll_iwdg_init(LL_IWDG_PSC_64, (5UL * LL_LSI_HZ) / 64UL - 1UL);
 }
 
 /** Start IWDG with ~10 second timeout */
 static inline void ll_iwdg_init_10s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_256, 1249);
+    ll_iwdg_init(LL_IWDG_PSC_256, (10UL * LL_LSI_HZ) / 256UL - 1UL);
 }
 
 /* ============================================================
