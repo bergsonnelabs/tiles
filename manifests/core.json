@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3af6291",
+  "source": "tiles@f356b04",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -471,7 +471,7 @@
       "symbol": "core_led_heartbeat",
       "header": "core_led.h",
       "category": "led",
-      "description": "Start a free-running, asymmetric heartbeat on the onboard LED. Set it up once (e.g. at startup) and it runs on its own — the LED turns on for on_ms, off for the rest of period_ms, repeating forever. Serviced from the 1 ms SysTick interrupt, so it does NOT block your main loop the way a toggle-and-delay would: the loop stays free for tile reads and logic. Call again at any time to change the rhythm; pass period_ms = 0 to stop the heartbeat (the LED is left off). on_ms is clamped to period_ms. Brightness holds across the supply: a short on_ms (under 50 ms, e.g. a 2 ms blip) is the on-time at 3.3 V, and is lengthened as VDD drops (about 32 ms at 1.8 V), because the LED carries far less current there and the eye adds up the light of a short flash. VDD is read through VREFINT when the heartbeat is set (at most once a minute) on the L0 and L4; other Cores use the on-time as given. Examples: heartbeat(1000, 2)    — a 1 Hz 2 ms blip, the same brightness at any VDD. heartbeat(1000, 100)  — a 1 Hz \"blip\": 100 ms on, 900 ms off. heartbeat(500, 250)   — a steady 1 Hz, 50%-duty pulse. Defined in core_led.c (not header-only) because it owns persistent state shared with the SysTick handler.",
+      "description": "Start a free-running, asymmetric heartbeat on the onboard LED. Set it up once (e.g. at startup) and it runs on its own — the LED turns on for on_ms, off for the rest of period_ms, repeating forever. Serviced from the 1 ms SysTick interrupt, so it does NOT block your main loop the way a toggle-and-delay would: the loop stays free for tile reads and logic. Call again at any time to change the rhythm; pass period_ms = 0 to stop the heartbeat (the LED is left off). on_ms is clamped to period_ms. Brightness holds across the supply: a short on_ms (under 50 ms, e.g. a 2 ms blip) is the on-time at 3.3 V, and is lengthened as VDD drops (about 32 ms at 1.8 V), because the LED carries far less current there and the eye adds up the light of a short flash. VDD is read through VREFINT when the heartbeat is set (at most once a minute) on the L0, L4 and W5; the H5 uses the on-time as given. Examples: heartbeat(1000, 2)    — a 1 Hz 2 ms blip, the same brightness at any VDD. heartbeat(1000, 100)  — a 1 Hz \"blip\": 100 ms on, 900 ms off. heartbeat(500, 250)   — a steady 1 Hz, 50%-duty pulse. Defined in core_led.c (not header-only) because it owns persistent state shared with the SysTick handler.",
       "params": [
         {
           "name": "period_ms",

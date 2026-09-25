@@ -88,7 +88,7 @@ static inline void core_led_toggle(void)
  * ~50 ms the eye integrates the flash, so lower VDD (less LED current) gets
  * a proportionally longer blip, up to 16x and capped at 50 ms. On-times of
  * 50 ms and longer come back unchanged. Reads VDD through VREFINT at most
- * once a minute (L0 / L4; other Cores return on_ms as is). Defined in
+ * once a minute (L0 / L4 / W5; the H5 returns on_ms as is). Defined in
  * core_led.c. Plain comment on purpose: internal, kept out of the manifest.
  */
 uint32_t core_led_scaled_on_ms(uint32_t on_ms);
@@ -152,8 +152,8 @@ static inline void core_led_sos(void)
  * 2 ms blip) is the on-time at 3.3 V, and is lengthened as VDD drops
  * (about 32 ms at 1.8 V), because the LED carries far less current there
  * and the eye adds up the light of a short flash. VDD is read through
- * VREFINT when the heartbeat is set (at most once a minute) on the L0 and
- * L4; other Cores use the on-time as given.
+ * VREFINT when the heartbeat is set (at most once a minute) on the L0,
+ * L4 and W5; the H5 uses the on-time as given.
  *
  * Examples:
  *   heartbeat(1000, 2)    — a 1 Hz 2 ms blip, the same brightness at any VDD.

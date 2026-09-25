@@ -10,7 +10,8 @@
  * Per-family internal channel numbers:
  *   L0:  VREFINT = CH17, TEMP = CH16
  *   L4:  VREFINT = CH0 (ADC_Common), TEMP = CH17, VBAT = CH18
- *   WBA: VREFINT = CH13, TEMP = CH12
+ *   WBA: VREFINT = CH0, TEMP = CH13, VCORE = CH12 (ADC4, RM0493 ADC
+ *        interconnection table)
  *   H5:  VREFINT = CH19, TEMP = CH16
  *
  * Factory calibration addresses:
@@ -20,9 +21,9 @@
  *   L4:  VREFINT_CAL  @ 0x1FFF75AA (calibrated at 3.0V)
  *        TS_CAL1      @ 0x1FFF75A8 (30°C, 3.0V)
  *        TS_CAL2      @ 0x1FFF75CA (130°C, 3.0V)
- *   WBA: VREFINT_CAL  @ 0x0BFA0700 (calibrated at 3.3V)
- *        TS_CAL1      @ 0x0BFA0710 (30°C, 3.3V)
- *        TS_CAL2      @ 0x0BFA0720 (130°C, 3.3V)
+ *   WBA: VREFINT_CAL  @ 0x0BF907A5 (calibrated at 3.0V; odd address)
+ *        TS_CAL1      @ 0x0BF90710 (30°C, 3.0V)
+ *        TS_CAL2      @ 0x0BF90742 (130°C, 3.0V)   (RM0493 Tables 144/145)
  *   H5:  VREFINT_CAL  @ 0x08FFF810 (calibrated at 3.3V)
  *        TS_CAL1      @ 0x08FFF800 (30°C, 3.3V)
  *        TS_CAL2      @ 0x08FFF804 (110°C, 3.3V)
@@ -49,9 +50,12 @@
   #define ADC_CH_VBAT       18
 
 #elif defined(STM32WBA55xx)
-  /* ADC4 on WBA55 — see RM0493 §22 */
-  #define ADC_CH_VREFINT    13
-  #define ADC_CH_TEMP       12
+  /* ADC4 on WBA55. RM0493 "ADC interconnection": VIN[0] = VREFINT,
+   * VIN[12] = VCORE, VIN[13] = VSENSE (temperature sensor). This used to
+   * say VREFINT = 13 / TEMP = 12, so "VREFINT" read the temperature
+   * sensor and the temperature read VCORE. */
+  #define ADC_CH_VREFINT    0
+  #define ADC_CH_TEMP       13
 
 #elif defined(STM32H523xx)
   /* ADC1/ADC2 on H523 — see RM0481 §24 */
@@ -82,11 +86,14 @@
   #define TS_CAL2_TEMP       130
 
 #elif defined(STM32WBA55xx)
-  /* WBA55 RM0493 §3.11 — calibrated at VDDA = 3.3V, 30°C / 130°C */
-  #define VREFINT_CAL_ADDR   ((volatile uint16_t *)0x0BFA0700UL)
-  #define TS_CAL1_ADDR       ((volatile uint16_t *)0x0BFA0710UL)
-  #define TS_CAL2_ADDR       ((volatile uint16_t *)0x0BFA0720UL)
-  #define VREFINT_CAL_VDD_MV 3300UL
+  /* WBA55: RM0493 Tables 144 / 145 (and DS14127). All acquired by ADC4
+   * at VDDA = VREF+ = 3.0 V. VREFINT_CAL sits at an ODD address, so it is
+   * read byte by byte (_cal_read). The old values here (0x0BFA07x0, 3.3 V)
+   * were not in the RM. */
+  #define VREFINT_CAL_ADDR   ((volatile uint16_t *)0x0BF907A5UL)
+  #define TS_CAL1_ADDR       ((volatile uint16_t *)0x0BF90710UL)
+  #define TS_CAL2_ADDR       ((volatile uint16_t *)0x0BF90742UL)
+  #define VREFINT_CAL_VDD_MV 3000UL
   #define TS_CAL1_TEMP       30
   #define TS_CAL2_TEMP       130
 
@@ -99,6 +106,15 @@
   #define TS_CAL1_TEMP       30
   #define TS_CAL2_TEMP       130
 #endif
+
+/* Factory calibration words, read a byte at a time: the WBA's VREFINT_CAL is
+ * at an odd address, and an unaligned halfword load from the info block is
+ * not something to rely on. Little-endian, 12 bits used. */
+static uint16_t _cal_read(volatile const uint16_t *addr)
+{
+    volatile const uint8_t *b = (volatile const uint8_t *)addr;
+    return (uint16_t)(b[0] | ((uint16_t)b[1] << 8));
+}
 
 /* ============================================================
  * Sampling time encoding (family-specific LL constants)
@@ -287,11 +303,17 @@ static void _apply_oversample(ADC_TypeDef *adc, hal_adc_oversample_t ratio,
  */
 static void _set_channel_samp(ADC_TypeDef *adc, uint8_t channel, uint32_t smpr_val)
 {
-#if defined(STM32L011xx) || defined(STM32WBA55xx)
-    /* Single SMPR register — update all fields to the same value */
-    uint32_t smpr = 0;
-    for (int i = 0; i < 8; i++) smpr |= smpr_val << (i * 3);
-    adc->SMPR = smpr;
+#if defined(STM32L011xx)
+    /* One SMP[2:0] field for every channel (RM0377); the rest is reserved. */
+    adc->SMPR = smpr_val & 0x7UL;
+    (void)channel;
+
+#elif defined(STM32WBA55xx)
+    /* ADC4 SMPR (RM0493): SMP1[2:0], SMP2[6:4], SMPSELx[21:8] picks SMP1
+     * or SMP2 per channel. Use SMP1 for all (SMPSEL = 0). Repeating the
+     * 3-bit code across the register, as this did, scattered a pattern
+     * over SMP2 and SMPSEL for every code but 0b111. */
+    adc->SMPR = smpr_val & 0x7UL;
     (void)channel;
 
 #elif defined(STM32L422xx) || defined(STM32H523xx)
@@ -596,6 +618,8 @@ void hal_adc_deinit(hal_adc_t *adc)
 #elif defined(STM32L422xx)
     CLR_BITS(instance->CR, 1UL << 28);          /* ADVREGEN = 0 ... */
     SET_BITS(instance->CR, 1UL << 29);          /* ... then DEEPPWD = 1 */
+#elif defined(STM32WBA55xx)
+    CLR_BITS(instance->CR, 1UL << 28);          /* ADVREGEN = 0 (ADC4 has no DEEPPWD) */
 #endif
     adc->instance = 0;
 }
@@ -618,21 +642,23 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
 
     uint16_t vref_raw = hal_adc_read(adc, ADC_CH_VREFINT);
 
-#if defined(STM32WBA55xx) || defined(STM32H523xx)
-    /* WBA55/H523: use nominal 3.3V VDDA.
+#if defined(STM32H523xx)
+    /* H523: use nominal 3.3V VDDA.
      * H523: VREFINT channel read via hal_adc_read needs further debugging —
      * the read returns incorrect values despite correct calibration data.
-     * Since the supply is a fixed 3.3V rail, the nominal value is accurate.
      * TODO: debug H523 VREFINT channel read path. */
     (void)vref_raw;
     uint32_t vdda = 3300UL;
 #else
-    uint16_t vref_cal = *VREFINT_CAL_ADDR;
+    uint16_t vref_cal = _cal_read(VREFINT_CAL_ADDR);
 
-    if (vref_raw == 0 || vref_cal == 0) return 3300UL;
+    if (vref_raw == 0 || vref_cal == 0 || vref_cal >= 0xFFF) return 3300UL;
 
     /* VDDA = VREFINT_CAL_VDD_MV * vref_cal / vref_raw */
     uint32_t vdda = (VREFINT_CAL_VDD_MV * (uint32_t)vref_cal) / (uint32_t)vref_raw;
+    /* Outside every Core's supply range means a bad read (wrong channel,
+     * sampling too short): report nominal rather than a nonsense VDDA. */
+    if (vdda < 1600UL || vdda > 3700UL) vdda = 3300UL;
 #endif
 
     /* Remove the channel if we added it ourselves */
@@ -715,17 +741,19 @@ int32_t hal_adc_read_temp_decidegc(hal_adc_t *adc)
      */
     uint32_t raw_scaled = ((uint32_t)raw * adc->vdda_mv) / VREFINT_CAL_VDD_MV;
 
+    int32_t ts_cal1 = (int32_t)_cal_read(TS_CAL1_ADDR);
+    int32_t ts_cal2 = (int32_t)_cal_read(TS_CAL2_ADDR);
 #if defined(STM32WBA55xx)
-    /* OTP region not bus-accessible on WBA55 (see note in hal_adc_read_vdda_mv).
-     * Use datasheet typical sensor output values (VDD = 3.3V):
-     *   V_TS(30°C)  ≈ 770 mV → (770/3300) × 4095 ≈ 955 counts
-     *   V_TS(130°C) ≈ 1110 mV → (1110/3300) × 4095 ≈ 1378 counts
-     * Accuracy without per-chip calibration: ~±15°C. */
-    int32_t ts_cal1 = 955;
-    int32_t ts_cal2 = 1378;
-#else
-    int32_t ts_cal1 = (int32_t)*TS_CAL1_ADDR;
-    int32_t ts_cal2 = (int32_t)*TS_CAL2_ADDR;
+    /* The WBA used to fall back to typical constants here because the
+     * calibration words "weren't readable"; the addresses it tried
+     * (0x0BFA07xx) were wrong. RM0493 Table 144 puts TS_CAL1 / TS_CAL2 at
+     * 0x0BF90710 / 0x0BF90742 (3.0 V). Keep the typical figures only as a
+     * fallback for blank words: V_TS(30 °C) ≈ 770 mV, V_TS(130 °C) ≈
+     * 1110 mV, as 12-bit counts at 3.0 V. */
+    if (ts_cal1 == 0 || ts_cal1 >= 0xFFF || ts_cal2 == 0 || ts_cal2 >= 0xFFF) {
+        ts_cal1 = 1051;   /* 770 mV / 3000 mV x 4095 */
+        ts_cal2 = 1515;   /* 1110 mV / 3000 mV x 4095 */
+    }
 #endif
 
     /* Temperature formula from RM:
