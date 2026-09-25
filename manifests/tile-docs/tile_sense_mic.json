@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@624d703",
+  "source": "tiles@8c11e89",
   "file": "tile_sense_mic.h",
   "brief": "Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC). I2C-only, command-based protocol via tiles_pal_t raw I2C.",
-  "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.3.0\n\nAnalog signal chain: an analog MEMS microphone is AC-coupled into an\nAD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is\nalso tapped out to a pad). Components:\n  - Same Sky / CUI CMM-2718AT-42316-TR: omnidirectional ANALOG MEMS mic,\n    −42 dBV/Pa sensitivity, 57 dBA SNR, 130 dB SPL AOP, 300 Ω output.\n  - Analog Devices AD8605: precision RRIO op-amp, non-inverting gain\n    ~48× (R4 47k / R3 1k → 1 + 47). The ADC therefore sees ~48× the\n    bare mic voltage — the mV→SPL conversion divides this back out.\n  - Maxim MAX11645: 12-bit 2-channel ADC, up to 94.4 ksps,\n    I2C up to 1.7 MHz, internal 2.048V reference.\n\nThe amplified analog output is also brought out to a tile pad (the\nschematic routes it to pad 8). NOTE: as of this writing the canonical\ntile JSON is mid-reconciliation — it lists the older PUI AMM-2742 mic\nand labels pad 6 (not 8) as the analog out, and omits the AD8605. The\ndriver here reflects the real schematic; the product DB still needs the\nmic part, the AD8605, and the analog-out pad (8) updated to match.\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  The MAX11645 supports an external reference on its REF/AIN1\n  pin, but the Sense.MIC tile does not route REF/AIN1 to any\n  pad (pad 6 carries the chip's analog audio output, not the\n  ADC reference). Closing this gap requires a tile hardware\n  revision that breaks REF out to a connector pad. Until then,\n  the SENSE_MIC_REF_EXTERNAL* enum values configure the chip\n  but have no usable external pin.",
+  "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.4.0\n\nSignal chain (production schematic):\n  - Same Sky CMM-2718AT-38164W-TR: analog, omnidirectional, top-port MEMS\n    mic. −38 dBV/Pa (±1 dB), 64 dBA SNR, 128 dB SPL overload, 170 Ω\n    output, 0.75 V DC output, 175 µA.\n  - AC-coupled through C2 (100 nF) into the + input of an Analog Devices\n    AD8605 (rail-to-rail CMOS op-amp, 1 mA). C3 (100 nF) also sits from\n    that input to GND, so C2/C3 halve the audio on the way in.\n  - Non-inverting gain 1 + R4/R3 = 1 + 47k/1k = 48x (C4 100 pF across\n    R4: ~34 kHz low-pass). Mic to ADC: 0.5 x 48 = 24x.\n  - The amp output drives the MAX11645's AIN0 and pad 8. AIN1 is not\n    connected.\n  - Maxim MAX11645: 12-bit, 2-channel, up to 94.4 ksps, I2C to 1.7 MHz,\n    internal 2.048 V reference.\n\nBias: the + input is biased from the MAX11645's REF pin through R2/R1\n(330k/330k, with C6 100 nF on REF), and R3 returns to GND with no\nDC-blocking capacitor, so the bias is amplified 48x as well. REF is\ndriven only by SENSE_MIC_REF_INTERNAL_BUF (Table 6); then the bias is\n1.024 V x 48 and the output sits at the V+ rail — no audio. In every\nother mode REF is not connected, the bias is ~0 V, and the output rests\nat 0 V: only the positive half-cycles of the sound reach the ADC. The\ndriver therefore defaults to the VDD reference, measures the resting\nlevel at init(), and corrects its SPL figure for the half-wave signal.\n(A board revision with a capacitor in series with R3 would centre the\nsignal on 1.024 V in the REF_INTERNAL_BUF mode.)\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Full-wave audio\" section=runtime\n  Hardware-gated. The amp rests at 0 V in every usable mode (its bias\n  comes from the undriven REF pin and is gained 48x), so only positive\n  half-cycles reach the ADC: fine for levels and events, not for\n  recording a waveform. Needs a board revision (a capacitor in series\n  with R3, then the REF_INTERNAL_BUF mode centres the signal).\n\n@studio unsupported severity=niche category=\"Differential / bipolar input\" section=config\n  Hardware-gated: AIN1 is not connected, so the ADC runs single-ended,\n  where the MAX11645 ignores the bipolar setting.\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  Hardware-gated. The MAX11645 accepts an external reference on\n  its REF pin, but on this tile REF only feeds the on-board amp\n  bias divider (R2/R1) and its 100 nF decoupling cap (C6); it is\n  not on any pad, and AIN1 is unconnected. Closing this gap needs\n  a tile revision. Until then SENSE_MIC_REF_EXTERNAL configures\n  the chip but has no usable reference source.",
   "code_examples": [
     {
       "label": "Quick start — polling",
@@ -21,9 +21,21 @@
   "studio_ready": true,
   "studio_unsupported": [
     {
+      "severity": "common",
+      "category": "Full-wave audio",
+      "brief": "Hardware-gated. The amp rests at 0 V in every usable mode (its bias comes from the undriven REF pin and is gained 48x), so only positive half-cycles reach the ADC: fine for levels and events, not for recording a waveform. Needs a board revision (a capacitor in series with R3, then the REF_INTERNAL_BUF mode centres the signal).",
+      "section": "runtime"
+    },
+    {
+      "severity": "niche",
+      "category": "Differential / bipolar input",
+      "brief": "Hardware-gated: AIN1 is not connected, so the ADC runs single-ended, where the MAX11645 ignores the bipolar setting.",
+      "section": "config"
+    },
+    {
       "severity": "advanced",
       "category": "External reference voltage on REF pin",
-      "brief": "The MAX11645 supports an external reference on its REF/AIN1 pin, but the Sense.MIC tile does not route REF/AIN1 to any pad (pad 6 carries the chip's analog audio output, not the ADC reference). Closing this gap requires a tile hardware revision that breaks REF out to a connector pad. Until then, the SENSE_MIC_REF_EXTERNAL* enum values configure the chip but have no usable external pin.",
+      "brief": "Hardware-gated. The MAX11645 accepts an external reference on its REF pin, but on this tile REF only feeds the on-board amp bias divider (R2/R1) and its 100 nF decoupling cap (C6); it is not on any pad, and AIN1 is unconnected. Closing this gap needs a tile revision. Until then SENSE_MIC_REF_EXTERNAL configures the chip but has no usable reference source.",
       "section": "config"
     }
   ],
@@ -36,7 +48,7 @@
     },
     {
       "name": "TILE_SENSE_MIC_VERSION_MINOR",
-      "value": "3",
+      "value": "4",
       "description": "",
       "section": ""
     },
@@ -63,12 +75,12 @@
     {
       "name": "sense_mic_ref_t",
       "brief": "Reference voltage selection.",
-      "description": "| Enum value        | Vref     | Notes                                        |\n|-------------------|----------|----------------------------------------------|\n| REF_VDD           | VDD      | Simple, full-range (default)                 |\n| REF_INTERNAL      | 2.048 V  | Precise, always on (datasheet's preferred)   |\n| REF_INTERNAL_BUF  | 2.048 V  | Also driven out on the REF pin (not routed)  |\n| REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not routed   |\nValues are the MAX11645's SEL[2:0] field (Table 6). They changed in v2.3.0 —\nsee the MAX11645_SEL_* note above; the names did not.",
+      "description": "| Enum value        | Vref     | Notes                                        |\n|-------------------|----------|----------------------------------------------|\n| REF_VDD           | VDD      | Default. 0.8 mV/count; tracks the supply     |\n| REF_INTERNAL      | 2.048 V  | 0.5 mV/count, always on (+330 µA)            |\n| REF_INTERNAL_BUF  | 2.048 V  | NOT USABLE on this tile: driving REF biases  |\n|                   |          | the amp to the rail (see the header)         |\n| REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not on a pad |\nValues are the MAX11645's SEL[2:0] field (Table 6). They changed in v2.3.0 —\nsee the MAX11645_SEL_* note above; the names did not.",
       "members": [
         {
           "name": "SENSE_MIC_REF_VDD",
           "value": "0x00",
-          "description": "Supply voltage (3.3V)"
+          "description": "Supply voltage (V+)"
         },
         {
           "name": "SENSE_MIC_REF_EXTERNAL",
@@ -78,19 +90,19 @@
         {
           "name": "SENSE_MIC_REF_INTERNAL",
           "value": "0x05",
-          "description": "Internal 2.048V"
+          "description": "Internal 2.048 V"
         },
         {
           "name": "SENSE_MIC_REF_INTERNAL_BUF",
           "value": "0x07",
-          "description": "Internal 2.048V, also on the REF pin"
+          "description": "Internal 2.048V, also on the REF pin (saturates this board's amp)"
         }
       ]
     },
     {
       "name": "sense_mic_channel_t",
       "brief": "ADC channel selection.",
-      "description": "| Enum value | Channel | Tile signal                         |\n|------------|---------|-------------------------------------|\n| CH_AIN0    | AIN0    | MEMS microphone output (default)    |\n| CH_AIN1    | AIN1    | AIN1 / reference input              |",
+      "description": "| Enum value | Channel | Tile signal                         |\n|------------|---------|-------------------------------------|\n| CH_AIN0    | AIN0    | MEMS microphone output (default)    |\n| CH_AIN1    | AIN1    | Not connected on this tile          |",
       "members": [
         {
           "name": "SENSE_MIC_CH_AIN0",
@@ -107,7 +119,7 @@
     {
       "name": "sense_mic_scan_t",
       "brief": "Scan mode.",
-      "description": "| Enum value   | Behavior                                 |\n|--------------|------------------------------------------|\n| SCAN_UP      | Scan from AIN0 up to selected channel (default) |\n| SCAN_SINGLE  | Convert selected channel once            |\n| SCAN_8X      | Convert selected channel 8 times         |",
+      "description": "| Enum value   | Behavior                                 |\n|--------------|------------------------------------------|\n| SCAN_SINGLE  | Convert selected channel once (default)  |\n| SCAN_UP      | Scan from AIN0 up to selected channel    |\n| SCAN_8X      | Convert selected channel 8 times, returning 8 results |\nSCAN_8X is not averaging: each conversion comes back as its own result.\nget_samples() uses it to fetch eight samples per I2C transaction (about\ntwice the burst rate); single reads take the first of the eight.",
       "members": [
         {
           "name": "SENSE_MIC_SCAN_SINGLE",
@@ -122,7 +134,7 @@
         {
           "name": "SENSE_MIC_SCAN_8X",
           "value": "0x01",
-          "description": "Convert CS0 8 times (averaging)"
+          "description": "Convert CS0 8 times, 8 results per read"
         }
       ]
     },
@@ -146,7 +158,7 @@
     {
       "name": "sense_mic_polarity_t",
       "brief": "Output coding (unipolar vs bipolar).",
-      "description": "| Enum value | Output range          | Encoding                  |\n|------------|-----------------------|---------------------------|\n| UNIPOLAR   | 0 .. VREF             | Straight binary (default) |\n| BIPOLAR    | -VREF/2 .. +VREF/2    | Two's complement          |\n       DC bias, so unipolar mode is the natural fit. Bipolar mode\n       re-encodes the same single-ended sample as a signed value\n       centred on VREF/2 — useful if your code wants signed audio\n       directly out of get_raw(), but does NOT enable true\n       differential reads (the tile has no second analog input\n       wired to AIN1).",
+      "description": "| Enum value | Output range          | Encoding                  |\n|------------|-----------------------|---------------------------|\n| UNIPOLAR   | 0 .. VREF             | Straight binary (default) |\n| BIPOLAR    | -VREF/2 .. +VREF/2    | Two's complement          |\n       always converts single-ended (AIN1 is not connected on this\n       tile), and the MAX11645 then works unipolar whatever this bit\n       says (datasheet \"Unipolar/Bipolar\"). So on this tile the two\n       settings read the same.",
       "members": [
         {
           "name": "SENSE_MIC_POLARITY_UNIPOLAR",
@@ -180,7 +192,7 @@
         {
           "type": "uint8_t",
           "name": "scan",
-          "description": "Scan mode (sense_mic_scan_t). Default: SENSE_MIC_SCAN_SINGLE."
+          "description": "Scan mode (sense_mic_scan_t). 0 = default, SENSE_MIC_SCAN_SINGLE."
         },
         {
           "type": "uint8_t",
@@ -195,7 +207,7 @@
         {
           "type": "uint16_t",
           "name": "vref_mv",
-          "description": "Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set manually only for external ref."
+          "description": "Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set it to the real supply when using the VDD reference off 3.3 V."
         }
       ]
     }
@@ -213,7 +225,7 @@
       "signature": "void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_mic_cfg_t *cfg)",
       "params": [],
       "notes": [
-        "Blocks for ~5 ms (setup settling + DC offset calibration). Call once at startup."
+        "Blocks for ~5 ms (~15 ms with the internal reference, which takes 10 ms to wake). Call once at startup."
       ],
       "brief": "Initialize the MAX11645 ADC.",
       "description": "Sends setup byte (reference, clock, polarity) and configuration byte\n(scan mode, channel, single-ended). Verifies the device responds by\nperforming a test read.\n\nPass cfg=NULL for defaults: VDD reference, AIN0 (mic), single-ended,\nunipolar, internal clock, single-channel scan.",
@@ -226,7 +238,7 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Enter low-power mode (no conversions).",
-      "description": "",
+      "description": "The ADC powers down between conversions on its own; sleep also turns an\ninternal reference off (~330 µA). The mic and amp run from V+ and keep\ndrawing ~1.2 mA: the tile has no switch for them.",
       "name": "tile_sense_mic_sleep"
     },
     {
@@ -258,7 +270,7 @@
         }
       ],
       "notes": [
-        "When switching to internal ref, allow ~10 µs for settling. This function inserts a 1 ms delay automatically."
+        "The internal reference takes 10 ms to wake; this function waits for it. Don't select REF_INTERNAL_BUF or REF_EXTERNAL on this tile (see sense_mic_ref_t). Call calibrate() afterwards: the resting level in counts changes with the reference."
       ],
       "studio_exposed": true,
       "studio_section": "config",
@@ -325,7 +337,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Switch the output coding (unipolar vs bipolar).",
-      "description": "Unipolar (default) returns 0–4095 straight binary, mid-bias near\n2048. Bipolar returns the same sample re-encoded as a signed\n12-bit two's-complement value centred on VREF/2.\n\nBoth modes use the chip's single-ended input on AIN0 — bipolar\ndoes NOT enable true differential reads (the tile does not route\nan opposing analog input to AIN1). It just changes how get_raw()\nencodes the same physical sample.\n\nAfter switching to bipolar, treat get_raw() output as a signed\n12-bit value (sign-extend before use): see get_audio_sample()\nfor an alternative that subtracts the calibrated DC offset.",
+      "description": "No effect on this tile: bipolar coding applies only to differential\ninputs, and the driver always converts single-ended (AIN1 is not\nconnected). get_raw() stays 0-4095 straight binary either way. Kept for\nAPI compatibility. For signed audio use get_audio_sample(), which\nsubtracts the calibrated resting level.",
       "name": "tile_sense_mic_set_polarity"
     },
     {
@@ -376,7 +388,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Get the auto-calibrated DC offset (mic bias point).",
-      "description": "Measured during init() by averaging 64 samples. Typically 600–900\nwith VDD reference, depending on supply voltage and PCB layout.",
+      "description": "Measured during init() by averaging 64 samples. Near 0 on this board\n(the amp rests at 0 V; see the header), a few counts of amp offset.",
       "name": "tile_sense_mic_get_dc_offset"
     },
     {
@@ -414,10 +426,6 @@
       "signature": "uint16_t tile_sense_mic_dc_level(tile_t *tile, const uint16_t *samples, uint16_t count)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle (unused — accepted for DSL-binding"
-        },
-        {
           "name": "samples",
           "description": "Sample buffer (typically from get_samples())."
         },
@@ -431,16 +439,12 @@
       "studio_section": "runtime",
       "return": "DC offset in raw ADC counts.",
       "brief": "Compute the DC level (mean) of a sample buffer.",
-      "description": "Useful for determining the mic bias point. Varies with supply\nvoltage and PCB bias circuit (typically 600–900 with VDD ref).\n\n                 symmetry with the rest of the driver surface).",
+      "description": "Useful for determining the resting level (near 0 on this board).",
       "name": "tile_sense_mic_dc_level"
     },
     {
       "signature": "uint16_t tile_sense_mic_peak_to_peak(tile_t *tile, const uint16_t *samples, uint16_t count)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle (unused — accepted for DSL-binding symmetry)."
-        },
         {
           "name": "samples",
           "description": "Sample buffer."
@@ -455,16 +459,12 @@
       "studio_section": "runtime",
       "return": "Peak-to-peak amplitude in raw ADC counts.",
       "brief": "Compute peak-to-peak amplitude of a sample buffer (raw counts).",
-      "description": "Returns max - min across all samples. Silence ≈ 5–20 counts (noise floor).",
+      "description": "Returns max - min across all samples. Silence is a few counts. On this\nboard only the positive half of the signal is captured, so this is the\npositive peak, not the full swing.",
       "name": "tile_sense_mic_peak_to_peak"
     },
     {
       "signature": "uint16_t tile_sense_mic_rms(tile_t *tile, const uint16_t *samples, uint16_t count, uint16_t dc_offset)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle (unused — accepted for DSL-binding symmetry)."
-        },
         {
           "name": "samples",
           "description": "Sample buffer."
@@ -475,7 +475,7 @@
         },
         {
           "name": "dc_offset",
-          "description": "DC bias point (use dc_level() to measure, or pass 2048)."
+          "description": "Resting level (get_dc_offset(), or dc_level() of a quiet buffer)."
         }
       ],
       "notes": [],
@@ -506,12 +506,8 @@
       "signature": "uint8_t tile_sense_mic_is_loud(tile_t *tile, int16_t threshold_db)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "threshold_db",
-          "description": "[300..1300] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the"
+          "description": "[300..1100] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). Readings start at ~45 dB and clip near 112 dB, so thresholds outside that never change."
         }
       ],
       "notes": [
@@ -521,38 +517,29 @@
       "studio_section": "runtime",
       "return": "1 if measured SPL > threshold, 0 otherwise.",
       "brief": "Quick \"is the room loud right now?\" check.",
-      "description": "Captures a short sample buffer (~64 samples / ~5 ms at 12.5 ksps)\nvia @ref tile_sense_mic_get_samples, computes the RMS amplitude\nrelative to the calibrated DC offset, converts it to dB SPL via\nthe CMM-2718AT sensitivity model (with the AD8605 gain divided\nout), and compares against `threshold_db` (0.1 dB units, e.g. 700 = 70.0 dB).\n\n                      driver's noise floor; 1300 is the microphone's 130 dB acoustic overload point.",
+      "description": "Captures a short sample buffer (~64 samples / ~5 ms at 12.5 ksps)\nvia @ref tile_sense_mic_get_samples, computes the RMS amplitude\nrelative to the calibrated DC offset, converts it to dB SPL via\nthe signal-chain model above, and compares against `threshold_db`\n(0.1 dB units, e.g. 700 = 70.0 dB).",
       "name": "tile_sense_mic_is_loud"
     },
     {
       "signature": "int16_t tile_sense_mic_read_spl_db(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [
         "Blocking. Takes ~5 ms while sampling.",
         "Accuracy regime documented in the section comment above."
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "SPL in 0.1 dB units. Floor at 300 (~30 dB) when below",
+      "return": "SPL in 0.1 dB units. 300 (30.0 dB) when below the ~45 dB",
       "brief": "Read instantaneous SPL in 0.1 dB units.",
-      "description": "Captures a short sample buffer (~64 samples), computes the RMS\namplitude relative to the calibrated DC offset, scales to mV\nvia the configured Vref, then maps mV→dB SPL using the CMM-2718AT's\n−42 dBV/Pa typical sensitivity AND the AD8605's ~48× gain (1 Pa ≈\n7.94 mV RMS at the mic → ~381 mV RMS at the ADC input, where 1 Pa\nSPL = 94 dB). The conversion is integer-only with a 32-entry log10\nlookup table (1..32 mV).\n\nReturns dB SPL in 0.1 dB units (e.g. 700 = 70.0 dB).\n\n        the noise floor. Negative values are not produced.",
+      "description": "Captures a short sample buffer (~64 samples), computes the RMS\namplitude relative to the calibrated resting level, scales it to\n0.1 mV via the configured Vref, then maps to dB SPL: −38 dBV/Pa\n(1 Pa = 94 dB = 12.59 mV RMS at the mic, ~302 mV RMS at the ADC after\nthe 24x chain), +3 dB for the half-wave signal. Integer-only, with a\n32-entry log10 table.\n\nReturns dB SPL in 0.1 dB units (e.g. 700 = 70.0 dB).\n\n        measurement floor. Negative values are not produced.",
       "name": "tile_sense_mic_read_spl_db"
     },
     {
       "signature": "uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db, uint32_t timeout_ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "threshold_db",
-          "description": "[300..1300] SPL threshold in 0.1 dB units."
+          "description": "[300..1100] SPL threshold in 0.1 dB units."
         },
         {
           "name": "timeout_ms",
@@ -573,10 +560,6 @@
       "signature": "uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "timeout_ms",
           "description": "[1..60000] ms Maximum wait, in milliseconds."
         }
@@ -593,7 +576,7 @@
     }
   ],
   "source_file": "tile_sense_mic.h",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "tile_family": "Sense",
   "tile_name": "MIC",
   "display_name": "Sense.MIC",
@@ -607,9 +590,10 @@
       "kind": "number",
       "range": [
         30,
-        130
+        110
       ],
-      "unit": "dB"
+      "unit": "dB",
+      "default": 700
     },
     {
       "label": "Sound wait threshold",
@@ -620,9 +604,10 @@
       "kind": "number",
       "range": [
         30,
-        130
+        110
       ],
-      "unit": "dB"
+      "unit": "dB",
+      "default": 700
     },
     {
       "label": "Voltage reference",
@@ -632,10 +617,10 @@
       "param": "ref",
       "kind": "choice",
       "choices": [
-        "Supply voltage (3.3V)",
-        "Internal 2.048V"
+        "Supply voltage (V+)",
+        "Internal 2.048 V"
       ],
-      "default": "Supply voltage (3.3V)"
+      "default": "Supply voltage (V+)"
     },
     {
       "label": "Sound wait timeout",
@@ -648,7 +633,8 @@
         1,
         60000
       ],
-      "unit": "ms"
+      "unit": "ms",
+      "default": 5000
     },
     {
       "label": "Clap wait timeout",
@@ -661,7 +647,8 @@
         1,
         60000
       ],
-      "unit": "ms"
+      "unit": "ms",
+      "default": 5000
     }
   ]
 }

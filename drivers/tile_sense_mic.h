@@ -2,25 +2,33 @@
  * @file   tile_sense_mic.h
  * @brief  Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC).
  *         I2C-only, command-based protocol via tiles_pal_t raw I2C.
- * @version 2.3.0
+ * @version 2.4.0
  *
- * Analog signal chain: an analog MEMS microphone is AC-coupled into an
- * AD8605 op-amp gain stage, whose output drives the MAX11645 ADC (and is
- * also tapped out to a pad). Components:
- *   - Same Sky / CUI CMM-2718AT-42316-TR: omnidirectional ANALOG MEMS mic,
- *     −42 dBV/Pa sensitivity, 57 dBA SNR, 130 dB SPL AOP, 300 Ω output.
- *   - Analog Devices AD8605: precision RRIO op-amp, non-inverting gain
- *     ~48× (R4 47k / R3 1k → 1 + 47). The ADC therefore sees ~48× the
- *     bare mic voltage — the mV→SPL conversion divides this back out.
- *   - Maxim MAX11645: 12-bit 2-channel ADC, up to 94.4 ksps,
- *     I2C up to 1.7 MHz, internal 2.048V reference.
+ * Signal chain (production schematic):
+ *   - Same Sky CMM-2718AT-38164W-TR: analog, omnidirectional, top-port MEMS
+ *     mic. −38 dBV/Pa (±1 dB), 64 dBA SNR, 128 dB SPL overload, 170 Ω
+ *     output, 0.75 V DC output, 175 µA.
+ *   - AC-coupled through C2 (100 nF) into the + input of an Analog Devices
+ *     AD8605 (rail-to-rail CMOS op-amp, 1 mA). C3 (100 nF) also sits from
+ *     that input to GND, so C2/C3 halve the audio on the way in.
+ *   - Non-inverting gain 1 + R4/R3 = 1 + 47k/1k = 48x (C4 100 pF across
+ *     R4: ~34 kHz low-pass). Mic to ADC: 0.5 x 48 = 24x.
+ *   - The amp output drives the MAX11645's AIN0 and pad 8. AIN1 is not
+ *     connected.
+ *   - Maxim MAX11645: 12-bit, 2-channel, up to 94.4 ksps, I2C to 1.7 MHz,
+ *     internal 2.048 V reference.
  *
- * The amplified analog output is also brought out to a tile pad (the
- * schematic routes it to pad 8). NOTE: as of this writing the canonical
- * tile JSON is mid-reconciliation — it lists the older PUI AMM-2742 mic
- * and labels pad 6 (not 8) as the analog out, and omits the AD8605. The
- * driver here reflects the real schematic; the product DB still needs the
- * mic part, the AD8605, and the analog-out pad (8) updated to match.
+ * Bias: the + input is biased from the MAX11645's REF pin through R2/R1
+ * (330k/330k, with C6 100 nF on REF), and R3 returns to GND with no
+ * DC-blocking capacitor, so the bias is amplified 48x as well. REF is
+ * driven only by SENSE_MIC_REF_INTERNAL_BUF (Table 6); then the bias is
+ * 1.024 V x 48 and the output sits at the V+ rail — no audio. In every
+ * other mode REF is not connected, the bias is ~0 V, and the output rests
+ * at 0 V: only the positive half-cycles of the sound reach the ADC. The
+ * driver therefore defaults to the VDD reference, measures the resting
+ * level at init(), and corrects its SPL figure for the half-wave signal.
+ * (A board revision with a capacitor in series with R3 would centre the
+ * signal on 1.024 V in the REF_INTERNAL_BUF mode.)
  *
  * The MAX11645 uses a command-based I2C protocol (no register addresses).
  * All bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.
@@ -61,14 +69,24 @@
  *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
+ * @studio unsupported severity=common category="Full-wave audio" section=runtime
+ *   Hardware-gated. The amp rests at 0 V in every usable mode (its bias
+ *   comes from the undriven REF pin and is gained 48x), so only positive
+ *   half-cycles reach the ADC: fine for levels and events, not for
+ *   recording a waveform. Needs a board revision (a capacitor in series
+ *   with R3, then the REF_INTERNAL_BUF mode centres the signal).
+ *
+ * @studio unsupported severity=niche category="Differential / bipolar input" section=config
+ *   Hardware-gated: AIN1 is not connected, so the ADC runs single-ended,
+ *   where the MAX11645 ignores the bipolar setting.
+ *
  * @studio unsupported severity=advanced category="External reference voltage on REF pin" section=config
- *   The MAX11645 supports an external reference on its REF/AIN1
- *   pin, but the Sense.MIC tile does not route REF/AIN1 to any
- *   pad (pad 6 carries the chip's analog audio output, not the
- *   ADC reference). Closing this gap requires a tile hardware
- *   revision that breaks REF out to a connector pad. Until then,
- *   the SENSE_MIC_REF_EXTERNAL* enum values configure the chip
- *   but have no usable external pin.
+ *   Hardware-gated. The MAX11645 accepts an external reference on
+ *   its REF pin, but on this tile REF only feeds the on-board amp
+ *   bias divider (R2/R1) and its 100 nF decoupling cap (C6); it is
+ *   not on any pad, and AIN1 is unconnected. Closing this gap needs
+ *   a tile revision. Until then SENSE_MIC_REF_EXTERNAL configures
+ *   the chip but has no usable reference source.
  */
 
 #ifndef INC_TILE_SENSE_MIC_H_
@@ -82,7 +100,7 @@
  * ================================================================ */
 
 #define TILE_SENSE_MIC_VERSION_MAJOR  2
-#define TILE_SENSE_MIC_VERSION_MINOR  3
+#define TILE_SENSE_MIC_VERSION_MINOR  4
 #define TILE_SENSE_MIC_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -137,7 +155,7 @@ TILES_CHECK_VERSION(1, 0);
 
 /* CLK: bit 3 */
 #define MAX11645_CLK_INTERNAL    (0 << 3)     /**< Internal clock (default) */
-#define MAX11645_CLK_EXTERNAL    (1 << 3)     /**< External clock on AIN1 */
+#define MAX11645_CLK_EXTERNAL    (1 << 3)     /**< External clock: SCL clocks the conversion */
 
 /* BIP/UNI: bit 2 */
 #define MAX11645_UNI             (0 << 2)     /**< Unipolar output (default) */
@@ -179,19 +197,20 @@ TILES_CHECK_VERSION(1, 0);
  *
  * | Enum value        | Vref     | Notes                                        |
  * |-------------------|----------|----------------------------------------------|
- * | REF_VDD           | VDD      | Simple, full-range (default)                 |
- * | REF_INTERNAL      | 2.048 V  | Precise, always on (datasheet's preferred)   |
- * | REF_INTERNAL_BUF  | 2.048 V  | Also driven out on the REF pin (not routed)  |
- * | REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not routed   |
+ * | REF_VDD           | VDD      | Default. 0.8 mV/count; tracks the supply     |
+ * | REF_INTERNAL      | 2.048 V  | 0.5 mV/count, always on (+330 µA)            |
+ * | REF_INTERNAL_BUF  | 2.048 V  | NOT USABLE on this tile: driving REF biases  |
+ * |                   |          | the amp to the rail (see the header)         |
+ * | REF_EXTERNAL      | REF pin  | NOT USABLE on this tile: REF is not on a pad |
  *
  * Values are the MAX11645's SEL[2:0] field (Table 6). They changed in v2.3.0 —
  * see the MAX11645_SEL_* note above; the names did not.
  */
 typedef enum {
-    SENSE_MIC_REF_VDD          = 0x00,  /**< Supply voltage (3.3V) */
+    SENSE_MIC_REF_VDD          = 0x00,  /**< Supply voltage (V+) */
     SENSE_MIC_REF_EXTERNAL     = 0x02,  /**< External reference on the REF pin (not routed on this tile) */
-    SENSE_MIC_REF_INTERNAL     = 0x05,  /**< Internal 2.048V */
-    SENSE_MIC_REF_INTERNAL_BUF = 0x07,  /**< Internal 2.048V, also on the REF pin */
+    SENSE_MIC_REF_INTERNAL     = 0x05,  /**< Internal 2.048 V */
+    SENSE_MIC_REF_INTERNAL_BUF = 0x07,  /**< Internal 2.048V, also on the REF pin (saturates this board's amp) */
 } sense_mic_ref_t;
 
 /**
@@ -200,7 +219,7 @@ typedef enum {
  * | Enum value | Channel | Tile signal                         |
  * |------------|---------|-------------------------------------|
  * | CH_AIN0    | AIN0    | MEMS microphone output (default)    |
- * | CH_AIN1    | AIN1    | AIN1 / reference input              |
+ * | CH_AIN1    | AIN1    | Not connected on this tile          |
  */
 typedef enum {
     SENSE_MIC_CH_AIN0 = 0,  /**< AIN0 — microphone (default) */
@@ -212,14 +231,18 @@ typedef enum {
  *
  * | Enum value   | Behavior                                 |
  * |--------------|------------------------------------------|
- * | SCAN_UP      | Scan from AIN0 up to selected channel (default) |
- * | SCAN_SINGLE  | Convert selected channel once            |
- * | SCAN_8X      | Convert selected channel 8 times         |
+ * | SCAN_SINGLE  | Convert selected channel once (default)  |
+ * | SCAN_UP      | Scan from AIN0 up to selected channel    |
+ * | SCAN_8X      | Convert selected channel 8 times, returning 8 results |
+ *
+ * SCAN_8X is not averaging: each conversion comes back as its own result.
+ * get_samples() uses it to fetch eight samples per I2C transaction (about
+ * twice the burst rate); single reads take the first of the eight.
  */
 typedef enum {
     SENSE_MIC_SCAN_SINGLE = 0x03,  /**< Single channel conversion (default) */
     SENSE_MIC_SCAN_UP     = 0x00,  /**< Scan from AIN0 up to CS0 */
-    SENSE_MIC_SCAN_8X     = 0x01,  /**< Convert CS0 8 times (averaging) */
+    SENSE_MIC_SCAN_8X     = 0x01,  /**< Convert CS0 8 times, 8 results per read */
 } sense_mic_scan_t;
 
 /**
@@ -248,13 +271,11 @@ typedef enum {
  * | UNIPOLAR   | 0 .. VREF             | Straight binary (default) |
  * | BIPOLAR    | -VREF/2 .. +VREF/2    | Two's complement          |
  *
- * @note  The Sense.MIC's MEMS mic is single-ended around a positive
- *        DC bias, so unipolar mode is the natural fit. Bipolar mode
- *        re-encodes the same single-ended sample as a signed value
- *        centred on VREF/2 — useful if your code wants signed audio
- *        directly out of get_raw(), but does NOT enable true
- *        differential reads (the tile has no second analog input
- *        wired to AIN1).
+ * @note  Bipolar coding applies to differential inputs only. The driver
+ *        always converts single-ended (AIN1 is not connected on this
+ *        tile), and the MAX11645 then works unipolar whatever this bit
+ *        says (datasheet "Unipolar/Bipolar"). So on this tile the two
+ *        settings read the same.
  */
 typedef enum {
     SENSE_MIC_POLARITY_UNIPOLAR = 0,  /**< 0 .. VREF, straight binary (default) */
@@ -272,10 +293,10 @@ typedef enum {
 typedef struct {
     uint8_t  ref;       /**< Voltage reference (sense_mic_ref_t). Default: SENSE_MIC_REF_VDD. */
     uint8_t  channel;   /**< ADC channel (sense_mic_channel_t). Default: SENSE_MIC_CH_AIN0. */
-    uint8_t  scan;      /**< Scan mode (sense_mic_scan_t). Default: SENSE_MIC_SCAN_SINGLE. */
+    uint8_t  scan;      /**< Scan mode (sense_mic_scan_t). 0 = default, SENSE_MIC_SCAN_SINGLE. */
     uint8_t  clock;     /**< Conversion clock (sense_mic_clock_t). Default: SENSE_MIC_CLOCK_INTERNAL. */
     uint8_t  polarity;  /**< Output coding (sense_mic_polarity_t). Default: SENSE_MIC_POLARITY_UNIPOLAR. */
-    uint16_t vref_mv;   /**< Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set manually only for external ref. */
+    uint16_t vref_mv;   /**< Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set it to the real supply when using the VDD reference off 3.3 V. */
 } sense_mic_cfg_t;
 
 /* ================================================================
@@ -300,14 +321,18 @@ uint8_t tile_sense_mic_find(tiles_pal_t *hal, uint8_t instance);
  * Pass cfg=NULL for defaults: VDD reference, AIN0 (mic), single-ended,
  * unipolar, internal clock, single-channel scan.
  *
- * @note   Blocks for ~5 ms (setup settling + DC offset calibration).
- *         Call once at startup.
+ * @note   Blocks for ~5 ms (~15 ms with the internal reference, which
+ *         takes 10 ms to wake). Call once at startup.
  */
 void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance,
                          tile_t *tile, const sense_mic_cfg_t *cfg);
 
 /**
  * @brief  Enter low-power mode (no conversions).
+ *
+ * The ADC powers down between conversions on its own; sleep also turns an
+ * internal reference off (~330 µA). The mic and amp run from V+ and keep
+ * drawing ~1.2 mA: the tile has no switch for them.
  *
  * @studio expose category=tile name=sleep section=lifecycle
  */
@@ -334,8 +359,10 @@ void tile_sense_mic_reset(tile_t *tile);
 /**
  * @brief  Change the reference voltage source.
  *
- * @note   When switching to internal ref, allow ~10 µs for settling.
- *         This function inserts a 1 ms delay automatically.
+ * @note   The internal reference takes 10 ms to wake; this function waits
+ *         for it. Don't select REF_INTERNAL_BUF or REF_EXTERNAL on this
+ *         tile (see sense_mic_ref_t). Call calibrate() afterwards: the
+ *         resting level in counts changes with the reference.
  *
  * @studio expose category=tile name=set_reference section=config
  * @studio control ref label="Voltage reference" tier=advanced default=SENSE_MIC_REF_VDD allow=SENSE_MIC_REF_VDD,SENSE_MIC_REF_INTERNAL
@@ -384,18 +411,11 @@ void tile_sense_mic_set_clock_mode(tile_t *tile, sense_mic_clock_t clk);
 /**
  * @brief  Switch the output coding (unipolar vs bipolar).
  *
- * Unipolar (default) returns 0–4095 straight binary, mid-bias near
- * 2048. Bipolar returns the same sample re-encoded as a signed
- * 12-bit two's-complement value centred on VREF/2.
- *
- * Both modes use the chip's single-ended input on AIN0 — bipolar
- * does NOT enable true differential reads (the tile does not route
- * an opposing analog input to AIN1). It just changes how get_raw()
- * encodes the same physical sample.
- *
- * After switching to bipolar, treat get_raw() output as a signed
- * 12-bit value (sign-extend before use): see get_audio_sample()
- * for an alternative that subtracts the calibrated DC offset.
+ * No effect on this tile: bipolar coding applies only to differential
+ * inputs, and the driver always converts single-ended (AIN1 is not
+ * connected). get_raw() stays 0-4095 straight binary either way. Kept for
+ * API compatibility. For signed audio use get_audio_sample(), which
+ * subtracts the calibrated resting level.
  *
  * @param  pol  SENSE_MIC_POLARITY_UNIPOLAR or SENSE_MIC_POLARITY_BIPOLAR
  *
@@ -451,8 +471,8 @@ int16_t tile_sense_mic_get_audio_sample(tile_t *tile);
 /**
  * @brief  Get the auto-calibrated DC offset (mic bias point).
  *
- * Measured during init() by averaging 64 samples. Typically 600–900
- * with VDD reference, depending on supply voltage and PCB layout.
+ * Measured during init() by averaging 64 samples. Near 0 on this board
+ * (the amp rests at 0 V; see the header), a few counts of amp offset.
  *
  * @studio expose category=tile name=get_dc_offset returns=int section=runtime
  */
@@ -492,14 +512,11 @@ void tile_sense_mic_get_samples(tile_t *tile, uint16_t *buf, uint16_t count);
 /**
  * @brief  Compute the DC level (mean) of a sample buffer.
  *
- * Useful for determining the mic bias point. Varies with supply
- * voltage and PCB bias circuit (typically 600–900 with VDD ref).
+ * Useful for determining the resting level (near 0 on this board).
  *
  * @studio expose category=tile name=dc_level returns=int section=runtime
  * @studio in_buffer samples type=uint16_t length_param=count
  *
- * @param  tile     Tile handle (unused — accepted for DSL-binding
- *                  symmetry with the rest of the driver surface).
  * @param  samples  Sample buffer (typically from get_samples()).
  * @param  count    Number of samples in the buffer.
  * @return DC offset in raw ADC counts.
@@ -509,12 +526,13 @@ uint16_t tile_sense_mic_dc_level(tile_t *tile, const uint16_t *samples, uint16_t
 /**
  * @brief  Compute peak-to-peak amplitude of a sample buffer (raw counts).
  *
- * Returns max - min across all samples. Silence ≈ 5–20 counts (noise floor).
+ * Returns max - min across all samples. Silence is a few counts. On this
+ * board only the positive half of the signal is captured, so this is the
+ * positive peak, not the full swing.
  *
  * @studio expose category=tile name=peak_to_peak returns=int section=runtime
  * @studio in_buffer samples type=uint16_t length_param=count
  *
- * @param  tile     Tile handle (unused — accepted for DSL-binding symmetry).
  * @param  samples  Sample buffer.
  * @param  count    Number of samples.
  * @return Peak-to-peak amplitude in raw ADC counts.
@@ -527,10 +545,9 @@ uint16_t tile_sense_mic_peak_to_peak(tile_t *tile, const uint16_t *samples, uint
  * @studio expose category=tile name=rms returns=int section=runtime
  * @studio in_buffer samples type=uint16_t length_param=count
  *
- * @param  tile       Tile handle (unused — accepted for DSL-binding symmetry).
  * @param  samples    Sample buffer.
  * @param  count      Number of samples.
- * @param  dc_offset  DC bias point (use dc_level() to measure, or pass 2048).
+ * @param  dc_offset  Resting level (get_dc_offset(), or dc_level() of a quiet buffer).
  * @return RMS of AC component in raw ADC counts.
  */
 uint16_t tile_sense_mic_rms(tile_t *tile, const uint16_t *samples, uint16_t count,
@@ -558,16 +575,16 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw);
  *
  * SPL accuracy regime
  * -------------------
- * The CMM-2718AT sensitivity (−42 dBV/Pa typ.) — through the AD8605's
- * ~48× gain — and the integer mV→dB lookup that backs read_spl_db() /
- * is_loud() / wait_for_sound() are tuned for "did something happen"
- * event detection — knock, clap, voice presence, ambient quiet vs.
- * busy. They are NOT calibrated for studio metering: expect roughly
- * ±5 dB absolute accuracy in the 50–100 dB SPL window, more error
- * toward the extremes (sub-50 dB falls into the noise floor of the
- * ADC, above ~110 dB the mic clips at its 130 dB AOP). A-weighting is
- * approximated as flat — the CMM-2718AT has its own frequency response
- * (50 Hz–10 kHz) and we don't apply any weighting filter.
+ * read_spl_db() / is_loud() / wait_for_sound() use the chain as built:
+ * the CMM-2718AT-38164W's −38 dBV/Pa, 24x from mic to ADC, and a half-wave
+ * correction (+3 dB) when the signal rests at 0 V, as it does on this
+ * board. They are for "did something happen" detection — knock, clap,
+ * voice, quiet vs busy — not metering: a few dB absolute, flat weighting
+ * (no A-weighting), not yet checked against a reference meter. The usable
+ * window is about 45 dB (one ADC count of RMS) to ~112 dB (half-wave
+ * clipping at the VDD reference; ~108 dB with the internal 2.048 V),
+ * below the mic's 128 dB overload point. Quieter than the floor reads
+ * 30.0 dB.
  * ================================================================ */
 
 /**
@@ -578,15 +595,13 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw);
  * Captures a short sample buffer (~64 samples / ~5 ms at 12.5 ksps)
  * via @ref tile_sense_mic_get_samples, computes the RMS amplitude
  * relative to the calibrated DC offset, converts it to dB SPL via
- * the CMM-2718AT sensitivity model (with the AD8605 gain divided
- * out), and compares against `threshold_db` (0.1 dB units, e.g. 700 = 70.0 dB).
+ * the signal-chain model above, and compares against `threshold_db`
+ * (0.1 dB units, e.g. 700 = 70.0 dB).
  *
  * @note  Blocking. Takes ~5 ms while sampling.
  *
- * @studio control threshold_db label="Loudness threshold" tier=basic scope=usage scale=0.1 unit=dB
- * @param  tile          Initialised tile handle.
- * @param  threshold_db  [300..1300] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). 300 is the
- *                       driver's noise floor; 1300 is the microphone's 130 dB acoustic overload point.
+ * @studio control threshold_db label="Loudness threshold" tier=basic scope=usage scale=0.1 unit=dB default=700
+ * @param  threshold_db  [300..1100] SPL threshold in 0.1 dB units (e.g. 700 = 70 dB). Readings start at ~45 dB and clip near 112 dB, so thresholds outside that never change.
  * @return 1 if measured SPL > threshold, 0 otherwise.
  */
 uint8_t tile_sense_mic_is_loud(tile_t *tile, int16_t threshold_db);
@@ -597,21 +612,19 @@ uint8_t tile_sense_mic_is_loud(tile_t *tile, int16_t threshold_db);
  * @studio expose category=tile name=read_spl_db returns=int section=runtime
  *
  * Captures a short sample buffer (~64 samples), computes the RMS
- * amplitude relative to the calibrated DC offset, scales to mV
- * via the configured Vref, then maps mV→dB SPL using the CMM-2718AT's
- * −42 dBV/Pa typical sensitivity AND the AD8605's ~48× gain (1 Pa ≈
- * 7.94 mV RMS at the mic → ~381 mV RMS at the ADC input, where 1 Pa
- * SPL = 94 dB). The conversion is integer-only with a 32-entry log10
- * lookup table (1..32 mV).
+ * amplitude relative to the calibrated resting level, scales it to
+ * 0.1 mV via the configured Vref, then maps to dB SPL: −38 dBV/Pa
+ * (1 Pa = 94 dB = 12.59 mV RMS at the mic, ~302 mV RMS at the ADC after
+ * the 24x chain), +3 dB for the half-wave signal. Integer-only, with a
+ * 32-entry log10 table.
  *
  * Returns dB SPL in 0.1 dB units (e.g. 700 = 70.0 dB).
  *
  * @note  Blocking. Takes ~5 ms while sampling.
  * @note  Accuracy regime documented in the section comment above.
  *
- * @param  tile  Initialised tile handle.
- * @return SPL in 0.1 dB units. Floor at 300 (~30 dB) when below
- *         the noise floor. Negative values are not produced.
+ * @return SPL in 0.1 dB units. 300 (30.0 dB) when below the ~45 dB
+ *         measurement floor. Negative values are not produced.
  */
 int16_t tile_sense_mic_read_spl_db(tile_t *tile);
 
@@ -627,10 +640,9 @@ int16_t tile_sense_mic_read_spl_db(tile_t *tile);
  *
  * @note  Blocking until threshold or timeout.
  *
- * @studio control threshold_db label="Sound wait threshold" tier=basic scope=usage scale=0.1 unit=dB
- * @studio control timeout_ms label="Sound wait timeout" tier=advanced scope=usage
- * @param  tile          Initialised tile handle.
- * @param  threshold_db  [300..1300] SPL threshold in 0.1 dB units.
+ * @studio control threshold_db label="Sound wait threshold" tier=basic scope=usage scale=0.1 unit=dB default=700
+ * @studio control timeout_ms label="Sound wait timeout" tier=advanced scope=usage default=5000
+ * @param  threshold_db  [300..1100] SPL threshold in 0.1 dB units.
  * @param  timeout_ms    [1..60000] ms Maximum wait, in milliseconds.
  * @return 1 if threshold was crossed, 0 on timeout.
  */
@@ -656,8 +668,7 @@ uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db,
  *        on door knocks / drawer slams are expected — this is a
  *        coarse pattern detector, not a trained classifier.
  *
- * @studio control timeout_ms label="Clap wait timeout" tier=advanced scope=usage
- * @param  tile        Initialised tile handle.
+ * @studio control timeout_ms label="Clap wait timeout" tier=advanced scope=usage default=5000
  * @param  timeout_ms  [1..60000] ms Maximum wait, in milliseconds.
  * @return 1 if a clap pattern was detected, 0 on timeout.
  */
