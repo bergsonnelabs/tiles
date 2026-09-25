@@ -1,0 +1,471 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@f5a0d22",
+  "file": "tile_sense_acp.h",
+  "brief": "TMD3725 ambient-light, RGB colour & proximity sensor.",
+  "description": "Platform-agnostic driver for the ams/OSRAM TMD3725 ALS/Color/Proximity\nmodule on Sense.ACP. Provides RGBC ambient-light sensing (four 16-bit\ndata converters — Clear/Red/Green/Blue) plus an integrated IR-LED\nproximity engine with an 8-bit result.\n\nKey specifications:\n - RGBC ambient light: 16-bit Clear/Red/Green/Blue channels\n - Programmable ALS gain (1/4/16/64x) and integration time (2.8-719 ms)\n - Proximity: integrated, factory-trimmed IR LED, 8-bit output\n - Programmable proximity gain (1/2/4/8x) and LED drive (6-192 mA)\n - 1.8 V supply and 1.8 V I2C (up to 400 kHz), fixed address 0x39\n\nBoard note: on Sense.ACP the proximity IR LED anode (LEDA) is fed from\nan on-tile TPS61099 boost converter, so the LED drive current is drawn\nfrom a boosted rail rather than the 1.8 V input directly. The boost is\nalways-on hardware; this driver only sets the LED drive strength via\nPLDRIVE.\n\n\nDatasheet: ams TMD3725, \"ALS, Color and Proximity Sensor Module\"\n(v2-00, 2023-Mar-21).\n\n@studio tile label=Sense.ACP icon=🎨\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Threshold interrupts (ALS / proximity INT pin)\" section=config\n  Driver-deferred AND definition-gated. The TMD3725 asserts its INT pin\n  (open-drain, active-low) when the Clear channel or the proximity\n  result crosses the AILT/AIHT or PILT/PIHT thresholds past the PERS\n  persistence count. The tile routes INT to pad 7, but Sense-ACP-b.json\n  does not declare that pad, so Studio cannot wire it as an event\n  source. Polled reads (get_clear / get_proximity) cover the same ground\n  for v1 — a DSL comparison yields \"near/far\" without the INT path.\n  Closing this needs the tile definition updated to declare pad 7 = INT,\n  then a follow-up pass to expose the threshold/PERS/INTENAB registers\n  and a tile event.\n\n@studio unsupported severity=advanced category=\"Illuminance (lux) and correlated colour temperature\"\n  Out of scope for an integer driver. Converting RGBC counts to lux or\n  CCT requires the device-specific calibration coefficients from the ams\n  application note plus floating-point maths. This driver exposes the raw\n  per-channel counts (clear/red/green/blue); compute lux/CCT on the host\n  where floats and calibration data are available.\n\n@studio unsupported severity=niche category=\"Wait state, proximity offset calibration, IR-channel mux\"\n  Deferred, not gated. The wait feature (WEN/WTIME/WLONG idle timing),\n  the proximity offset-cancellation engine (POFFSET + CALIB autozero),\n  and the IR_TO_GREEN mux (route the IR photodiode into the green data\n  converter) are left at sane power-on defaults and not surfaced. A later\n  pass can expose them if a use-case needs them.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core.h\"\n  #include \"core_tiles.h\"\n  #include \"tile_sense_acp.h\"\n\n  tile_t acp;\n  tile_sense_acp_init(core_tiles_pal(&core_i2c1), 0, &acp, NULL);\n\n  uint16_t clear = tile_sense_acp_get_clear(&acp);\n  uint8_t  prox  = tile_sense_acp_get_proximity(&acp);"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "common",
+      "category": "Threshold interrupts (ALS / proximity INT pin)",
+      "brief": "Driver-deferred AND definition-gated. The TMD3725 asserts its INT pin (open-drain, active-low) when the Clear channel or the proximity result crosses the AILT/AIHT or PILT/PIHT thresholds past the PERS persistence count. The tile routes INT to pad 7, but Sense-ACP-b.json does not declare that pad, so Studio cannot wire it as an event source. Polled reads (get_clear / get_proximity) cover the same ground for v1 — a DSL comparison yields \"near/far\" without the INT path. Closing this needs the tile definition updated to declare pad 7 = INT, then a follow-up pass to expose the threshold/PERS/INTENAB registers and a tile event.",
+      "section": "config"
+    },
+    {
+      "severity": "advanced",
+      "category": "Illuminance (lux) and correlated colour temperature",
+      "brief": "Out of scope for an integer driver. Converting RGBC counts to lux or CCT requires the device-specific calibration coefficients from the ams application note plus floating-point maths. This driver exposes the raw per-channel counts (clear/red/green/blue); compute lux/CCT on the host where floats and calibration data are available."
+    },
+    {
+      "severity": "niche",
+      "category": "Wait state, proximity offset calibration, IR-channel mux",
+      "brief": "Deferred, not gated. The wait feature (WEN/WTIME/WLONG idle timing), the proximity offset-cancellation engine (POFFSET + CALIB autozero), and the IR_TO_GREEN mux (route the IR photodiode into the green data converter) are left at sane power-on defaults and not surfaced. A later pass can expose them if a use-case needs them."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_ACP_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_ACP_VERSION_MINOR",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_ACP_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TMD3725_I2C_ADDR",
+      "value": "0x39",
+      "description": "Fixed 7-bit I2C address (only value).",
+      "section": ""
+    },
+    {
+      "name": "TMD3725_ID_VALUE",
+      "value": "0xE4",
+      "description": "ID register (0x92) reset/expected value.",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_acp_als_gain_t",
+      "brief": "ALS/Color gain (CFG1 AGAIN[1:0]).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_ACP_ALS_GAIN_1X",
+          "value": "0x00",
+          "description": "1x."
+        },
+        {
+          "name": "SENSE_ACP_ALS_GAIN_4X",
+          "value": "0x01",
+          "description": "4x."
+        },
+        {
+          "name": "SENSE_ACP_ALS_GAIN_16X",
+          "value": "0x02",
+          "description": "16x (default)."
+        },
+        {
+          "name": "SENSE_ACP_ALS_GAIN_64X",
+          "value": "0x03",
+          "description": "64x."
+        }
+      ]
+    },
+    {
+      "name": "sense_acp_prox_gain_t",
+      "brief": "Proximity IR-sensor gain (PCFG1 PGAIN[7:6]).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_ACP_PROX_GAIN_1X",
+          "value": "0x00",
+          "description": "1x."
+        },
+        {
+          "name": "SENSE_ACP_PROX_GAIN_2X",
+          "value": "0x01",
+          "description": "2x."
+        },
+        {
+          "name": "SENSE_ACP_PROX_GAIN_4X",
+          "value": "0x02",
+          "description": "4x (default)."
+        },
+        {
+          "name": "SENSE_ACP_PROX_GAIN_8X",
+          "value": "0x03",
+          "description": "8x."
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_acp_cfg_t",
+      "brief": "Optional init-time configuration for Sense.ACP.",
+      "description": "Pass NULL to tile_sense_acp_init() for defaults: ALS gain 16x,\nintegration ~135 ms (ATIME 0x2F), proximity gain 4x, LED drive 12 mA,\nboth the ALS and proximity engines enabled.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "als_gain",
+          "description": "ALS gain (sense_acp_als_gain_t). Default 16x."
+        },
+        {
+          "type": "uint8_t",
+          "name": "atime",
+          "description": "ALS integration: (atime+1) x 2.78 ms. Default 0x2F."
+        },
+        {
+          "type": "uint8_t",
+          "name": "prox_gain",
+          "description": "Proximity gain (sense_acp_prox_gain_t). Default 4x."
+        },
+        {
+          "type": "uint8_t",
+          "name": "prox_drive_ma",
+          "description": "IR LED drive current in mA (6-192). Default 12."
+        },
+        {
+          "type": "uint8_t",
+          "name": "enable_als",
+          "description": "1 = enable ALS at init (default), 0 = leave off."
+        },
+        {
+          "type": "uint8_t",
+          "name": "enable_prox",
+          "description": "1 = enable proximity at init (default), 0 = off."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_acp_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "Address selector — only 0 is valid (fixed address 0x39)."
+        }
+      ],
+      "notes": [],
+      "return": "1 if the device ACKs and its ID register reads 0xE4, else 0.",
+      "brief": "Check if a Sense.ACP is present on the bus.",
+      "description": "",
+      "name": "tile_sense_acp_find"
+    },
+    {
+      "signature": "void tile_sense_acp_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_acp_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "Address selector — only 0 is valid (fixed address 0x39)."
+        },
+        {
+          "name": "tile",
+          "description": "Tile handle to initialise."
+        },
+        {
+          "name": "cfg",
+          "description": "Configuration (NULL for defaults)."
+        }
+      ],
+      "notes": [],
+      "brief": "Initialise a Sense.ACP tile.",
+      "description": "Probes the device, verifies the ID register, programs ALS gain +\nintegration time and proximity gain + LED drive, then powers on the\nrequested engines (PON is asserted together with AEN so the chip's\nauto-zero runs before the first ALS measurement). Sets tile state to\nREADY on success, ERROR otherwise.",
+      "name": "tile_sense_acp_init"
+    },
+    {
+      "signature": "void tile_sense_acp_sleep(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Power down the sensor (clears PON/AEN/PEN).",
+      "description": "",
+      "name": "tile_sense_acp_sleep"
+    },
+    {
+      "signature": "void tile_sense_acp_wake(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Sleeping tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Resume from sleep, restoring the engines enabled at init.",
+      "description": "",
+      "name": "tile_sense_acp_wake"
+    },
+    {
+      "signature": "void tile_sense_acp_set_als_gain(tile_t *tile, sense_acp_als_gain_t gain)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "gain",
+          "description": "ALS gain selection (sense_acp_als_gain_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the ALS/Color gain.",
+      "description": "",
+      "name": "tile_sense_acp_set_als_gain"
+    },
+    {
+      "signature": "void tile_sense_acp_set_integration_time(tile_t *tile, uint8_t atime)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "atime",
+          "description": "[0..255] Raw ATIME register value."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the ALS integration time.",
+      "description": "Integration time is (atime + 1) steps of nominally 2.8 ms; the maximum ALS\ncount scales with it (1024 per step, saturating at 65535). The datasheet\nprose says 2.78 ms per step, but its own table (0x3F = 180 ms, 0xFF = 719 ms)\nand clock arithmetic work out to 2.81 ms, which is what is shown to the user.\nFor example 0x00 = 2.8 ms, 0x2F = ~135 ms (default), 0xFF = ~719 ms.",
+      "name": "tile_sense_acp_set_integration_time"
+    },
+    {
+      "signature": "void tile_sense_acp_set_prox_gain(tile_t *tile, sense_acp_prox_gain_t gain)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "gain",
+          "description": "Proximity gain selection (sense_acp_prox_gain_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the proximity IR-sensor gain.",
+      "description": "",
+      "name": "tile_sense_acp_set_prox_gain"
+    },
+    {
+      "signature": "void tile_sense_acp_set_prox_drive_ma(tile_t *tile, uint8_t ma)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        },
+        {
+          "name": "ma",
+          "description": "[6..192] mA Desired LED drive current, in milliamps."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the proximity IR-LED drive current.",
+      "description": "The LED current is programmed in ~6 mA steps: i_LED = 6 x (PLDRIVE + 1),\nso the request is clamped to 6-192 mA and rounded down to the nearest\nstep. Actual current is factory-trimmed to normalise IR intensity, so\ntreat the value as approximate.",
+      "name": "tile_sense_acp_set_prox_drive_ma"
+    },
+    {
+      "signature": "uint16_t tile_sense_acp_get_clear(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "16-bit Clear channel count.",
+      "brief": "Read the Clear (unfiltered) channel — overall ambient light.",
+      "description": "",
+      "name": "tile_sense_acp_get_clear"
+    },
+    {
+      "signature": "uint16_t tile_sense_acp_get_red(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "16-bit Red channel count.",
+      "brief": "Read the Red channel count.",
+      "description": "",
+      "name": "tile_sense_acp_get_red"
+    },
+    {
+      "signature": "uint16_t tile_sense_acp_get_green(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "16-bit Green channel count.",
+      "brief": "Read the Green channel count.",
+      "description": "",
+      "name": "tile_sense_acp_get_green"
+    },
+    {
+      "signature": "uint16_t tile_sense_acp_get_blue(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "16-bit Blue channel count.",
+      "brief": "Read the Blue channel count.",
+      "description": "",
+      "name": "tile_sense_acp_get_blue"
+    },
+    {
+      "signature": "uint8_t tile_sense_acp_get_proximity(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "8-bit proximity count.",
+      "brief": "Read the proximity result (larger = closer object).",
+      "description": "",
+      "name": "tile_sense_acp_get_proximity"
+    },
+    {
+      "signature": "uint8_t tile_sense_acp_get_status(tile_t *tile)",
+      "params": [
+        {
+          "name": "tile",
+          "description": "Initialised tile handle."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Raw STATUS byte.",
+      "brief": "Read the STATUS register.",
+      "description": "Use the TMD3725_ST_* masks — e.g. ASAT (ALS saturation), PSAT\n(proximity saturation), AINT/PINT (threshold interrupts pending).",
+      "name": "tile_sense_acp_get_status"
+    }
+  ],
+  "source_file": "tile_sense_acp.h",
+  "version": "1.0.0",
+  "tile_family": "Sense",
+  "tile_name": "ACP",
+  "display_name": "Sense.ACP",
+  "vibe_settings": [
+    {
+      "label": "Light sensor gain",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_als_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "1x",
+        "4x",
+        "16x (default)",
+        "64x"
+      ],
+      "default": "16x (default)"
+    },
+    {
+      "label": "Light integration time",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_integration_time",
+      "param": "atime",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 47,
+      "computed_unit": "ms"
+    },
+    {
+      "label": "Proximity sensor gain",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_prox_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "1x",
+        "2x",
+        "4x (default)",
+        "8x"
+      ],
+      "default": "4x (default)"
+    },
+    {
+      "label": "Proximity LED current",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_prox_drive_ma",
+      "param": "ma",
+      "kind": "number",
+      "range": [
+        6,
+        192
+      ],
+      "unit": "mA",
+      "default": 12
+    }
+  ]
+}

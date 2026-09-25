@@ -1,0 +1,35 @@
+{
+  "rev": "d",
+  "name": "I.9",
+  "pads": [],
+  "power": [],
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 83,
+  "headline": "9-DOF IMU",
+  "components": [
+    {
+      "url": "",
+      "part": "BHI385",
+      "datasheet": "",
+      "manufacturer": "Bosch Sensortec"
+    },
+    {
+      "url": "",
+      "part": "BMM350",
+      "datasheet": "",
+      "manufacturer": "Bosch Sensortec"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-06-05T09:07:28.008Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}
