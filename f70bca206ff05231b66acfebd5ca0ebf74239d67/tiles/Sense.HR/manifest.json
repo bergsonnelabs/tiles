@@ -1,0 +1,934 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@0adc73d",
+  "tile": "Sense.HR",
+  "palette": {
+    "label": "Sense.HR",
+    "icon": "♥"
+  },
+  "driver": {
+    "prefix": "tile_sense_hr",
+    "header": "tile_sense_hr.h",
+    "version": "1.0.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_hr_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_hr_sleep",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Enter shutdown (SHDN = 1): oscillator off, LEDs off, ~1 µA (3 µA max on VDD, 0.5 µA max on VLED).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_hr_wake",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Leave shutdown and resume the configured measurements.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_hr_reset",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Software-reset the device to power-on defaults.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "start"
+      ],
+      "symbol": "tile_sense_hr_start",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Start the frame engine on every enabled slot.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "stop"
+      ],
+      "symbol": "tile_sense_hr_stop",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Stop all measurements (LEDs off, FIFO stops filling).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_sense_hr_process",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Process pending interrupt events. Call from your main loop.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_event"
+      ],
+      "symbol": "tile_sense_hr_on_event",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Register or change the event callback.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?sense_hr_event_cb_t",
+          "description": "Callback to fire on STATUS1 activity. NULL to clear."
+        },
+        {
+          "name": "ctx",
+          "type": "?void *",
+          "description": "Opaque user pointer passed to the callback."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_interrupts"
+      ],
+      "symbol": "tile_sense_hr_set_interrupts",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Choose which STATUS1 sources drive INTB (Interrupt Enable 1).",
+      "params": [
+        {
+          "name": "mask",
+          "type": "int",
+          "description": "STATUS1 bits that should assert INTB."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_frame_rate"
+      ],
+      "symbol": "tile_sense_hr_set_frame_rate",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set the frame rate.",
+      "params": [
+        {
+          "name": "fps",
+          "type": "int",
+          "description": "Requested frames per second."
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_frame_rate"
+      ],
+      "symbol": "tile_sense_hr_get_frame_rate",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read the configured frame rate.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_slot"
+      ],
+      "symbol": "tile_sense_hr_set_slot",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Configure and enable a measurement slot with one emitter.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5 (MEAS1..MEAS6)."
+        },
+        {
+          "name": "led",
+          "type": "int",
+          "description": "Emitter to pulse (sense_hr_led_t).",
+          "choices": [
+            {
+              "name": "SENSE_HR_LED_IR",
+              "value": 0,
+              "label": "LED1_DRV — 940 nm infrared"
+            },
+            {
+              "name": "SENSE_HR_LED_GREEN",
+              "value": 1,
+              "label": "LED2_DRV — 525 nm green (primary)"
+            },
+            {
+              "name": "SENSE_HR_LED_RED",
+              "value": 2,
+              "label": "LED3_DRV — 645 nm red (IN-S42ATR, λP)"
+            },
+            {
+              "name": "SENSE_HR_LED_GREEN2",
+              "value": 3,
+              "label": "LED4_DRV — 525 nm green (second)"
+            }
+          ]
+        },
+        {
+          "name": "led_ua",
+          "type": "int",
+          "description": "LED current in µA, 0–100000 (0 disables the LED; above 100 mA is capped)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_ambient_slot"
+      ],
+      "symbol": "tile_sense_hr_set_ambient_slot",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Configure a slot as a direct ambient-light measurement (no LED).",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "enable_slot"
+      ],
+      "symbol": "tile_sense_hr_enable_slot",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Enable or disable a slot without changing its settings.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = included in each frame, 0 = skipped."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_led_current"
+      ],
+      "symbol": "tile_sense_hr_set_led_current",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set a slot's LED drive current.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "led_ua",
+          "type": "int",
+          "description": "LED current in µA, 0–100000 (above 100 mA is capped)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_led_current"
+      ],
+      "symbol": "tile_sense_hr_get_led_current",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read back a slot's LED drive current after quantisation.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_integration"
+      ],
+      "symbol": "tile_sense_hr_set_integration",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set a slot's ADC integration time.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "tint",
+          "type": "int",
+          "description": "Integration time (sense_hr_tint_t).",
+          "choices": [
+            {
+              "name": "SENSE_HR_TINT_14US",
+              "value": 0,
+              "label": "14.6 µs"
+            },
+            {
+              "name": "SENSE_HR_TINT_29US",
+              "value": 1,
+              "label": "29.2 µs"
+            },
+            {
+              "name": "SENSE_HR_TINT_58US",
+              "value": 2,
+              "label": "58.6 µs"
+            },
+            {
+              "name": "SENSE_HR_TINT_117US",
+              "value": 3,
+              "label": "117.1 µs (default, most signal per exposure)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_averaging"
+      ],
+      "symbol": "tile_sense_hr_set_averaging",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set how many LED pulses a slot averages into one sample.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "aver",
+          "type": "int",
+          "description": "Pulses per sample (sense_hr_aver_t).",
+          "choices": [
+            {
+              "name": "SENSE_HR_AVER_1",
+              "value": 0,
+              "label": "1 pulse"
+            },
+            {
+              "name": "SENSE_HR_AVER_2",
+              "value": 1,
+              "label": "2 pulses"
+            },
+            {
+              "name": "SENSE_HR_AVER_4",
+              "value": 2,
+              "label": "4 pulses (default)"
+            },
+            {
+              "name": "SENSE_HR_AVER_8",
+              "value": 3,
+              "label": "8 pulses"
+            },
+            {
+              "name": "SENSE_HR_AVER_16",
+              "value": 4,
+              "label": "16 pulses"
+            },
+            {
+              "name": "SENSE_HR_AVER_32",
+              "value": 5,
+              "label": "32 pulses"
+            },
+            {
+              "name": "SENSE_HR_AVER_64",
+              "value": 6,
+              "label": "64 pulses"
+            },
+            {
+              "name": "SENSE_HR_AVER_128",
+              "value": 7,
+              "label": "128 pulses"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_adc_range"
+      ],
+      "symbol": "tile_sense_hr_set_adc_range",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set a slot's ADC full-scale photocurrent range (both channels).",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "range",
+          "type": "int",
+          "description": "Full-scale range (sense_hr_adc_range_t).",
+          "choices": [
+            {
+              "name": "SENSE_HR_ADC_4UA",
+              "value": 0,
+              "label": "4 µA full scale, 7.6 pA/LSB"
+            },
+            {
+              "name": "SENSE_HR_ADC_8UA",
+              "value": 1,
+              "label": "8 µA full scale, 15.3 pA/LSB"
+            },
+            {
+              "name": "SENSE_HR_ADC_16UA",
+              "value": 2,
+              "label": "16 µA full scale, 30.5 pA/LSB"
+            },
+            {
+              "name": "SENSE_HR_ADC_32UA",
+              "value": 3,
+              "label": "32 µA full scale, 61 pA/LSB (default)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_dac_offset"
+      ],
+      "symbol": "tile_sense_hr_set_dac_offset",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set a slot's offset-DAC cancellation current (both channels).",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "offset_ua",
+          "type": "int",
+          "description": "Cancellation current in µA, 0–28."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_photodiodes"
+      ],
+      "symbol": "tile_sense_hr_set_photodiodes",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Route the two photodiodes to the readout channels for a slot.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "pdsel",
+          "type": "int",
+          "description": "Routing (sense_hr_pdsel_t).",
+          "choices": [
+            {
+              "name": "SENSE_HR_PD_BOTH_PPG1",
+              "value": 0,
+              "label": "PD1 + PD2 summed onto PPG1 (default, best SNR)"
+            },
+            {
+              "name": "SENSE_HR_PD_2_1",
+              "value": 1,
+              "label": "PD2 → PPG1, PD1 → PPG2"
+            },
+            {
+              "name": "SENSE_HR_PD_1_2",
+              "value": 2,
+              "label": "PD1 → PPG1, PD2 → PPG2 (per-diode readout)"
+            },
+            {
+              "name": "SENSE_HR_PD_BOTH_PPG2",
+              "value": 3,
+              "label": "PD1 + PD2 summed onto PPG2"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_ppg2_enabled"
+      ],
+      "symbol": "tile_sense_hr_set_ppg2_enabled",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Power readout channel 2 up or down.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = channel 2 powered, 0 = powered down."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "auto_gain"
+      ],
+      "symbol": "tile_sense_hr_auto_gain",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Find LED current, offset and ADC range for a slot automatically.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5 (must already have an emitter)."
+        },
+        {
+          "name": "max_ua",
+          "type": "int",
+          "description": "Upper bound for LED current in µA (0 = 10000, a safe default for the 0402 emitters). The search runs in the 32 mA range, so anything above 31875 is capped there."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_status"
+      ],
+      "symbol": "tile_sense_hr_get_status",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read STATUS1 (clears its latched bits and releases INTB).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_status2"
+      ],
+      "symbol": "tile_sense_hr_get_status2",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read STATUS2: invalid-configuration and LED compliance flags.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "frame_ready"
+      ],
+      "symbol": "tile_sense_hr_frame_ready",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Check whether at least one full frame is waiting in the FIFO.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_fifo_count"
+      ],
+      "symbol": "tile_sense_hr_get_fifo_count",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Number of unread samples in the FIFO (0–256).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_fifo_overflow"
+      ],
+      "symbol": "tile_sense_hr_get_fifo_overflow",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Samples lost to FIFO overflow since the last FIFO read (0–127).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "flush_fifo"
+      ],
+      "symbol": "tile_sense_hr_flush_fifo",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Discard everything in the FIFO and reset its pointers.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_fifo_watermark"
+      ],
+      "symbol": "tile_sense_hr_set_fifo_watermark",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Set the almost-full watermark used by the A_FULL flag / event.",
+      "params": [
+        {
+          "name": "samples",
+          "type": "int",
+          "description": "Number of queued samples that asserts A_FULL, 1–256."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_frame"
+      ],
+      "symbol": "tile_sense_hr_read_frame",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Drain the FIFO and decode the most recent complete frame.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "c_out_buffer": {
+        "type": "int32_t",
+        "length": 12
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_ppg"
+      ],
+      "symbol": "tile_sense_hr_read_ppg",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Latest PPG1 sample for a slot, in ADC counts.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_ppg2"
+      ],
+      "symbol": "tile_sense_hr_read_ppg2",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Latest PPG2 sample for a slot, in ADC counts.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_photocurrent_na"
+      ],
+      "symbol": "tile_sense_hr_read_photocurrent_na",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Latest PPG1 photocurrent for a slot, in nanoamps.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_overflow_count"
+      ],
+      "symbol": "tile_sense_hr_get_overflow_count",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Overflow-tagged samples seen in the last FIFO drain.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_fifo_raw"
+      ],
+      "symbol": "tile_sense_hr_read_fifo_raw",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read raw 24-bit FIFO words (tag in bits 23:20, data in 19:0).",
+      "params": [
+        {
+          "name": "buf",
+          "type": "int[]",
+          "description": "Caller buffer for raw words."
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "c_out_buffer": {
+        "name": "buf",
+        "type": "uint32_t",
+        "cap_param": "count"
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_threshold"
+      ],
+      "symbol": "tile_sense_hr_set_threshold",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Program threshold instance 1 on a slot's PPG1 data.",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Measurement slot 0–5 to watch."
+        },
+        {
+          "name": "lower",
+          "type": "int",
+          "description": "Lower limit ÷ 2048."
+        },
+        {
+          "name": "upper",
+          "type": "int",
+          "description": "Upper limit ÷ 2048."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_proximity_mode"
+      ],
+      "symbol": "tile_sense_hr_set_proximity_mode",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Enable automatic proximity mode.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = automatic proximity mode, 0 = normal."
+        },
+        {
+          "name": "lower",
+          "type": "int",
+          "description": "Skin-detect threshold ÷ 2048 ADC counts."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_reg"
+      ],
+      "symbol": "tile_sense_hr_read_reg",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Read any register directly.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address 0x00–0xFF."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_reg"
+      ],
+      "symbol": "tile_sense_hr_write_reg",
+      "header": "tile_sense_hr.h",
+      "category": "tile",
+      "description": "Write any register directly.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address 0x00–0xFF."
+        },
+        {
+          "name": "val",
+          "type": "int",
+          "description": "Value to write."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [
+    {
+      "name": "frame_ready",
+      "payload": [],
+      "mask": "MAX86174A_STATUS1_FRAME_RDY"
+    },
+    {
+      "name": "fifo_almost_full",
+      "payload": [],
+      "mask": "MAX86174A_STATUS1_A_FULL"
+    },
+    {
+      "name": "exposure_overflow",
+      "payload": [],
+      "mask": "MAX86174A_STATUS1_EXP_OVF"
+    },
+    {
+      "name": "proximity",
+      "payload": [],
+      "mask": "MAX86174A_STATUS1_THRESH1_HILO"
+    }
+  ],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x6B",
+        "is_default": true
+      },
+      {
+        "address": "0x6A"
+      }
+    ]
+  }
+}
