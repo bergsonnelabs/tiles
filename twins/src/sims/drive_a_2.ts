@@ -23,6 +23,9 @@ const DAC_MAX = 4095;
 const WAVE_SINE = 4;
 const WAVE_OFF = 7; // DRIVE_A_2_WAVE_OFF
 const GEN_ID_STATUS = 0x06 << 2; // GENERAL-STATUS DEVICE-ID[7:2] = 0x06
+// The sine generator plays 24 fixed codes, 0x19A..0xE66 (SLASF73A Table 6-10):
+// ±1638 codes about mid-scale, whatever the margins are.
+const SINE_PEAK_CODES = 0xe66 - DAC_MID;
 
 // Driver's resolve_vref() (tile_drive_a_2.c:145-156): full-scale mV per gain.
 const DRIVER_VREF_MV = [3300, 3300, 1815, 2420, 3630, 4840];
@@ -61,7 +64,7 @@ interface State {
   ch1_wave_running: number;
   ch0_sw_wave: number; // play_chirp driving the DAC from software
   ch1_sw_wave: number;
-  ch0_freq: number; // requested tone/chirp frequency (Hz), observability
+  ch0_freq: number; // tone pitch the generator plays / chirp end frequency (Hz)
   ch1_freq: number;
   ch0_phase: number;
   ch1_phase: number;
@@ -118,6 +121,7 @@ const realVref = (s: State, gain: number) =>
 function inputCodes(s: State, c: Ch): number {
   const g = (k: string) => s[`ch${c}_${k}` as keyof State] as number;
   if (g('sw_wave')) return 2046;
+  if (g('wave_running') && g('wave') === WAVE_SINE) return SINE_PEAK_CODES;
   if (g('wave_running') && g('wave') !== WAVE_OFF) {
     const lo = g('margin_low');
     const hi = g('margin_high');
@@ -145,17 +149,25 @@ const unmuteState = (s: State): Partial<State> => ({
   ...(s.amp_muted ? { amp_muted: 0, amp_gain_db: s.amp_muted_gain_db } : {}),
 });
 
-// pick_wave_params() (tile_drive_a_2.c:707-726) → [slew, step].
-function waveParams(f: number): [number, number] {
-  if (f >= 5000) return [0x1, 0x7];
-  if (f >= 2000) return [0x1, 0x5];
-  if (f >= 1000) return [0x2, 0x5];
-  if (f >= 500) return [0x4, 0x5];
-  if (f >= 200) return [0x6, 0x5];
-  if (f >= 100) return [0x8, 0x5];
-  if (f >= 50) return [0xa, 0x5];
-  if (f >= 10) return [0xd, 0x5];
-  return [0xf, 0x0];
+// Sine pitch per SLEW-RATE code 1..15 in 0.1 Hz: f = 1 / (24 × time_step)
+// (SLASF73A Eq 8, Table 6-30), the driver's SINE_HZ_X10.
+const SINE_HZ_X10 = [
+  104167, 52083, 34722, 23148, 15409, 10293, 6862, 4573, 3048, 1742, 995, 569, 325, 163, 81,
+];
+
+// pick_wave_params() (tile_drive_a_2.c): the slew code whose sine pitch is
+// nearest `f` on a log scale; the code step is 1 LSB (unused by the sine).
+// Returns [slew, step, generated pitch in Hz].
+function waveParams(f: number): [number, number, number] {
+  const fx10 = f * 10;
+  let k = 14;
+  for (let i = 0; i < 15; i++) {
+    if (fx10 >= SINE_HZ_X10[i]) {
+      k = i > 0 && fx10 * fx10 > SINE_HZ_X10[i] * SINE_HZ_X10[i - 1] ? i - 1 : i;
+      break;
+    }
+  }
+  return [k + 1, 0, SINE_HZ_X10[k] / 10];
 }
 
 // Channel-scoped setters: channel > 1 is ignored by the driver.
@@ -317,7 +329,7 @@ const sim: TileSim<State> = {
     tile_drive_a_2_set_waveform: ({ args }) =>
       onCh(args, (c) => patch([c], { wave: (args[1] ?? WAVE_OFF) & 0x07 })),
     tile_drive_a_2_start_waveform: ({ args }) => onCh(args, (c) => patch([c], { wave_running: 1 })),
-    // FUNC-CONFIG = OFF (tile_drive_a_2.c:411-418).
+    // START-FUNC-X cleared, FUNC-CONFIG = OFF (tile_drive_a_2_stop_waveform).
     tile_drive_a_2_stop_waveform: ({ args }) =>
       onCh(args, (c) => patch([c], { wave: WAVE_OFF, wave_running: 0 })),
     tile_drive_a_2_set_slew_rate: ({ args }) =>
@@ -410,14 +422,14 @@ const sim: TileSim<State> = {
         nextState: patch(cs, { wave: WAVE_OFF, wave_running: 0, sw_wave: 0, code: DAC_MID }),
       };
     },
-    // Unmute if muted, sine on the generator for `ms`, then stop + mid-scale and
-    // re-mute (tile_drive_a_2.c:749-767).
+    // Unmute if muted, sine on the generator at the nearest of its 15 pitches
+    // for `ms`, then stop + mid-scale and re-mute (tile_drive_a_2.c).
     tile_drive_a_2_play_tone: ({ state, args }) => {
       const freq = (args[1] ?? 0) & 0xffff;
       const ms = (args[2] ?? 0) & 0xffff;
       if (freq === 0 || ms === 0) return {};
       const cs = chans(args[0] ?? 0);
-      const [slew, step] = waveParams(freq);
+      const [slew, step, pitch] = waveParams(freq);
       return {
         nextState: {
           ...(state.amp_muted ? unmuteState(state) : {}),
@@ -428,9 +440,9 @@ const sim: TileSim<State> = {
             step,
             slew,
             wave_running: 1,
-            freq,
+            freq: pitch,
           }),
-          currently_playing: `tone ${freq} Hz / ${ms} ms`,
+          currently_playing: `tone ${pitch} Hz (asked ${freq}) / ${ms} ms`,
           play_channels: maskOf(cs),
           play_remute: state.amp_muted,
           play_ms: ms,
@@ -491,11 +503,11 @@ const sim: TileSim<State> = {
     tile_drive_a_2_unmute: 'canonical',
     tile_drive_a_2_sleep: 'inferred',
     tile_drive_a_2_wake: 'inferred',
-    tile_drive_a_2_start_waveform: 'inferred', // generator output level only, no waveform
+    tile_drive_a_2_start_waveform: 'canonical', // START-FUNC-X, per channel; sine level from Table 6-10
     tile_drive_a_2_set_slew_rate: 'inferred', // stored; frequency not derived from it
     tile_drive_a_2_set_code_step: 'inferred',
     tile_drive_a_2_set_phase: 'inferred',
-    tile_drive_a_2_play_tone: 'inferred',
+    tile_drive_a_2_play_tone: 'canonical', // pitch from Eq 8, level from Table 6-10
     tile_drive_a_2_play_silence: 'inferred',
     tile_drive_a_2_play_chirp: 'inferred',
     tile_drive_a_2_nvm_reload: 'inferred', // assumes factory NVM

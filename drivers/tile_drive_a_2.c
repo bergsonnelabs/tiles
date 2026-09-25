@@ -400,17 +400,33 @@ void tile_drive_a_2_set_waveform(tile_t *tile, uint8_t channel,
     dac_write(tile, dac_func_cfg_reg(channel), func_cfg);
 }
 
+/* COMMON-DAC-TRIG (SLASF73A §6.6.11): START-FUNC-0 is bit 0 and
+ * START-FUNC-1 bit 12, both R/W and level-sensitive (0 = stop). The
+ * other bits are write-only self-clearing triggers. Writing one
+ * channel's START bit alone would clear the other's and stop its
+ * generator, so both START bits are read back and preserved. */
+#define DAC_TRIG_START_MASK  0x1001u
+
+static uint16_t start_func_bit(uint8_t ch)
+{
+    return (ch == 0) ? 0x0001u : 0x1000u;
+}
+
 void tile_drive_a_2_start_waveform(tile_t *tile, uint8_t channel)
 {
     if (channel > 1) return;
-    /* START-FUNC-0 is bit 0, START-FUNC-1 is bit 12 */
-    uint16_t trig = (channel == 0) ? 0x0001 : 0x1000;
+    uint16_t trig = dac_read(tile, DAC63202W_REG_COMMON_DAC_TRIG) & DAC_TRIG_START_MASK;
+    trig |= start_func_bit(channel);
     dac_write(tile, DAC63202W_REG_COMMON_DAC_TRIG, trig);
 }
 
 void tile_drive_a_2_stop_waveform(tile_t *tile, uint8_t channel)
 {
     if (channel > 1) return;
+    uint16_t trig = dac_read(tile, DAC63202W_REG_COMMON_DAC_TRIG) & DAC_TRIG_START_MASK;
+    trig &= (uint16_t)~start_func_bit(channel);
+    dac_write(tile, DAC63202W_REG_COMMON_DAC_TRIG, trig);
+
     uint16_t func_cfg = dac_read(tile, dac_func_cfg_reg(channel));
     func_cfg &= ~(0x07 << 8);
     func_cfg |= ((uint16_t)DRIVE_A_2_WAVE_OFF << 8);
@@ -523,6 +539,10 @@ void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)
 {
     if (!cfg) return;
 
+    int8_t fixed_gain = cfg->fixed_gain_db;
+    if (fixed_gain < -28) fixed_gain = -28;
+    if (fixed_gain > 30)  fixed_gain = 30;
+
     amp_write(tile, TPA2028D1_REG_AGC_ATTACK,
               cfg->attack & 0x3F);
 
@@ -533,7 +553,17 @@ void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)
               cfg->hold & 0x3F);
 
     amp_write(tile, TPA2028D1_REG_AGC_GAIN,
-              (uint8_t)(cfg->fixed_gain_db & 0x3F));
+              (uint8_t)(fixed_gain & 0x3F));
+
+    /* Register 0x07 first: [7:4] max gain (value - 18), [1:0] compression
+     * ratio. The limiter-disable bit in 0x06 is only honoured while the
+     * compression ratio is 1:1 (SLOS660C Table 11), so the ratio must be
+     * in place before 0x06 is written. */
+    uint8_t max_gain = cfg->max_gain_db;
+    if (max_gain < 18) max_gain = 18;
+    if (max_gain > 30) max_gain = 30;
+    uint8_t ctrl2 = ((max_gain - 18) << 4) | (cfg->compression & 0x03);
+    amp_write(tile, TPA2028D1_REG_AGC_CTRL2, ctrl2);
 
     /* Register 0x06: [7] limiter disable, [6:5] noise gate, [4:0] limiter level */
     uint8_t ctrl1 = (cfg->limiter_level & 0x1F)
@@ -541,13 +571,6 @@ void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)
     if (cfg->compression == DRIVE_A_2_COMP_1_1)
         ctrl1 |= (1 << 7);  /* disable limiter when compression is off */
     amp_write(tile, TPA2028D1_REG_AGC_CTRL1, ctrl1);
-
-    /* Register 0x07: [7:4] max gain (value - 18), [1:0] compression ratio */
-    uint8_t max_gain = cfg->max_gain_db;
-    if (max_gain < 18) max_gain = 18;
-    if (max_gain > 30) max_gain = 30;
-    uint8_t ctrl2 = ((max_gain - 18) << 4) | (cfg->compression & 0x03);
-    amp_write(tile, TPA2028D1_REG_AGC_CTRL2, ctrl2);
 }
 
 uint8_t tile_drive_a_2_amp_read_status(tile_t *tile)
@@ -692,37 +715,41 @@ void tile_drive_a_2_play_silence(tile_t *tile, drive_a_2_channel_t channel,
 
 /* --- play_tone --------------------------------------------------- */
 
-/* Pick a (slew, step) pair that approximates the requested
- * frequency on the DAC's parametric generator.
+/* Pick the slew code whose sine pitch is nearest `freq_hz`.
  *
- * For a triangle/sine traversing margin_low..margin_high in a
- * single cycle:
- *
- *   f ≈ 1 / (2 × t_step × ceil((4096 / step_lsb)))
- *
- * We pick the smallest slew that gets us into the right ballpark
- * for `freq_hz`, then increase step_lsb to climb. Anything beyond
- * a few kHz this way is approximate — that's documented as a
- * limitation of the on-chip generator. */
+ * The DAC63202W sine generator plays 24 fixed points per cycle, one
+ * per slew step, so f_sine = 1 / (24 × time_step) (SLASF73A Eq 8):
+ * the code step and margins do not affect it. SINE_HZ_X10[k] is that
+ * pitch for SLEW-RATE code k+1 (Table 6-30 step times), in 0.1 Hz.
+ * "Nearest" is taken on a log scale: pick the higher pitch when
+ * freq² > f_hi × f_lo (geometric midpoint). */
+static const uint32_t SINE_HZ_X10[15] = {
+    104167, 52083, 34722, 23148, 15409, 10293, 6862,
+      4573,  3048,  1742,   995,   569,   325,  163,  81,
+};
+
 static void pick_wave_params(uint16_t freq_hz,
                              drive_a_2_slew_t *out_slew,
                              drive_a_2_step_t *out_step)
 {
-    /* Defaults: longest slew for low-frequency hum (~4 Hz min). */
-    drive_a_2_slew_t slew = DRIVE_A_2_SLEW_5128_US;
-    drive_a_2_step_t step = DRIVE_A_2_STEP_1_LSB;
-
-    if (freq_hz >= 5000)      { slew = DRIVE_A_2_SLEW_4_US;    step = DRIVE_A_2_STEP_32_LSB; }
-    else if (freq_hz >= 2000) { slew = DRIVE_A_2_SLEW_4_US;    step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 1000) { slew = DRIVE_A_2_SLEW_8_US;    step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 500)  { slew = DRIVE_A_2_SLEW_18_US;   step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 200)  { slew = DRIVE_A_2_SLEW_41_US;   step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 100)  { slew = DRIVE_A_2_SLEW_91_US;   step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 50)   { slew = DRIVE_A_2_SLEW_239_US;  step = DRIVE_A_2_STEP_8_LSB;  }
-    else if (freq_hz >= 10)   { slew = DRIVE_A_2_SLEW_1282_US; step = DRIVE_A_2_STEP_8_LSB;  }
-
-    *out_slew = slew;
-    *out_step = step;
+    uint32_t f_x10 = (uint32_t)freq_hz * 10u;
+    uint8_t k = 14;                       /* slowest: 5128 µs, 8.1 Hz */
+    for (uint8_t i = 0; i < 15; i++) {
+        if (f_x10 >= SINE_HZ_X10[i]) {
+            k = i;
+            /* Between pitch i (below f) and i-1 (above f): take i-1
+             * when f is past their geometric midpoint. The products
+             * reach ~5.4e9, hence 64-bit. */
+            if (i > 0 &&
+                (uint64_t)f_x10 * f_x10 >
+                (uint64_t)SINE_HZ_X10[i] * SINE_HZ_X10[i - 1])
+                k = (uint8_t)(i - 1);
+            break;
+        }
+        k = i;                            /* f below every pitch so far */
+    }
+    *out_slew = (drive_a_2_slew_t)(k + 1);
+    *out_step = DRIVE_A_2_STEP_1_LSB;     /* unused by the sine generator */
 }
 
 typedef struct {
