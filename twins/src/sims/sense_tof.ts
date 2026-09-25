@@ -61,7 +61,11 @@ interface State {
   calib_valid: number;
   /** 14- and 11-byte blobs as base64 (state holds only scalars/strings). */
   calib_data_b64: string;
+  /** restore_state()'s blob, held by the driver until the next start(). */
   state_data_b64: string;
+  /** The chip's own algorithm state (STATE_DATA 0x28-0x32): zeros until
+   * it has ranged, a restored blob once start() loads one. */
+  chip_state_b64: string;
 }
 
 /** SENSE_TOF_PRESENCE_RELIABILITY_MIN — the presence helpers' cutoff. */
@@ -74,6 +78,39 @@ const APP_VERSION = [4, 14, 0];
 /** Serial from cmd 0x47: a recognizable non-zero pattern, since the flat variant
  * signals an error with all zeros. */
 const DUMMY_SERIAL = [0xab, 0xcd, 0xef, 0x42];
+/** SYS_CLOCK runs at 4.7 MHz: 4700 ticks per ms (datasheet §7.3.5). */
+const SYS_CLOCK_PER_MS = 4700;
+
+/** A calibration blob in the chip's format: byte 0 bits [3:0] = format
+ * revision 2 (§7.4.1); the rest is opaque, so a fixed pattern per mode
+ * (5 m has its own calibration). */
+function calibBlob(mode: number): number[] {
+  const b = [0x02];
+  for (let i = 1; i < 14; i++) b.push((0x35 * i + 0x11 * mode + 0x5a) & 0xff);
+  return b;
+}
+/** The chip's algorithm state after ranging: opaque accumulators, modeled as
+ * a pattern that changes as results accumulate. */
+function algStateBlob(s: State): number[] {
+  const b: number[] = [];
+  for (let i = 0; i < 11; i++) b.push((s.result_number * 7 + i * 0x1d + s.distance_mode) & 0xff);
+  return b;
+}
+/** TDC0 bins 0-63 as the driver returns them: 64 little-endian uint16 counts
+ * (128 bytes). Bins are 100 ps wide (§4); the reference peak sits a few bins
+ * in, its height growing with the iteration count, over a small floor. Shape
+ * and position are modeled. */
+function referenceHistogram(s: State): number[] {
+  const peakBin = 8;
+  const height = Math.min(0xffff, Math.round(s.kilo_iters * 20));
+  const out: number[] = [];
+  for (let bin = 0; bin < 64; bin++) {
+    const d = bin - peakBin;
+    const v = Math.min(0xffff, Math.round(height * Math.exp(-(d * d) / 4)) + 12 + ((bin * 37) % 9));
+    out.push(v & 0xff, v >> 8);
+  }
+  return out;
+}
 
 // ── blobs ──
 function bytesToB64(bytes: readonly number[]): string {
@@ -254,6 +291,7 @@ const sim: TileSim<State> = {
     calib_valid: 0,
     calib_data_b64: '',
     state_data_b64: '',
+    chip_state_b64: '',
   },
 
   controls: [
@@ -339,9 +377,24 @@ const sim: TileSim<State> = {
         calib_valid: 0,
         calib_data_b64: '',
         state_data_b64: '',
+        chip_state_b64: '',
+        last_result_t: 0,
       },
     }),
-    tile_sense_tof_start: () => ({ nextState: { measuring: 1, sleeping: 0 } }),
+    // Loads a restored algorithm state (only with valid calibration: algState
+    // needs factoryCal) and consumes it. Period 0 is one measurement, not
+    // continuous ranging.
+    tile_sense_tof_start: ({ state }) => {
+      const next: Partial<State> = { sleeping: 0, state_data_b64: '' };
+      if (state.state_data_b64 && state.calib_valid) next.chip_state_b64 = state.state_data_b64;
+      if (periodMs(state.period_ms) === 0) {
+        next.measuring = 0;
+        next.result_number = nextResult(state);
+      } else {
+        next.measuring = 1;
+      }
+      return { nextState: next };
+    },
     tile_sense_tof_stop: () => ({ nextState: { measuring: 0, in_band_streak: 0 } }),
 
     // ── results ──
@@ -446,36 +499,71 @@ const sim: TileSim<State> = {
     }),
 
     // ── calibration / algorithm state ──
-    // The real cycle runs ~40M iterations; the twin reports success at once.
-    tile_sense_tof_factory_calibrate: () => ({ scalar: 1, nextState: { calib_valid: 1 } }),
+    // The real cycle runs ~40M iterations; the twin reports success at once
+    // with a blob in the chip's format (byte 0 = format revision 2, §7.4.1;
+    // the other 13 bytes are opaque, so modeled). Calibrating drops any
+    // algorithm state, as the driver does.
+    tile_sense_tof_factory_calibrate: ({ state }) => ({
+      scalar: 1,
+      nextState: {
+        calib_valid: 1,
+        calib_data_b64: bytesToB64(calibBlob(state.distance_mode)),
+        state_data_b64: '',
+      },
+    }),
     tile_sense_tof_set_calibration: ({ bufferIn }) => {
       const data = bufferIn?.data;
       if (!data) return;
       return { nextState: { calib_valid: 1, calib_data_b64: bytesToB64(data) } };
     },
-    // Echoes the last blob loaded (14 zeros if none).
+    // The driver's copy: the blob while it is valid, zeros once it isn't
+    // (reset, or crossing the 5 m boundary).
     tile_sense_tof_get_calibration: ({ state }) => ({
-      array: b64ToBytes(state.calib_data_b64, 14),
+      array: state.calib_valid ? b64ToBytes(state.calib_data_b64, 14) : new Array(14).fill(0),
     }),
-    // The chip's 11 bytes of accumulators: echoes the last restore (zeros if none).
-    tile_sense_tof_save_state: ({ state }) => ({ array: b64ToBytes(state.state_data_b64, 11) }),
+    // A live read of STATE_DATA (0x28-0x32): zeros (their reset value) until
+    // the chip has ranged; then its algorithm state — a restored blob if
+    // start() loaded one, otherwise accumulators the twin can only model.
+    tile_sense_tof_save_state: ({ state }) => ({
+      array:
+        state.result_number === 0
+          ? new Array(11).fill(0)
+          : state.chip_state_b64
+            ? b64ToBytes(state.chip_state_b64, 11)
+            : algStateBlob(state),
+    }),
+    // The driver holds it and writes it at the next start().
     tile_sense_tof_restore_state: ({ bufferIn }) => {
       const data = bufferIn?.data;
       if (!data) return;
-      return { nextState: { state_data_b64: bytesToB64(data) } };
+      return { nextState: { state_data_b64: bytesToB64(data.slice(0, 11)) } };
     },
 
     // ── identity / diagnostics ──
     tile_sense_tof_get_app_version_flat: () => ({
       outScalars: { major: APP_VERSION[0], minor: APP_VERSION[1], patch: APP_VERSION[2] },
     }),
+    // SERIAL_NUMBER_0..3 (§7.6): a fixed, non-zero stand-in (zero is the
+    // flat variant's failure value). Every real chip has its own.
     tile_sense_tof_get_serial_number_flat: () => ({ array: DUMMY_SERIAL }),
-    // The chip's SYS_CLOCK counter: a stand-in ramp tied to the result counter.
+    // SYS_CLOCK (0x24-0x27, §7.3.5): the last result's time stamp in units of
+    // 1/4.7 MHz, valid only with its LSB set — so 0 before any result.
     tile_sense_tof_get_sys_clock_ticks: ({ state }) => ({
-      scalar: (state.result_number * 4700) >>> 0,
+      scalar:
+        state.result_number === 0 && state.last_result_t === 0
+          ? 0
+          : ((Math.round(state.last_result_t * SYS_CLOCK_PER_MS) % 2 ** 32) | 1) >>> 0,
     }),
-    // Zero-filled is the flat variant's documented failure result.
-    tile_sense_tof_read_histogram_flat: () => ({ array: new Array(128).fill(0) }),
+    // The first block the driver reads is TDC0 bins 0-63 (§7.5.1, cmd 0x80):
+    // the REFERENCE histogram, whose peak marks zero distance (§4 Figure 15),
+    // so it doesn't move with the target. Needs a histogram type the chip
+    // knows (bits 1, 4 or 7), else the driver times out and returns zeros.
+    // Ranging is stopped afterwards.
+    tile_sense_tof_read_histogram_flat: ({ state, args }) => {
+      const type = arg(args, 0, 0) & 0xff;
+      if (!(type & 0x92)) return { array: new Array(128).fill(0), nextState: { measuring: 0 } };
+      return { array: referenceHistogram(state), nextState: { measuring: 0, in_band_streak: 0 } };
+    },
   },
 
   provenance: {
@@ -499,14 +587,14 @@ const sim: TileSim<State> = {
     tile_sense_tof_result_ready: 'inferred', // "measuring and awake", not a per-period INT_STATUS bit
     tile_sense_tof_factory_calibrate: 'inferred',
     tile_sense_tof_get_signal_quality_flat: 'inferred', // zero-on-no-object is canonical (§7.3.11); magnitudes modeled
-    // hallucinated — stubbed / opaque
-    tile_sense_tof_get_sys_clock_ticks: 'hallucinated', // fabricated ramp, not the real 4.7 MHz counter
-    tile_sense_tof_read_histogram_flat: 'hallucinated',
-    tile_sense_tof_get_serial_number_flat: 'hallucinated',
-    tile_sense_tof_get_calibration: 'hallucinated',
-    tile_sense_tof_set_calibration: 'hallucinated',
-    tile_sense_tof_save_state: 'hallucinated',
-    tile_sense_tof_restore_state: 'hallucinated',
+    // the chip-state and diagnostic calls: behavior per the datasheet, opaque contents modeled
+    tile_sense_tof_get_sys_clock_ticks: 'canonical', // last result's time stamp, 4.7 MHz units, LSB = valid (§7.3.5)
+    tile_sense_tof_get_calibration: 'canonical', // the driver's copy: blob while valid, else zeros
+    tile_sense_tof_set_calibration: 'canonical',
+    tile_sense_tof_restore_state: 'canonical', // held, loaded at the next start with valid calibration, consumed
+    tile_sense_tof_read_histogram_flat: 'inferred', // TDC0 reference block per §7.5.1; peak shape and position modeled
+    tile_sense_tof_get_serial_number_flat: 'inferred', // layout per §7.6; the value is per chip
+    tile_sense_tof_save_state: 'inferred', // zeros until ranging (reset value); accumulator contents opaque
     power: 'inferred', // duty-cycle model over datasheet currents; matches the I_RANGING_AVG rows within 6 %, 5 m ranging current fitted
   },
 
