@@ -1,0 +1,437 @@
+{
+  "rev": "a",
+  "name": "L.1N",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "common ground for the charger, battery, and output",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "other",
+          "function": "CC1",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "other",
+          "function": "CC2",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "charger input (4.0-5.5V recommended; 22V max)",
+          "type": "power",
+          "function": "CHG",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "battery positive terminal",
+          "type": "power",
+          "function": "BATT",
+          "direction": "bidirectional"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "system output voltage",
+          "type": "power",
+          "function": "VSYS",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "normally-on 3.3V buck output",
+          "type": "power",
+          "function": "3V3",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "normally-on 1.8V buck output",
+          "type": "power",
+          "function": "1V8",
+          "direction": "output"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 1.8,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "LDO",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "200mA",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 3.3,
+      "min": 3.3,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "LDO",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "200mA",
+      "positive_pad": [
+        "9"
+      ]
+    },
+    {
+      "max": 4.45,
+      "min": 2.3,
+      "type": "rechargeable battery",
+      "notes": "programmable termination voltage between 3.5-4.45V",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "BATT",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "800mA (charge)",
+      "positive_pad": [
+        "7"
+      ]
+    },
+    {
+      "max": 5.5,
+      "min": 3.4,
+      "type": "charge",
+      "notes": "100mA default limit, 500mA for standard USB, 1500mA for USB-C",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "CHG",
+      "direction": "input",
+      "is_required": false,
+      "max_current": "1500mA",
+      "positive_pad": [
+        "6"
+      ]
+    },
+    {
+      "max": 5.5,
+      "min": 2.3,
+      "type": "system",
+      "notes": "battery or charge voltage, whichever is higher",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "VSYS",
+      "direction": "output",
+      "is_required": false,
+      "max_current": "1340mA",
+      "positive_pad": [
+        "8"
+      ]
+    }
+  ],
+  "config": {
+    "usbCSource": {
+      "kind": "boolean",
+      "group": "USB",
+      "label": "USB-C source-power detection",
+      "binding": {
+        "pad": "2",
+        "kind": "intent"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "text": "USB-C CC detection unused; pads 2/3 left unconnected",
+              "type": "note"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "external",
+                  "connector": "USB-C.cc1"
+                },
+                "tag": "usbCSource.cc1.attached",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "data"
+              },
+              {
+                "to": {
+                  "kind": "external",
+                  "connector": "USB-C.cc2"
+                },
+                "tag": "usbCSource.cc2.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "monitor",
+              "register": "USBCDETECTSTATUS"
+            }
+          ]
+        }
+      ],
+      "description": "When true, the CC pins (pads 2/3) are wired to a USB-C connector's CC1/CC2 lines so the PMIC can detect source power capability. When false, the pins are left unused."
+    }
+  },
+  "family": "Power",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 10,
+  "features": {
+    "led_red": {
+      "kind": "led",
+      "color": "red",
+      "label": "Red LED",
+      "control": {
+        "via": "pmic_register",
+        "signal": "LED0",
+        "controller": "nPM1300"
+      },
+      "default_use": "charge error / fault indication"
+    },
+    "led_green": {
+      "kind": "led",
+      "color": "green",
+      "label": "Green LED",
+      "control": {
+        "via": "pmic_register",
+        "signal": "LED2",
+        "controller": "nPM1300"
+      },
+      "default_use": "host control"
+    },
+    "led_yellow": {
+      "kind": "led",
+      "color": "yellow",
+      "label": "Yellow LED",
+      "control": {
+        "via": "pmic_register",
+        "signal": "LED1",
+        "controller": "nPM1300"
+      },
+      "default_use": "charge indication"
+    }
+  },
+  "headline": "1C Li-Ion charge manager w/ 1.8 & 3.3V out",
+  "image_url": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/10/tile-image.jpg",
+  "components": [
+    {
+      "url": "https://www.nordicsemi.com/Products/nPM1300",
+      "part": "NPM1300",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/10/Nordic_Semiconductor-NPM1300.pdf",
+      "manufacturer": "Nordic Semiconductor"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x6B"
+          }
+        ],
+        "address_bits": [
+          7
+        ]
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:44:26.314Z",
+  "description": "Single-cell Li-ion/Li-poly/LiFePO₄ battery charging and power management tile built around the Nordic nPM1300 PMIC. Provides both 1.8V and 3.3V regulated outputs via high-efficiency buck converters rated to 200mA each. An unregulated VSYS rail is also available for loads that require direct battery voltage or higher current. USB-C power input with CC pins exposed for connection detection. Supports charging currents from 32 to 800 mA for batteries up to 1000 mAh, and has three on-board LEDs for state observation.",
+  "json_version": "0.12",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "Battery charging, if desired, must be enabled via firmware.",
+      "heading": "Battery charging",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "Three onboard LEDs (red, yellow, green) driven by the nPM1300's LED outputs provide visual indication of charging and system status. Red is connected to LED0 (default = error reporting), yellow to LED1 (default = charge indication), and green to LED2 (default = host control).  The LED outputs must be enabled via firmware.",
+      "heading": "LEDs",
+      "image_url": ""
+    },
+    {
+      "sort": 2,
+      "details": "The two CC pads can be connected to the CC lines of a standard USB C input to detect the source power capability.  They have internal 5.1k pull-down resistors to conform to the standard for a sink device.  Upon connection and detection, the source capability is reported in the USBCDETECTSTATUS register.",
+      "heading": "CC pads for USB C ",
+      "image_url": ""
+    },
+    {
+      "sort": 3,
+      "details": "The default charging current limit is set to 100mA, and can be adjusted via firmware.",
+      "heading": "Charging Current",
+      "image_url": ""
+    }
+  ]
+}
