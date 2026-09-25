@@ -1,53 +1,80 @@
-// Digital twin for Core.ST.W5 (formerly Core.W) — the BLE MCU host board itself.
+// Digital twin for Core.ST.W5 (formerly Core.W): the BLE MCU host board itself.
 //
 // A Core, not a peripheral: no tile driver, no host calls. The twin models the
-// board standards — STM32WBA55 power across run/sleep/stop/standby (LDO vs SMPS
-// regulator path), the BLE radio as a power state (the on-board Johanson 2450AT
-// chip antenna is RF-only, no pad), the on-board status LED, and the optional
-// I2C pull-ups.
+// board standards: STM32WBA55 power across run/sleep/stop/standby, the BLE radio
+// as a power state (the on-board Johanson 2450AT chip antenna is RF-only, no pad),
+// the on-board status LED, and the two software-switched I2C3 pull-ups.
+//
+// Regulator: LDO only. The tile schematic ties VDDSMPS and VLXSMPS to ground with
+// no SMPS inductor (DS14127 §3.12.1 caution for SMPS parts used in an LDO application),
+// so the SMPS figures in the datasheet do not apply to this board.
 //
 // Power numbers: STM32WBA5xxx datasheet (DS14127 Rev 7, TYP @ 3.3 V / 25 °C),
-// MCU Tables 45/46/49/51/52/54 and BLE radio Table 37. Pad map per Core-ST-W5-b.json
-// (V+ pad 14, GND pad 1, I2C3 CLK/DAT pads 4/5).
-import type { TileSim } from '../tileSim';
+// LDO rows of Tables 45/49/51/52/54 and BLE radio Table 37. Pad map per
+// Core-ST-W5-b.json (V+ pad 14, GND pad 1, I2C3 CLK/DAT pads 4/5). Board parts
+// per the tile schematic: red LED on PB12 through R2 = 40 Ω; R3 = 2.2k from PC15
+// to pad 4 (I2C3 SCL) and R4 = 2.2k from PC14 to pad 5 (I2C3 SDA).
+import type { PowerCtx, TileSim } from '../tileSim';
 
 // power_mode slider index → mode.
 const MODES = ['run', 'sleep', 'stop0', 'stop1', 'standby'] as const;
-// sysclk slider index → MHz.
-const CLOCKS = [16, 32, 100] as const;
+// sysclk slider index → MHz: the tile's Clock knob (definition config.clock:
+// low 16 MHz HSI16, medium 32 MHz HSE [default], high 64 MHz PLL, max 100 MHz PLL).
+const CLOCKS = [16, 32, 64, 100] as const;
 // ble_state slider index → activity.
-const BLE = ['off', 'advertising', 'connected', 'tx', 'rx'] as const;
+const BLE = ['off', 'advertising', 'connected', 'tx', 'rx', 'tx_10dbm'] as const;
 
-// MCU core current (µA) by clock, per regulator path (LDO / SMPS).
-const RUN_UA = { ldo: { 16: 910, 32: 2290, 100: 6160 }, smps: { 16: 450, 32: 1470, 100: 3350 } };
-const SLEEP_UA = { ldo: { 16: 340, 32: 950, 100: 2140 }, smps: { 16: 220, 32: 820, 100: 1500 } };
-// Fixed low-power modes (µA) — SMPS path largely matches in deep stop/standby.
-const FIXED_UA: Record<string, { ldo: number; smps: number }> = {
-  stop0: { ldo: 49, smps: 11 },
-  stop1: { ldo: 22.6, smps: 22.6 },
-  standby: { ldo: 0.37, smps: 0.37 },
+// MCU current (µA) by clock on the LDO (T45 Run, T49 Sleep). 64 MHz has no row:
+// interpolated linearly between the 32 and 100 MHz points (both Range 1 + HSE).
+const RUN_UA: Record<number, number> = {
+  16: 910,
+  32: 2290,
+  64: 4110,
+  100: 6160,
 };
-// BLE radio adder (µA) on top of core current (Table 37, 0 dBm Tx / 1 Mbps Rx).
-// advertising/connected are duty-cycled averages (estimated — datasheet gives peaks only).
-const RADIO_UA: Record<string, { ldo: number; smps: number }> = {
-  off: { ldo: 0, smps: 0 },
-  advertising: { ldo: 800, smps: 500 },
-  connected: { ldo: 1200, smps: 700 },
-  tx: { ldo: 10510, smps: 5540 },
-  rx: { ldo: 7910, smps: 5220 },
+const SLEEP_UA: Record<number, number> = {
+  16: 340,
+  32: 950,
+  64: 1510,
+  100: 2140,
+};
+// Fixed low-power modes (µA), LDO, 3.3 V.
+const FIXED_UA: Record<string, number> = {
+  stop0: 49, // T51, SRAM2 + cache retained
+  stop1: 22.6, // T52, SRAM1 retained, ULPMEN = 1
+  standby: 0.37, // T54, all peripherals disabled, ULPMEN = 1
+};
+// Radio. Table 37 figures are the WHOLE device during Tx/Rx ("including 2.4 GHz
+// RADIO subsystem and digital processing"), LDO: they replace the core figure
+// rather than add to it. Advertising / connected are duty-cycled averages added
+// on top of the core (estimated: the datasheet gives only the active peaks, and
+// the real average depends on the interval the program picks).
+const RADIO_TOTAL_UA: Record<string, number> = {
+  tx: 10510, // Tx 0 dBm
+  rx: 7910, // Rx 1 Mbps
+  tx_10dbm: 21150, // Tx +10 dBm
+};
+const RADIO_AVG_UA: Record<string, number> = {
+  off: 0,
+  advertising: 800,
+  connected: 1200,
 };
 
-const RAIL_MV = 3300;
-const LED_R_OHM = 40; // R2 (schematic) — atypically low, see provenance
-const LED_VF_MV = 1900;
+const VDD_NOM_MV = 3300; // V+ when the pad isn't wired to a known rail
+const VDD_MIN_MV = 1710; // DS14127 Table 31 (definition power[].min says 1.8 V)
+const VDD_MAX_MV = 3600; // Table 31 operating max
+const LED_R_OHM = 40; // R2 (schematic)
+const LED_VF_MV = 1900; // red LED forward drop (assumed; LED part not in the BOM)
+// GPIO output resistance: VOH = VDD - 0.4 V at 8 mA .. VDD - 1.3 V at 20 mA
+// (DS14127 Table 77), ~55 Ω. With R2 at only 40 Ω the pin sets most of the current.
+const PIN_R_OHM = 55;
 
 interface State {
   power_mode: number;
   sysclk: number;
-  regulator: number; // 0 = LDO, 1 = SMPS
   led_on: number; // on-board red LED (PB12, active-high)
   ble_state: number;
-  i2c_pullups: number; // optional 2.2k pull-ups on I2C3 (pads 4/5)
+  i2c_pullups: number; // PC15/PC14 driven high: 2.2k pull-ups on pads 4/5 engaged
   [field: string]: number;
 }
 
@@ -55,23 +82,23 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const modeOf = (s: State) => MODES[clamp(s.power_mode, 0, MODES.length - 1)];
 const clockOf = (s: State) => CLOCKS[clamp(s.sysclk, 0, CLOCKS.length - 1)];
 const bleOf = (s: State) => BLE[clamp(s.ble_state, 0, BLE.length - 1)];
-const regOf = (s: State): 'ldo' | 'smps' => (s.regulator ? 'smps' : 'ldo');
+// V+ from the wiring (pad 14) when it's on a resolved net, else nominal.
+const vddOf = (ctx?: PowerCtx) => ctx?.padVoltage?.['14'] ?? VDD_NOM_MV;
 
-const ledUa = (s: State) =>
-  s.led_on && RAIL_MV > LED_VF_MV ? Math.round(((RAIL_MV - LED_VF_MV) / LED_R_OHM) * 1000) : 0;
+// LED current when lit: (VDD - Vf) across R2 plus the pin's output resistance.
+const ledUa = (s: State, vdd: number) =>
+  s.led_on && modeOf(s) !== 'standby' && vdd > LED_VF_MV
+    ? Math.round(((vdd - LED_VF_MV) / (LED_R_OHM + PIN_R_OHM)) * 1000)
+    : 0;
 
-function coreUa(s: State): number {
-  const reg = regOf(s);
+// MCU + radio (µA). The radio only runs while the MCU is awake (run/sleep).
+function mcuUa(s: State): number {
   const mode = modeOf(s);
-  if (mode === 'run') return RUN_UA[reg][clockOf(s)];
-  if (mode === 'sleep') return SLEEP_UA[reg][clockOf(s)];
-  return FIXED_UA[mode][reg];
-}
-// Radio only runs when the MCU is awake (run/sleep); deep-sleep modes drop it.
-function radioUa(s: State): number {
-  const mode = modeOf(s);
-  if (mode !== 'run' && mode !== 'sleep') return 0;
-  return RADIO_UA[bleOf(s)][regOf(s)];
+  if (mode !== 'run' && mode !== 'sleep') return FIXED_UA[mode];
+  const core = mode === 'run' ? RUN_UA[clockOf(s)] : SLEEP_UA[clockOf(s)];
+  const ble = bleOf(s);
+  if (ble in RADIO_TOTAL_UA) return Math.max(core, RADIO_TOTAL_UA[ble]);
+  return core + RADIO_AVG_UA[ble];
 }
 
 const sim: TileSim<State> = {
@@ -79,11 +106,10 @@ const sim: TileSim<State> = {
 
   defaultState: {
     power_mode: 0, // run
-    sysclk: 1, // 32 MHz
-    regulator: 1, // SMPS (default firmware path)
+    sysclk: 1, // 32 MHz (Clock knob default "medium")
     led_on: 0,
     ble_state: 0, // off
-    i2c_pullups: 1,
+    i2c_pullups: 0, // PC14/PC15 reset to analog (Hi-Z): pull-ups disengaged
   },
 
   controls: [
@@ -98,51 +124,58 @@ const sim: TileSim<State> = {
     {
       type: 'slider',
       field: 'sysclk',
-      label: 'Clock (0:16·1:32·2:100 MHz)',
+      label: 'Clock (0:16·1:32·2:64·3:100 MHz)',
       min: 0,
-      max: 2,
+      max: 3,
       step: 1,
     },
-    { type: 'toggle', field: 'regulator', label: 'SMPS regulator (off = LDO)' },
     {
       type: 'slider',
       field: 'ble_state',
-      label: 'BLE (0 off·1 adv·2 conn·3 tx·4 rx)',
+      label: 'BLE (0 off·1 adv·2 conn·3 tx 0 dBm·4 rx·5 tx +10 dBm)',
       min: 0,
-      max: 4,
+      max: 5,
       step: 1,
     },
     { type: 'toggle', field: 'led_on', label: 'On-board LED (PB12)' },
-    { type: 'toggle', field: 'i2c_pullups', label: 'I2C3 pull-ups populated' },
+    {
+      type: 'toggle',
+      field: 'i2c_pullups',
+      label: '2.2k I2C3 pull-ups engaged (PC15/PC14 high)',
+    },
   ],
 
   hostCalls: {},
 
   provenance: {
-    power: 'inferred', // MCU + Tx/Rx currents canonical (DS14127); adv/connected averages + LED estimated
+    power: 'inferred', // MCU + Tx/Rx currents canonical (DS14127, LDO); adv/connected averages + LED estimated
   },
 
-  // Optional 2.2k pull-ups idle I2C3 (pads 4 CLK / 5 DAT) high. LED (PB12) and the
-  // antenna (RF matching network) are internal — neither is a numbered pad.
-  padOutputs(state) {
-    const up = state.i2c_pullups ? 1 : 0;
-    return { 'I2C3.CLK': up, 'I2C3.DAT': up };
+  // With PC15 / PC14 driven high the 2.2k resistors pull I2C3 (pad 4 CLK, pad 5
+  // DAT) high. LED (PB12) and the antenna are internal, not numbered pads.
+  padOutputs(state): Record<string, number> {
+    return state.i2c_pullups ? { '4': 1, '5': 1 } : {};
   },
 
-  // Supply draw on V+ (pad 14) / GND (pad 1): MCU-mode + BLE radio + LED.
-  power(state) {
-    const ua = coreUa(state) + radioUa(state) + ledUa(state);
+  // Supply draw on V+ (pad 14) / GND (pad 1): MCU (+ radio) + LED.
+  power(state, ctx) {
+    const vdd = vddOf(ctx);
+    const on = vdd >= VDD_MIN_MV;
+    const ua = on ? mcuUa(state) + ledUa(state, vdd) : 0;
+    const i = Math.round(ua * 1000) / 1000;
     const ble = bleOf(state);
     return {
-      draw_ua: Math.round(ua * 1000) / 1000,
+      draw_ua: i,
       rails: [
         {
           name: 'V+',
           role: 'supply',
-          v_mv: RAIL_MV,
-          i_ua: Math.round(ua * 1000) / 1000,
+          v_mv: vdd,
+          i_ua: i,
           pads: ['14'],
-          note: `STM32WBA55 ${modeOf(state)}/${regOf(state)}${ble !== 'off' ? ' +BLE ' + ble : ''}${state.led_on ? ' +LED' : ''}`,
+          note: on
+            ? `STM32WBA55 ${modeOf(state)}${ble !== 'off' ? ' +BLE ' + ble : ''}${state.led_on ? ' +LED' : ''}${vdd > VDD_MAX_MV ? ' (V+ above 3.6 V max)' : ''}`
+            : 'STM32WBA55 unpowered (V+ below 1.71 V)',
         },
       ],
     };
