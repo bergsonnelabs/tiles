@@ -1405,6 +1405,13 @@ def main():
 
     tile_sources = [
         {
+            "path": ROOT / "drivers/tile_sense_hr.h",
+            "definition": ROOT / "definitions/Sense-HR-a.json",
+            "prefix": "tile_sense_hr",
+            "init": "tile_sense_hr_init",
+            "version": "1.0.0",
+        },
+        {
             "path": ROOT / "drivers/tile_sense_cam_p.h",
             "definition": ROOT / "definitions/Sense-CAM-P-a.json",
             "prefix": "tile_sense_cam_p",

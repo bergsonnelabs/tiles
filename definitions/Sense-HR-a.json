@@ -29,7 +29,7 @@
       },
       "functions": [
         {
-          "note": "internal pull-up sets the default I2C address to 0xD6; connect to GND to switch to 0xD5; do not connect > 2.0V",
+          "note": "A pull-up to 1.8 V on the tile (R1/R2) selects address 0x6B; tie to GND for 0x6A. Never drive above 2.1 V (VDD + 0.3 V absolute maximum).",
           "type": "digital",
           "function": "I2C.AD0",
           "direction": "input",
@@ -54,7 +54,7 @@
       },
       "functions": [
         {
-          "note": "internal pull-up enables I2C by default; connect to GND to switch to SPI; do not connect > 2.0V",
+          "note": "A pull-up to 1.8 V on the tile (R1/R2) selects I2C; tie to GND for SPI. Tolerates up to 6 V.",
           "type": "digital",
           "function": "I2C.EN",
           "direction": "input",
@@ -150,7 +150,7 @@
       },
       "functions": [
         {
-          "note": "configurable interrupt output",
+          "note": "interrupt output, open-drain, active low; needs a pull-up on the host side (tolerates up to 6 V)",
           "type": "digital",
           "function": "INTB",
           "direction": "output"
@@ -167,7 +167,7 @@
       },
       "functions": [
         {
-          "note": "2.7-5.5V",
+          "note": "2.7-5.5V LED supply",
           "type": "power",
           "function": "VLED",
           "direction": "input"
@@ -184,7 +184,7 @@
       },
       "functions": [
         {
-          "note": "1.8V",
+          "note": "1.8V (1.7-2.0V)",
           "type": "power",
           "function": "V+",
           "direction": "input"
@@ -194,17 +194,17 @@
   ],
   "power": [
     {
-      "max": 1.8,
-      "min": 1.8,
+      "max": 2,
+      "min": 1.7,
       "type": "system",
-      "notes": "",
+      "notes": "MAX86174A core supply, 1.7-2.0 V (2.2 V absolute maximum): a 1.8 V rail, not 3.3 V. About 0.1-0.5 mA while sampling, 1 µA in shutdown.",
       "gnd_pad": [
         "1"
       ],
       "function": "",
       "direction": "input",
       "is_required": true,
-      "max_current": "",
+      "max_current": "0.65mA",
       "positive_pad": [
         "10"
       ]
@@ -213,16 +213,16 @@
       "max": 5.5,
       "min": 2.7,
       "type": "system",
-      "notes": "LED drive voltage",
+      "notes": "LED supply (anodes of all four LEDs), 2.7-5.5 V; 5 V recommended so green LEDs keep driver headroom. Draws short LED pulses (up to 100 mA, the LEDs' pulse rating); average is well under 1 mA at typical frame rates. VLED must not come up before V+ (datasheet: \"Power up VDD before VLED\").",
       "gnd_pad": [
         "1"
       ],
       "function": "",
       "direction": "input",
       "is_required": true,
-      "max_current": "",
+      "max_current": "100mA (pulsed)",
       "positive_pad": [
-        "10"
+        "9"
       ]
     }
   ],
@@ -291,37 +291,37 @@
         "pad": "2",
         "kind": "strap",
         "states": {
-          "low": "0xD6",
-          "high": "0xD5 (forced)",
-          "open": "0xD5 (default, via internal PU)"
+          "low": "0x6A",
+          "high": "0x6B (1.8 V logic only)",
+          "open": "0x6B (default, pull-up on the tile)"
         }
       },
       "default": "default",
       "options": [
         {
-          "label": "0xD5 (default)",
+          "label": "0x6B (default)",
           "value": "default",
           "states": {
             "2": "open"
           },
           "derived": {
-            "i2c_address": "0xD5"
+            "i2c_address": "0x6B"
           },
           "contributes": {
             "busAddress": {
               "bus": "i2c",
-              "value": "0xD5"
+              "value": "0x6B"
             }
           }
         },
         {
-          "label": "0xD6 (alternate)",
+          "label": "0x6A (alternate)",
           "value": "alternate",
           "states": {
             "2": "low"
           },
           "derived": {
-            "i2c_address": "0xD6"
+            "i2c_address": "0x6A"
           },
           "netlist": {
             "requires": [
@@ -342,7 +342,7 @@
           "contributes": {
             "busAddress": {
               "bus": "i2c",
-              "value": "0xD6"
+              "value": "0x6A"
             }
           }
         }
@@ -356,9 +356,9 @@
         "pad": "3",
         "kind": "strap",
         "states": {
-          "low": "SPI/SPI3",
-          "high": "I2C/I3C (forced)",
-          "open": "I2C/I3C (default, via internal PU)"
+          "low": "SPI",
+          "high": "I2C (forced)",
+          "open": "I2C (default, pull-up on the tile)"
         }
       },
       "default": "i2c",
@@ -408,6 +408,24 @@
       "part": "VEMD1060X01",
       "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/21/unknown-VEMD1060X01.pdf",
       "manufacturer": "Vishay Semiconductors"
+    },
+    {
+      "url": "https://www.inolux-corp.com/",
+      "part": "IN-S42CTQHIR",
+      "datasheet": "",
+      "manufacturer": "Inolux"
+    },
+    {
+      "url": "https://www.inolux-corp.com/",
+      "part": "IN-S42ATR",
+      "datasheet": "",
+      "manufacturer": "Inolux"
+    },
+    {
+      "url": "https://www.inolux-corp.com/",
+      "part": "IN-S42ATG",
+      "datasheet": "",
+      "manufacturer": "Inolux"
     }
   ],
   "interfaces": [
@@ -420,11 +438,11 @@
         ],
         "addresses": [
           {
-            "address": "0xD5",
+            "address": "0x6B",
             "is_default": true
           },
           {
-            "address": "0xD6"
+            "address": "0x6A"
           }
         ],
         "address_bits": [
@@ -486,8 +504,8 @@
       ]
     }
   ],
-  "updated_at": "2026-08-11T04:01:16.794Z",
+  "updated_at": "2026-09-25T08:45:51.214Z",
   "description": "The fully-integrated Sense.HR optical heart-rate and SpO₂ sensor combines the advanced Analog Devices MAX86174A photoplethysmography (PPG) front end with dual Vishay VEMD1060X01 silicon PIN photodiodes and four LEDs (two green, one red, one IR) for multi-wavelength reflective optical sensing.  The 20-bit ADC with a 256-word FIFO provides data at configurable rates from 1 to 2048 frames per second for external processing.",
-  "json_version": "0.10",
+  "json_version": "0.11",
   "application_notes": []
 }

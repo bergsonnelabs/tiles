@@ -1208,6 +1208,7 @@ TILE_DRIVER_MAP = {
     "Sense.ACP":   {"header": "tile_sense_acp.h", "source": "tile_sense_acp", "prefix": "tile_sense_acp"},
     "Sense.CAP":   {"header": "tile_sense_cap.h", "source": "tile_sense_cap", "prefix": "tile_sense_cap"},
     "Sense.M.3G":  {"header": "tile_sense_m_3g.h", "source": "tile_sense_m_3g", "prefix": "tile_sense_m_3g"},
+    "Sense.HR":    {"header": "tile_sense_hr.h",   "source": "tile_sense_hr",   "prefix": "tile_sense_hr"},
 }
 
 

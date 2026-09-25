@@ -1,0 +1,28 @@
+{
+  "core": "Core.ST.L4.1",
+  "clock": "max",
+  "pads": {
+    "3": "GPIO.IN",
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT"
+  },
+  "gpio": {
+    "3": {
+      "direction": "in",
+      "pull": "up",
+      "exti": "falling"
+    }
+  },
+  "interfaces": {
+    "I2C1": {
+      "speed": 400000
+    }
+  },
+  "tiles": [
+    {
+      "tile": "Sense.HR",
+      "bus": "I2C1",
+      "instance": 0
+    }
+  ]
+}
