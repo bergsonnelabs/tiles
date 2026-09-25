@@ -1475,6 +1475,13 @@ def main():
             "version": "1.4.0",
         },
         {
+            "path": ROOT / "drivers/tile_sense_cap.h",
+            "definition": ROOT / "definitions/Sense-CAP-a.json",
+            "prefix": "tile_sense_cap",
+            "init": "tile_sense_cap_init",
+            "version": "1.0.0",
+        },
+        {
             "path": ROOT / "drivers/tile_drive_a_2.h",
             "definition": ROOT / "definitions/Drive-A-2-a.json",
             "prefix": "tile_drive_a_2",
