@@ -79,9 +79,19 @@ interface State {
   ch2_ref_id: number;
   ch2_compensation: number;
 
-  // write_reg / read_reg echo
-  last_reg: number;
-  last_reg_value: number;
+  // Prox debounce (A.16 [15:8]) and touch hysteresis (A.17 [15:12]); the
+  // driver's typed setters write 4/4 and 0.
+  ch0_prox_debounce: number;
+  ch1_prox_debounce: number;
+  ch2_prox_debounce: number;
+  ch0_touch_hyst: number;
+  ch1_touch_hyst: number;
+  ch2_touch_hyst: number;
+  /** The rest of the writable register file, sparse: JSON {reg: value} for
+   * registers written with write_reg that no field above models. Anything
+   * absent reads its value after init (datasheet §9 reset value, or what
+   * init wrote). */
+  reg_file: string;
 }
 
 const CHANNELS = 3;
@@ -154,66 +164,244 @@ const arg = (args: number[], i: number, fallback: number) =>
 const chArg = (args: number[]) => arg(args, 0, 0);
 const validCh = (ch: number) => ch >= 0 && ch < CHANNELS;
 
+// State AFTER init with no cfg: soft reset + ACK, CH0 / CH1 on their own
+// electrodes and CH2 off, Azoteq's EV-kit settings (prox 20, touch 40,
+// counts filter 0x0202, NP 16 / LP 60 / ULP 160 / Halt 3000 ms, timeout
+// 2000 ms), events = TOUCH | PROX, AUTO power, re-ATI, then EVENT mode.
+const DEFAULT_STATE: State = {
+  ch0_touched: 0,
+  ch1_touched: 0,
+  ch0_prox: 0,
+  ch1_prox: 0,
+
+  ch0_lta: COUNTS_REST,
+  ch1_lta: COUNTS_REST,
+  ch2_lta: COUNTS_REST,
+  status_flags: 0,
+  prev_ch_bits: 0,
+  int_latched: 0,
+  active_mode: PM_NORMAL,
+  idle_since_t: 0,
+
+  last_status: 0,
+  ready: 1,
+  sleeping: 0,
+
+  power_mode: PM_AUTO,
+  comm_mode: 1,
+  events_enable: ST_TOUCH_EVENT | ST_PROX_EVENT,
+  counts_filter: 0x0202,
+  np_rate_ms: 16,
+  lp_rate_ms: 60,
+  ulp_rate_ms: 160,
+  halt_rate_ms: 3000,
+  power_timeout_ms: 2000,
+  ch0_prox_th: 20,
+  ch0_touch_th: 40,
+  ch0_ati_setup: 0x040c,
+  ch0_conv_freq: 0x057f,
+  ch0_mode: 0,
+  ch0_ref_id: 0,
+  ch0_compensation: COMPENSATION_NOMINAL,
+  ch1_prox_th: 20,
+  ch1_touch_th: 40,
+  ch1_ati_setup: 0x040c,
+  ch1_conv_freq: 0x057f,
+  ch1_mode: 0,
+  ch1_ref_id: 0,
+  ch1_compensation: COMPENSATION_NOMINAL,
+  ch2_prox_th: 20,
+  ch2_touch_th: 40,
+  ch2_ati_setup: 0x040c,
+  ch2_conv_freq: 0x057f,
+  ch2_mode: 0,
+  ch2_ref_id: 0,
+  ch2_compensation: COMPENSATION_NOMINAL,
+
+  ch0_prox_debounce: 0x44,
+  ch1_prox_debounce: 0x44,
+  ch2_prox_debounce: 0x44,
+  ch0_touch_hyst: 0,
+  ch1_touch_hyst: 0,
+  ch2_touch_hyst: 0,
+  reg_file: '{}',
+};
+
+/** The configuration part of the state after init (what a soft reset
+ * followed by the driver re-configuring the chip returns to). */
+const configAfterInit: Partial<State> = Object.fromEntries(
+  Object.entries(DEFAULT_STATE).filter(
+    ([k]) =>
+      !/^ch[012]_(touched|prox|lta)$|^(status_flags|prev_ch_bits|int_latched|active_mode|idle_since_t|last_status|ready|sleeping)$/.test(
+        k,
+      ),
+  ),
+);
+
+// ── The register file (datasheet §9 memory map) ──
+//
+// read_reg / write_reg see the same chip the typed calls do: registers the
+// twin models come from (and write back to) its state, the other writable
+// ones live in the sparse `reg_file`, and a register that doesn't exist
+// reads 0xEEEE (§8.10). Values after init: §9 reset values, overlaid with
+// what the driver's init writes (channel pins, filters, rates, events).
+
+const PRODUCT_NUMBER = 1106; // IQS323-00x (A.1)
+const VERSION_MAJOR = 1;
+const VERSION_MINOR = 3;
+const INVALID = 0xeeee;
+
+/** Per-channel sensor setup (0x30 + 0x10·ch) after init: CH0 on CRx0/CTx0,
+ * CH1 on CRx1/CTx1, CH2 off. [setup, prox input]. */
+const SENSOR_PINS: readonly (readonly [number, number])[] = [
+  [0x0101, 0x01cf],
+  [0x0201, 0x02cf],
+  [0x0000, 0x01cf],
+];
+/** Other registers after init, where §9 or init gives a value. */
+const INIT_REGS: Readonly<Record<number, number>> = {
+  0xb1: 0x0505, // LTA filter betas (init)
+  0xb2: 0x0303, // LTA fast filter betas (init)
+  0xb4: 30, // fast filter band (init)
+  0xd1: 0x00c8, // I2C transaction timeout, 200 ms (§9)
+};
+/** Addresses that exist (§9). Reserved 0x03-0x09 and 0x99 read as 0. */
+function regExists(reg: number): boolean {
+  if (reg <= 0x09) return true;
+  if (reg >= 0x10 && reg <= 0x18) return true;
+  if (reg >= 0x20 && reg <= 0x25) return true;
+  const lo = reg & 0x0f;
+  const hi = reg >> 4;
+  if (hi >= 3 && hi <= 5) return lo <= 0x9; // sensor setup
+  if (hi >= 6 && hi <= 8) return lo <= 0x4; // channel setup
+  if (reg >= 0x90 && reg <= 0x99) return true;
+  if (reg >= 0xa0 && reg <= 0xa6) return true;
+  if (reg >= 0xb0 && reg <= 0xb4) return true;
+  if (reg >= 0xc0 && reg <= 0xc5) return true;
+  if (reg >= 0xd0 && reg <= 0xd4) return true;
+  return reg === 0xe0 || reg === 0xe1;
+}
+const regFile = (s: State): Record<string, number> => {
+  try {
+    return JSON.parse(s.reg_file) as Record<string, number>;
+  } catch {
+    return {};
+  }
+};
+
+function readReg(s: State, reg: number): number {
+  if (!regExists(reg)) return INVALID;
+  const stored = regFile(s)[String(reg)];
+  const hi = reg >> 4;
+  const lo = reg & 0x0f;
+  // Read-only system information
+  if (reg === 0x00) return PRODUCT_NUMBER;
+  if (reg === 0x01) return VERSION_MAJOR;
+  if (reg === 0x02) return VERSION_MINOR;
+  if (reg <= 0x09) return 0;
+  if (reg === 0x10) return statusWord(s);
+  if (reg === 0x11 || reg === 0x12) return 0; // no gestures / slider configured
+  if (reg >= 0x13 && reg <= 0x18) {
+    const ch = (reg - 0x13) >> 1;
+    return (reg - 0x13) & 1 ? ltaOf(s, ch) : countsOf(s, ch);
+  }
+  if (reg >= 0x20 && reg <= 0x22) return ltaOf(s, reg - 0x20); // activation LTA tracks the LTA
+  if (reg >= 0x23 && reg <= 0x25) return 0; // delta snapshots: Release UI not enabled
+  if (reg === 0xe1) return HW_ID_3DD;
+  // Sensor setup, per channel
+  if (hi >= 3 && hi <= 5) {
+    const ch = hi - 3;
+    if (lo === 0x1) return s[key(ch, 'conv_freq')];
+    if (lo === 0x6) return s[key(ch, 'ati_setup')];
+    if (lo === 0x9) return s[key(ch, 'compensation')];
+    if (stored !== undefined) return stored;
+    if (lo === 0x0) return SENSOR_PINS[ch]![0];
+    if (lo === 0x3) return SENSOR_PINS[ch]![1];
+    if (lo === 0x2) return 0x1290; // prox control: self-capacitance (§9)
+    if (lo === 0x4) return 0x030a; // pattern definitions (§9)
+    if (lo === 0x7) return 0x0064; // ATI base (§9)
+    return 0; // 0x35 pattern select; 0x38 ATI multipliers (set by ATI, not modeled)
+  }
+  // Channel UI setup, per channel
+  if (hi >= 6 && hi <= 8) {
+    const ch = hi - 6;
+    if (lo === 0x0)
+      return ((stored ?? 0) & 0xff00) | (s[key(ch, 'ref_id')] << 4) | s[key(ch, 'mode')];
+    if (lo === 0x1) return (s[key(ch, 'prox_debounce')] << 8) | s[key(ch, 'prox_th')];
+    if (lo === 0x2) return (s[key(ch, 'touch_hyst')] << 12) | s[key(ch, 'touch_th')];
+    return stored ?? 0;
+  }
+  if (reg === 0xb0) return s.counts_filter;
+  if (reg === 0xc0)
+    return (s.comm_mode ? 0x80 : 0) | ((s.power_mode & 0x07) << 4) | ((stored ?? 0) & 0x0700);
+  if (reg === 0xc1) return s.np_rate_ms;
+  if (reg === 0xc2) return s.lp_rate_ms;
+  if (reg === 0xc3) return s.ulp_rate_ms;
+  if (reg === 0xc4) return s.halt_rate_ms;
+  if (reg === 0xc5) return s.power_timeout_ms;
+  if (reg === 0xd3) return s.events_enable;
+  return stored ?? INIT_REGS[reg] ?? 0;
+}
+
+/** A host write. Read-only registers ignore it (§8.14: the R/W check is on
+ * by default); modeled ones update state; the rest land in reg_file. */
+function writeReg(s: State, reg: number, v: number): Partial<State> | undefined {
+  if (!regExists(reg) || reg <= 0x25 || reg === 0xe1) return undefined;
+  const hi = reg >> 4;
+  const lo = reg & 0x0f;
+  const store = (value: number): Partial<State> => {
+    const file = regFile(s);
+    file[String(reg)] = value;
+    return { reg_file: JSON.stringify(file) };
+  };
+  if (hi >= 3 && hi <= 5) {
+    const ch = hi - 3;
+    if (lo === 0x1) return { [key(ch, 'conv_freq')]: v };
+    if (lo === 0x6) return { [key(ch, 'ati_setup')]: v };
+    if (lo === 0x9) return { [key(ch, 'compensation')]: v & 0xfbff }; // bit 10 reserved
+    return store(v);
+  }
+  if (hi >= 6 && hi <= 8) {
+    const ch = hi - 6;
+    if (lo === 0x0)
+      return {
+        [key(ch, 'mode')]: v & 0x0f,
+        [key(ch, 'ref_id')]: (v >> 4) & 0x0f,
+        ...store(v & 0xff00),
+      };
+    if (lo === 0x1) return { [key(ch, 'prox_th')]: v & 0xff, [key(ch, 'prox_debounce')]: v >> 8 };
+    if (lo === 0x2) return { [key(ch, 'touch_th')]: v & 0xff, [key(ch, 'touch_hyst')]: v >> 12 };
+    return store(v);
+  }
+  if (reg === 0xb0) return { counts_filter: v };
+  if (reg === 0xc0) {
+    // Trigger bits (ACK, soft reset, re-ATI, reseed) act and clear; the
+    // mode fields persist. A soft reset is followed by the driver's
+    // process() re-configuring the chip, which lands back on init's state.
+    if (v & 0x02) return { ...configAfterInit, ready: s.ready };
+    const next: Partial<State> = { comm_mode: v & 0x80 ? 1 : 0, ...store(v & 0x0700) };
+    const mode = (v >> 4) & 0x07;
+    if (mode <= PM_AUTO_NO_ULP) next.power_mode = mode;
+    if (v & 0x0c) {
+      next.ch0_lta = countsOf(s, 0);
+      next.ch1_lta = countsOf(s, 1);
+      next.ch2_lta = countsOf(s, 2);
+    }
+    return next;
+  }
+  if (reg === 0xc1) return { np_rate_ms: Math.min(3000, v) };
+  if (reg === 0xc2) return { lp_rate_ms: Math.min(3000, v) };
+  if (reg === 0xc3) return { ulp_rate_ms: Math.min(3000, v) };
+  if (reg === 0xc4) return { halt_rate_ms: Math.min(3000, v) };
+  if (reg === 0xc5) return { power_timeout_ms: Math.min(65000, v) };
+  if (reg === 0xd3) return { events_enable: v & 0x5f };
+  return store(v);
+}
+
 const sim: TileSim<State> = {
   tile: 'Sense.T.C',
 
-  // State AFTER init with no cfg: soft reset + ACK, CH0 / CH1 on their own
-  // electrodes and CH2 off, Azoteq's EV-kit settings (prox 20, touch 40,
-  // counts filter 0x0202, NP 16 / LP 60 / ULP 160 / Halt 3000 ms, timeout
-  // 2000 ms), events = TOUCH | PROX, AUTO power, re-ATI, then EVENT mode.
-  defaultState: {
-    ch0_touched: 0,
-    ch1_touched: 0,
-    ch0_prox: 0,
-    ch1_prox: 0,
-
-    ch0_lta: COUNTS_REST,
-    ch1_lta: COUNTS_REST,
-    ch2_lta: COUNTS_REST,
-    status_flags: 0,
-    prev_ch_bits: 0,
-    int_latched: 0,
-    active_mode: PM_NORMAL,
-    idle_since_t: 0,
-
-    last_status: 0,
-    ready: 1,
-    sleeping: 0,
-
-    power_mode: PM_AUTO,
-    comm_mode: 1,
-    events_enable: ST_TOUCH_EVENT | ST_PROX_EVENT,
-    counts_filter: 0x0202,
-    np_rate_ms: 16,
-    lp_rate_ms: 60,
-    ulp_rate_ms: 160,
-    halt_rate_ms: 3000,
-    power_timeout_ms: 2000,
-    ch0_prox_th: 20,
-    ch0_touch_th: 40,
-    ch0_ati_setup: 0,
-    ch0_conv_freq: 0,
-    ch0_mode: 0,
-    ch0_ref_id: 0,
-    ch0_compensation: COMPENSATION_NOMINAL,
-    ch1_prox_th: 20,
-    ch1_touch_th: 40,
-    ch1_ati_setup: 0,
-    ch1_conv_freq: 0,
-    ch1_mode: 0,
-    ch1_ref_id: 0,
-    ch1_compensation: COMPENSATION_NOMINAL,
-    ch2_prox_th: 20,
-    ch2_touch_th: 40,
-    ch2_ati_setup: 0,
-    ch2_conv_freq: 0,
-    ch2_mode: 0,
-    ch2_ref_id: 0,
-    ch2_compensation: COMPENSATION_NOMINAL,
-
-    last_reg: 0,
-    last_reg_value: 0,
-  },
+  defaultState: DEFAULT_STATE,
 
   controls: [
     { type: 'toggle', field: 'ch1_touched', label: 'Touch top surface (CH1)' },
@@ -312,18 +500,37 @@ const sim: TileSim<State> = {
       const prox = arg(args, 1, 0) & 0xff;
       const touch = arg(args, 2, 0) & 0xff;
       const next: Partial<State> = {};
-      if (prox) next[key(ch, 'prox_th')] = prox;
-      if (touch) next[key(ch, 'touch_th')] = touch;
+      if (prox) {
+        next[key(ch, 'prox_th')] = prox;
+        next[key(ch, 'prox_debounce')] = 0x44;
+      }
+      if (touch) {
+        next[key(ch, 'touch_th')] = touch;
+        next[key(ch, 'touch_hyst')] = 0;
+      }
       return { nextState: next };
     },
     // All enabled channels (CH0, CH1); 0 is ignored.
     tile_sense_t_c_set_touch_threshold: ({ args }) => {
       const th = arg(args, 0, 0) & 0xff;
-      return th ? { nextState: { ch0_touch_th: th, ch1_touch_th: th } } : undefined;
+      return th
+        ? {
+            nextState: { ch0_touch_th: th, ch1_touch_th: th, ch0_touch_hyst: 0, ch1_touch_hyst: 0 },
+          }
+        : undefined;
     },
     tile_sense_t_c_set_prox_threshold: ({ args }) => {
       const th = arg(args, 0, 0) & 0xff;
-      return th ? { nextState: { ch0_prox_th: th, ch1_prox_th: th } } : undefined;
+      return th
+        ? {
+            nextState: {
+              ch0_prox_th: th,
+              ch1_prox_th: th,
+              ch0_prox_debounce: 0x44,
+              ch1_prox_debounce: 0x44,
+            },
+          }
+        : undefined;
     },
     // Modes 6 and 7 are reserved; the driver ignores them.
     tile_sense_t_c_set_power_mode: ({ state, args }) => {
@@ -409,17 +616,13 @@ const sim: TileSim<State> = {
     },
 
     // ── low-level ──
-    tile_sense_t_c_read_reg: ({ state, args }) => {
-      const reg = arg(args, 0, 0) & 0xff;
-      if (reg === 0x10) return { scalar: statusWord(state) };
-      if (reg === 0x11 || reg === 0x12) return { scalar: 0 }; // gestures / slider at rest
-      if (reg === 0xe1) return { scalar: HW_ID_3DD };
-      if (reg === state.last_reg) return { scalar: state.last_reg_value };
-      return { scalar: 0 };
-    },
-    tile_sense_t_c_write_reg: ({ args }) => ({
-      nextState: { last_reg: arg(args, 0, 0) & 0xff, last_reg_value: arg(args, 1, 0) & 0xffff },
+    tile_sense_t_c_read_reg: ({ state, args }) => ({
+      scalar: readReg(state, arg(args, 0, 0) & 0xff),
     }),
+    tile_sense_t_c_write_reg: ({ state, args }) => {
+      const next = writeReg(state, arg(args, 0, 0) & 0xff, arg(args, 1, 0) & 0xffff);
+      return next ? { nextState: next } : undefined;
+    },
   },
 
   provenance: {
@@ -452,8 +655,10 @@ const sim: TileSim<State> = {
     tile_sense_t_c_read_slider_pct: 'inferred', // resolution 0 → returns 0
     tile_sense_t_c_get_gestures: 'inferred',
     tile_sense_t_c_wait_for_gesture: 'inferred',
-    // hallucinated — the register file isn't modeled beyond a few registers
-    tile_sense_t_c_read_reg: 'hallucinated',
+    // the §9 memory map: modeled registers read and write the twin's state,
+    // the rest hold their value after init; missing ones read 0xEEEE (§8.10)
+    tile_sense_t_c_read_reg: 'canonical',
+    tile_sense_t_c_write_reg: 'canonical',
     power: 'inferred', // datasheet §3.4 per-mode current is for 3 self-cap channels at the EV-kit rates; the tile runs 2, and AUTO's stepping is modeled
   },
 
