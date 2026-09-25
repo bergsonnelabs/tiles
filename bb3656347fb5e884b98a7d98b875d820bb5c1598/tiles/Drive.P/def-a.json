@@ -1,0 +1,389 @@
+{
+  "rev": "a",
+  "name": "P",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "type": "power",
+          "function": "GND",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "type": "digital",
+          "function": "GPIO",
+          "direction": "bidirectional"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "when using a non-Core processor, ensure adequate external pull-up resistance.",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "I3C.CLK",
+          "direction": "bidirectional",
+          "interface": "I3C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "when using a non-Core processor, ensure adequate external pull-up resistance.",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C",
+          "is_default": true
+        },
+        {
+          "type": "digital",
+          "function": "I3C.DAT",
+          "direction": "bidirectional",
+          "interface": "I3C"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT+",
+          "direction": "output",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "drive",
+          "function": "OUT-",
+          "direction": "output",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "3.0-5.5V supply for the power stage",
+          "type": "power",
+          "function": "V_DRIVE",
+          "direction": "input",
+          "is_default": true
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.8-5.5V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    }
+  ],
+  "power": [
+    {
+      "max": 5.5,
+      "min": 1.8,
+      "type": "system",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 5.5,
+      "min": 3,
+      "type": "drive",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "9"
+      ]
+    }
+  ],
+  "config": {
+    "gpio": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use GPIO sideband",
+      "binding": {
+        "pad": "3",
+        "kind": "intent"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "input-floating",
+              "register": "COMM.GPIODIR"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "input",
+                    "output"
+                  ]
+                },
+                "tag": "gpio.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "text": "Wire pad 3 to a Core GPIO. Used as the write-gate for GPIO-gated I2C re-addressing when two BOS1921 share one bus (both default 0x44): the Core holds the target chip's GPIO low while it re-addresses. Core drives the pad; the chip side is configured via COMM.GPIODIR.",
+              "type": "note"
+            }
+          ]
+        }
+      ],
+      "description": "Pad 3 is the BOS1921 GPIO, routed to a Core pad. Only needed to place two Drive.P on one I2C bus (GPIO-gated re-address, driver §6.3.3). Leave unused for a single Drive.P."
+    },
+    "interfaceMode": {
+      "kind": "select",
+      "group": "Interfaces",
+      "label": "Interface mode",
+      "default": "i2c",
+      "options": [
+        {
+          "label": "I2C",
+          "value": "i2c",
+          "activates": {
+            "interface": "I2C"
+          }
+        },
+        {
+          "label": "I3C",
+          "value": "i3c",
+          "activates": {
+            "interface": "I3C"
+          }
+        }
+      ],
+      "description": "Selects which bus this tile sits on. The chip's mode is set by firmware via register write at init (no boot-strap pad on this tile), so the catalog choice expresses *wiring intent* and which interface's pad_assignments are active."
+    }
+  },
+  "family": "Drive",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 1800
+  },
+  "tile_id": 5,
+  "headline": "piezoelectric sensor/actuator driver",
+  "components": [
+    {
+      "url": "https://www.boreas.ca/products/bos1921-piezo-driver",
+      "part": "BOS1921",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf",
+      "manufacturer": "Boréas Technologies"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x44",
+            "is_default": true
+          }
+        ],
+        "data_bits": [
+          8
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I3C"
+      ]
+    },
+    {
+      "name": "I3C",
+      "type": "I3C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ]
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I3C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I3C.DAT",
+          "is_required": true
+        }
+      ],
+      "mutually_exclusive": [
+        "I2C"
+      ]
+    }
+  ],
+  "updated_at": "2026-06-27T14:21:11.236Z",
+  "description": "Built around the Boréas Technologies BOS1921 driver, the advanced DRIVE.P tile provides an ultra-compact, fully-integrated solution for interfacing with piezoelectric sensors and actuators. With a maximum peak-to-peak differential output amplitude of 190V, the ability to drive one or two capacitive loads up to a total of 820nF, a built-in waveform synthesizer and high-speed 1024-sample continuous-playback FIFO, as well as a sensing resolution of just 7.6mV, this tile provides an unparalleled level of integration for next-generation haptics and other piezoactuator solutions.",
+  "json_version": "0.8",
+  "application_notes": [
+    {
+      "details": "A single piezo connected across the OUT terminals can be used for both sensing and output, including bipolar output",
+      "heading": "Single Piezo"
+    },
+    {
+      "details": "Two piezos can be driven by in a unipolar configuration by connecting the positive lead of each piezo to each of the OUT pads, and the negative terminals to GND.  Sensing is not possible in this configuration.",
+      "heading": "Dual Piezo"
+    }
+  ]
+}
