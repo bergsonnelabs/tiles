@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "U.PD",
+  "pads": [],
+  "power": [],
+  "family": "Power",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 43,
+  "headline": "USB-C power-delivery controller",
+  "components": [
+    {
+      "url": "",
+      "part": "STUSB4500",
+      "datasheet": "",
+      "manufacturer": "ST Microelectronics"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-03-02T10:33:28.919Z",
+  "description": "",
+  "json_version": "0.2",
+  "application_notes": []
+}

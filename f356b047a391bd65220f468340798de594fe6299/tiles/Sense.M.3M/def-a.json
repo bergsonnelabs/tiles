@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "M.3M",
+  "pads": [],
+  "power": [],
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 26,
+  "headline": "50mT triaxial magnetometer",
+  "components": [
+    {
+      "url": "",
+      "part": "MLX90395",
+      "datasheet": "",
+      "manufacturer": "Melexis"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-03-02T09:42:36.587Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}
