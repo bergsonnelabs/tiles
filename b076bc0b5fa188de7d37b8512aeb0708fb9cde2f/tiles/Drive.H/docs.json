@@ -1,0 +1,899 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@afe442f",
+  "file": "tile_drive_h.h",
+  "brief": "LRA/ERM haptic driver for the Drive.H tile (rev a).",
+  "description": "Embeds the TI DRV2605 (DEVICE_ID 3 — the non-L part), a haptic\ndriver for LRA (Linear Resonant Actuator) and ERM actuators with\na built-in waveform library of 123 effects. The actuator is\nexternal, connected via the tile's OUT+ / OUT- pads; V_MOTOR\naccepts 2.5-5.5 V.\n\nThe chip regulates output amplitude itself: the supply rail only\nsets headroom. Full-scale drive level comes from RATED_VOLTAGE /\nOD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the\nvoltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply\n(VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's\nminimum load is 8 Ω at VDD = 5.2 V.\n\nV+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).\nPower V+ from a logic rail, or drive pad 3 high from a Core pin:\nwith neither, EN floats, the chip may stay in shutdown, and init()\nfails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ\n(33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The\ntile has no I2C pull-ups.\n\nKey specifications:\n  - Output:       full-bridge, amplitude regulated per config\n  - Waveform lib: 123 haptic effects (6 libraries)\n  - Smart-loop:   automatic resonance tracking for LRA (closed loop)\n  - Modes:        Internal trigger, RTP, PWM, audio-to-vibe\n\nDatasheet: https://www.bergsonne.io/tiles/drive/h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv2605.pdf\n\n\n@studio tile label=Drive.H icon=≋\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"OTP waveform burning\"\n  The DRV2605 can burn custom waveforms into one-time-programmable\n  memory. This is implemented in firmware (tile_drive_h_program_otp())\n  but intentionally NOT exposed to Studio: it permanently and\n  irreversibly modifies the chip. Driver-deferred by policy, not a\n  hardware gap — call it from C if you really need it.\n\n@studio unsupported severity=niche category=\"Minor control bits\"\n  Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),\n  SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /\n  analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,\n  LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and\n  MODE.DEV_RESET have no setter. Reachable only by editing the\n  driver; none is hardware-gated.\n\n@studio unsupported severity=niche category=\"Hardware EN control\"\n  Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a\n  100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the\n  STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core\n  GPIO. With EN low the chip still ACKs its address but ignores\n  reads and writes (SLOS825E §7.4.1.3), so init fails on the\n  device-ID check; registers are kept.",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core_tiles.h\"\n\n  tile_t haptic;\n  tile_drive_h_init(core_tiles_pal(&core_i2c1), 0, &haptic, NULL);\n  if (tile_is_ready(&haptic)) {\n      tile_drive_h_play(&haptic, 1, 1);  // play effect #1 once\n  }"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "niche",
+      "category": "OTP waveform burning",
+      "brief": "The DRV2605 can burn custom waveforms into one-time-programmable memory. This is implemented in firmware (tile_drive_h_program_otp()) but intentionally NOT exposed to Studio: it permanently and irreversibly modifies the chip. Driver-deferred by policy, not a hardware gap — call it from C if you really need it."
+    },
+    {
+      "severity": "niche",
+      "category": "Minor control bits",
+      "brief": "Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle), SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM / analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN, LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and MODE.DEV_RESET have no setter. Reachable only by editing the driver; none is hardware-gated."
+    },
+    {
+      "severity": "niche",
+      "category": "Hardware EN control",
+      "brief": "Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a 100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core GPIO. With EN low the chip still ACKs its address but ignores reads and writes (SLOS825E §7.4.1.3), so init fails on the device-ID check; registers are kept."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_DRIVE_H_VERSION_MAJOR",
+      "value": "4",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_DRIVE_H_VERSION_MINOR",
+      "value": "3",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_DRIVE_H_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_I2C_ADDR_DEFAULT",
+      "value": "0x5A",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_STATUS_DEFAULT",
+      "value": "0x60",
+      "description": "Expected default STATUS register value (DEVICE_ID = 3).",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_STATUS_DEVICE_ID",
+      "value": "0xE0",
+      "description": "Bits 7:5 — device ID",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_STATUS_DIAG_RESULT",
+      "value": "0x08",
+      "description": "Bit 3 — diagnostic result",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_STATUS_OVER_TEMP",
+      "value": "0x02",
+      "description": "Bit 1 — over-temperature",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_STATUS_OC_DETECT",
+      "value": "0x01",
+      "description": "Bit 0 — overcurrent detect",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_INTERNAL_TRIG",
+      "value": "0x00",
+      "description": "Internal trigger (I2C GO)",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_EXT_EDGE",
+      "value": "0x01",
+      "description": "External trigger, edge mode",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_EXT_LEVEL",
+      "value": "0x02",
+      "description": "External trigger, level mode",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_PWM_ANALOG",
+      "value": "0x03",
+      "description": "PWM or analog input on TRIG",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_AUDIO",
+      "value": "0x04",
+      "description": "Audio-to-vibe on TRIG",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_RTP",
+      "value": "0x05",
+      "description": "Real-time playback",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_DIAGNOSTICS",
+      "value": "0x06",
+      "description": "Actuator diagnostics",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_CALIBRATION",
+      "value": "0x07",
+      "description": "Auto-calibration",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_MODE_STANDBY",
+      "value": "0x40",
+      "description": "STANDBY bit (bit 6)",
+      "section": ""
+    },
+    {
+      "name": "DRIVE_H_TRIG_INTERNAL",
+      "value": "0",
+      "description": "",
+      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
+    },
+    {
+      "name": "DRIVE_H_TRIG_EDGE",
+      "value": "1",
+      "description": "",
+      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
+    },
+    {
+      "name": "DRIVE_H_TRIG_LEVEL",
+      "value": "2",
+      "description": "",
+      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
+    },
+    {
+      "name": "DRV2605L_SEQ_MAX",
+      "value": "8",
+      "description": "",
+      "section": "* Maximum effects in a single waveform sequence."
+    }
+  ],
+  "enums": [
+    {
+      "name": "drive_h_library_t",
+      "brief": "ROM waveform library, which also sets the actuator type (ERM vs LRA).",
+      "description": "",
+      "members": [
+        {
+          "name": "DRIVE_H_LIB_EMPTY",
+          "value": "0",
+          "description": "Empty library (silence)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_A",
+          "value": "1",
+          "description": "ERM motor: TS2200 Library A (fixed open-loop overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_B",
+          "value": "2",
+          "description": "ERM motor: TS2200 Library B (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_C",
+          "value": "3",
+          "description": "ERM motor: TS2200 Library C (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_D",
+          "value": "4",
+          "description": "ERM motor: TS2200 Library D (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_ERM_E",
+          "value": "5",
+          "description": "ERM motor: TS2200 Library E (no overdrive)."
+        },
+        {
+          "name": "DRIVE_H_LIB_LRA",
+          "value": "6",
+          "description": "LRA (coin / linear actuator): LRA library, auto-resonance."
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "drive_h_cfg_t",
+      "brief": "",
+      "description": "Optional init config. Pass NULL for defaults: LRA closed-loop,\nlibrary 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C (the actuator is\nexternal, via the OUT± pads). At init's ~238 Hz DRIVE_TIME and the\nreset SAMPLE_TIME (300 µs), 0x56 is ~2.2 Vrms closed-loop\n(SLOS825E Eq 3) and 0x8C is a 3.07 V peak clamp (Eq 7), ~2.7 Vrms\nfull scale in open loop (Eq 5). That suits a 2.0 Vrms-class coin\nLRA (bench-verified on a Vybronix V4CHA1) and over-drives smaller\nones.\nFor any other actuator, set rated_voltage and od_clamp from its\ndatasheet with Eq 2-5 (SLOS825E §7.5.2.1-7.5.2.2), or call\ntile_drive_h_set_actuator_voltage() with millivolts. Values at\n238 Hz / 300 µs, open-loop clamp = rated:\n| LRA rated voltage | rated_voltage | od_clamp |\n|-------------------|---------------|----------|\n| 0.5 Vrms          | 0x13          | 0x1A     |\n| 0.7 Vrms          | 0x1B          | 0x24     |\n| 1.0 Vrms          | 0x26          | 0x34     |\n| 1.8 Vrms          | 0x45          | 0x5D     |\n| 2.0 Vrms          | 0x4D          | 0x68     |\nNote: in open-loop mode the chip ignores RATED_VOLTAGE and derives\nfull-scale output from OD_CLAMP alone (and LRA playback does not\nresonance-track on this part) — prefer closed loop for LRAs.",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "library",
+          "description": ""
+        },
+        {
+          "type": "uint8_t",
+          "name": "closed_loop",
+          "description": ""
+        },
+        {
+          "type": "uint8_t",
+          "name": "rated_voltage",
+          "description": ""
+        },
+        {
+          "type": "uint8_t",
+          "name": "od_clamp",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_drive_h_find(tiles_pal_t* hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        }
+      ],
+      "notes": [],
+      "return": "1 if device ACKs, 0 otherwise",
+      "brief": "Check whether a DRV2605 is present on the I2C bus.",
+      "description": "",
+      "name": "tile_drive_h_find"
+    },
+    {
+      "signature": "void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile, const drive_h_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle"
+        },
+        {
+          "name": "instance",
+          "description": "Instance index (0 = default, see mapping table)"
+        },
+        {
+          "name": "tile",
+          "description": "Pointer to tile handle (populated by this function)"
+        },
+        {
+          "name": "cfg",
+          "description": "Optional config, or NULL for defaults"
+        }
+      ],
+      "notes": [
+        "Blocks for ~500 ms during init. Call once at startup."
+      ],
+      "brief": "Initialize the DRV2605 haptic driver.",
+      "description": "Verifies the device ID, exits standby, and configures the\nactuator drive mode. Pass cfg=NULL for defaults (LRA closed-loop,\nlibrary 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C: see drive_h_cfg_t).",
+      "name": "tile_drive_h_init"
+    },
+    {
+      "signature": "void tile_drive_h_play(tile_t* tile, uint8_t index, uint8_t repeats)",
+      "params": [
+        {
+          "name": "index",
+          "description": "[1..123] Library effect index (see datasheet)."
+        },
+        {
+          "name": "repeats",
+          "description": "[1..20] Number of times to play (1 = once)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Play a waveform effect from the built-in library.",
+      "description": "Loads the effect index into sequence slot 0, terminates\nthe sequence, and triggers playback. For repeats > 1,\nre-triggers with a 200ms gap between plays.",
+      "name": "tile_drive_h_play"
+    },
+    {
+      "signature": "void tile_drive_h_play_sequence(tile_t* tile, const uint8_t *effects, uint8_t count)",
+      "params": [
+        {
+          "name": "effects",
+          "description": "Array of effect indices (1-123, 0 = stop)"
+        },
+        {
+          "name": "count",
+          "description": "Number of effects (1-8)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Play a sequence of up to 8 waveform effects.",
+      "description": "Loads effects into the waveform sequencer registers (0x04-0x0B),\nterminates the sequence, and triggers playback. Returns\nimmediately — use tile_drive_h_is_playing() to poll for\ncompletion. DSL pads short sequences with 0 (DRV2605 effect 0\nis \"stop\"), so a 3-effect sequence written as `[5, 10, 15, 0,\n0, 0, 0, 0]` plays effects 5/10/15 then halts.",
+      "name": "tile_drive_h_play_sequence"
+    },
+    {
+      "signature": "void tile_drive_h_load_sequence(tile_t* tile, const uint8_t *effects, uint8_t count)",
+      "params": [
+        {
+          "name": "effects",
+          "description": "Array of effect indices (1-123, 0 = stop)"
+        },
+        {
+          "name": "count",
+          "description": "Number of effects (1-8)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Load effects into the waveform sequencer without triggering.",
+      "description": "Identical to tile_drive_h_play_sequence() but does NOT assert\nthe GO bit. Use this to pre-load effects before switching to\nexternal trigger mode (edge or level).",
+      "name": "tile_drive_h_load_sequence"
+    },
+    {
+      "signature": "void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot, uint8_t delay_steps)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Slot index 0..7"
+        },
+        {
+          "name": "delay_steps",
+          "description": "Wait length in 10 ms steps (0 = no wait, 0x7F = 1.27 s)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Set a per-slot wait delay in the loaded sequence.",
+      "description": "The 8 sequencer slots can each be marked as either an effect\n(MSB=0, low 7 bits = waveform 1..123) or a wait time (MSB=1,\nlow 7 bits × 10 ms = pause). This call rewrites slot @p slot\nwith a wait of @p delay_steps × 10 ms (max 1270 ms). Use it\nafter tile_drive_h_load_sequence() to insert pauses between\neffects, e.g. play 1, wait 200 ms, play 47.\n\nSlot is silently ignored if >= 8; delay_steps is clipped to 0x7F.",
+      "name": "tile_drive_h_set_sequence_wait"
+    },
+    {
+      "signature": "void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode)",
+      "params": [
+        {
+          "name": "mode",
+          "description": "[0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Set the trigger mode.",
+      "description": "Selects how the waveform sequencer is triggered:\n  - DRIVE_H_TRIG_INTERNAL (default): I2C GO bit, used by play()\n    and play_sequence().\n  - DRIVE_H_TRIG_EDGE: a rising edge on the IN/TRIG pin sets\n    GO. A second rising edge while playing cancels. Pre-load\n    effects with tile_drive_h_load_sequence() before entering\n    this mode.\n  - DRIVE_H_TRIG_LEVEL: GO follows the IN/TRIG pin level.\n    High = playing, low = idle. Falling edge cancels.\n\n              DRIVE_H_TRIG_LEVEL (2)",
+      "name": "tile_drive_h_set_trigger"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_is_playing(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if playing, 0 if idle",
+      "brief": "Check whether an effect or sequence is still playing.",
+      "description": "Reads the GO bit in register 0x0C. The GO bit remains high\nuntil playback completes.",
+      "name": "tile_drive_h_is_playing"
+    },
+    {
+      "signature": "void tile_drive_h_stop(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Stop any currently playing effect.",
+      "description": "",
+      "name": "tile_drive_h_stop"
+    },
+    {
+      "signature": "void tile_drive_h_set_library(tile_t* tile, drive_h_library_t library)",
+      "params": [
+        {
+          "name": "library",
+          "description": "Library (use DRIVE_H_LIB_* constants)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Switch the active waveform library at runtime.",
+      "description": "The DRV2605 ships with 6 ROM libraries: 1–5 are TS2200 ERM\nlibraries (A–E), 6 is the LRA library. Library 0 is empty\n(silence). This call also updates the FEEDBACK_CTRL N_ERM_LRA\nbit so the chip drives the correct actuator type.\n\nThe actuator is external (OUT± pads), so this must match what is\nwired: an LRA (coin / linear) uses DRIVE_H_LIB_LRA, an ERM (spinning\nmass) motor one of the ERM libraries.",
+      "name": "tile_drive_h_set_library"
+    },
+    {
+      "signature": "void tile_drive_h_set_actuator_params(tile_t* tile, uint8_t rated_voltage, uint8_t od_clamp, uint8_t fb_brake, uint8_t loop_gain)",
+      "params": [
+        {
+          "name": "rated_voltage",
+          "description": "RATED_VOLTAGE byte (0 = no change)"
+        },
+        {
+          "name": "od_clamp",
+          "description": "OD_CLAMP byte (0 = no change)"
+        },
+        {
+          "name": "fb_brake",
+          "description": "Feedback brake factor 0..7 (0xFF = no change)"
+        },
+        {
+          "name": "loop_gain",
+          "description": "Loop gain 0..3 (0xFF = no change)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Tune the actuator drive parameters.",
+      "description": "Writes the four registers that the auto-calibration engine and\nsmart-loop architecture consume:\n  - rated_voltage (0x16): full-scale RMS drive level (closed-loop ref).\n  - od_clamp      (0x17): peak overdrive ceiling (also open-loop ref).\n  - fb_brake      (0x1A bits 6:4): feedback brake factor (0=1× .. 6=16×, 7=off).\n  - loop_gain     (0x1A bits 3:2): closed-loop gain (0=Low .. 3=Very high).\n\nPass 0 for rated_voltage / od_clamp to leave that register untouched.\nPass 0xFF for fb_brake / loop_gain to leave them untouched. Run\ntile_drive_h_calibrate() afterwards to update A_CAL_COMP / A_CAL_BEMF.",
+      "name": "tile_drive_h_set_actuator_params"
+    },
+    {
+      "signature": "void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed)",
+      "params": [
+        {
+          "name": "closed",
+          "description": "1 = closed-loop (smart-loop), 0 = open-loop"
+        }
+      ],
+      "notes": [
+        "Switching to open loop makes OD_CLAMP the full-scale level: with init's 0x8C that is ~2.7 Vrms, stronger than closed loop."
+      ],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Switch between open-loop and closed-loop drive at runtime.",
+      "description": "Closed loop (recommended for LRAs) enables smart-loop back-EMF\nfeedback: automatic resonance tracking, overdrive, and braking,\nwith full-scale amplitude referenced to RATED_VOLTAGE. Open loop\ndrives blind: amplitude is referenced to OD_CLAMP, RATED_VOLTAGE\nis ignored, and LRA playback does NOT resonance-track on this\npart — the commutation frequency comes from DRIVE_TIME (see\ntile_drive_h_set_resonance_hz()).\n\nApplies to whichever actuator type is currently selected\n(set_library() / FEEDBACK_CTRL N_ERM_LRA).",
+      "name": "tile_drive_h_set_loop_mode"
+    },
+    {
+      "signature": "void tile_drive_h_set_actuator_voltage(tile_t* tile, uint16_t rated_mv, uint16_t overdrive_mv)",
+      "params": [
+        {
+          "name": "rated_mv",
+          "description": "[300..3600] Rated drive level in mV"
+        },
+        {
+          "name": "overdrive_mv",
+          "description": "[300..5000] Overdrive clamp in mV"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the actuator drive levels in millivolts.",
+      "description": "The friendly-units version of tile_drive_h_set_actuator_params():\nconverts voltages to the RATED_VOLTAGE (0x16) and OD_CLAMP (0x17)\nregister values using the DRV2605 datasheet equations (section\n7.5.2, Eq. 2-5), honouring the currently selected actuator type\n(ERM vs LRA) and, for LRAs, the drive frequency currently\nprogrammed via tile_drive_h_set_resonance_hz().\n\n  - rated_mv:     steady-state full-scale level (RMS for LRA,\n                  average for ERM). Closed-loop reference.\n  - overdrive_mv: peak ceiling for overdrive/braking; also the\n                  full-scale reference in open-loop mode. Must be\n                  >= rated_mv; typically 1.3-1.5x for LRAs.\n\nRun tile_drive_h_calibrate() afterwards — the datasheet requires\nrecalibration whenever these references change.\n\n         above its rated voltage for long effects (play_buzz, RTP)\n         heats it and shortens its life. The output never exceeds\n         V_MOTOR, whatever is set here.\n\nThe control defaults (2230 / 2700 mV) reproduce init's 0x56 / 0x8C\nat init's 238 Hz DRIVE_TIME.",
+      "name": "tile_drive_h_set_actuator_voltage"
+    },
+    {
+      "signature": "void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz)",
+      "params": [
+        {
+          "name": "hz",
+          "description": "[125..300] LRA resonant frequency in Hz"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the LRA resonant frequency the driver targets.",
+      "description": "Programs CONTROL1 DRIVE_TIME to half the LRA period — the\ndatasheet-optimal value. In closed-loop mode this seeds the\nauto-resonance tracker (which then follows the real resonance);\nin open-loop mode it directly sets the commutation frequency.\nRead the actuator's actual resonance with\ntile_drive_h_get_resonance_hz() while driving in closed loop.",
+      "name": "tile_drive_h_set_resonance_hz"
+    },
+    {
+      "signature": "void tile_drive_h_set_resonance_params(tile_t* tile, uint8_t sample_time, uint8_t blanking_time, uint8_t idiss_time)",
+      "params": [
+        {
+          "name": "sample_time",
+          "description": "Sample time 0..3 (0=150µs, 3=300µs; 0xFF = no change)"
+        },
+        {
+          "name": "blanking_time",
+          "description": "Blanking time 0..3 (0xFF = no change)"
+        },
+        {
+          "name": "idiss_time",
+          "description": "Current-dissipation time 0..3 (0xFF = no change)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Tune the LRA auto-resonance tracker.",
+      "description": "Writes Control2 (0x1C) bits for sample / blanking / current-\ndissipation timing. Default values (3 / 1 / 1) work for most\ncoin-type LRAs at 175–235 Hz. Tune only if calibration fails to\nconverge or the actuator runs at the edges of the 125–300 Hz\nwindow.\n\nPass 0xFF for any field to leave that register slice untouched.",
+      "name": "tile_drive_h_set_resonance_params"
+    },
+    {
+      "signature": "void tile_drive_h_set_waveform_timing(tile_t* tile, int8_t overdrive, int8_t sustain_pos, int8_t sustain_neg, int8_t brake)",
+      "params": [
+        {
+          "name": "overdrive",
+          "description": "Overdrive Time Offset (0x0D, signed × 5 ms)"
+        },
+        {
+          "name": "sustain_pos",
+          "description": "Sustain-Time Positive Offset (0x0E, signed × 5 ms)"
+        },
+        {
+          "name": "sustain_neg",
+          "description": "Sustain-Time Negative Offset (0x0F, signed × 5 ms)"
+        },
+        {
+          "name": "brake",
+          "description": "Brake Time Offset (0x10, signed × 5 ms)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Tune the open-loop library waveform timing.",
+      "description": "Adds signed offsets (in 5 ms steps) to the overdrive, sustain,\nand brake portions of every library effect. Offsets are 8-bit\ntwo's complement, so range is -640..+635 ms per knob.\n\nThese offsets are only honoured in open-loop mode — closed-loop\nmode generates them automatically from back-EMF feedback.",
+      "name": "tile_drive_h_set_waveform_timing"
+    },
+    {
+      "signature": "void tile_drive_h_rtp_start(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Enter RTP (Real-Time Playback) mode.",
+      "description": "Sets DRV2605 MODE register to 0x05 (RTP). The chip drives\nthe LRA at its resonant frequency with amplitude controlled\nby tile_drive_h_rtp_write(). Call tile_drive_h_rtp_stop()\nto return to internal trigger mode.",
+      "name": "tile_drive_h_rtp_start"
+    },
+    {
+      "signature": "void tile_drive_h_rtp_write(tile_t* tile, uint8_t amplitude)",
+      "params": [
+        {
+          "name": "amplitude",
+          "description": "[0..127] Amplitude (0 = off, 127 = max)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Write an amplitude value in RTP mode.",
+      "description": "",
+      "name": "tile_drive_h_rtp_write"
+    },
+    {
+      "signature": "void tile_drive_h_set_rtp_format(tile_t* tile, uint8_t unsigned_, uint8_t bidir)",
+      "params": [
+        {
+          "name": "unsigned_",
+          "description": "1 = unsigned data format, 0 = signed (default)"
+        },
+        {
+          "name": "bidir",
+          "description": "1 = bidirectional input (default), 0 = unidirectional"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Set the RTP data format.",
+      "description": "Selects how RTP_INPUT bytes are interpreted:\n  - signed (default for closed-loop bidirectional): 0x80 = full\n    reverse, 0x00 = mid-scale (no drive), 0x7F = full forward.\n  - unsigned (recommended for closed-loop unidirectional and\n    open-loop): 0x00 = no drive, 0xFF = full drive.\n\nAlso exposes the BIDIR_INPUT bit (CONTROL2[7]) which selects\nunidirectional vs bidirectional input interpretation; tie this\nto the same convention as the format flag.",
+      "name": "tile_drive_h_set_rtp_format"
+    },
+    {
+      "signature": "void tile_drive_h_rtp_stop(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Exit RTP mode and return to internal trigger mode.",
+      "description": "",
+      "name": "tile_drive_h_rtp_stop"
+    },
+    {
+      "signature": "void tile_drive_h_pwm_input_start(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Drive the actuator from a PWM signal on pad 2 (TRIG).",
+      "description": "Sets MODE=3 with N_PWM_ANALOG=0. The chip accepts a 10–250 kHz\nPWM signal: duty cycle directly modulates output amplitude\n(50 % = no drive in bidirectional mode; 0 % = no drive in\nunidirectional mode). Useful for offloading waveform generation\nto a hardware timer or audio rendering pipeline.\n\nCall tile_drive_h_set_rtp_format() first if you need to change\nthe unidirectional / bidirectional interpretation.",
+      "name": "tile_drive_h_pwm_input_start"
+    },
+    {
+      "signature": "void tile_drive_h_analog_input_start(tile_t* tile)",
+      "params": [],
+      "notes": [
+        "Pad 2 (TRIG) is a digital pad on the tile. The chip pin itself accepts 0–1.8 V analog, but the driving Core must output a clean analog level — Drive.H has no input filter or AC-coupling cap on TRIG."
+      ],
+      "studio_exposed": true,
+      "brief": "Drive the actuator from an analog voltage on pad 2 (TRIG).",
+      "description": "Sets MODE=3 with N_PWM_ANALOG=1. Reference voltage is 1.8 V:\n0 V → 0 % drive, 0.9 V → 50 %, 1.8 V → 100 %. Useful for waveform\nsynthesis from a DAC or analog signal source.",
+      "name": "tile_drive_h_analog_input_start"
+    },
+    {
+      "signature": "void tile_drive_h_pwm_input_stop(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Exit PWM / analog input mode.",
+      "description": "Returns to internal-trigger mode (MODE=0). Same effect as\ntile_drive_h_audio_stop(); both modes share the IN/TRIG pin.",
+      "name": "tile_drive_h_pwm_input_stop"
+    },
+    {
+      "signature": "void tile_drive_h_audio_start(tile_t* tile)",
+      "params": [],
+      "notes": [
+        "The DRV2605 expects an AC-coupled line-level audio source (1.8 Vpp full-scale). Drive.H rev a does not include a series capacitor on pad 2 — users wanting audio-to-vibe must add their own external 1 µF AC-coupling cap between the audio source and pad 2."
+      ],
+      "studio_exposed": true,
+      "brief": "Drive the actuator from an AC-coupled audio signal.",
+      "description": "Sets MODE=4 (audio-to-vibe), N_PWM_ANALOG=1 (analog), and\nAC_COUPLE=1 (0.9 V common-mode bias on IN/TRIG). The chip\nenvelope-detects the audio and drives haptic vibration at\nmatching intensity.",
+      "name": "tile_drive_h_audio_start"
+    },
+    {
+      "signature": "void tile_drive_h_set_audio_params(tile_t* tile, uint8_t peak_time, uint8_t filter, uint8_t min_input, uint8_t max_input, uint8_t min_drive, uint8_t max_drive)",
+      "params": [
+        {
+          "name": "peak_time",
+          "description": "ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)"
+        },
+        {
+          "name": "filter",
+          "description": "ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)"
+        },
+        {
+          "name": "min_input",
+          "description": "Minimum input gate (0xFF = no change)"
+        },
+        {
+          "name": "max_input",
+          "description": "Full-scale input level (0xFF = no change)"
+        },
+        {
+          "name": "min_drive",
+          "description": "Minimum output drive once active (0xFF = no change)"
+        },
+        {
+          "name": "max_drive",
+          "description": "Full-scale output drive (0xFF = no change)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Tune the audio-to-vibe envelope detector.",
+      "description": "Configures the four ATV control registers:\n  - ATV_CTRL  (0x11): peak-detect time (0=10ms..3=40ms) and\n    low-pass filter cutoff (0=100Hz..3=200Hz).\n  - ATV_MIN_INPUT (0x12): minimum input level below which the\n    envelope is gated (output silent). raw × 1.8/255 V.\n  - ATV_MAX_INPUT (0x13): full-scale input level. raw × 1.8/255 V.\n  - ATV_MIN_DRIVE (0x14): minimum output drive once unmuted.\n    raw / 255 × 100 %.\n  - ATV_MAX_DRIVE (0x15): maximum output drive at full input.\n    raw / 255 × 100 %.\n\nPass 0xFF for any field to leave it untouched.",
+      "name": "tile_drive_h_set_audio_params"
+    },
+    {
+      "signature": "void tile_drive_h_audio_stop(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Exit audio-to-vibe mode.",
+      "description": "Returns to internal-trigger mode (MODE=0) and clears the\nAC_COUPLE bit. Same physical effect as tile_drive_h_pwm_input_stop().",
+      "name": "tile_drive_h_audio_stop"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_get_status(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Raw status byte",
+      "brief": "Read the raw STATUS register (0x00).",
+      "description": "Contains DEVICE_ID[7:5], DIAG_RESULT[3], FB_STS[2],\nOVER_TEMP[1], OC_DETECT[0]. Status bits clear on read.",
+      "name": "tile_drive_h_get_status"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_diagnose(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if actuator passed diagnostics, 0 if fault detected",
+      "brief": "Run actuator diagnostics.",
+      "description": "Enters diagnostic mode (MODE=6), triggers GO, and polls\nfor completion. The DRV2605 checks whether the actuator is\npresent, open, or shorted.",
+      "name": "tile_drive_h_diagnose"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_calibrate(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if calibration passed, 0 if it failed to converge",
+      "brief": "Run auto-calibration for the connected actuator.",
+      "description": "Enters calibration mode (MODE=7) with datasheet-recommended\nparameters, triggers GO, and polls for completion. On success,\nthe DRV2605 stores optimized A_CAL_COMP and A_CAL_BEMF values\nthat improve playback fidelity.",
+      "name": "tile_drive_h_calibrate"
+    },
+    {
+      "signature": "uint16_t tile_drive_h_get_vbat_mv(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Battery voltage in mV (e.g. 3300 = 3.3 V), 0 if idle",
+      "brief": "Read supply voltage in millivolts.",
+      "description": "Reads the VBAT register (0x21). The reading is only valid\nwhile the device is actively driving a waveform (RTP, library\nplayback, etc.).",
+      "name": "tile_drive_h_get_vbat_mv"
+    },
+    {
+      "signature": "uint16_t tile_drive_h_get_resonance_hz(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Resonant frequency in Hz (e.g. 235), 0 if unavailable",
+      "brief": "Read LRA resonant frequency in Hz.",
+      "description": "Reads the LRA_PERIOD register (0x22). The reading is only\nvalid while the device is actively driving a waveform and\nmust not be polled during braking.",
+      "name": "tile_drive_h_get_resonance_hz"
+    },
+    {
+      "signature": "void tile_drive_h_standby(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Enter low-power standby.",
+      "description": "Sets the STANDBY bit in the MODE register. The device retains\nregister values and can be woken quickly with\ntile_drive_h_wake().",
+      "name": "tile_drive_h_standby"
+    },
+    {
+      "signature": "void tile_drive_h_wake(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Wake from standby.",
+      "description": "Clears the STANDBY bit in the MODE register. The device\nreturns to the active state, ready for playback.",
+      "name": "tile_drive_h_wake"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_program_otp(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "return": "1 on success, 0 on failure / already-programmed",
+      "brief": "Burn the current calibration into on-chip OTP.",
+      "description": "Writes the current contents of registers 0x16–0x1A\n(RATED_VOLTAGE, OD_CLAMP, A_CAL_COMP, A_CAL_BEMF, FEEDBACK_CTRL)\nto the DRV2605's nonvolatile OTP cells. After this, those values\nbecome the power-on defaults — the chip skips run-time calibration\non subsequent boots.\n\n         once per device. A bad programming run permanently\n         mistunes the chip. NOT exposed to Studio by design.\n\nPre-conditions:\n  - Run tile_drive_h_calibrate() first and confirm pass.\n  - VDD must be 4.0–4.4 V at the moment of programming\n    (datasheet section 7.5.7). Lower VDD silently corrupts the cells.\n\nReturns 1 if the OTP_STATUS bit reads 1 after programming, 0 if\nthe burn failed or OTP was already programmed.",
+      "name": "tile_drive_h_program_otp"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_get_otp_status(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "return": "1 if OTP is programmed, 0 if unprogrammed",
+      "brief": "Read the OTP_STATUS bit.",
+      "description": "Returns 1 if the chip's OTP cells have already been programmed\n(registers 0x16–0x1A boot from OTP rather than chip defaults).",
+      "name": "tile_drive_h_get_otp_status"
+    },
+    {
+      "signature": "void tile_drive_h_play_click(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Fire a single sharp tactile click.",
+      "description": "Plays ROM library effect 1 (\"Strong Click — 100%\") once. Returns\nimmediately; the chip drives the click after the call returns.\nUse @ref tile_drive_h_is_playing to poll for completion.",
+      "name": "tile_drive_h_play_click"
+    },
+    {
+      "signature": "void tile_drive_h_play_double_tap(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Fire a double tap.",
+      "description": "Loads the sequencer with ROM library effect 10 (\"Double Click —\n100%\"), a two-click effect, and triggers playback. The\nchip handles the inter-tap timing internally. Returns\nimmediately; use @ref tile_drive_h_is_playing to poll.",
+      "name": "tile_drive_h_play_double_tap"
+    },
+    {
+      "signature": "void tile_drive_h_play_alert(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Play an alert pattern.",
+      "description": "Sequences three ROM-library effects: effect 14 (\"Strong Buzz —\n100%\") → effect 56 (\"Pulsing Sharp 1 — 100%\") → effect 14.\nReturns immediately; use @ref tile_drive_h_is_playing to poll.",
+      "name": "tile_drive_h_play_alert"
+    },
+    {
+      "signature": "void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms)",
+      "params": [
+        {
+          "name": "ms",
+          "description": "[0..65535] Duration in milliseconds"
+        }
+      ],
+      "notes": [
+        "Blocking call — does not return until the buzz completes. For longer non-blocking patterns, drive RTP directly via"
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Play a sustained vibration for `ms` milliseconds.",
+      "description": "Switches into RTP (Real-Time Playback) mode, drives a constant\nfull-amplitude signal for `ms` milliseconds, then stops the RTP\nstream and returns to internal-trigger mode.\n\n       / @ref tile_drive_h_rtp_stop.",
+      "name": "tile_drive_h_play_buzz"
+    },
+    {
+      "signature": "uint8_t tile_drive_h_is_calibrated(tile_t* tile)",
+      "params": [],
+      "notes": [
+        "STATUS bits clear on read, so the result reflects the most recent calibration / diagnostic run."
+      ],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if calibration converged, 0 otherwise",
+      "brief": "Check whether smart-loop calibration converged.",
+      "description": "Reads the STATUS register's DIAG_RESULT bit, which the auto-\ncalibration engine populates on completion: 0 = converged\n(calibration produced valid A_CAL_COMP / A_CAL_BEMF values),\n1 = failed. Only meaningful after a prior call to @ref\ntile_drive_h_calibrate.",
+      "name": "tile_drive_h_is_calibrated"
+    }
+  ],
+  "source_file": "tile_drive_h.h",
+  "version": "4.3.0",
+  "tile_family": "Drive",
+  "tile_name": "H",
+  "display_name": "Drive.H",
+  "vibe_settings": [
+    {
+      "label": "Actuator type",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_library",
+      "param": "library",
+      "kind": "choice",
+      "choices": [
+        "ERM motor: TS2200 Library A (fixed open-loop overdrive)",
+        "ERM motor: TS2200 Library B (no overdrive)",
+        "ERM motor: TS2200 Library C (no overdrive)",
+        "ERM motor: TS2200 Library D (no overdrive)",
+        "ERM motor: TS2200 Library E (no overdrive)",
+        "LRA (coin / linear actuator): LRA library, auto-resonance"
+      ],
+      "default": "LRA (coin / linear actuator): LRA library, auto-resonance"
+    },
+    {
+      "label": "Actuator rated voltage",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_actuator_voltage",
+      "param": "rated_mv",
+      "kind": "number",
+      "range": [
+        0.3,
+        3.6
+      ],
+      "unit": "V",
+      "default": 2230
+    },
+    {
+      "label": "Closed-loop drive",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_loop_mode",
+      "param": "closed",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "Overdrive clamp",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_actuator_voltage",
+      "param": "overdrive_mv",
+      "kind": "number",
+      "range": [
+        0.3,
+        5
+      ],
+      "unit": "V",
+      "default": 2700
+    },
+    {
+      "label": "LRA resonance",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_resonance_hz",
+      "param": "hz",
+      "kind": "number",
+      "range": [
+        125,
+        300
+      ],
+      "default": 238
+    }
+  ]
+}

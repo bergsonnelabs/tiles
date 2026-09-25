@@ -1,0 +1,461 @@
+{
+  "rev": "a",
+  "name": "P.N",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "power-good output (active-high open drain with pull-up)",
+          "type": "digital",
+          "function": "PG",
+          "direction": "output"
+        },
+        {
+          "note": "simultaneous active-low reset (configurable press duration; default >10s)",
+          "type": "digital",
+          "function": "reset",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "firmware configurable",
+          "type": "digital",
+          "function": "GPIO1",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "active-low (with internal pull up) trigger for ship and hold modes",
+          "type": "digital",
+          "function": "SHPHLD",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "battery positive terminal",
+          "type": "power",
+          "function": "VBATT+",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "0.8-3.0V regulated LDO output; must be enabled via I2C",
+          "type": "power",
+          "function": "VLDO",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "default = 1.8V or VBATT+, whichever is GREATER",
+          "type": "power",
+          "function": "VOUT",
+          "direction": "output"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.3,
+      "min": 1.8,
+      "type": "system",
+      "notes": "defaults to 1.8V or the battery voltage (VBATT+), whichever is GREATER",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "output",
+      "is_required": true,
+      "max_current": "150mA",
+      "positive_pad": [
+        "10"
+      ]
+    },
+    {
+      "max": 3,
+      "min": 0.8,
+      "type": "system",
+      "notes": "must be enabled via I2C",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "LDO",
+      "direction": "output",
+      "is_required": true,
+      "max_current": "50mA",
+      "positive_pad": [
+        "9"
+      ]
+    },
+    {
+      "max": 3.4,
+      "min": 0.7,
+      "type": "primary battery",
+      "notes": "",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "",
+      "positive_pad": [
+        "7"
+      ]
+    }
+  ],
+  "config": {
+    "gpio1": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use GPIO1 sideband",
+      "binding": {
+        "pad": "3",
+        "kind": "intent"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "input-floating",
+              "register": "GPIO1.MODE"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "input",
+                    "output"
+                  ]
+                },
+                "tag": "gpio1.attached",
+                "from": {
+                  "pad": "3",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "text": "Configure GPIO1 direction/mode via I2C as needed",
+              "type": "note"
+            }
+          ]
+        }
+      ],
+      "description": "Pad 3 is a general-purpose GPIO on the PMIC. When true, wire to a Core pad and configure direction via I2C. When false, leave unused."
+    },
+    "shipHold": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use SHPHLD (ship-hold) input",
+      "binding": {
+        "pad": "6",
+        "kind": "intent"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "text": "SHPHLD floats; firmware can still command ship mode via I2C",
+              "type": "note"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "output"
+                  ]
+                },
+                "tag": "shipHold.attached",
+                "from": {
+                  "pad": "6",
+                  "kind": "tile"
+                },
+                "role": "control"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "text": "SHPHLD wired to Core GPIO; firmware drives low to force ship mode",
+              "type": "note"
+            }
+          ]
+        }
+      ],
+      "description": "When true, pad 6 (SHPHLD) is wired to a Core GPIO output so firmware can drive low to enter ship mode (extreme low-power). When false, ship mode entry is via I2C only."
+    },
+    "powerGood": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use PG (power-good) output",
+      "binding": {
+        "pad": "2",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "PG_CONFIG"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "input"
+                  ]
+                },
+                "tag": "powerGood.attached",
+                "from": {
+                  "pad": "2",
+                  "kind": "tile"
+                },
+                "role": "data"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "PG_CONFIG"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "family": "Power",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 23,
+  "headline": "primary-cell battery boost regulator",
+  "components": [
+    {
+      "url": "https://www.nordicsemi.com/Products/nPM2100",
+      "part": "nPM2100",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/23/Nordic_Semiconductor-nPM2100.pdf",
+      "manufacturer": "Nordic Semiconductor"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x74"
+          }
+        ],
+        "data_bits": [
+          8
+        ],
+        "address_bits": [
+          7
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-05-01T12:44:26.408Z",
+  "description": "The Power.P.N tile is a primary-cell power-management subsystem based on the Nordic nPM2100 PMIC. Drawing power  from one or two alkaline cells or a single coin cell battery with a total voltage of between 0.7 and 3.4V, the boost regulator delivers 1.8 V to 3.3 V at up to 150 mA, with a secondary LDO/load-switch output providing 0.8 V to 3.0 V at up to 50 mA.  In addition to I2C configuration, monitoring, and advanced fuel gauging, pads are exposed for power-good indication, reset, ship-mode control, and one GPIO.",
+  "json_version": "0.9",
+  "application_notes": [
+    {
+      "sort": 0,
+      "details": "The output voltage of the 150mA-max boost regulator defaults to 1.8V or the battery voltage (VBATT+), whichever is GREATER, with higher voltages up to 3.3V configurable via I2C.",
+      "heading": "VOUT",
+      "image_url": ""
+    },
+    {
+      "sort": 1,
+      "details": "Off by default, the 50mA regulated output can be configured via I2C to be between 0.8 and 3.0V.",
+      "heading": "VLDO",
+      "image_url": ""
+    },
+    {
+      "sort": 2,
+      "details": "The electrical configuration of pad 2 allows it to be function simultaneously as both the power-good output (as an open-drain with a pull-up resistor) and an active-low reset input.",
+      "heading": "PG / RESET",
+      "image_url": ""
+    }
+  ]
+}
