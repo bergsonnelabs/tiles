@@ -54,6 +54,7 @@ static uint8_t resolve_id(uint8_t instance)
  * ================================================================ */
 
 typedef struct {
+    uint8_t  addr;         /* the tile->id this slot belongs to, 0 = free */
     uint16_t mv[SENSE_ADC_6_CHANNELS];
     uint16_t supply_mv;
     uint8_t  status;
@@ -66,10 +67,25 @@ typedef struct {
 
 static adc6_state_t state[NUM_INSTANCES];
 
+/* Slots are keyed by the address a handle talks to, not by the default
+ * address table, so a tile moved to its own address (set_address) gets its
+ * own state instead of sharing instance 0's. */
 static adc6_state_t *state_for(tile_t *tile)
 {
     for (uint8_t i = 0; i < NUM_INSTANCES; i++)
-        if (id_table[i] == tile->id) return &state[i];
+        if (state[i].addr == tile->id) return &state[i];
+    return &state[0];
+}
+
+/** Claim a slot for this address: its own if it has one, else the
+ *  instance's, else any free one. */
+static adc6_state_t *state_claim(uint8_t addr, uint8_t instance)
+{
+    for (uint8_t i = 0; i < NUM_INSTANCES; i++)
+        if (state[i].addr == addr) return &state[i];
+    if (instance < NUM_INSTANCES) return &state[instance];
+    for (uint8_t i = 0; i < NUM_INSTANCES; i++)
+        if (state[i].addr == 0) return &state[i];
     return &state[0];
 }
 
@@ -101,6 +117,31 @@ static uint8_t write_regs(tile_t *tile, uint8_t reg, const uint8_t *buf, uint16_
 static uint8_t read_u8(tile_t *tile, uint8_t reg, uint8_t *out)
 {
     return read_regs(tile, reg, out, 1);
+}
+
+/** Poll a request register until the tile answers it. Reads the request
+ *  magic itself (the host's write, not yet picked up) or 0 (idle) while it
+ *  is still working; anything else is the result. */
+static uint8_t wait_result(tile_t *tile, uint8_t reg, uint8_t request,
+                           uint8_t tries, uint8_t step_ms)
+{
+    uint8_t result = request;
+    for (uint8_t i = 0; i < tries; i++) {
+        tile->hal->delay_ms(step_ms);
+        if (read_u8(tile, reg, &result) && result != request && result != 0)
+            return result;
+    }
+    return result;
+}
+
+/** Commit the staged address and the live settings to the tile's EEPROM. */
+static uint8_t commit(tile_t *tile, uint8_t addr)
+{
+    uint8_t w[2] = { addr, COMMIT_REQUEST };
+    if (!write_regs(tile, REG_ADDR_SET, w, 2)) return 0;
+    /* Storing holds the bus for up to ~30 ms (the tile stretches the
+     * clock through it), plus a main-loop pass to pick the request up. */
+    return wait_result(tile, REG_COMMIT, COMMIT_REQUEST, 20, 5) == RESULT_OK;
 }
 
 /** Refresh the cached settings from the tile. */
@@ -144,8 +185,9 @@ void tile_sense_adc_6_init(tiles_pal_t *hal, uint8_t instance,
         return;
     }
 
-    adc6_state_t *s = state_for(tile);
+    adc6_state_t *s = state_claim(tile->id, instance);
     memzero(s, sizeof(adc6_state_t));
+    s->addr = tile->id;
 
     if (hal->i2c_is_ready(hal->handle, tile->id) != 0) {
         tile->state = TILE_STATE_ERROR;
@@ -164,6 +206,12 @@ void tile_sense_adc_6_init(tiles_pal_t *hal, uint8_t instance,
     s->fw_version = id[1];
 
     refresh_settings(tile, s);
+
+    /* The tile measures its supply once, at its own power-up, so one read
+     * here is enough. */
+    uint8_t v[2];
+    if (read_regs(tile, REG_SUPPLY, v, 2))
+        s->supply_mv = (uint16_t)(v[0] | ((uint16_t)v[1] << 8));
 
     /* Apply only what the caller asked for, so a tile that was
      * configured and saved comes up the way it was left. */
@@ -199,12 +247,6 @@ uint8_t tile_sense_adc_6_update(tile_t *tile)
     s->seq    = d[1];
     for (uint8_t i = 0; i < SENSE_ADC_6_CHANNELS; i++)
         s->mv[i] = (uint16_t)(d[2 + 2 * i] | ((uint16_t)d[3 + 2 * i] << 8));
-
-    /* Cheap and useful: the supply doubles as full scale, and it moves
-     * only with the rail. */
-    uint8_t v[2];
-    if (read_regs(tile, REG_SUPPLY, v, 2))
-        s->supply_mv = (uint16_t)(v[0] | ((uint16_t)v[1] << 8));
 
     return 1;
 }
@@ -256,6 +298,8 @@ uint8_t tile_sense_adc_6_set_rate(tile_t *tile, uint8_t rate_hz,
     if (rate_hz  < 1 || rate_hz  > SENSE_ADC_6_RATE_MAX)     return 0;
     if (oversamp < 1 || oversamp > SENSE_ADC_6_OVERSAMP_MAX) return 0;
     if (window   < 1 || window   > SENSE_ADC_6_WINDOW_MAX)   return 0;
+    if ((uint16_t)oversamp * window  > SENSE_ADC_6_SWEEPS_MAX)     return 0;
+    if ((uint16_t)rate_hz  * oversamp > SENSE_ADC_6_SWEEP_HZ_MAX)  return 0;
 
     uint8_t w[4] = { rate_hz, oversamp, window, APPLY_REQUEST };
     if (!write_regs(tile, REG_RATE, w, 4)) {
@@ -263,13 +307,9 @@ uint8_t tile_sense_adc_6_set_rate(tile_t *tile, uint8_t rate_hz,
         return 0;
     }
 
-    /* The tile applies within one output period. Wait the slowest one
-     * (1 s at 1 Hz) only if it has to: poll instead of sleeping long. */
-    uint8_t result = 0;
-    for (uint8_t tries = 0; tries < 50; tries++) {
-        tile->hal->delay_ms(4);
-        if (read_u8(tile, REG_APPLY, &result) && result != 0) break;
-    }
+    /* The tile's main loop restarts acquisition on its next pass, a few
+     * ms at most (longer only if an EEPROM commit is in progress). */
+    uint8_t result = wait_result(tile, REG_APPLY, APPLY_REQUEST, 50, 4);
 
     if (result != RESULT_OK) {
         /* Rejected: the tile restores its own settings, so pick them up
@@ -302,28 +342,16 @@ uint8_t tile_sense_adc_6_get_window(tile_t *tile)
 
 uint8_t tile_sense_adc_6_save(tile_t *tile)
 {
-    uint8_t cur = 0;
+    uint8_t staged = 0;
 
     /* The tile stores address and settings together, so send back the
-     * address it already has. Saving must not move a tile by accident. */
-    if (!read_u8(tile, REG_ADDR_CUR, &cur)) return 0;
+     * address already staged: the one it boots with, or one a previous
+     * set_address() committed for the next power-up. Re-sending the
+     * address it is answering on now would undo that. */
+    if (!read_u8(tile, REG_ADDR_SET, &staged)) return 0;
 
-    uint8_t w[2] = { cur, COMMIT_REQUEST };
-    if (!write_regs(tile, REG_ADDR_SET, w, 2)) {
+    if (!commit(tile, staged)) {
         TILE_ON_ERROR(tile, "sense_adc_6: save failed");
-        return 0;
-    }
-
-    /* Storing holds the bus for up to ~30 ms, and the tile stretches the
-     * clock through it, so the first read may simply be slow. */
-    uint8_t result = 0;
-    for (uint8_t tries = 0; tries < 20; tries++) {
-        tile->hal->delay_ms(5);
-        if (read_u8(tile, REG_COMMIT, &result) && result != 0) break;
-    }
-
-    if (result != RESULT_OK) {
-        TILE_ON_ERROR(tile, "sense_adc_6: save rejected");
         return 0;
     }
     return 1;
@@ -337,20 +365,8 @@ uint8_t tile_sense_adc_6_set_address(tile_t *tile, uint8_t addr)
 {
     if (addr < SENSE_ADC_6_ADDR_MIN || addr > SENSE_ADC_6_ADDR_MAX) return 0;
 
-    uint8_t w[2] = { addr, COMMIT_REQUEST };
-    if (!write_regs(tile, REG_ADDR_SET, w, 2)) {
-        TILE_ON_ERROR(tile, "sense_adc_6: address write failed");
-        return 0;
-    }
-
-    uint8_t result = 0;
-    for (uint8_t tries = 0; tries < 20; tries++) {
-        tile->hal->delay_ms(5);
-        if (read_u8(tile, REG_COMMIT, &result) && result != 0) break;
-    }
-
-    if (result != RESULT_OK) {
-        TILE_ON_ERROR(tile, "sense_adc_6: address rejected");
+    if (!commit(tile, addr)) {
+        TILE_ON_ERROR(tile, "sense_adc_6: address not stored");
         return 0;
     }
 

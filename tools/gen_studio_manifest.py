@@ -1430,7 +1430,7 @@ def main():
             "definition": ROOT / "definitions/Sense-ADC-6-a.json",
             "prefix": "tile_sense_adc_6",
             "init": "tile_sense_adc_6_init",
-            "version": "1.0.0",
+            "version": "1.1.0",
         },
         {
             "path": ROOT / "drivers/tile_drive_h.h",

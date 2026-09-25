@@ -12,10 +12,11 @@
  * the block straight into a uint16 array.
  *
  *   0x00  WHO_AM_I   0x6D, constant
- *   0x01  VERSION    0x12 = v1.2
+ *   0x01  VERSION    0x13 = v1.3
  *   0x02  STATUS     bit0 sample valid
  *                    bit1 DMA running
- *                    bit2 VDDA calibration succeeded
+ *                    bit2 VDDA measured against VREFINT (clear: the
+ *                         3.3 V nominal fallback is in use)
  *   0x03  SEQ        increments once per published set, wraps at 255
  *   0x04  CH0 mV     pad 2  (ADC3)
  *   0x06  CH1 mV     pad 3  (ADC0)
@@ -23,7 +24,7 @@
  *   0x0A  CH3 mV     pad 7  (ADC2)
  *   0x0C  CH4 mV     pad 8  (ADC5)
  *   0x0E  CH5 mV     pad 9  (ADC8)
- *   0x10  VDDA mV    measured supply rail, for host sanity checks
+ *   0x10  VDDA mV    supply rail, measured once at power-up
  *   0x12  ADDR_CUR   the address this hub is answering on right now
  *   0x13  ADDR_SET   writable, staged address for the next commit
  *   0x14  COMMIT     writable, see "Saving"
@@ -132,7 +133,7 @@
 #define HUB_I2C_ADDR_DEFAULT  0x28
 #endif
 #define HUB_WHO_AM_I    0x6D
-#define HUB_VERSION     0x12   /* v1.2 — rate and window over I2C */
+#define HUB_VERSION     0x13   /* v1.3 — explicit sampling time, rounded averages */
 
 /* Smallest and largest addresses I2C leaves to devices. Below 0x08 and
  * above 0x77 are reserved by the spec, and a board that took one would
@@ -470,7 +471,9 @@ static void publish(void)
         for (uint16_t k = 0; k < ring_scans; k++) {
             acc += dma_buf[slot + k * N_CH];
         }
-        uint16_t raw = (uint16_t)(acc / ring_scans);
+        /* Round to nearest: truncating biased every reading half a
+         * count (about 0.4 mV at 3.3 V) low. */
+        uint16_t raw = (uint16_t)((acc + ring_scans / 2) / ring_scans);
         snap[i] = (uint16_t)core_adc_raw_to_mv(adc, raw);
     }
 
@@ -513,7 +516,17 @@ int main(void)
      * DMA hijacks the channel selection. hal_adc_read_vdda_mv caches the
      * result, so every later millivolt conversion reuses it. */
     uint32_t vdda_mv = core_adc_vdd(adc);
-    if (vdda_mv) pub_status |= ST_VDDA;
+    if (adc->vdda_calibrated) pub_status |= ST_VDDA;
+
+    /* The L0 has one sampling time for every channel (RM0377 ADC_SMPR), so
+     * the last channel added sets it. coregen adds the pads at MED (7.5
+     * cycles, under 0.5 us), and the VDDA measurement above left it at
+     * SLOW only as a side effect. Set it on purpose: 160.5 cycles at the
+     * 16 MHz HSI16 ADC clock is about 10 us, which is what lets the inputs
+     * take 30-50 kOhm sources, and what the ~65 us scan time assumes. */
+    for (int i = 0; i < N_CH; i++) {
+        core_adc_add(adc, CH_PAD[i], HAL_ADC_SAMP_SLOW);
+    }
 
     for (int i = 0; i < N_CH; i++) {
         ch_slot[i] = core_adc_dma_slot(adc, CH_PAD[i]);

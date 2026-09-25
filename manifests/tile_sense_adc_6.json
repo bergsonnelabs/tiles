@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e95f3f8",
+  "source": "tiles@69a297c",
   "tile": "Sense.ADC.6",
   "palette": {
     "label": "Sense.ADC.6",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_adc_6",
     "header": "tile_sense_adc_6.h",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "handle": {
     "type": "tile_t",
@@ -149,8 +149,77 @@
         }
       ],
       "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "rate_hz",
+          "label": "Output rate",
+          "tier": "basic",
+          "scope": "config",
+          "default": 100
+        },
+        {
+          "param": "window",
+          "label": "Averaging window (periods)",
+          "tier": "basic",
+          "scope": "config",
+          "default": 1
+        },
+        {
+          "param": "oversamp",
+          "label": "Sweeps per period",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 8
+        }
+      ],
       "dsl_returns": "bool",
-      "receiver": "tile_t *"
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_rate.oversamp"
+                  },
+                  {
+                    "ref": "set_rate.window"
+                  }
+                ]
+              },
+              {
+                "num": 32
+              }
+            ]
+          },
+          "message": "Sweeps per period times the averaging window can't exceed 32, the size of the tile's sample buffer. Lower one of them."
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "op": "*",
+                "args": [
+                  {
+                    "ref": "set_rate.rate_hz"
+                  },
+                  {
+                    "ref": "set_rate.oversamp"
+                  }
+                ]
+              },
+              {
+                "num": 8000
+              }
+            ]
+          },
+          "message": "Output rate times sweeps per period can't exceed 8000 sweeps a second. Lower the rate or the sweeps per period."
+        }
+      ]
     },
     {
       "qname": [
