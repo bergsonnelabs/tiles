@@ -3,15 +3,14 @@
   "clock": "max",
   "bootloader": "rom",
   "pads": {
-    "3": "GPIO.IN",
+    "3": "GPIO.OUT",
     "4": "I2C1.CLK",
     "5": "I2C1.DAT"
   },
   "gpio": {
     "3": {
-      "direction": "in",
-      "pull": "none",
-      "exti": "falling"
+      "output_type": "open-drain",
+      "default": "high"
     }
   },
   "interfaces": {

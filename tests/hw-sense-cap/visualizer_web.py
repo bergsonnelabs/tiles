@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Web-based live touch visualizer for the Sense.CAP 2x3 surface.
+"""Web-based live touch visualizer for the Sense.CAP tile (driver v1.0).
 
 Reads the hw-sense-cap firmware serial stream and serves a live view at
-http://localhost:8765 — surface heatmap, finger + trail, delta bars with
-threshold, event ticker. Stdlib + pyserial only; the page is a single
-HTML5 canvas fed by Server-Sent Events.
+http://localhost:8765: surface heatmap, finger + trail, delta bars with
+threshold, event ticker; /slider is a one-axis scroll view. The surface
+geometry (channels, resolution, axis switch) comes from the firmware's S
+line, so every layout preset draws correctly. Stdlib + pyserial only; the
+page is a single HTML5 canvas fed by Server-Sent Events.
 
 Usage:  python3 visualizer_web.py [serial-port]
 """
@@ -25,7 +27,10 @@ state_lock = threading.Lock()
 ser_handle = None
 state = {
     "t": 0, "nf": 0, "x": 0, "y": 0, "strength": 0,
-    "zone": -1, "touchbits": 0, "deltas": [0] * 6, "alive": False,
+    "zone": -1, "touchbits": 0, "deltas": [0] * 6, "counts": [0] * 6,
+    "alive": False,
+    # Surface geometry from the S line (defaults: the 2x3 grid).
+    "layout": 1, "nrx": 2, "ntx": 3, "xres": 512, "yres": 256, "sw": 1,
 }
 events = deque(maxlen=200)
 event_seq = 0
@@ -56,15 +61,26 @@ def reader():
                 if not line:
                     continue
                 parts = line.split(",")
-                if parts[0] == "D" and len(parts) >= 14:
+                if parts[0] == "S" and len(parts) >= 7:
                     try:
                         with state_lock:
+                            state.update(
+                                layout=int(parts[1]), nrx=int(parts[2]),
+                                ntx=int(parts[3]), xres=int(parts[4]),
+                                yres=int(parts[5]), sw=int(parts[6]))
+                    except ValueError:
+                        pass
+                elif parts[0] == "D" and len(parts) >= 8:
+                    try:
+                        with state_lock:
+                            n = (len(parts) - 8) // 2  # deltas then counts
                             state.update(
                                 t=int(parts[1]), nf=int(parts[2]),
                                 x=int(parts[3]), y=int(parts[4]),
                                 strength=int(parts[5]), zone=int(parts[6]),
                                 touchbits=int(parts[7], 16),
-                                deltas=[int(v) for v in parts[8:14]])
+                                deltas=[int(v) for v in parts[8:8 + n]],
+                                counts=[int(v) for v in parts[8 + n:8 + 2 * n]])
                     except ValueError:
                         pass
                 elif parts[0] == "E" and len(parts) >= 2:
@@ -73,7 +89,7 @@ def reader():
                         events.append({"i": event_seq,
                                        "t": time.strftime("%H:%M:%S"),
                                        "msg": " ".join(parts[1:])})
-                elif "recipe" in line:
+                elif line in ("PASS", "FAIL (ATI)") or "IQS7211A" in line:
                     with state_lock:
                         event_seq += 1
                         events.append({"i": event_seq,
@@ -103,11 +119,21 @@ PAGE = """<!DOCTYPE html>
 </style></head>
 <body>
 <div id="wrap">
-  <h3 id="hdr">Sense.CAP 2&times;3 &mdash; connecting&hellip;</h3>
+  <h3 id="hdr">Sense.CAP &mdash; connecting&hellip;</h3>
   <div style="margin-bottom:8px">
     <button onclick="cmd('r')">Re-ATI (re-baseline)</button>
+    <button onclick="cmd('x')">MCLR reset</button>
+    <a href="/slider" style="color:#8090a0;margin-left:10px">scroll view</a>
+  </div>
+  <div style="margin-bottom:8px">
     sensitivity:
     <button onclick="cmd('s1')">1</button><button onclick="cmd('s2')">2</button><button onclick="cmd('s3')">3</button><button onclick="cmd('s4')">4</button><button onclick="cmd('s5')">5</button>
+    stickiness:
+    <button onclick="cmd('h1')">1</button><button onclick="cmd('h2')">2</button><button onclick="cmd('h3')">3</button><button onclick="cmd('h4')">4</button><button onclick="cmd('h5')">5</button>
+  </div>
+  <div style="margin-bottom:8px">
+    layout:
+    <button onclick="cmd('l1')">grid 2x3</button><button onclick="cmd('l2')">buttons 2x3</button><button onclick="cmd('l3')">slider 1x3</button><button onclick="cmd('l4')">slider 1x4</button><button onclick="cmd('l0')">none</button>
   </div>
   <canvas id="cv" width="820" height="560"></canvas>
 </div>
@@ -116,9 +142,18 @@ PAGE = """<!DOCTYPE html>
   <div id="ticker"></div>
 </div>
 <script>
-const XR=512, YR=256, COLS=3, ROWS=2, SC=1.6;
-const W=XR*SC, H=YR*SC, BAR=120, PAD=10;
+// Geometry follows the firmware's S line; the canvas keeps a fixed size.
+const W=820-20, H=410, BAR=120, PAD=10, LAYOUTS=['none','grid 2x3','buttons 2x3','slider 1x3','slider 1x4'];
 const DELTA_FULL=200, THRESH=Math.floor(900*8/128);
+let XR=512, YR=256, COLS=3, ROWS=2, NRX=2, SW=1, SX=W/512, SY=H/256;
+function geom(d){
+  NRX=Math.max(1,d.nrx); SW=d.sw;
+  COLS=SW?d.ntx:d.nrx; ROWS=SW?d.nrx:d.ntx;
+  XR=Math.max(1,d.xres); YR=Math.max(1,d.yres);
+  SX=W/XR; SY=H/YR;
+}
+// channel for grid cell (c, r): along the Rxs first, then the next Tx (5.1.1)
+function chan(c,r){ return SW ? c*NRX+r : r*NRX+c; }
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const ticker=document.getElementById('ticker'), hdr=document.getElementById('hdr');
 let trail=[], seen=0;
@@ -133,9 +168,10 @@ function draw(s){
   ctx.clearRect(0,0,cv.width,cv.height);
   const cw=W/COLS, ch=H/ROWS;
   for(let c=0;c<COLS;c++) for(let r=0;r<ROWS;r++){
-    const z=c*ROWS+r, x0=PAD+c*cw, y0=PAD+r*ch;
+    const z=chan(c,r), x0=PAD+c*cw, y0=PAD+r*ch;
     const touched=(s.touchbits>>z)&1;
-    ctx.fillStyle=heat(s.deltas[z]);
+    const dz=s.deltas[z]||0;
+    ctx.fillStyle=heat(dz);
     ctx.fillRect(x0+3,y0+3,cw-6,ch-6);
     ctx.strokeStyle=touched?'#eeeeee':'#39424d';
     ctx.lineWidth=touched?3:1;
@@ -143,17 +179,17 @@ function draw(s){
     ctx.fillStyle='#8090a0'; ctx.font='bold 13px Menlo';
     ctx.fillText(z, x0+10, y0+20);
     ctx.fillStyle='#c0cad4'; ctx.font='11px Menlo';
-    ctx.fillText((s.deltas[z]>=0?'+':'')+s.deltas[z], x0+cw-52, y0+ch-12);
+    ctx.fillText((dz>=0?'+':'')+dz, x0+cw-52, y0+ch-12);
   }
   // trail + finger
   trail.forEach((p,i)=>{
     const f=i/Math.max(1,trail.length), r=2+4*f;
     ctx.fillStyle=`rgba(${64+f*143|0},220,60,${0.15+0.35*f})`;
     ctx.beginPath();
-    ctx.arc(PAD+p[0]*SC,PAD+p[1]*SC,r,0,7); ctx.fill();
+    ctx.arc(PAD+p[0]*SX,PAD+p[1]*SY,r,0,7); ctx.fill();
   });
   if(s.nf>0 && s.x<65535){
-    const fx=PAD+s.x*SC, fy=PAD+s.y*SC, r=10+Math.min(20,s.strength/40);
+    const fx=PAD+s.x*SX, fy=PAD+Math.min(s.y,YR)*SY, r=10+Math.min(20,s.strength/40);
     ctx.strokeStyle='#ffe066'; ctx.lineWidth=3;
     ctx.beginPath(); ctx.arc(fx,fy,r,0,7); ctx.stroke();
     ctx.fillStyle='#ffe066'; ctx.font='12px Menlo';
@@ -161,10 +197,10 @@ function draw(s){
                  Math.min(fx,W-140), Math.max(16,fy-18));
   }
   // delta bars
-  const top=PAD+H+12, bw=W/6,
+  const nch=Math.max(1,s.deltas.length), top=PAD+H+12, bw=W/nch,
         span=Math.max(DELTA_FULL,...s.deltas.map(Math.abs)),
         mid=top+(BAR-24)/2;
-  for(let z=0;z<6;z++){
+  for(let z=0;z<s.deltas.length;z++){
     const x0=PAD+z*bw+10, h=(s.deltas[z]/span)*(BAR-28)/2;
     ctx.fillStyle=heat(Math.abs(s.deltas[z]));
     ctx.fillRect(x0,Math.min(mid,mid-h),bw-20,Math.abs(h));
@@ -185,7 +221,8 @@ function cmd(c){ fetch('/cmd?c='+c); }
 const es=new EventSource('/events');
 es.onmessage=(m)=>{
   const d=JSON.parse(m.data);
-  hdr.innerHTML='Sense.CAP 2&times;3 &mdash; '+(d.alive?'live':'no serial');
+  geom(d);
+  hdr.innerHTML='Sense.CAP '+(LAYOUTS[d.layout]||'custom')+' &mdash; '+(d.alive?'live':'no serial');
   if(d.nf>0 && d.x<65535){ trail.push([d.x,d.y]); if(trail.length>40) trail.shift(); }
   else if(trail.length) trail.shift();
   draw(d);
@@ -203,6 +240,151 @@ es.onmessage=(m)=>{
 """
 
 
+SLIDER_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Sense.CAP scroll</title>
+<style>
+ body{background:#101418;color:#c0cad4;font-family:Menlo,monospace;margin:0;
+      padding:18px;display:flex;gap:28px}
+ #track{position:relative;width:120px;height:560px;background:#0a0d10;
+        border-radius:14px;border:1px solid #39424d;overflow:hidden}
+ #fill{position:absolute;left:0;right:0;bottom:0;background:#1a2028}
+ #ghost{position:absolute;left:0;right:0;height:2px;background:#3b82c4;opacity:.55}
+ #puck{position:absolute;left:8px;right:8px;height:52px;border-radius:10px;
+       background:#ffe066}
+ body.off #puck{background:#3a4048}
+ body.bridged #puck{background:#c9a227}
+ body.off #fill{background:#141a20}
+ .panel{font-size:13px;line-height:2.0}
+ .big{font-size:34px;color:#ffe066;line-height:1.3}
+ body.off .big{color:#6b737d}
+ .lab{color:#8090a0}
+ input[type=range]{width:170px;vertical-align:middle}
+ button{background:#1d242c;color:#c0cad4;border:1px solid #39424d;border-radius:5px;
+        font-family:Menlo,monospace;font-size:12px;padding:5px 11px;margin-right:6px;
+        cursor:pointer}
+ button:hover{background:#2a333d}
+ hr{border:0;border-top:1px solid #39424d;margin:14px 0}
+ a{color:#8090a0}
+</style></head><body class="off">
+<div id="track"><div id="fill"></div><div id="ghost"></div><div id="puck"></div></div>
+<div class="panel">
+ <div class="big" id="pct">--</div>
+ <div><span class="lab">raw</span> <span id="raw">-</span>
+      &nbsp; <span class="lab">smoothed</span> <span id="sm">-</span>
+      &nbsp; <span class="lab">of</span> <span id="xr">511</span></div>
+ <div><span class="lab">contact</span> <span id="tch">up</span>
+      &nbsp; <span class="lab">zone</span> <span id="zone">-</span></div>
+ <div><span class="lab">travel</span> <span id="acc">0</span>
+      &nbsp; <span class="lab">detents</span> <span id="det">0</span></div>
+ <div><span class="lab">dropouts</span> <span id="drops">0</span>
+      &nbsp; <span class="lab">longest gap</span> <span id="gap">0</span> ms</div>
+ <hr>
+ <div><span class="lab">smoothing</span>
+      <input id="alpha" type="range" min="5" max="100" value="25">
+      <span id="av">0.25</span></div>
+ <div><span class="lab">median window</span>
+      <input id="med" type="range" min="1" max="9" step="2" value="5">
+      <span id="mv">5</span></div>
+ <div><span class="lab">detent size</span>
+      <input id="dsz" type="range" min="16" max="160" step="8" value="64">
+      <span id="dv">64</span></div>
+ <div><span class="lab">bridge dropouts</span>
+      <input id="hold" type="range" min="0" max="400" step="25" value="200">
+      <span id="hv">200</span> ms</div>
+ <div><label><input type="checkbox" id="flip"> flip direction</label></div>
+ <hr>
+ <div><button onclick="fetch('/cmd?c=r')">Re-ATI (recalibrate)</button>
+      <button onclick="resetCounters()">reset travel</button></div>
+ <div><span class="lab">sensitivity</span>
+      <button onclick="fetch('/cmd?c=s1')">1</button><button onclick="fetch('/cmd?c=s2')">2</button><button onclick="fetch('/cmd?c=s3')">3</button><button onclick="fetch('/cmd?c=s4')">4</button><button onclick="fetch('/cmd?c=s5')">5</button></div>
+ <div><span class="lab">stickiness</span>
+      <button onclick="fetch('/cmd?c=h1')">1</button><button onclick="fetch('/cmd?c=h2')">2</button><button onclick="fetch('/cmd?c=h3')">3</button><button onclick="fetch('/cmd?c=h4')">4</button><button onclick="fetch('/cmd?c=h5')">5</button></div>
+ <div><span class="lab">layout</span>
+      <button onclick="fetch('/cmd?c=l3')">slider 1x3</button><button onclick="fetch('/cmd?c=l4')">slider 1x4</button><button onclick="fetch('/cmd?c=l1')">grid 2x3</button></div>
+ <div><a href="/">full surface view</a></div>
+</div>
+<script>
+let XR=511;
+const PUCK=52;
+let buf=[], ema=null, acc=0, det=0, lastSm=null;
+let rawWasDown=false, lastRawTime=0, drops=0, gapMax=0;
+const $=id=>document.getElementById(id);
+function resetCounters(){ acc=0; det=0; drops=0; gapMax=0;
+  ['acc','det','drops','gap'].forEach(i=>$(i).textContent='0'); }
+$('alpha').oninput=()=>$('av').textContent=($('alpha').value/100).toFixed(2);
+$('med').oninput=()=>$('mv').textContent=$('med').value;
+$('dsz').oninput=()=>$('dv').textContent=$('dsz').value;
+$('hold').oninput=()=>$('hv').textContent=$('hold').value;
+
+const es=new EventSource('/events');
+es.onmessage=m=>{
+ const d=JSON.parse(m.data);
+ XR=Math.max(1,d.xres-1); $('xr').textContent=XR;
+ const raw = d.nf>0 && d.x<65535;
+ const now = Date.now();
+ const HOLD = +$('hold').value;
+ const H=$('track').clientHeight;
+
+ if(raw){
+   const gap = lastRawTime ? now-lastRawTime : 1e9;
+   if(!rawWasDown){
+     if(gap<=HOLD && ema!==null){
+       // chip let go briefly mid-stroke: count it, keep the filter running
+       drops++; if(gap>gapMax) gapMax=gap;
+     } else {
+       buf=[]; ema=null; lastSm=null;   // a genuinely new contact starts clean
+     }
+   }
+   lastRawTime=now;
+   buf.push(d.x);
+   const W=+$('med').value;
+   while(buf.length>W) buf.shift();
+   const srt=[...buf].sort((a,b)=>a-b);
+   const med=srt[Math.floor(srt.length/2)];   // median rejects single-frame spikes
+   const A=$('alpha').value/100;
+   ema = (ema===null) ? med : ema + A*(med-ema);
+   if(lastSm!==null){
+     acc += (ema-lastSm);
+     det = Math.trunc(acc/(+$('dsz').value));
+   }
+   lastSm=ema;
+ }
+ rawWasDown=raw;
+ // bridge brief drop-outs so one stroke reads as one gesture
+ const down = raw || (lastRawTime && now-lastRawTime<HOLD && ema!==null);
+ document.body.classList.toggle('off', !down);
+ document.body.classList.toggle('bridged', !raw && down);
+
+ if(ema!==null){
+   let f=ema/XR; if($('flip').checked) f=1-f;
+   f=Math.max(0,Math.min(1,f));
+   const y=f*(H-PUCK);
+   $('puck').style.top=y+'px';
+   $('fill').style.height=(H-y)+'px';
+   $('pct').textContent=Math.round(f*100)+'%';
+   $('sm').textContent=Math.round(ema);
+ }
+ if(raw){
+   let rf=d.x/XR; if($('flip').checked) rf=1-rf;
+   rf=Math.max(0,Math.min(1,rf));
+   $('ghost').style.display='block';
+   $('ghost').style.top=(rf*(H-2))+'px';
+   $('raw').textContent=d.x;
+ } else {
+   $('ghost').style.display='none';
+   $('raw').textContent='-';
+ }
+ $('tch').textContent = raw ? 'down' : (down ? 'bridged' : 'up');
+ $('zone').textContent=d.zone;
+ $('acc').textContent=Math.round(acc);
+ $('det').textContent=det;
+ $('drops').textContent=drops;
+ $('gap').textContent=Math.round(gapMax);
+};
+</script></body></html>
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -210,6 +392,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
             body = PAGE.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/slider":
+            body = SLIDER_PAGE.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
