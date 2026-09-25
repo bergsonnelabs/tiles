@@ -42,8 +42,8 @@
     "adc.raw": "verified",
     "adc.mv": "verified",
     "adc.temp": {
-      "status": "partial",
-      "note": "Reads hardware sensor; OTP cal (0x0BFA07xx) not bus-accessible on WBA55 — uses datasheet typical constants, ~±15°C accuracy"
+      "status": "verified",
+      "note": "Bench-verified 2026-09-25 (tests/hw-vdd-w5): 23.1 °C at room temperature, VDD 1806 mV vs 1800 mV sensed. Channel and calibration corrected that day (ADC4 VIN[13], TS_CAL1/2 at 0x0BF90710/0x0BF90742, 3.0 V); before, it read VCORE with typical constants."
     },
     "adc.res": {
       "status": "partial",

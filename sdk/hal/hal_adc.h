@@ -254,9 +254,9 @@ int32_t hal_adc_read_temp_decidegc(hal_adc_t *adc);
  * Disable an ADC initialised with hal_adc_init() and power it down, so a
  * one-off measurement (the status LED's VDD read) leaves no standing
  * current behind.
- * L0: ADEN and the voltage regulator off (RM0377 ADC_CR bit 28). L4: also
- * back into deep power-down (RM0394 ADC_CR bit 29). Other families: ADEN
- * off only. The peripheral clock stays enabled.
+ * L0 / WBA (ADC4): ADEN and the voltage regulator off (ADC_CR bit 28). L4:
+ * also back into deep power-down (RM0394 ADC_CR bit 29). H5: ADEN off only.
+ * The peripheral clock stays enabled.
  */
 void hal_adc_deinit(hal_adc_t *adc);
 

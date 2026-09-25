@@ -47,11 +47,17 @@ extern hal_adc_t core_adc1 __attribute__((weak));
 static uint32_t s_scale_q8 = 0;      /* 0 = not measured yet */
 static uint32_t s_scaled_at_ms = 0;
 
-/* VDD in mV. Only the L0 and L4 read VREFINT today; the W5 / H5 ADC paths
- * return a nominal 3300 mV, which gives a scale of 1 (no change). */
+/* VDD in mV through VREFINT: L0 and L4 (ADC1), W5 (ADC4). The H5's
+ * VREFINT read is not working yet and returns a nominal 3300 mV, which
+ * gives a scale of 1 (no change). */
+#if defined(STM32WBA55xx)
+#define LED_VDD_ADC  ADC4
+#else
+#define LED_VDD_ADC  ADC1
+#endif
 static uint32_t led_vdd_mv(void)
 {
-#if defined(STM32L011xx) || defined(STM32L422xx)
+#if defined(STM32L011xx) || defined(STM32L422xx) || defined(STM32WBA55xx)
     if (&core_adc1 != 0 && core_adc1.instance != 0) {
         /* The project owns ADC1: never re-sequence it under running DMA. */
         if (core_adc1.dma_active) {
@@ -61,7 +67,7 @@ static uint32_t led_vdd_mv(void)
     }
     /* No project ADC: bring one up, read VREFINT, and power it back down. */
     hal_adc_t adc;
-    if (hal_adc_init(&adc, ADC1, SYSCLK_HZ, HAL_ADC_RES_12BIT) != HAL_OK) {
+    if (hal_adc_init(&adc, LED_VDD_ADC, SYSCLK_HZ, HAL_ADC_RES_12BIT) != HAL_OK) {
         return CORE_LED_REF_MV;
     }
     uint32_t mv = hal_adc_read_vdda_mv(&adc);
