@@ -1,7 +1,86 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@0adc73d",
+  "source": "tiles@6f27e78",
   "tiles": [
+    {
+      "family": "Sense",
+      "name": "A.3",
+      "rev": "a",
+      "headline": "",
+      "i2c": [],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
     {
       "family": "Sense",
       "name": "A.D3H",
@@ -444,7 +523,13 @@
       "name": "CAP",
       "rev": "a",
       "headline": "capacitive touch controller",
-      "i2c": [],
+      "i2c": [
+        {
+          "name": "I2C",
+          "default": "0x56",
+          "alt": []
+        }
+      ],
       "pads": {
         "1": {
           "default": {
@@ -462,7 +547,7 @@
         },
         "3": {
           "default": {
-            "name": "/RDY",
+            "name": "/MCLR",
             "type": "digital"
           },
           "alt": []
@@ -1214,7 +1299,7 @@
           },
           "alt": []
         },
-        "6": {
+        "8": {
           "default": {
             "name": "AOUT",
             "type": "analog"
@@ -1349,7 +1434,7 @@
         },
         "3": {
           "default": {
-            "name": "EN",
+            "name": "GPIO",
             "type": "digital"
           },
           "alt": []

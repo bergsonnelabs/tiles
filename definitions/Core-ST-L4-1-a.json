@@ -404,8 +404,14 @@
           "interface": "SPI1"
         },
         {
+          "note": "",
+          "type": "analog",
+          "function": "ADC9",
+          "direction": "input"
+        },
+        {
           "af": 14,
-          "note": "break input to disable PWM output",
+          "note": "low-power timer output (PWM / one-pulse)",
           "type": "timer",
           "function": "LPTIM2.OUT",
           "direction": "output"
@@ -881,6 +887,12 @@
               "interface": "SPI1"
             },
             {
+              "value": "ADC9",
+              "derived": {
+                "role": "analog"
+              }
+            },
+            {
               "af": 14,
               "value": "LPTIM2.OUT",
               "derived": {
@@ -920,13 +932,13 @@
       "default": "medium",
       "options": [
         {
-          "label": "Low (8MHz, MSI)",
+          "label": "Low (16MHz, MSI; USB minimum)",
           "value": "low",
           "firmware_contract": [
             {
               "type": "clock",
               "source": "msi",
-              "sysclk_mhz": 8
+              "sysclk_mhz": 16
             }
           ]
         },
@@ -1291,7 +1303,7 @@
           "frequency_mhz": 48
         }
       ],
-      "boot_source": "hsi16"
+      "boot_source": "msi"
     }
   },
   "headline": "USB-programmable Cortex-M4",

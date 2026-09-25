@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@8c11e89",
+  "source": "tiles@6f27e78",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -597,7 +597,8 @@
   "bus_addresses": {
     "I2C": [
       {
-        "address": "0x36"
+        "address": "0x36",
+        "is_default": true
       }
     ]
   }

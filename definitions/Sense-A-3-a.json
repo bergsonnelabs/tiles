@@ -1,6 +1,6 @@
 {
   "rev": "a",
-  "name": "CAP",
+  "name": "A.3",
   "pads": [
     {
       "pad": "1",
@@ -30,8 +30,8 @@
       "functions": [
         {
           "note": "",
-          "type": "analog",
-          "function": "RX3",
+          "type": "",
+          "function": "",
           "direction": ""
         }
       ]
@@ -46,10 +46,10 @@
       },
       "functions": [
         {
-          "note": "IQS7211A ball A5: active-low reset (MCLR), 4.7k pull-up to V+ on the tile. Carries /RDY instead on an IQS7211E build.",
-          "type": "digital",
-          "function": "/MCLR",
-          "direction": "input"
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
         }
       ]
     },
@@ -64,10 +64,9 @@
       "functions": [
         {
           "note": "",
-          "type": "digital",
+          "type": "interface",
           "function": "I2C.CLK",
-          "direction": "bidirectional",
-          "interface": "I2C"
+          "direction": "bidirectional"
         }
       ]
     },
@@ -82,10 +81,9 @@
       "functions": [
         {
           "note": "",
-          "type": "digital",
+          "type": "interface",
           "function": "I2C.DAT",
-          "direction": "bidirectional",
-          "interface": "I2C"
+          "direction": "bidirectional"
         }
       ]
     },
@@ -100,8 +98,8 @@
       "functions": [
         {
           "note": "",
-          "type": "analog",
-          "function": "TX11",
+          "type": "",
+          "function": "",
           "direction": ""
         }
       ]
@@ -117,8 +115,8 @@
       "functions": [
         {
           "note": "",
-          "type": "analog",
-          "function": "TX9/TX10",
+          "type": "",
+          "function": "",
           "direction": ""
         }
       ]
@@ -134,8 +132,8 @@
       "functions": [
         {
           "note": "",
-          "type": "analog",
-          "function": "TX8",
+          "type": "",
+          "function": "",
           "direction": ""
         }
       ]
@@ -151,8 +149,8 @@
       "functions": [
         {
           "note": "",
-          "type": "analog",
-          "function": "RX6",
+          "type": "",
+          "function": "",
           "direction": ""
         }
       ]
@@ -175,79 +173,28 @@
       ]
     }
   ],
-  "power": [
-    {
-      "max": 3.3,
-      "min": 1.8,
-      "type": "system",
-      "notes": "",
-      "gnd_pad": [
-        "1"
-      ],
-      "function": "",
-      "direction": "input",
-      "is_required": true,
-      "max_current": "",
-      "positive_pad": [
-        "10"
-      ]
-    }
-  ],
+  "power": [],
   "family": "Sense",
   "package": {
     "pads": 10,
-    "type": "T44",
-    "size_x": 4000,
+    "type": "T24",
+    "size_x": 2000,
     "size_y": 4000,
     "size_z": 0
   },
-  "tile_id": 92,
-  "headline": "capacitive touch controller",
+  "tile_id": 94,
+  "headline": "",
   "components": [
     {
       "url": "",
-      "part": "IQS7211A",
+      "part": "BMA580",
       "datasheet": "",
-      "manufacturer": "Azoteq"
+      "manufacturer": "Bosch Sensortec"
     }
   ],
-  "interfaces": [
-    {
-      "name": "I2C",
-      "type": "I2C",
-      "parameters": {
-        "modes": [
-          "slave"
-        ],
-        "addresses": [
-          {
-            "address": "0x56",
-            "is_default": true
-          }
-        ],
-        "address_bits": [
-          7
-        ],
-        "max_clock_speed": "1MHz"
-      },
-      "pad_assignments": [
-        {
-          "pad": "4",
-          "role": "bus",
-          "function": "I2C.CLK",
-          "is_required": true
-        },
-        {
-          "pad": "5",
-          "role": "bus",
-          "function": "I2C.DAT",
-          "is_required": true
-        }
-      ]
-    }
-  ],
-  "updated_at": "2026-09-25T13:49:11.000Z",
+  "interfaces": [],
+  "updated_at": "2026-09-25T14:24:29.189Z",
   "description": "",
-  "json_version": "0.1",
+  "json_version": "0.2",
   "application_notes": []
 }
