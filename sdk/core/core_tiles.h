@@ -7,6 +7,10 @@
  *   tiles_pal_t *hal = core_tiles_pal(&core_i2c1);   // I2C bus
  *   tiles_pal_t *hal = core_tiles_pal(&core_spi1);   // SPI bus
  *
+ * and core_tiles_pal2() for a tile that uses an I2C and an SPI bus together:
+ *
+ *   tiles_pal_t *hal = core_tiles_pal2(&core_i2c1, &core_spi1);
+ *
  * The correct bus type is resolved at compile time via C11 _Generic.
  * Passing the wrong type is a compile error.
  *
@@ -160,6 +164,72 @@ static inline tiles_pal_t *_core_tiles_pal_spi(core_spi_t *bus)
     hals[i].delay_ms        = ll_delay_ms;
     hals[i].buses           = TILES_BUS_SPI;
     hals[i].handle          = bus;
+    return &hals[i];
+}
+
+/* ---- Internal: dual-bus (I2C + SPI) PAL ----
+ * tiles_pal_t has ONE handle that both bus families receive, so a tile that
+ * configures over I2C and streams over SPI (Sense.CAM.P) needs a handle that
+ * holds both buses. These adapters unpack it and forward to the single-bus
+ * adapters above. The SPI chip select is the SPI bus's own (coregen), so the
+ * PAL's `cs` argument is ignored here as it is for the single-bus SPI PAL. */
+typedef struct {
+    core_i2c_t *i2c;
+    core_spi_t *spi;
+} core_tiles_dual_t;
+
+static inline int _ct2_i2c_read(void *h, uint8_t a, uint16_t r, uint8_t *d, uint16_t n)
+{ return _ct_i2c_read(((core_tiles_dual_t *)h)->i2c, a, r, d, n); }
+static inline int _ct2_i2c_write(void *h, uint8_t a, uint16_t r, const uint8_t *d, uint16_t n)
+{ return _ct_i2c_write(((core_tiles_dual_t *)h)->i2c, a, r, d, n); }
+static inline int _ct2_i2c_ready(void *h, uint8_t a)
+{ return _ct_i2c_ready(((core_tiles_dual_t *)h)->i2c, a); }
+static inline int _ct2_i2c_write_raw(void *h, uint8_t a, const uint8_t *d, uint16_t n)
+{ return _ct_i2c_write_raw(((core_tiles_dual_t *)h)->i2c, a, d, n); }
+static inline int _ct2_i2c_read_raw(void *h, uint8_t a, uint8_t *d, uint16_t n)
+{ return _ct_i2c_read_raw(((core_tiles_dual_t *)h)->i2c, a, d, n); }
+static inline int _ct2_spi_read(void *h, uint8_t cs, uint8_t r, uint8_t *d, uint16_t n)
+{ return _ct_spi_read(((core_tiles_dual_t *)h)->spi, cs, r, d, n); }
+static inline int _ct2_spi_write(void *h, uint8_t cs, uint8_t r, const uint8_t *d, uint16_t n)
+{ return _ct_spi_write(((core_tiles_dual_t *)h)->spi, cs, r, d, n); }
+
+/**
+ * Get a tiles_pal_t* carrying BOTH an I2C and an SPI bus, for tiles that use
+ * the two together (Sense.CAM.P: I2C configuration, SPI image readout).
+ * Cached per (i2c, spi) pair, up to 4 pairs.
+ *
+ * @code
+ *   tiles_pal_t *hal = core_tiles_pal2(&core_i2c1, &core_spi1);
+ * @endcode
+ */
+static inline tiles_pal_t *core_tiles_pal2(core_i2c_t *i2c, core_spi_t *spi)
+{
+    enum { CT_MAX = 4 };
+    static tiles_pal_t hals[CT_MAX];
+    static core_tiles_dual_t pairs[CT_MAX];
+    static uint8_t count = 0;
+
+    for (uint8_t i = 0; i < count; i++)
+        if (pairs[i].i2c == i2c && pairs[i].spi == spi)
+            return &hals[i];
+
+    if (count >= CT_MAX)
+        return &hals[0];
+
+    uint8_t i = count++;
+    pairs[i].i2c = i2c;
+    pairs[i].spi = spi;
+    hals[i].i2c_read        = _ct2_i2c_read;
+    hals[i].i2c_write       = _ct2_i2c_write;
+    hals[i].i2c_is_ready    = _ct2_i2c_ready;
+    hals[i].i2c_write_raw   = _ct2_i2c_write_raw;
+    hals[i].i2c_read_raw    = _ct2_i2c_read_raw;
+    hals[i].spi_read        = _ct2_spi_read;
+    hals[i].spi_write       = _ct2_spi_write;
+    hals[i].gpio_irq_enable = _ct_gpio_irq_enable;
+    hals[i].delay_ms        = ll_delay_ms;
+    hals[i].buses           = TILES_BUS_I2C | TILES_BUS_SPI;
+    hals[i].handle          = &pairs[i];
     return &hals[i];
 }
 #endif /* _CORE_TILES_HAS_SPI */

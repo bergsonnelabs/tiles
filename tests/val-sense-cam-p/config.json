@@ -1,0 +1,28 @@
+{
+  "core": "Core.ST.L4.1",
+  "clock": "max",
+  "pads": {
+    "2": "SPI1.MOSI",
+    "3": "SPI1.CLK",
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT",
+    "8": "SPI1.MISO",
+    "9": "SPI1.CS"
+  },
+  "interfaces": {
+    "I2C1": {
+      "speed": 100000
+    },
+    "SPI1": {
+      "mode": 3,
+      "prescaler": 4
+    }
+  },
+  "tiles": [
+    {
+      "tile": "Sense.CAM.P",
+      "bus": "I2C1",
+      "instance": 0
+    }
+  ]
+}

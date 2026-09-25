@@ -1416,7 +1416,7 @@ def main():
             "definition": ROOT / "definitions/Sense-CAM-P-a.json",
             "prefix": "tile_sense_cam_p",
             "init": "tile_sense_cam_p_init",
-            "version": "0.1.0",
+            "version": "1.0.0",
         },
         {
             "path": ROOT / "drivers/tile_display_rgbw.h",

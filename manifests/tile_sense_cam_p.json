@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e3a9c64",
+  "source": "tiles@91a1e56",
   "tile": "Sense.CAM.P",
   "palette": {
     "label": "Sense.CAM.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_cam_p",
     "header": "tile_sense_cam_p.h",
-    "version": "0.1.0"
+    "version": "1.0.0"
   },
   "handle": {
     "type": "tile_t",
@@ -93,17 +93,17 @@
       "params": [
         {
           "name": "dst",
-          "type": "?uint8_t*",
+          "type": "int[]",
           "description": "Destination buffer."
-        },
-        {
-          "name": "len",
-          "type": "int",
-          "description": "Size of dst; must be >= tile_sense_cam_p_frame_bytes()."
         }
       ],
       "returns": "uint8_t",
       "dsl_returns": "bool",
+      "c_out_buffer": {
+        "name": "dst",
+        "type": "uint8_t",
+        "cap_param": "len"
+      },
       "receiver": "tile_t*"
     },
     {

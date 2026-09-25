@@ -311,16 +311,29 @@ static const pag_reg_t init_qqvga[] = {
 /* Private helpers                                                 */
 /* -------------------------------------------------------------- */
 
+/* The vendor tables start the sensor 24 writes before they end, so the last
+ * writes land on a running sensor and a few do not ACK first time: the bench
+ * measured 3-22 retried writes per init. Retry each one, as the validator
+ * does (8 tries), rather than failing init on the first NACK. The HAL only
+ * sleeps in milliseconds; the validator's 200 us gap is a lower bound. */
+#define PAG_WRITE_TRIES  8
+
 static int pag_write(tile_t* tile, uint8_t reg, uint8_t value)
 {
-    return tile->hal->i2c_write(tile->hal->handle, tile->id, reg, &value, 1);
+    int rc = -1;
+    for (uint8_t t = 0; t < PAG_WRITE_TRIES; t++) {
+        rc = tile->hal->i2c_write(tile->hal->handle, tile->id, reg, &value, 1);
+        if (rc == 0) return 0;
+        tile->hal->delay_ms(1);
+    }
+    return rc;
 }
 
-static uint8_t pag_read(tile_t* tile, uint8_t reg)
+/** One register over I2C. Returns 0 and sets *val, or non-zero on a bus error. */
+static int pag_read(tile_t* tile, uint8_t reg, uint8_t* val)
 {
-    uint8_t val = 0;
-    tile->hal->i2c_read(tile->hal->handle, tile->id, reg, &val, 1);
-    return val;
+    *val = 0;
+    return tile->hal->i2c_read(tile->hal->handle, tile->id, reg, val, 1);
 }
 
 /** @brief  Apply one vendor table in order. Returns writes that did not ACK. */
@@ -339,18 +352,40 @@ static uint16_t apply_table(tile_t* tile, const pag_reg_t* tbl, uint32_t len)
  * bit 7 is the direction flag, so the SPI and I2C register maps are not
  * addressed identically.
  */
-static uint8_t spi_read_reg(tile_t* tile, uint8_t reg)
+static int spi_read_reg(tile_t* tile, uint8_t reg, uint8_t* v)
 {
-    uint8_t v = 0;
-    tile->hal->spi_read(tile->hal->handle, s_spi_cs,
-                        (uint8_t)(reg | PAG7920_SPI_RD_BIT), &v, 1);
-    return v;
+    *v = 0;
+    return tile->hal->spi_read(tile->hal->handle, s_spi_cs,
+                               (uint8_t)(reg | PAG7920_SPI_RD_BIT), v, 1);
 }
 
-static void spi_write_reg(tile_t* tile, uint8_t reg, uint8_t val)
+static int spi_write_reg(tile_t* tile, uint8_t reg, uint8_t val)
 {
-    tile->hal->spi_write(tile->hal->handle, s_spi_cs,
-                         (uint8_t)(reg & 0x7F), &val, 1);
+    return tile->hal->spi_write(tile->hal->handle, s_spi_cs,
+                                (uint8_t)(reg & 0x7F), &val, 1);
+}
+
+/* Poll a CPU_INT0_Status bit until it sets, within `timeout_ms` of real
+ * time. The PAL has no clock, so time is counted in the 1 ms sleeps taken
+ * every POLL_BATCH polls: a lower bound on the time spent, never an
+ * overcount. FB_Ovf seen along the way is reported through *ovf.
+ * Returns 1 when the bit set, 0 on timeout or a bus error. */
+#define POLL_BATCH  256
+static uint8_t wait_status(tile_t* tile, uint8_t bit, uint32_t timeout_ms,
+                           uint8_t* ovf)
+{
+    uint32_t waited = 0;
+    for (uint32_t n = 1; ; n++) {
+        uint8_t st;
+        if (spi_read_reg(tile, PAG7920_SPI_INT_STATUS, &st) != 0) return 0;
+        if (ovf && (st & PAG7920_INT_FB_OVF)) *ovf = 1;
+        if (st & bit) return 1;
+        if (n % POLL_BATCH == 0) {
+            if (waited >= timeout_ms) return 0;
+            tile->hal->delay_ms(1);
+            waited++;
+        }
+    }
 }
 
 /* -------------------------------------------------------------- */
@@ -367,17 +402,21 @@ uint8_t tile_sense_cam_p_find(tiles_pal_t* hal, uint8_t instance)
 uint16_t tile_sense_cam_p_part_id(tile_t* tile)
 {
     if (tile->hal == NULL) return 0;
-    pag_write(tile, PAG7920_REG_BANK, PAG7920_BANK_0);
-    uint8_t lo = pag_read(tile, PAG7920_REG_PARTID_L);
-    uint8_t hi = pag_read(tile, PAG7920_REG_PARTID_H);
+    uint8_t lo, hi;
+    if (pag_write(tile, PAG7920_REG_BANK, PAG7920_BANK_0) != 0 ||
+        pag_read(tile, PAG7920_REG_PARTID_L, &lo) != 0 ||
+        pag_read(tile, PAG7920_REG_PARTID_H, &hi) != 0)
+        return 0;   /* a partial read is not an ID */
     return (uint16_t)((hi << 8) | lo);
 }
 
 uint16_t tile_sense_cam_p_spi_id(tile_t* tile)
 {
     if (tile->hal == NULL || tile->hal->spi_read == NULL) return 0;
-    uint8_t lo = spi_read_reg(tile, PAG7920_SPI_CHECKID_L);
-    uint8_t hi = spi_read_reg(tile, PAG7920_SPI_CHECKID_H);
+    uint8_t lo, hi;
+    if (spi_read_reg(tile, PAG7920_SPI_CHECKID_L, &lo) != 0 ||
+        spi_read_reg(tile, PAG7920_SPI_CHECKID_H, &hi) != 0)
+        return 0;
     return (uint16_t)((hi << 8) | lo);
 }
 
@@ -496,41 +535,42 @@ uint8_t tile_sense_cam_p_capture(tile_t* tile, uint8_t* dst, uint32_t len)
     /* Frame-lock. Discarding buffers is not enough - it leaves an arbitrary
      * phase and the image comes back rotated by whole 4800-byte buffers.
      * Clear all three flags first so a stale assertion is not mistaken for a
-     * fresh frame boundary. */
-    spi_write_reg(tile, PAG7920_SPI_INT_STATUS, 0xF8);
-    for (uint32_t guard = 0; ; guard++) {
-        if (spi_read_reg(tile, PAG7920_SPI_INT_STATUS) & PAG7920_INT_FRAME_START)
-            break;
-        if (guard > 200000u) {
-            TILE_ON_ERROR(tile, "capture: no Frame_Start");
-            return 0;
-        }
+     * fresh frame boundary. A frame is 33 ms at the configured 30 fps; the
+     * validator allows 1000 ms, and so does this. */
+    if (spi_write_reg(tile, PAG7920_SPI_INT_STATUS, 0xF8) != 0 ||
+        !wait_status(tile, PAG7920_INT_FRAME_START, 1000, NULL)) {
+        TILE_ON_ERROR(tile, "capture: no Frame_Start");
+        return 0;
     }
     spi_write_reg(tile, PAG7920_SPI_INT_STATUS, 0xFD);
 
     uint8_t overflowed = 0;
     for (uint32_t c = 0; c < cycles; c++) {
-        uint8_t st = 0;
-        for (uint32_t guard = 0; ; guard++) {
-            st = spi_read_reg(tile, PAG7920_SPI_INT_STATUS);
-            if (st & PAG7920_INT_FB_OVF) overflowed = 1;
-            if (st & PAG7920_INT_FB_RDY) break;
-            if (guard > 200000u) {
-                TILE_ON_ERROR(tile, "capture: timed out waiting for buffer");
-                return 0;
-            }
+        if (!wait_status(tile, PAG7920_INT_FB_RDY, 500, &overflowed)) {
+            TILE_ON_ERROR(tile, "capture: timed out waiting for buffer");
+            return 0;
         }
 
-        spi_write_reg(tile, PAG7920_SPI_IMG_RD_EN, 0x01);
-        /* Datasheet asks for 1.5 us here; delay_ms(0) is not granular enough,
-         * and the SPI transaction setup already exceeds it comfortably. */
-        tile->hal->spi_read(tile->hal->handle, s_spi_cs,
-                            (uint8_t)(PAG7920_SPI_IMG_DATA | PAG7920_SPI_RD_BIT),
-                            dst + (c * PAG7920_BUFFER_BYTES),
-                            PAG7920_BUFFER_BYTES);
-        spi_write_reg(tile, PAG7920_SPI_IMG_RD_EN, 0x00);
-        spi_write_reg(tile, PAG7920_SPI_INT_STATUS, 0xFE);
+        /* Datasheet asks for 1.5 us after Img_Rd_En; delay_ms(0) is not
+         * granular enough, and the SPI transaction setup already exceeds it. */
+        int rc = spi_write_reg(tile, PAG7920_SPI_IMG_RD_EN, 0x01);
+        rc |= tile->hal->spi_read(tile->hal->handle, s_spi_cs,
+                                  (uint8_t)(PAG7920_SPI_IMG_DATA | PAG7920_SPI_RD_BIT),
+                                  dst + (c * PAG7920_BUFFER_BYTES),
+                                  PAG7920_BUFFER_BYTES);
+        rc |= spi_write_reg(tile, PAG7920_SPI_IMG_RD_EN, 0x00);
+        rc |= spi_write_reg(tile, PAG7920_SPI_INT_STATUS, 0xFE);
+        if (rc != 0) {
+            TILE_ON_ERROR(tile, "capture: SPI transfer failed");
+            return 0;
+        }
     }
+
+    /* An overflow during the last buffer shows up only after it; look once
+     * more before calling the frame good. */
+    uint8_t st;
+    if (spi_read_reg(tile, PAG7920_SPI_INT_STATUS, &st) == 0 && (st & PAG7920_INT_FB_OVF))
+        overflowed = 1;
 
     if (overflowed) {
         TILE_ON_ERROR(tile, "capture: FB_Ovf - frame torn, readout too slow");
