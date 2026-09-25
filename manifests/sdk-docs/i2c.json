@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6897677",
+  "source": "tiles@6f27e78",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -780,7 +780,7 @@
       "name": "ll_i2c_init",
       "signature": "ll_i2c_init(I2C_TypeDef * i2c, uint32_t timing)",
       "returns": "void",
-      "brief": "Initialize I2C in master mode. i2c:     I2C instance timing:  TIMINGR value (use LL_I2C_TIMING_* defines) fmp:     set non-zero to enable Fast-mode Plus (CR1.FMP bit) Only effective on STM32WBA55 and STM32H523. On L422, FMP is enabled via SYSCFG — see hal_i2c.c. On L011, FMP is not supported.",
+      "brief": "Initialize I2C in master mode. i2c:     I2C instance timing:  TIMINGR value (use LL_I2C_TIMING_* defines) fmp:     set non-zero to enable Fast-mode Plus (CR1.FMP bit) Only effective on STM32WBA55 and STM32H523. On L422, FMP is enabled via SYSCFG — see ll_i2c_init_fmp(). On L011, FMP is not supported.",
       "params": [
         {
           "name": "i2c",
@@ -798,7 +798,7 @@
       "name": "ll_i2c_init_fmp",
       "signature": "ll_i2c_init_fmp(I2C_TypeDef * i2c, uint32_t timing)",
       "returns": "void",
-      "brief": "Initialize I2C in Fast-mode Plus (1 MHz). Sets the CR1.FMP bit for 20 mA output drive on WBA55 / H523.",
+      "brief": "Initialize I2C in Fast-mode Plus (1 MHz), with the Fm+ (20 mA) pad drive. WBA55 / H523: I2C_CR1.FMP (bit 24). L422: I2C_CR1 bits 31:24 are reserved (RM0394 §38.9.1); Fm+ drive is SYSCFG_CFGR1.I2C1_FMP (bit 20) / I2C3_FMP (bit 22), RM0394 §9.2.2, which needs the SYSCFG clock (RCC_APB2ENR.SYSCFGEN, bit 0).",
       "params": [
         {
           "name": "i2c",

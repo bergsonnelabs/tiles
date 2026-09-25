@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@6f27e78",
   "category": "clocks",
   "label": "Clocks",
   "icon": "⏱",
@@ -31,7 +31,7 @@
       "name": "ll_flash_set_latency",
       "signature": "ll_flash_set_latency(uint32_t wait_states)",
       "returns": "void",
-      "brief": "Set flash read latency (wait states). Must be set BEFORE increasing SYSCLK, or AFTER decreasing it. Typical values for VDD >= 2.7V: L0:   0 WS ≤ 16MHz, 1 WS ≤ 32MHz L4:   0 WS ≤ 16MHz, 1 WS ≤ 32MHz, 2 WS ≤ 48MHz, 3 WS ≤ 64MHz, 4 WS ≤ 80MHz WBA:  0 WS ≤ 32MHz, 1 WS ≤ 64MHz, 2 WS ≤ 96MHz, 3 WS ≤ 100MHz H5:   0 WS ≤ 32MHz, 1 WS ≤ 64MHz, 2 WS ≤ 96MHz, ... 5 WS ≤ 250MHz",
+      "brief": "Set flash read latency (wait states). Must be set BEFORE increasing SYSCLK, or AFTER decreasing it. See ll_flash_latency_for_range() for the tables.",
       "params": [
         {
           "name": "wait_states",
@@ -45,7 +45,7 @@
       "name": "ll_flash_latency_for_mhz",
       "signature": "ll_flash_latency_for_mhz(uint32_t mhz)",
       "returns": "uint32_t",
-      "brief": "Calculate required flash wait states from SYSCLK frequency.",
+      "brief": "Flash wait states for SYSCLK `mhz` in the highest voltage range (range 1 on L0/L4/WBA). The WBA and L0 generated clock setup uses ll_flash_latency_for_range(), which also covers their lower ranges.",
       "params": [
         {
           "name": "mhz",

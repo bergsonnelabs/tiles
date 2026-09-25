@@ -104,6 +104,7 @@ markers** — re-running coregen will clobber them. Edit `config.json` instead.
 | `pads`         | object | no       | `{}`           | ✅ |
 | `interfaces`   | object | no       | `{}`           | ✅ (tuning only) |
 | `gpio`         | object | no       | `{}`           | ✅ |
+| `pullups`      | array  | no       | `[]`           | ✅ (on-tile pull-ups, §7) |
 | `tiles`        | array  | no       | `[]`           | ✅ |
 | `usb`          | object | no       | disabled       | ✅ |
 | `bootloader`   | string | no       | `"none"`       | ✅ |
@@ -160,8 +161,19 @@ value `"default"` resolves to the tile's schema default.
 - If you name a level that doesn't exist, coregen lists the valid options and
   **exits with an error**.
 - coregen auto-solves the PLL (M/N/R) when the target frequency differs from the
-  source, and sets the correct voltage-scaling range (WBA55 needs Range 1 above
-  16 MHz; H5 needs the right VOS for higher speeds).
+  source, and sets the voltage range and flash wait states the reference manual
+  requires for the level (L0: range 3 for `low`, 2 for `medium`, 1 for
+  `high`/`max`; WBA55: range 2 for `low` (HSI16), range 1 above 16 MHz; H5: the
+  right VOS for higher speeds).
+- Per-Core adjustments, printed as a build NOTE or ERROR:
+  - **Core.ST.L4:** `low` runs at 16 MHz, not 8 MHz. USB is always on and
+    needs an APB clock of at least 10 MHz (RM0394 §46.4), so `low` and
+    `medium` are the same clock there.
+  - **Core.ST.L0:** `low` runs in voltage range 3 (no Low-power run: that needs
+    <= 131 kHz), or range 2 when the project has an I2C bus, whose HSI16
+    kernel clock can't run in range 3.
+  - **Core.ST.W5:** BLE with `low` is an error: "BLE needs clock medium or
+    higher" (the radio needs voltage range 1).
 
 **Clock has knock-on effects on buses** — see the I2C kernel-clock minimums in
 §7. Picking too low a clock can make a requested I2C speed invalid.
@@ -241,10 +253,24 @@ never creates one. Keys are peripheral names (`I2C1`, `SPI1`, `USART2`, `TIM2`,
 | `pullups` | bool | `true`  | enable internal pad pull-ups         |
 
 **Kernel-clock minimums (enforced, exits on failure):** 100 kHz needs ≥1 MHz,
-400 kHz needs ≥4 MHz, 1 MHz needs ≥16 MHz on the I2C kernel clock. On WBA55 the
-I2C kernel clock is **fixed at HSI16 (16 MHz)** regardless of SYSCLK; on H5 it
-follows SYSCLK. So on most cores, a too-low `clock` level can make a fast
-`speed` illegal.
+400 kHz needs ≥4 MHz, 1 MHz needs ≥16 MHz on the I2C kernel clock. On WBA55 and
+L0 the I2C kernel clock is **fixed at HSI16 (16 MHz)** regardless of SYSCLK (on
+the L0 that costs ~100 µA while running at the MSI levels); on L4 and H5 it
+follows SYSCLK. So on those, a too-low `clock` level can make a fast `speed`
+illegal.
+
+**On-tile pull-ups (`pullups`, top level).** Some Cores have pull-up resistors
+on I2C pads that a GPIO switches on (Core.ST.L4.1: pad 4 via PA9, pad 5 via
+PC15; the tile JSON's `config.pullups` lists them). Name the ones you want:
+
+```json
+"pullups": ["pad4", "pad5"]
+```
+
+coregen drives the control pins high in `core_pads_init()`. An unknown name, or
+a control pin that is also assigned as a pad, is an error. With I2C at 400 kHz
+or more on a pad whose on-tile pull-up is available but not enabled, coregen
+prints a WARNING (the MCU's internal ~40 kΩ pull-up is too weak for that).
 
 ### SPI
 
@@ -531,6 +557,10 @@ coregen is mostly **fail-fast** — most mistakes print an error and exit, so a
 bad config won't silently generate wrong code. Things that **exit**:
 
 - a pad that doesn't exist, or a function not available on that pad
+- on Core.ST.L4, anything other than `USB.*` on the USB D+/D- pads (6/7 on
+  L4.1, 16/17 on L4.2): USB is always on there
+- an unknown `pullups` name, or a pull-up control pin that is also a pad
+- on Core.ST.W5, `ble` enabled with `clock: "low"`
 - an `interfaces` key (in cross-checks) that doesn't match the core JSON
 - an unknown `clock` level
 - I2C `speed` not in the allowed set, or kernel clock too low for it

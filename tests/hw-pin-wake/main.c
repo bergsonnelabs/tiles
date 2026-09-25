@@ -13,13 +13,14 @@
  *   T1  loopback   drive PA9 high/low, read pad 4 back high/low (run mode)
  *   T2  fast-fail   core_stop_until_on_change() on a pad with no GPIO (pad 1,
  *                    GND) returns right away instead of sleeping
- *   T3  wake        core_stop_until_on_change(4, EDGE_FALLING) actually wakes
- *                    the Core from Stop when a human shorts pad 4 to pad 1
- *
- * T2 was supposed to also cover "an edge that's already pending when the call
- * is made" (arm, then create the edge just before calling). Reading
- * core_power.h shows that isn't something the API can catch — see the T2
- * comment below for why, and why testing it live isn't safe to automate.
+ *   T3  wake        core_stop_until_on_change_timeout(4, EDGE_FALLING, 60 s)
+ *                    actually wakes the Core from Stop when a human shorts pad 4
+ *                    to pad 1 (unattended, it times out and T3 reports FAIL)
+ *   T4  at-level    pad 4 already low (PA9 low) when a falling-edge wait starts:
+ *                    both the old call and the _timeout call return at once
+ *                    (1) instead of sleeping forever (added 2026-09-25)
+ *   T5  timeout     pad 4 held high, core_stop_until_on_change_timeout(..., 3000)
+ *                    returns 0 after 2.5-4 s of Stop, no watchdog reset
  *
  * T3 needs a human: nothing that runs in Stop can drive PA9, so a real
  * wake-from-Stop edge has to come from outside the chip. USB CDC doesn't
@@ -47,16 +48,23 @@
 #define BKP_ATTEMPT  4u   /* T3 attempt counter (1-based) */
 #define BKP_WD       5u   /* 1 if a watchdog reset was ever seen during a T3 wait */
 
+#define BKP_T5       6u   /* T5: measured ms << 8 | return value + 1 */
+
 #define MAGIC  0xC9u
-enum { PH_START = 0, PH_RETRY, PH_ARMED, PH_REPORT };
+enum { PH_START = 0, PH_RETRY, PH_ARMED, PH_REPORT, PH_T5 };
 
 #define T_T1  (1u << 0)
 #define T_T2  (1u << 1)
 #define T_T3  (1u << 2)
-#define EXPECTED  (T_T1 | T_T2 | T_T3)
+#define T_T4  (1u << 3)
+#define T_T5  (1u << 4)
+#define EXPECTED  (T_T1 | T_T2 | T_T3 | T_T4 | T_T5)
+#define N_TESTS   5u
 
 #define VERDICT_PASS  0x900DBEEFu
-#define VERDICT_FAIL  0xBAD00000u   /* | index (1-3) of the first failing test */
+#define VERDICT_FAIL  0xBAD00000u   /* | index (1-5) of the first failing test */
+
+#define T3_TIMEOUT_MS  60000u       /* unattended runs end here instead of hanging */
 
 #define T3_MAX_ATTEMPTS  5u
 /* PAD_GND (coregen, core_pads.h) is pad 1 -- no GPIO, proves the "can't take
@@ -135,29 +143,10 @@ static int run_t1(void)
  * ever arming an EXTI or touching Stop. That's automatable and bounded, so
  * that's what this checks: elapsed time under 100 ms.
  *
- * The task this test was written from also wanted "arm the wake, create the
- * edge just before calling, check it returns promptly instead of sleeping or
- * missing the edge" -- i.e. an edge that's already pending when the call is
- * made. core_power.h shows that isn't a case the API catches:
- *
- *   _core_stop_pad_edge = 0;
- *   if (core_pad_on_change(pad, edge, _core_stop_pad_cb, (void *)0) != HAL_OK)
- *       return;
- *
- * Every call unconditionally clears the pending flag and freshly re-arms the
- * EXTI trigger (SYSCFG mux + FTSR/RTSR + IMR, in hal_exti.c / ll_exti). Real
- * EXTI hardware only latches a transition that happens while the trigger is
- * enabled -- it can't retroactively notice that the pin got to its target
- * level a few instructions earlier. So driving PA9 low and immediately
- * calling core_stop_until_on_change(4, EDGE_FALLING) does NOT return
- * promptly: pad 4 is already settled low by the time the falling-edge
- * trigger is armed, no new transition ever occurs, and the call sleeps in
- * fed 2.5 s chunks forever -- there's no timeout parameter and nothing else
- * on this single-core chip can toggle PA9 while it's asleep in Stop to get
- * it back. Proving that live would hang this binary permanently (the only
- * way out is a human touching the pad, which is what T3 already covers), so
- * it isn't attempted here -- this is a real, reportable API limitation
- * rather than a test we can safely automate.
+ * The case this test once couldn't cover, an edge that already happened
+ * before the call (the pad already sits at its wake level), is T4: since
+ * 2026-09-25 core_stop_until_on_change() reads the pad after arming and
+ * returns at once, and core_stop_until_on_change_timeout() bounds every wait.
  */
 static int run_t2(void)
 {
@@ -169,20 +158,76 @@ static int run_t2(void)
     core_usb_printf("[hw-pin-wake] T2 no-GPIO pad returns promptly: pad 1 (GND) "
                     "-> core_stop_until_on_change returned in %lu ms (want <100)  %s\r\n",
                     (unsigned long)dt, ok ? "PASS" : "FAIL");
-    core_usb_printf("[hw-pin-wake] T2 note: an edge already pending before the call "
-                    "is NOT caught (core_power.h always clears + re-arms on entry) "
-                    "-- see the comment in main.c. Not live-tested: it would hang forever.\r\n");
     return ok;
+}
+
+/* T4: PA9 low pulls pad 4 low (2.2k beats the ~40k internal pull-up the
+ * falling-edge arm selects). A falling-edge wait must see the pad is already
+ * at its wake level and return without entering Stop.
+ *
+ * Needs T1's loopback: without it pad 4 isn't low, and the untimed call
+ * would wait in Stop for an edge nobody makes (a bench run on 2026-09-25 did
+ * exactly that). So it is skipped when T1 failed, and the bounded _timeout
+ * call goes first; the untimed call runs only once that returned at once. */
+static int run_t4(int loop_ok)
+{
+    if (!loop_ok) {
+        core_usb_printf("[hw-pin-wake] T4 skipped: needs T1's PA9 -> pad 4 loopback  FAIL\r\n");
+        return 0;
+    }
+    ll_rcc_gpio_clk_enable(GPIOA);
+    ll_gpio_config_output(GPIOA, 9);
+    ll_gpio_clear(GPIOA, 1UL << 9);
+    core_delay_ms(5);
+
+    uint32_t t0 = core_millis();
+    int r = core_stop_until_on_change_timeout(LOOP_PAD, EDGE_FALLING, 3000u);
+    uint32_t dt_new = core_millis() - t0;
+    uint32_t dt_old = 0xFFFFFFFFu;
+    if (r == 1 && dt_new < 100u) {
+        t0 = core_millis();
+        core_stop_until_on_change(LOOP_PAD, EDGE_FALLING);
+        dt_old = core_millis() - t0;
+    }
+    core_pad_on_change_stop(LOOP_PAD);
+
+    int ok = dt_old < 100u && dt_new < 100u && r == 1;
+    core_usb_printf("[hw-pin-wake] T4 pad already low: _timeout call %lu ms returned %d, "
+                    "old call %lu ms (want <100 ms, 1, <100 ms)  %s\r\n",
+                    (unsigned long)dt_new, r, (unsigned long)dt_old, ok ? "PASS" : "FAIL");
+    return ok;
+}
+
+/* T5: pad 4 held high by PA9, a 3 s falling-edge wait with nothing touching
+ * it must time out (return 0) after ~3 s of Stop. USB doesn't survive Stop:
+ * the result goes to a backup register and the Core resets to report it. */
+static void run_t5(uint32_t s_pass, uint32_t s_fail)
+{
+    ll_rcc_gpio_clk_enable(GPIOA);
+    ll_gpio_config_output(GPIOA, 9);
+    ll_gpio_set(GPIOA, 1UL << 9);
+    core_delay_ms(5);
+    core_usb_printf("[hw-pin-wake] T5: 3 s timed wait in Stop (don't touch pad 4)\r\n");
+    core_delay_ms(50);
+
+    save(PH_T5, s_pass, s_fail, 0u, 0u, 0u);
+    uint32_t t0 = core_millis();
+    int r = core_stop_until_on_change_timeout(LOOP_PAD, EDGE_FALLING, 3000u);
+    uint32_t dt = core_millis() - t0;
+    core_pad_on_change_stop(LOOP_PAD);
+    core_backup_write(BKP_T5, (dt << 8) | (uint32_t)(r + 1));
+    if (r == 0 && dt >= 2500u && dt <= 4000u) s_pass |= T_T5; else s_fail |= T_T5;
+    save(PH_RETRY, s_pass, s_fail, 0u, 0u, 0u);
+    do_reset();                   /* fresh boot -> T3 */
 }
 
 /*
  * T3: one attempt at a real wake-from-Stop. Drives PA9 high (pull-up on pad
  * 4 through the 2.2k, ~1.5 mA if shorted to GND -- safe), prompts, blinks the
  * LED for ~30 s so a human has time to get the tweezers on pad 4 and pad 1,
- * then actually calls core_stop_until_on_change(4, EDGE_FALLING). That call
- * has no timeout of its own -- see the T2 note above -- so the 30 s window is
- * a "get ready" cue, not a firmware deadline; once the Core commits to the
- * blocking call it waits for a real edge no matter how long that takes.
+ * then calls core_stop_until_on_change_timeout(4, EDGE_FALLING, 60 s). With
+ * nobody at the bench it times out and T3 is scored FAIL ("no touch"), so an
+ * unattended run finishes instead of sleeping forever.
  *
  * PASS bar: slept longer than one watchdog chunk (2.5 s at the 5 s timeout
  * here) with no watchdog reset. A touch inside the first chunk still means
@@ -232,12 +277,15 @@ static void t3_attempt(uint32_t s_pass, uint32_t s_fail, uint32_t attempt, uint3
 
     uint32_t chunk = core_watchdog_sleep_chunk_ms();
     uint32_t t0 = core_millis();
-    core_stop_until_on_change(LOOP_PAD, EDGE_FALLING);
+    int r = core_stop_until_on_change_timeout(LOOP_PAD, EDGE_FALLING, T3_TIMEOUT_MS);
     uint32_t slept_ms = core_millis() - t0;
 
     if (core_watchdog_caused_reset()) wd_seen = 1;   /* belt-and-suspenders; see PH_ARMED at boot */
 
-    if (wd_seen) {
+    if (r == 0) {
+        s_fail |= T_T3;               /* nobody touched it: timed out */
+        save(PH_REPORT, s_pass, s_fail, attempt, wd_seen, slept_ms | 0x80000000u);
+    } else if (wd_seen) {
         s_fail |= T_T3;
         save(PH_REPORT, s_pass, s_fail, attempt, wd_seen, slept_ms);
     } else if (slept_ms > chunk) {
@@ -254,7 +302,7 @@ static void t3_attempt(uint32_t s_pass, uint32_t s_fail, uint32_t attempt, uint3
 
 static uint32_t first_failure(uint32_t missing)
 {
-    for (uint32_t i = 0; i < 3; i++)
+    for (uint32_t i = 0; i < N_TESTS; i++)
         if (missing & (1u << i)) return i + 1u;
     return 0;
 }
@@ -263,21 +311,29 @@ static void print_report(uint32_t verdict, uint32_t s_pass, uint32_t s_fail,
                           uint32_t slept_ms, uint32_t chunk, uint32_t wd_seen,
                           uint32_t attempt)
 {
-    static const char *const names[3] = {
-        "T1 pad loopback", "T2 no-GPIO fast-fail", "T3 wake from Stop"
+    static const char *const names[N_TESTS] = {
+        "T1 pad loopback", "T2 no-GPIO fast-fail", "T3 wake from Stop",
+        "T4 already at level", "T5 timed wait"
     };
     core_usb_printf("\r\n[hw-pin-wake] %s  (pass=0x%02lx fail=0x%02lx expected=0x%02lx)\r\n",
                     verdict == VERDICT_PASS ? "PASS" : "FAIL",
                     (unsigned long)s_pass, (unsigned long)s_fail, (unsigned long)EXPECTED);
-    for (uint32_t i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < N_TESTS; i++) {
         uint32_t b = 1u << i;
         core_usb_printf("  %-22s %s\r\n", names[i],
                         (s_pass & b) ? "PASS" : (s_fail & b) ? "FAIL" : "not run");
     }
-    core_usb_printf("  T3: slept %lu ms before wake (need >%lu ms, one watchdog chunk), "
-                    "watchdog reset seen: %s, attempts used: %lu\r\n",
-                    (unsigned long)slept_ms, (unsigned long)chunk,
-                    wd_seen ? "YES" : "no", (unsigned long)attempt);
+    if (slept_ms & 0x80000000u)
+        core_usb_printf("  T3: no touch -- timed out after %lu ms (needs a human, see README)\r\n",
+                        (unsigned long)(slept_ms & 0x7FFFFFFFu));
+    else
+        core_usb_printf("  T3: slept %lu ms before wake (need >%lu ms, one watchdog chunk), "
+                        "watchdog reset seen: %s, attempts used: %lu\r\n",
+                        (unsigned long)slept_ms, (unsigned long)chunk,
+                        wd_seen ? "YES" : "no", (unsigned long)attempt);
+    uint32_t t5 = core_backup_read(BKP_T5);
+    core_usb_printf("  T5: returned %ld after %lu ms (want 0 after 2500-4000 ms)\r\n",
+                    (long)(int32_t)((t5 & 0xFFu) - 1u), (unsigned long)(t5 >> 8));
 }
 
 int main(void)
@@ -325,10 +381,19 @@ int main(void)
          * hold whatever an unrelated earlier firmware left there -- start
          * clean rather than trusting them. */
         s_pass = s_fail = attempt = wd_seen = slept_ms = 0u;
-        if (run_t1()) s_pass |= T_T1; else s_fail |= T_T1;
+        core_backup_write(BKP_T5, 0u);
+        int loop_ok = run_t1();
+        if (loop_ok) s_pass |= T_T1; else s_fail |= T_T1;
         if (run_t2()) s_pass |= T_T2; else s_fail |= T_T2;
+        if (run_t4(loop_ok)) s_pass |= T_T4; else s_fail |= T_T4;
         save(PH_START, s_pass, s_fail, 0u, wd_seen, slept_ms);
-        t3_attempt(s_pass, s_fail, 0u, wd_seen);       /* does not return (resets) unless giving up */
+        run_t5(s_pass, s_fail);                        /* resets into PH_RETRY -> T3 */
+        break;
+    case PH_T5:
+        /* Reset inside T5's timed Stop: a watchdog reset (or a manual one). */
+        s_fail |= T_T5;
+        save(PH_RETRY, s_pass, s_fail, 0u, wd ? 1u : 0u, 0u);
+        t3_attempt(s_pass, s_fail, 0u, wd ? 1u : 0u);
         break;
     case PH_RETRY:
         t3_attempt(s_pass, s_fail, attempt, wd_seen);  /* does not return (resets) unless giving up */

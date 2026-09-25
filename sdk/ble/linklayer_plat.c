@@ -163,6 +163,10 @@ void LINKLAYER_PLAT_NotifyWFIEnter(void)
 
 void LINKLAYER_PLAT_NotifyWFIExit(void)
 {
+    /* As CubeWBA: if AHB5 was cut, sample the (frozen) sleep timer as early
+     * as possible; LINKLAYER_PLAT_WaitHclkRdy() then waits for it to move. */
+    if (AHB5_SwitchedOff)
+        radio_sleep_timer_val = ll_intf_cmn_get_slptmr_value();
 }
 
 /* ============================================================

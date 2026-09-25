@@ -55,7 +55,7 @@ typedef struct {
 #define LL_I2C_CR1_STOPIE       (1UL << 5)    /* STOP interrupt enable */
 #define LL_I2C_CR1_ANFOFF       (1UL << 12)   /* Analog filter off */
 #define LL_I2C_CR1_DNF_SHIFT    8             /* Digital noise filter [3:0] */
-#define LL_I2C_CR1_FMP          (1UL << 24)   /* Fast-mode plus enable (WBA55, H523) */
+#define LL_I2C_CR1_FMP          (1UL << 24)   /* Fast-mode plus enable (WBA55, H523; reserved on the L422) */
 #define LL_I2C_CR1_NOSTRETCH    (1UL << 17)   /* Clock stretching disable (slave mode) */
 #define LL_I2C_CR1_GCEN         (1UL << 19)   /* General call enable */
 #define LL_I2C_CR1_ADDRIE       (1UL << 3)    /* Address-match interrupt enable (target) */
@@ -275,7 +275,7 @@ static inline uint32_t ll_i2c_timing_1m(uint32_t kernel_mhz)
  *   timing:  TIMINGR value (use LL_I2C_TIMING_* defines)
  *   fmp:     set non-zero to enable Fast-mode Plus (CR1.FMP bit)
  *            Only effective on STM32WBA55 and STM32H523.
- *            On L422, FMP is enabled via SYSCFG — see hal_i2c.c.
+ *            On L422, FMP is enabled via SYSCFG — see ll_i2c_init_fmp().
  *            On L011, FMP is not supported.
  */
 static inline void ll_i2c_init(I2C_TypeDef *i2c, uint32_t timing)
@@ -294,14 +294,25 @@ static inline void ll_i2c_init(I2C_TypeDef *i2c, uint32_t timing)
 }
 
 /**
- * Initialize I2C in Fast-mode Plus (1 MHz).
- * Sets the CR1.FMP bit for 20 mA output drive on WBA55 / H523.
+ * Initialize I2C in Fast-mode Plus (1 MHz), with the Fm+ (20 mA) pad drive.
+ *   WBA55 / H523: I2C_CR1.FMP (bit 24).
+ *   L422: I2C_CR1 bits 31:24 are reserved (RM0394 §38.9.1); Fm+ drive is
+ *         SYSCFG_CFGR1.I2C1_FMP (bit 20) / I2C3_FMP (bit 22), RM0394 §9.2.2,
+ *         which needs the SYSCFG clock (RCC_APB2ENR.SYSCFGEN, bit 0).
  */
 static inline void ll_i2c_init_fmp(I2C_TypeDef *i2c, uint32_t timing)
 {
     i2c->CR1 = 0;
     i2c->TIMINGR = timing;
+#if defined(STM32L422xx)
+    REG32(0x40021060UL) |= (1UL << 0);                  /* RCC_APB2ENR.SYSCFGEN */
+    (void)REG32(0x40021060UL);
+    if (i2c == I2C1)      REG32(0x40010004UL) |= (1UL << 20);   /* SYSCFG_CFGR1.I2C1_FMP */
+    else if (i2c == I2C3) REG32(0x40010004UL) |= (1UL << 22);   /* SYSCFG_CFGR1.I2C3_FMP */
+    i2c->CR1 = LL_I2C_CR1_PE;
+#else
     i2c->CR1 = LL_I2C_CR1_PE | LL_I2C_CR1_FMP;
+#endif
 }
 
 /* ============================================================

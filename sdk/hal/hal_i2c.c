@@ -12,7 +12,24 @@
 static void _i2c_clk_enable(I2C_TypeDef *instance)
 {
     if (instance == I2C1) ll_rcc_apb1_clk_enable(LL_APB1_I2C1);
-#if defined(STM32L422xx)
+#if defined(STM32L011xx)
+    /* The L0's I2C1 kernel clock is HSI16 (RCC_CCIPR.I2C1SEL), so the TIMINGR
+     * values for 16 MHz (I2C_KERNEL_CLK_MHZ) hold at every SYSCLK, including
+     * the 1-2 MHz MSI levels. HSI16 can't run in voltage range 3 (RM0377
+     * Table 43), so a range-3 build steps up to range 2 (fine at <= 4.2 MHz).
+     * HSI16KERON stays clear: Stop turns HSI16 off; core_clock_init() starts
+     * it again on wake when the project has an I2C bus. */
+    if (instance == I2C1) {
+        if (ll_pwr_get_vos() == 3u) {
+            ll_rcc_pwr_clk_enable();
+            ll_pwr_set_vos(2);
+        }
+        ll_rcc_hsi16_enable();
+        for (uint32_t t = 100000UL; t && !ll_rcc_hsi16_ready(); t--)
+            ;
+        ll_rcc_set_i2c_clk_source(1, LL_RCC_I2C_CLK_HSI16);
+    }
+#elif defined(STM32L422xx)
     if (instance == I2C3) ll_rcc_apb1_clk_enable(LL_APB1_I2C3);
 #elif defined(STM32WBA55xx)
     if (instance == I2C3) ll_rcc_apb7_clk_enable(LL_APB7_I2C3);
@@ -157,8 +174,12 @@ static _i2c_pins_t _i2c_pins(I2C_TypeDef *instance)
         p = (const _i2c_pins_t){ GPIOB, 10, 4, GPIOB, 11, 4 };
     }
 #elif defined(STM32L011xx)
+    /* Core.ST.L0.1 routes I2C1 to pads 4/5 = PB6 (SCL) / PB7 (SDA), AF1
+     * (definitions/Core-ST-L0-1-a.json; STM32L011 DS Table 14: AF1). This used to
+     * bit-bang PA9/PA10 — not on this Core's pads — and then muxed them as
+     * I2C1, leaving the real bus stuck and two stray pins in AF mode. */
     if (instance == I2C1) {
-        p = (const _i2c_pins_t){ GPIOA, 9, 1, GPIOA, 10, 1 };
+        p = (const _i2c_pins_t){ GPIOB, 6, 1, GPIOB, 7, 1 };
     }
 #endif
     return p;

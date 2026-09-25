@@ -14,18 +14,30 @@
     "system.delay": "verified",
     "system.tick": "verified",
     "system.fault": "verified",
-    "clocks.hsi": "verified",
-    "clocks.hse": "verified",
+    "clocks.hsi": {
+      "status": "verified",
+      "note": "'low' (HSI16): range 2, flash 1 WS (RM0493 Table 41), SRAM 1 WS, hclk5 8 MHz, PLL off, also after Stop 1. Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-clock-levels: registers per RM, SYSCLK 15.91 MHz vs HSE, -5400 ppm, inside the HSI16 +-1.2 % band)."
+    },
+    "clocks.hse": {
+      "status": "verified",
+      "note": "'medium' (HSE32): range 1, 0 WS, hclk5 32 MHz (RM0493 Table 99). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-clock-levels: SYSCLK measured against HSE/32 on TIM16, 0 ppm)."
+    },
     "clocks.msi": "na",
     "clocks.csi": "na",
-    "clocks.pll": "verified",
+    "clocks.pll": {
+      "status": "verified",
+      "note": "'high' 64 MHz (HSE/2 x8 /2, VCO 128) and 'max' 100 MHz (HSE/4 x25 /2, VCO 200): PLL1RGE 11, the PLL1R rule, HPRE5 so hclk5 <= 32 MHz, SYSCLK stepped via PLL1RCLKPRE (RM0493 §12.8.6-7, Table 99). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-clock-levels: registers per RM, 0 ppm at both)."
+    },
     "gpio.digital": "verified",
     "gpio.exti": "verified",
     "gpio.af": "verified",
     "gpio.od_pull": "verified",
     "uart.polling": "verified",
     "uart.irq": "compile",
-    "uart.lp": "compile",
+    "uart.lp": {
+      "status": "na",
+      "note": "Core.ST.W5 routes no LPUART1 pads. (The clock enable targeted RCC+0xAC; RCC_APB7ENR is 0xA8, fixed 2026-09-25 for other WBA boards.)"
+    },
     "i2c.std": "verified",
     "i2c.fast": "verified",
     "i2c.fmp": "na",
@@ -65,7 +77,7 @@
     "power.sleep": "verified",
     "power.stop": {
       "status": "verified",
-      "note": "Two back-to-back core_stop_for(10) with a 5 s IWDG running: 10 s each by the RTC calendar, no watchdog reset (T3/T4). RM0493 map: LSI1/RTCSEL in RCC_BDCR1, RTCAPBEN (APB7ENR bit 21) set without BLE, RTC SR/SCR at 0x50/0x5C, wake on NVIC vector 2 (no EXTI line), FLASH/SRAM wait states >= 1 before Stop 1 and HDIV5 restored after (§11.7.7). The wake-up timer is no longer enabled through RTC init mode, whose exit reloads RTC_SSR (§36.3.11) and cost 0.5 s of calendar per 2.5 s chunk (10 s read as 8 s); a stale RTC pend in the NVIC no longer turns Stop into a busy-wait (315 M cycles at 32 MHz per 10 s before, ~19 k after). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
+      "note": "Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle on the fix/core-clocks build): two back-to-back core_stop_for(10) with a 5 s IWDG, 10 s each by the RTC, 0 watchdog resets. An Alarm A that matches during a stop is masked so it no longer busy-waits the rest of it."
     },
     "power.standby": {
       "status": "compile",
@@ -77,7 +89,7 @@
     },
     "power.exti_wake": {
       "status": "compile",
-      "note": "core_stop_until_on_change with the Stop 1 wait-state/HDIV5 handling and fed chunks while the watchdog runs. Implemented 2026-09-25, awaiting bench"
+      "note": "core_stop_until_on_change with the Stop 1 wait-state/HDIV5 handling and fed chunks while the watchdog runs; returns at once if the pad is already at its wake level; core_stop_until_on_change_timeout() bounds the wait. 2026-09-25, awaiting bench"
     },
     "power.wkup_wake": "",
     "power.rtc_alarm": {
@@ -98,19 +110,25 @@
     "conn.usb_hid": "na",
     "conn.usb_msc": "na",
     "conn.dfu": "na",
-    "conn.ble": "verified",
+    "conn.ble": {
+      "status": "verified",
+      "note": "Bench-verified 2026-09-25 on Core.ST.W5: tests/ble-beacon advertising seen on a phone and running 17 min (a 15 min SWD soak showed no stuck ISR). Fixed then: BLE idle now wraps WFI in the link-layer WFIEnter/Exit/WaitHclkRdy hooks (a bare WFI let the radio sleep timer read stale after wake; the LL asserted and hung about 7 min after boot, main included). ble_app_init no longer zeroes RCC_CFGR4 or reconfigures the RTC. Radio IRQs steady at high/max over SWD."
+    },
     "conn.ble_adv": "verified",
     "conn.ble_gatt": "verified",
     "conn.fdcan": "na",
     "adv.i3c_ctrl": "na",
     "adv.i3c_target": "na",
     "adv.dac": "na",
-    "ble.adv": "verified",
+    "ble.adv": {
+      "status": "verified",
+      "note": "Bench-verified 2026-09-25 on Core.ST.W5: 'Core.ST.W5' advertising seen on a phone at 'medium'. Public address from UID64 (ST OUI 00:80:E1, as CubeWBA); it was built from UID96 wafer/lot bytes. A shipping product needs its own OUI or a static random address."
+    },
     "ble.gatt": "verified",
     "ble.notify": "verified",
     "ble.pairing": {
       "status": "partial",
-      "note": "Just Works legacy pairing + bonding only; no LE Secure Connections / passkey"
+      "note": "Just Works legacy pairing + bonding only; no LE Secure Connections / passkey. Bonds never reached flash (8-byte writes; the WBA programs 16-byte quad-words, RM0493 §7.3.7); fixed 2026-09-25, awaiting bench"
     },
     "ble.central": "none",
     "nvm.eeprom": "na",

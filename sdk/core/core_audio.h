@@ -34,6 +34,10 @@
 #include "hal_sai.h"
 #include "core_pdm.h"
 
+#if !defined(STM32WBA55xx)
+#error "core_audio.h: SAI PDM capture needs an SAI, and only Core.ST.W5 (STM32WBA55) has one"
+#endif
+
 /** Delivered finished PCM: `n` samples at the configured rate. */
 typedef void (*core_audio_pcm_cb)(const int16_t *pcm, uint32_t n, void *ctx);
 

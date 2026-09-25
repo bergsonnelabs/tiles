@@ -17,6 +17,7 @@ static void _uart_clk_enable(USART_TypeDef *instance)
 {
 #if defined(STM32L011xx)
     if (instance == USART2)  ll_rcc_apb1_clk_enable(LL_APB1_USART2);
+    if (instance == LPUART1) ll_rcc_apb1_clk_enable(LL_APB1_LPUART1);  /* RM0377 §7.3.14 bit 18 */
 #elif defined(STM32L422xx)
     if (instance == USART1)  ll_rcc_apb2_clk_enable(LL_APB2_USART1);
     if (instance == USART2)  ll_rcc_apb1_clk_enable(LL_APB1_USART2);
@@ -24,7 +25,8 @@ static void _uart_clk_enable(USART_TypeDef *instance)
 #elif defined(STM32WBA55xx)
     if (instance == USART1)  ll_rcc_apb2_clk_enable(LL_APB2_USART1);
     if (instance == USART2)  ll_rcc_apb1_clk_enable(LL_APB1_USART2);
-    if (instance == LPUART1) SET_BITS(REG32(RCC_BASE + 0xACUL), LL_APB7_LPUART1);
+    /* RCC_APB7ENR is at 0x0A8 (RM0493 §12.8.27); 0x0AC is RCC_AHB1SMENR. */
+    if (instance == LPUART1) ll_rcc_apb7_clk_enable(LL_APB7_LPUART1);
 #elif defined(STM32H523xx)
     if (instance == USART1)  ll_rcc_apb2_clk_enable(LL_APB2_USART1);
     if (instance == USART2)  ll_rcc_apb1_clk_enable(LL_APB1_USART2);
@@ -203,7 +205,7 @@ hal_status_t hal_uart_init(hal_uart_t *h, USART_TypeDef *instance,
 
         /* Register handle and enable NVIC */
         _handles[idx] = h;
-        hal_nvic_set_priority(_irq_number(instance), 0x40);  /* Mid priority */
+        hal_nvic_set_priority(_irq_number(instance), 4);  /* level 4, mid (the helper shifts it) */
         hal_nvic_enable_irq(_irq_number(instance));
     }
 

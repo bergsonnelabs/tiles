@@ -6,7 +6,10 @@
  *
  * Layout: simple append-only log of records. Each record has a
  * 4-byte header (magic + type + size) followed by data, aligned
- * to 8 bytes (flash double-word program granularity).
+ * to 16 bytes: the WBA55 programs flash in 128-bit quad-words
+ * (RM0493 §7.3.7), and the controller completes a program only after
+ * all four words are written. The 8-byte double-word writes this used
+ * to issue never completed a line, so no bond ever reached flash.
  *
  * When the page fills up, it's erased and records are compacted.
  * For simplicity, the current implementation uses RAM as a write
@@ -32,9 +35,13 @@ typedef struct __attribute__((packed)) {
     uint16_t size;
 } nvm_record_header_t;
 
-/* RAM mirror for read operations */
+/* Record alignment = flash program unit (quad-word). */
+#define NVM_ALIGN        16u
+#define NVM_ALIGN_UP(n)  (((n) + (NVM_ALIGN - 1u)) & ~(NVM_ALIGN - 1u))
+
+/* RAM mirror for read operations (word-aligned: it is read as uint32_t) */
 #define NVM_RAM_SIZE     4096
-static uint8_t nvm_ram[NVM_RAM_SIZE];
+static uint8_t nvm_ram[NVM_RAM_SIZE] __attribute__((aligned(16)));
 static uint8_t nvm_initialized;
 static uint16_t nvm_write_pos;
 
@@ -50,14 +57,21 @@ static void nvm_flash_write(uint32_t addr, const uint8_t *data, uint16_t len)
     ll_flash_unlock();
     ll_flash_clear_errors();
 
-    /* Program in double-words (8 bytes) */
-    uint32_t aligned_addr = addr & ~7UL;
-    const uint32_t *src = (const uint32_t *)data;
-
-    for (uint16_t i = 0; i < len; i += 8) {
-        uint32_t w0 = (i < len) ? src[i/4] : 0xFFFFFFFF;
-        uint32_t w1 = (i+4 < len) ? src[i/4 + 1] : 0xFFFFFFFF;
-        ll_flash_program_dword(aligned_addr + i, w0, w1);
+    /* Program in quad-words (16 bytes, 16-byte aligned); pad the last one
+     * with 0xFF (erased). addr is the page start, so it is aligned. */
+    for (uint16_t i = 0; i < len; i += NVM_ALIGN) {
+        uint32_t w[4];
+        for (uint16_t k = 0; k < 4u; k++) {
+            uint16_t at = (uint16_t)(i + 4u * k);
+            if (at + 4u <= len) {
+                memcpy(&w[k], &data[at], 4);
+            } else {
+                uint8_t b[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+                for (uint16_t j = 0; at + j < len && j < 4u; j++) b[j] = data[at + j];
+                memcpy(&w[k], b, 4);
+            }
+        }
+        ll_flash_program_qword(addr + i, w);
     }
 
     ll_flash_lock();
@@ -85,7 +99,7 @@ static void nvm_load_from_flash(void)
         if (hdr->magic != NVM_RECORD_MAGIC) break;
 
         uint16_t total = sizeof(nvm_record_header_t) + hdr->size;
-        uint16_t aligned = (total + 7) & ~7;  /* 8-byte aligned */
+        uint16_t aligned = NVM_ALIGN_UP(total);
 
         if (pos + aligned > NVM_FLASH_SIZE) break;
         if (nvm_write_pos + aligned > NVM_RAM_SIZE) break;
@@ -98,10 +112,11 @@ static void nvm_load_from_flash(void)
 
 static void nvm_flush_to_flash(void)
 {
-    if (nvm_write_pos == 0) return;
-
+    /* Always erase, so NVM_Discard (write_pos 0) clears the stored bonds too;
+     * it used to return early and leave them in flash. */
     nvm_flash_erase();
-    nvm_flash_write(NVM_FLASH_ADDR, nvm_ram, nvm_write_pos);
+    if (nvm_write_pos)
+        nvm_flash_write(NVM_FLASH_ADDR, nvm_ram, nvm_write_pos);
 }
 
 #else
@@ -129,7 +144,7 @@ int NVM_Add(uint8_t type, const uint8_t *data, uint16_t size,
 
     uint16_t total_data = size + extra_size;
     uint16_t record_size = sizeof(nvm_record_header_t) + total_data;
-    uint16_t aligned = (record_size + 7) & ~7;
+    uint16_t aligned = NVM_ALIGN_UP(record_size);
 
     if (nvm_write_pos + aligned > NVM_RAM_SIZE) {
         /* NVM full — erase and start fresh */
@@ -172,7 +187,7 @@ int NVM_Get(int mode, uint8_t type, uint16_t offset, uint8_t *data, uint16_t siz
         if (hdr->magic != NVM_RECORD_MAGIC) return -3;
 
         uint16_t record_start = nvm_read_cursor + sizeof(nvm_record_header_t);
-        uint16_t aligned = (sizeof(nvm_record_header_t) + hdr->size + 7) & ~7;
+        uint16_t aligned = NVM_ALIGN_UP(sizeof(nvm_record_header_t) + hdr->size);
         nvm_read_cursor += aligned;
 
         if (hdr->type == type || type == 0xFF) {

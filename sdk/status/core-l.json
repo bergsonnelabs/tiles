@@ -9,23 +9,38 @@
     "system.delay": "verified",
     "system.tick": "verified",
     "system.fault": "verified",
-    "clocks.hsi": "verified",
+    "clocks.hsi": {
+      "status": "compile",
+      "note": "'high' now selects voltage range 1 (the L0 boots in range 2, where 16 MHz needs 1 WS) and ramps MSI 4.2 MHz -> HSI16 for the VDD < 2 V step rule (RM0377 §6.1.4). Changed 2026-09-25, awaiting bench (tests/hw-clock-levels)"
+    },
     "clocks.hse": "na",
     "clocks.msi": {
-      "status": "partial",
-      "note": "Reset default (2MHz) works; MSIRANGE change hangs — needs L0 errata study"
+      "status": "compile",
+      "note": "The hang was MSIRDY: the L0 polled RCC_CR bit 1 (HSI16KERON), MSIRDY is bit 9 (RM0377 §7.3.1). Fixed 2026-09-25, plus exact MSI frequencies in SYSCLK_HZ (1.048576 / 2.097152 MHz; SysTick ran ~5 % fast), 'low' in voltage range 3 (range 2 with I2C) and no out-of-spec LPRUN. Awaiting bench (tests/hw-clock-levels)"
     },
     "clocks.csi": "na",
-    "clocks.pll": "verified",
+    "clocks.pll": {
+      "status": "compile",
+      "note": "'max' ran the PLL VCO at 128 MHz in range 2 (limits 96 MHz in range 1, 48 in range 2, RM0377 §7.2.4); now HSI16 x4 /2 (VCO 64 MHz) in range 1 at 1 WS. Changed 2026-09-25, awaiting bench (tests/hw-clock-levels)"
+    },
     "gpio.digital": "verified",
     "gpio.exti": "verified",
     "gpio.af": "verified",
     "gpio.od_pull": "verified",
     "uart.polling": "verified",
     "uart.irq": "compile",
-    "uart.lp": "compile",
-    "i2c.std": "compile",
-    "i2c.fast": "compile",
+    "uart.lp": {
+      "status": "compile",
+      "note": "LPUART1 bus clock was never enabled (RCC_APB1ENR bit 18, RM0377 §7.3.14). Fixed 2026-09-25, awaiting bench"
+    },
+    "i2c.std": {
+      "status": "compile",
+      "note": "I2C1 kernel clock is HSI16 (RCC_CCIPR.I2C1SEL) at every clock level, so 100/400 kHz timing no longer depends on SYSCLK; bus recovery now uses PB6/PB7 (it drove PA9/PA10). 2026-09-25, awaiting bench"
+    },
+    "i2c.fast": {
+      "status": "compile",
+      "note": "400 kHz at the MSI levels (the default project + an I2C tile failed to build: 'requires at least 4 MHz'); HSI16 kernel clock, restarted after Stop. 2026-09-25, awaiting bench"
+    },
     "i2c.fmp": "na",
     "i2c.irq": "",
     "i2c.target": "verified",
@@ -48,7 +63,10 @@
       "status": "compile",
       "note": "Starved-refresh reset verified earlier, but the timeout assumed a 32 kHz LSI; the L0's is 37 kHz nominal (26-56 kHz, DS table 39), so the 5 s watchdog fired at ~4.3 s. Prescaler scaled per family (LL_LSI_HZ), fixed 2026-09-25 (RM0377), awaiting bench. Not calibrated against HSI16, so the timeout still varies part to part."
     },
-    "adc.raw": "verified",
+    "adc.raw": {
+      "status": "verified",
+      "note": "Verified at the HSI16 clock levels (asynchronous HSI16 ADC clock, unchanged). The MSI levels had no ADC clock at all; since 2026-09-25 they use PCLK/2 (LFMEN below 3.5 MHz), compile-only"
+    },
     "adc.mv": {
       "status": "partial",
       "note": "VREFINT was never enabled on the L0 before 2026-09-22 (VREFEN written to reserved CFGR2 bits), so earlier readings were ~9x off. Fixed; VDDA now reads 3292 mV on a ~3.3 V rail. Re-verify with known input voltages."
@@ -79,7 +97,7 @@
     "power.sleep": "verified",
     "power.stop": {
       "status": "compile",
-      "note": "The hang was not the wakeup path: the LSI helpers set LSEON (RCC_CSR bit 8) and waited forever on LSERDY; LSE/LSI bits were swapped. Fixed 2026-09-25 (register map per RM0377 §7.3.20; WUF cleared before each Stop per Table 39; RTC wake vector enabled under PRIMASK; sleeps in fed chunks while the watchdog runs, which the L0 cannot freeze in Stop), awaiting bench (tests/hw-sleep-cycle)"
+      "note": "The hang was not the wakeup path: the LSI helpers set LSEON (RCC_CSR bit 8) and waited forever on LSERDY; LSE/LSI bits were swapped. Fixed 2026-09-25 (register map per RM0377 §7.3.20; WUF cleared before each Stop per Table 39; RTC wake vector enabled under PRIMASK; sleeps in fed chunks while the watchdog runs, which the L0 cannot freeze in Stop; an Alarm A routed to EXTI 17 is masked during the sleep so its pend can't turn Stop into a busy-wait), awaiting bench (tests/hw-sleep-cycle)"
     },
     "power.standby": {
       "status": "compile",
@@ -91,7 +109,7 @@
     },
     "power.exti_wake": {
       "status": "compile",
-      "note": "core_stop_until_on_change now waits for the pad edge itself and wakes to feed a running watchdog. Reworked 2026-09-25, awaiting bench"
+      "note": "core_stop_until_on_change waits for the pad edge itself, wakes to feed a running watchdog, returns at once if the pad is already at its wake level, and core_stop_until_on_change_timeout() bounds the wait (RTC-measured). 2026-09-25, awaiting bench"
     },
     "power.wkup_wake": "",
     "power.rtc_alarm": {
@@ -128,7 +146,10 @@
     "ble.notify": "na",
     "ble.pairing": "na",
     "ble.central": "na",
-    "nvm.eeprom": "compile",
+    "nvm.eeprom": {
+      "status": "compile",
+      "note": "Writes step up from voltage range 3 (clock 'low') to range 2 for the program and back, since range 3 can't program the EEPROM (RM0377 §6.1.4). 2026-09-25"
+    },
     "nvm.flash_emu": "na"
   }
 }

@@ -14,7 +14,22 @@
 
 #define CLOCK_SOURCE_{{ clock_config.source | upper }}  1
 #define SYSCLK_MHZ        {{ clock_config.sysclk_mhz }}
+{% if clock_config.sysclk_hz is defined and clock_config.sysclk_hz != clock_config.sysclk_mhz * 1000000 %}
+#define SYSCLK_HZ         {{ clock_config.sysclk_hz }}UL   /* MSI range: {{ "%.6f" | format(clock_config.sysclk_hz / 1000000) }} MHz exactly */
+{% else %}
 #define SYSCLK_HZ         ({{ clock_config.sysclk_mhz }}UL * 1000000UL)
+{% endif %}
+
+{% if clock_config.level is defined %}
+#define CLOCK_LEVEL_{{ clock_config.level | upper }}   1
+#define CLOCK_LEVEL_NAME   "{{ clock_config.level }}"
+{% endif %}
+{% if clock_config.vos_range %}
+#define CLOCK_VOS_RANGE    {{ clock_config.vos_range }}   /* core voltage range core_clock_init() selects */
+{% endif %}
+{% if clock_config.hpre5 %}
+#define CLOCK_HPRE5        {{ clock_config.hpre5 }}   /* hclk5 = SYSCLK / CLOCK_HPRE5 on the PLL */
+{% endif %}
 
 {% if clock_config.pll %}
 #define CLOCK_USE_PLL      1

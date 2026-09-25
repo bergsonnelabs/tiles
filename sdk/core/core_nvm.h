@@ -110,6 +110,17 @@ static inline int core_nvm_write(uint32_t offset, const void *data, uint32_t len
      * The hardware handles erase-before-write internally.
      * Each byte write takes ~3.2ms (tPROG). */
 
+    /* Voltage range 3 (the "low" clock level) can't program the EEPROM
+     * (RM0377 §6.1.4): step up to range 2 for the write and back after.
+     * Range 3 runs at <= 4.2 MHz, which range 2 allows at 0 WS. */
+    uint32_t vos_was = (REG32(0x40007000UL) >> 11) & 0x3UL;    /* PWR_CR.VOS */
+    if (vos_was == 3u) {
+        SET_BITS(REG32(0x40021038UL), (1UL << 28));             /* RCC_APB1ENR.PWREN */
+        while (REG32(0x40007004UL) & (1UL << 4)) ;              /* PWR_CSR.VOSF */
+        MOD_BITS(REG32(0x40007000UL), 0x3UL << 11, 2UL << 11);
+        while (REG32(0x40007004UL) & (1UL << 4)) ;
+    }
+
     /* Unlock PECR if locked */
     if (FLASH_PECR & FLASH_PECR_PELOCK) {
         FLASH_PEKEYR = FLASH_PEKEY1;
@@ -128,6 +139,12 @@ static inline int core_nvm_write(uint32_t offset, const void *data, uint32_t len
 
     /* Re-lock */
     SET_BITS(FLASH_PECR, FLASH_PECR_PELOCK);
+
+    if (vos_was == 3u) {
+        while (REG32(0x40007004UL) & (1UL << 4)) ;
+        MOD_BITS(REG32(0x40007000UL), 0x3UL << 11, 3UL << 11);
+        while (REG32(0x40007004UL) & (1UL << 4)) ;
+    }
 
     return 0;
 #else

@@ -97,6 +97,27 @@ static inline int _ct_spi_write(void *h, uint8_t cs, uint8_t reg,
     return 0;
 }
 
+/* Raw transaction (tiles_pal.h spi_transfer): one CS assertion, send tx_len
+ * bytes, then clock in rx_len bytes, release CS. For command + address + data
+ * protocols such as SPI-NOR (Store.O.128). As with the register adapters,
+ * `cs` is ignored: the chip select is the bus's own (coregen). */
+static inline int _ct_spi_transfer(void *h, uint8_t cs,
+                                   const uint8_t *tx, uint16_t tx_len,
+                                   uint8_t *rx, uint16_t rx_len)
+{
+    core_spi_t *spi = (core_spi_t *)h;
+    (void)cs;
+    if ((tx_len && !tx) || (rx_len && !rx))
+        return -1;
+    core_spi_select(spi);
+    if (tx_len)
+        core_spi_write(spi, tx, tx_len);
+    if (rx_len)
+        core_spi_read(spi, rx, rx_len);
+    core_spi_deselect(spi);
+    return 0;
+}
+
 #endif /* _CORE_TILES_HAS_SPI */
 
 /* ---- Internal: shared adapters ---- */
@@ -109,6 +130,12 @@ static inline int _ct_gpio_irq_enable(void *h, uint8_t pin, uint8_t edge,
                : (edge == TILES_GPIO_EDGE_RISING)  ? EDGE_RISING
                : EDGE_BOTH;
     return core_pad_on_change(pin, e, cb, ctx);
+}
+
+static inline void _ct_gpio_irq_disable(void *h, uint8_t pin)
+{
+    (void)h;
+    core_pad_on_change_stop(pin);
 }
 
 /* ---- Internal: typed constructors ---- */
@@ -135,6 +162,7 @@ static inline tiles_pal_t *_core_tiles_pal_i2c(core_i2c_t *bus)
     hals[i].i2c_write_raw   = _ct_i2c_write_raw;
     hals[i].i2c_read_raw    = _ct_i2c_read_raw;
     hals[i].gpio_irq_enable = _ct_gpio_irq_enable;
+    hals[i].gpio_irq_disable = _ct_gpio_irq_disable;
     hals[i].delay_ms        = ll_delay_ms;
     hals[i].buses           = TILES_BUS_I2C;
     hals[i].handle          = bus;
@@ -160,7 +188,9 @@ static inline tiles_pal_t *_core_tiles_pal_spi(core_spi_t *bus)
     keys[i] = bus;
     hals[i].spi_read        = _ct_spi_read;
     hals[i].spi_write       = _ct_spi_write;
+    hals[i].spi_transfer    = _ct_spi_transfer;
     hals[i].gpio_irq_enable = _ct_gpio_irq_enable;
+    hals[i].gpio_irq_disable = _ct_gpio_irq_disable;
     hals[i].delay_ms        = ll_delay_ms;
     hals[i].buses           = TILES_BUS_SPI;
     hals[i].handle          = bus;
@@ -192,6 +222,9 @@ static inline int _ct2_spi_read(void *h, uint8_t cs, uint8_t r, uint8_t *d, uint
 { return _ct_spi_read(((core_tiles_dual_t *)h)->spi, cs, r, d, n); }
 static inline int _ct2_spi_write(void *h, uint8_t cs, uint8_t r, const uint8_t *d, uint16_t n)
 { return _ct_spi_write(((core_tiles_dual_t *)h)->spi, cs, r, d, n); }
+static inline int _ct2_spi_transfer(void *h, uint8_t cs, const uint8_t *tx, uint16_t tn,
+                                    uint8_t *rx, uint16_t rn)
+{ return _ct_spi_transfer(((core_tiles_dual_t *)h)->spi, cs, tx, tn, rx, rn); }
 
 /**
  * Get a tiles_pal_t* carrying BOTH an I2C and an SPI bus, for tiles that use
@@ -226,7 +259,9 @@ static inline tiles_pal_t *core_tiles_pal2(core_i2c_t *i2c, core_spi_t *spi)
     hals[i].i2c_read_raw    = _ct2_i2c_read_raw;
     hals[i].spi_read        = _ct2_spi_read;
     hals[i].spi_write       = _ct2_spi_write;
+    hals[i].spi_transfer    = _ct2_spi_transfer;
     hals[i].gpio_irq_enable = _ct_gpio_irq_enable;
+    hals[i].gpio_irq_disable = _ct_gpio_irq_disable;
     hals[i].delay_ms        = ll_delay_ms;
     hals[i].buses           = TILES_BUS_I2C | TILES_BUS_SPI;
     hals[i].handle          = &pairs[i];

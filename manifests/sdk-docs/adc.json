@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f356b04",
+  "source": "tiles@6f27e78",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -645,6 +645,24 @@
       ],
       "studio_exposed": false,
       "layer": "hal"
+    },
+    {
+      "name": "ll_adc_l0_clock_config",
+      "signature": "ll_adc_l0_clock_config(ADC_TypeDef * adc, uint32_t pclk_hz)",
+      "returns": "void",
+      "brief": "L0 ADC clock (RM0377 §13.3.5). fADC limits per voltage range: 16 / 8 / 4 MHz in range 1 / 2 / 3 (STM32L011 DS Table 54); below 3.5 MHz LFMEN must be set. - HSI16 running: the asynchronous clock (CKMODE = 00), HSI16 / 1 in range 1 and / 2 in range 2 (PRESC, ADC_CCR[21:18]). This is the path the ADC always used, and the only one at the HSI16 clock levels. - HSI16 off (the MSI levels; HSI16 can't even run in range 3): the ADC had no clock at all there and every conversion timed out. It now takes PCLK / 2 (CKMODE = 01, any duty cycle), or PCLK / 4 if / 2 is over the limit. Must be called with the ADC disabled (ADEN = 0), before calibration.",
+      "params": [
+        {
+          "name": "adc",
+          "ctype": "ADC_TypeDef *"
+        },
+        {
+          "name": "pclk_hz",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
     },
     {
       "name": "ll_adc_calibrate",

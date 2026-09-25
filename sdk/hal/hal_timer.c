@@ -309,7 +309,7 @@ hal_status_t hal_timer_tick_init(hal_timer_t *h, TIM_TypeDef *instance,
     uint32_t irq = _tim_irq(instance);
     if (!irq) return HAL_ERROR;  /* Timer has no NVIC interrupt (e.g. TIM6/TIM7 on H523) */
     _tim_handles[idx] = h;
-    hal_nvic_set_priority(irq, 0x30);
+    hal_nvic_set_priority(irq, 3);   /* level 3 (the helper shifts it into the priority bits) */
     hal_nvic_enable_irq(irq);
 
     return HAL_OK;
@@ -344,7 +344,7 @@ hal_status_t hal_timer_tick_enable(hal_timer_t *h, hal_callback_t cb, void *ctx)
     uint32_t irq = _tim_irq(h->instance);
     if (!irq) return HAL_ERROR;  /* Timer has no NVIC interrupt */
     SET_BITS(h->instance->DIER, LL_TIM_DIER_UIE);
-    hal_nvic_set_priority(irq, 0x30);
+    hal_nvic_set_priority(irq, 3);   /* level 3 (the helper shifts it into the priority bits) */
     hal_nvic_enable_irq(irq);
 
     return HAL_OK;

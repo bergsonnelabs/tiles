@@ -14,19 +14,31 @@
     },
     "clocks.hsi": "verified",
     "clocks.hse": "na",
-    "clocks.msi": "verified",
+    "clocks.msi": {
+      "status": "verified",
+      "note": "Wait states now raised before the MSI range goes up (RM0394 §3.3.3; 'high' switched to 48 MHz at 0 WS). 'low' runs 16 MHz, not 8: USB is always on and needs APB >= 10 MHz (RM0394 §46.4). low/medium/high bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-clock-levels: latency, range, SysTick vs USB SOF within 0.6 %)"
+    },
     "clocks.csi": "na",
-    "clocks.pll": "verified",
+    "clocks.pll": {
+      "status": "verified",
+      "note": "HSI16 /1 x10 /2 = 80 MHz, VCO 160 MHz, 4 WS. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-clock-levels max: SysTick vs USB SOF 0 ppm)"
+    },
     "gpio.digital": "verified",
     "gpio.exti": "verified",
     "gpio.af": "verified",
     "gpio.od_pull": "verified",
     "uart.polling": "compile",
     "uart.irq": "compile",
-    "uart.lp": "compile",
+    "uart.lp": {
+      "status": "compile",
+      "note": "Vector 70 (LPUART1) was 0 in startup_stm32l422xx.s; LPUART1_IRQHandler wired 2026-09-25 (RM0394 Table 51). Awaiting bench"
+    },
     "i2c.std": "verified",
     "i2c.fast": "verified",
-    "i2c.fmp": "compile",
+    "i2c.fmp": {
+      "status": "compile",
+      "note": "Fm+ drive set I2C_CR1 bit 24, reserved on the L422; now SYSCFG_CFGR1.I2C1_FMP / I2C3_FMP (bits 20 / 22) with the SYSCFG clock on (RM0394 §9.2.2). 2026-09-25, awaiting bench"
+    },
     "i2c.irq": "",
     "i2c.target": "compile",
     "i2c.dma": "",
@@ -97,7 +109,7 @@
     },
     "power.exti_wake": {
       "status": "compile",
-      "note": "Pad-edge wake from Stop 1 was verified (projects/power-test); core_stop_until_on_change now waits for the edge itself and wakes to feed a running watchdog. Reworked 2026-09-25, awaiting bench"
+      "note": "Pad-edge wake from Stop 1 was verified (projects/power-test); core_stop_until_on_change now waits for the edge itself, wakes to feed a running watchdog, returns at once if the pad is already at its wake level, and core_stop_until_on_change_timeout() bounds the wait. 2026-09-25; tests/hw-pin-wake T4/T5 added, not yet run to completion"
     },
     "power.wkup_wake": {
       "status": "compile",
@@ -112,8 +124,8 @@
       "note": "TAMP_BKPxR at 0x40003400 + 0x100 (RM0394 §36.6.8); write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "security.rng": {
-      "status": "verified",
-      "note": "HSI48 + CCIPR mux. 6/6 tests pass: init, read, uniqueness, fill, error check, deinit/reinit (tests/val-backup-rng-alarm-u)"
+      "status": "compile",
+      "note": "Verified before 2026-09-25 (tests/val-backup-rng-alarm-u, 6/6), when init wrote RCC_CCIPR[29:28] (ADCSEL, absent on the L42x) and worked because CLK48SEL resets to HSI48. Now writes CLK48SEL [27:26] = HSI48 (RM0394 §6.4.27); awaiting re-bench"
     },
     "security.aes": "none",
     "security.pka": "na",
