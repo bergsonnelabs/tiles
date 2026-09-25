@@ -55,7 +55,7 @@
  * @studio unsupported severity=advanced category="nSLEEP pin (hardware-gated)" section=advanced
  *   Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)
  *   is not routed to any tile pad in the Drive.DC.H rev-a layout
- *   (verify in kiln/definitions/Drive-DC-H-a.json — pads 1–10 are
+ *   (verify in definitions/Drive-DC-H-a.json — pads 1–10 are
  *   GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,
  *   V+; nSLEEP is strapped active on the PCB). sleep()/wake() only
  *   toggle the I²C-side EN_OUT bit; the chip itself can't reach its
@@ -83,7 +83,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_DRIVE_DC_H_VERSION_MAJOR  4
-#define TILE_DRIVE_DC_H_VERSION_MINOR  2
+#define TILE_DRIVE_DC_H_VERSION_MINOR  3
 #define TILE_DRIVE_DC_H_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -312,7 +312,6 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
  * @brief  Drive motor forward (OUT1=H, OUT2=L).
  * @studio expose category=tile name=forward section=runtime
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_forward(tile_t* tile);
 
@@ -320,7 +319,6 @@ void tile_drive_dc_h_forward(tile_t* tile);
  * @brief  Drive motor in reverse (OUT1=L, OUT2=H).
  * @studio expose category=tile name=reverse section=runtime
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_reverse(tile_t* tile);
 
@@ -331,7 +329,6 @@ void tile_drive_dc_h_reverse(tile_t* tile);
  * Motor is actively held. Current recirculates through the
  * low-side FETs, providing strong braking force.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_brake(tile_t* tile);
 
@@ -342,7 +339,6 @@ void tile_drive_dc_h_brake(tile_t* tile);
  * Motor freewheels. No braking force is applied. This is the
  * initial state after init().
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_coast(tile_t* tile);
 
@@ -362,7 +358,6 @@ void tile_drive_dc_h_coast(tile_t* tile);
  * I²C in all modes. Switching to a pad mode disables I²C bridge calls
  * (forward/reverse/etc) — they'll log an error and no-op.
  *
- * @param  tile  Pointer to tile handle
  * @param  mode  Bridge control source (DRIVE_DC_H_CTRL_*)
  */
 void tile_drive_dc_h_set_control_mode(tile_t* tile,
@@ -379,9 +374,9 @@ void tile_drive_dc_h_set_control_mode(tile_t* tile,
  *   With VM_GAIN_SEL=1: value * 3920/255 mV  (15.4 mV/bit)
  *
  * In speed mode: sets target ripple speed.
- *   Target speed = value * W_SCALE rad/s.
+ *   Target ripple speed = value * W_SCALE rad/s (W_SCALE 16/32/64/128;
+ *   shaft RPM = that × 60 / (2π × ripples per rev)).
  *
- * @param  tile   Pointer to tile handle
  * @param  value  Target setpoint (0-255)
  */
 void tile_drive_dc_h_set_target(tile_t* tile, uint8_t value);
@@ -389,13 +384,16 @@ void tile_drive_dc_h_set_target(tile_t* tile, uint8_t value);
 /**
  * @brief  Select the regulation loop (open-loop / current / voltage / speed).
  * @studio expose category=tile name=set_regulation_mode section=config
+ * @studio control mode label="Regulation" tier=advanced default=DRIVE_DC_H_REG_VOLTAGE
  *
  * Writes REG_CTRL bits in REG_CTRL0. After switching, set_target() is
  * interpreted in the new loop's units (voltage code, speed code, etc.).
  * Speed mode requires ripple counting to be enabled — the driver
  * automatically sets EN_RC=1 when SPEED is selected.
  *
- * @param  tile  Pointer to tile handle
+ * @note  REG_CTRL is only writable with the outputs off (datasheet
+ *        Table 8-29), so this briefly clears EN_OUT around the write.
+ *
  * @param  mode  Regulation mode (DRIVE_DC_H_REG_*)
  */
 void tile_drive_dc_h_set_regulation_mode(tile_t* tile,
@@ -413,7 +411,6 @@ void tile_drive_dc_h_set_regulation_mode(tile_t* tile,
  * internal 500 mV VREF (INT_VREF=1, fixed by this driver since the
  * external VREF pin isn't routed on the Drive.DC.H tile).
  *
- * @param  tile  Pointer to tile handle
  * @param  mode  Current regulation mode (DRIVE_DC_H_IMODE_*)
  */
 void tile_drive_dc_h_set_current_regulation_mode(tile_t* tile,
@@ -422,6 +419,7 @@ void tile_drive_dc_h_set_current_regulation_mode(tile_t* tile,
 /**
  * @brief  Set the current-sense gain / max-current range.
  * @studio expose category=tile name=set_current_sense_gain section=config
+ * @studio control code label="Current range (0 = 4 A … 5 = 0.125 A)" tier=advanced default=0
  *
  * Programs CS_GAIN_SEL[2:0] in RC_CTRL0. Lower max-current ranges
  * give finer current resolution but lower R_DS(on) headroom; higher
@@ -431,8 +429,7 @@ void tile_drive_dc_h_set_current_regulation_mode(tile_t* tile,
  *   3 = 0.5 A,  4 = 0.25 A, 5 = 0.125 A
  * Also affects ITRIP when current regulation is enabled.
  *
- * @param  tile  Pointer to tile handle
- * @param  code  CS_GAIN_SEL code (0-5)
+ * @param  code  [0..5] CS_GAIN_SEL code
  */
 void tile_drive_dc_h_set_current_sense_gain(tile_t* tile, uint8_t code);
 
@@ -441,12 +438,12 @@ void tile_drive_dc_h_set_current_sense_gain(tile_t* tile, uint8_t code);
 /**
  * @brief  Enable or disable hardware stall detection.
  * @studio expose category=tile name=set_stall_enabled section=config
+ * @studio control enabled label="Stall detection" tier=advanced type=bool default=1
  *
  * Toggles EN_STALL in CONFIG0. When disabled, the STALL bit in the
  * fault register won't latch and is_stalled() always returns 0.
  * Useful while tuning the inrush time for a new motor.
  *
- * @param  tile     Pointer to tile handle
  * @param  enabled  1 = stall detection on, 0 = off
  */
 void tile_drive_dc_h_set_stall_enabled(tile_t* tile, uint8_t enabled);
@@ -454,6 +451,7 @@ void tile_drive_dc_h_set_stall_enabled(tile_t* tile, uint8_t enabled);
 /**
  * @brief  Set the inrush blanking time (TINRUSH).
  * @studio expose category=tile name=set_inrush_time_ms section=config
+ * @studio control ms label="Inrush time" tier=advanced default=100 unit=ms
  *
  * Programs CONFIG1/CONFIG2 with a 16-bit count of 102.4 µs ticks,
  * giving up to ~6.7 s. During the blanking window after a drive
@@ -461,8 +459,12 @@ void tile_drive_dc_h_set_stall_enabled(tile_t* tile, uint8_t enabled);
  * because real motors draw several × steady-state during startup.
  * Tune for the slowest motor you want to drive.
  *
- * @param  tile  Pointer to tile handle
- * @param  ms    Inrush blanking time in milliseconds (0 - 6710)
+ * @note  With soft-start on (EN_SS=1, init's default) and voltage or
+ *        speed regulation active, the chip stretches the window to
+ *        TINRUSH × WSET_VSET (datasheet §8.3.7.3.1): 100 ms at
+ *        WSET_VSET=255 is a ~25 s ramp.
+ *
+ * @param  ms    [0..6710] ms Inrush blanking time
  */
 void tile_drive_dc_h_set_inrush_time_ms(tile_t* tile, uint16_t ms);
 
@@ -475,7 +477,6 @@ void tile_drive_dc_h_set_inrush_time_ms(tile_t* tile, uint16_t ms);
  * the chip flags STALL but keeps driving — useful for haptics or
  * actuators that legitimately stall against an end-stop.
  *
- * @param  tile  Pointer to tile handle
  * @param  mode  DRIVE_DC_H_STALL_LATCH or DRIVE_DC_H_STALL_REPORT
  */
 void tile_drive_dc_h_set_stall_recovery(tile_t* tile,
@@ -493,7 +494,6 @@ void tile_drive_dc_h_set_stall_recovery(tile_t* tile,
  * threshold is 10-bit; the driver picks the smallest scale (×2, ×8,
  * ×16, or ×64) that fits `count`.
  *
- * @param  tile   Pointer to tile handle
  * @param  count  Threshold count (0 - 65472, larger = coarser scale)
  */
 void tile_drive_dc_h_set_ripple_threshold(tile_t* tile, uint16_t count);
@@ -507,7 +507,6 @@ void tile_drive_dc_h_set_ripple_threshold(tile_t* tile, uint16_t count);
  * undercounts, decrease if it spuriously counts noise. Codes:
  *   0 = ×2,  1 = ×4 (default),  2 = ×8,  3 = ×16
  *
- * @param  tile  Pointer to tile handle
  * @param  code  FLT_GAIN_SEL code (0-3)
  */
 void tile_drive_dc_h_set_ripple_filter_gain(tile_t* tile, uint8_t code);
@@ -522,7 +521,6 @@ void tile_drive_dc_h_set_ripple_filter_gain(tile_t* tile, uint8_t code);
  * NPOR[1], CNT_DONE[0]. Use the DRV8214_FAULT_* masks to
  * decode individual bits.
  *
- * @param  tile  Pointer to tile handle
  * @return Raw fault byte (0 = no faults)
  */
 uint8_t tile_drive_dc_h_get_fault(tile_t* tile);
@@ -534,7 +532,6 @@ uint8_t tile_drive_dc_h_get_fault(tile_t* tile);
  * Sets CLR_FLT in CONFIG0. Clears FAULT, OCP, OVP, TSD,
  * and NPOR bits. The CLR_FLT bit is self-clearing.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_clear_fault(tile_t* tile);
 
@@ -542,7 +539,6 @@ void tile_drive_dc_h_clear_fault(tile_t* tile);
  * @brief  Check if a motor stall condition is active.
  * @studio expose category=tile name=is_stalled returns=bool section=runtime
  *
- * @param  tile  Pointer to tile handle
  * @return 1 if STALL bit is set, 0 otherwise
  */
 uint8_t tile_drive_dc_h_is_stalled(tile_t* tile);
@@ -554,7 +550,6 @@ uint8_t tile_drive_dc_h_is_stalled(tile_t* tile);
  * Reads the VMTR register. The reading is proportional to the
  * voltage across OUT1-OUT2 terminals. Valid while driving.
  *
- * @param  tile  Pointer to tile handle
  * @return Motor voltage in mV (e.g. 3300 = 3.3 V)
  */
 uint16_t tile_drive_dc_h_get_voltage_mv(tile_t* tile);
@@ -567,7 +562,6 @@ uint16_t tile_drive_dc_h_get_voltage_mv(tile_t* tile);
  * CS_GAIN_SEL setting. The reading reflects the current
  * flowing through the low-side FETs during drive or brake.
  *
- * @param  tile  Pointer to tile handle
  * @return Motor current in mA
  */
 uint16_t tile_drive_dc_h_get_current_ma(tile_t* tile);
@@ -580,7 +574,6 @@ uint16_t tile_drive_dc_h_get_current_ma(tile_t* tile);
  * algorithm. Value is proportional to motor speed but requires
  * motor-specific calibration for RPM conversion.
  *
- * @param  tile  Pointer to tile handle
  * @return Raw speed estimate (0-255)
  */
 uint8_t tile_drive_dc_h_get_speed(tile_t* tile);
@@ -595,7 +588,6 @@ uint8_t tile_drive_dc_h_get_speed(tile_t* tile);
  * Accuracy depends on the motor profile (see set_motor_params());
  * without INV_R/KMC calibration the estimate is approximate.
  *
- * @param  tile  Pointer to tile handle
  * @return Estimated shaft speed in revolutions per minute
  */
 uint32_t tile_drive_dc_h_get_speed_rpm(tile_t* tile);
@@ -607,7 +599,6 @@ uint32_t tile_drive_dc_h_get_speed_rpm(tile_t* tile);
  * Returns the total number of commutation ripples counted
  * since the last clear. Proportional to rotor position.
  *
- * @param  tile  Pointer to tile handle
  * @return Ripple count (0-65535)
  */
 uint16_t tile_drive_dc_h_get_ripple_count(tile_t* tile);
@@ -619,7 +610,6 @@ uint16_t tile_drive_dc_h_get_ripple_count(tile_t* tile);
  * Sets CLR_CNT in CONFIG0. Also clears CNT_DONE flag.
  * The CLR_CNT bit is self-clearing.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_clear_ripple_count(tile_t* tile);
 
@@ -633,7 +623,6 @@ void tile_drive_dc_h_clear_ripple_count(tile_t* tile);
  * and registers are accessible, but no current flows through
  * the motor. OVP protection remains active in sleep.
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_sleep(tile_t* tile);
 
@@ -644,7 +633,6 @@ void tile_drive_dc_h_sleep(tile_t* tile);
  * Sets EN_OUT in CONFIG0. The bridge returns to the last
  * commanded state (coast/brake/forward/reverse).
  *
- * @param  tile  Pointer to tile handle
  */
 void tile_drive_dc_h_wake(tile_t* tile);
 
@@ -682,13 +670,15 @@ typedef enum {
  * immediately — the chip ramps the motor to the target speed
  * autonomously and is_running() / get_speed() report progress.
  *
- * @note  The driver picks the finest W_SCALE (24/40/64/128) whose
- *        8-bit WSET range still reaches the requested speed, so low
- *        targets get the best granularity the chip offers: the RPM
- *        step is `60 × W_SCALE / ripples_per_rev`, e.g. 120 RPM at
- *        ripples_per_rev=12 for targets below ~30 600 RPM. WSET is
- *        clamped at 0xFF for targets beyond the coarsest scale, and
- *        a nonzero request never rounds down to a stop.
+ * @note  The driver picks the finest W_SCALE (16/32/64/128 rad/s,
+ *        datasheet Table 8-24) whose 8-bit WSET range still reaches
+ *        the requested speed, so low targets get the best granularity
+ *        the chip offers. W_SCALE is in ripple rad/s (Eq. 8, 11), so
+ *        the RPM step is `60 × W_SCALE / (2π × ripples_per_rev)`:
+ *        ~12.7 RPM at ripples_per_rev=12 for targets up to ~3 250 RPM,
+ *        ~102 RPM per step at the coarsest scale (to ~26 000 RPM).
+ *        WSET is clamped at 0xFF for targets beyond the coarsest
+ *        scale, and a nonzero request never rounds down to a stop.
  *
  * @note  The conversion depends on the ripples-per-rev value from the
  *        init config (or set_motor_params()), and closed-loop accuracy
@@ -698,7 +688,6 @@ typedef enum {
  *        approximate. Provide a full motor profile — at init or via
  *        set_motor_params() — for accurate low-RPM control.
  *
- * @param  tile       Initialised tile handle
  * @param  rpm        Target shaft speed in revolutions per minute
  * @param  direction  DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE
  */
@@ -709,6 +698,9 @@ void tile_drive_dc_h_set_speed_rpm(tile_t* tile, uint32_t rpm,
  * @brief  Program the motor profile for ripple counting and speed regulation.
  *
  * @studio expose category=tile name=set_motor_params section=config
+ * @studio control ripples_per_rev label="Ripples per revolution" tier=basic default=12
+ * @studio control motor_mohm label="Motor winding resistance" tier=advanced default=0 scale=0.001 unit=Ω
+ * @studio control kv_uv_per_rpm label="Motor Kv (back-EMF)" tier=advanced default=0 unit=µV/RPM
  *
  * Writes the DRV8214's ripple-counter calibration registers (INV_R,
  * KMC and their scale fields) from physical motor parameters, and
@@ -721,13 +713,12 @@ void tile_drive_dc_h_set_speed_rpm(tile_t* tile, uint32_t rpm,
  * Example (RS PRO 834-7644, direct drive): motor_mohm=6000,
  * ripples_per_rev=12, kv_uv_per_rpm=187.
  *
- * @param  tile             Initialised tile handle
- * @param  motor_mohm       Winding resistance in milliohms. 0 = leave
+ * @param  motor_mohm       [0..65535] mΩ Winding resistance. 0 = leave
  *                          chip defaults (no-op for INV_R/KMC).
- * @param  ripples_per_rev  Commutation ripples per shaft revolution
+ * @param  ripples_per_rev  [0..255] Commutation ripples per shaft revolution
  *                          (poles × brush pairs; common: 3, 5, 6, 7,
  *                          12). 0 = default (12); clamped to 255.
- * @param  kv_uv_per_rpm    Back-EMF constant in µV/RPM (typical small
+ * @param  kv_uv_per_rpm    [0..5000] µV/RPM Back-EMF constant (typical small
  *                          motor: 100-2000). 0 = skip KMC tuning.
  */
 void tile_drive_dc_h_set_motor_params(tile_t* tile, uint16_t motor_mohm,
@@ -761,7 +752,6 @@ void tile_drive_dc_h_set_motor_params(tile_t* tile, uint16_t motor_mohm,
  *        revolution — typically 1/12 turn. Don't expect sub-degree
  *        positioning.
  *
- * @param  tile       Initialised tile handle
  * @param  ripples    Number of ripples to advance (0–65472)
  * @param  direction  DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE
  */
@@ -778,7 +768,6 @@ void tile_drive_dc_h_move_distance(tile_t* tile, uint16_t ripples,
  * Returns 0 when braking, coasting, sleeping, in pad-control mode,
  * or not yet ready.
  *
- * @param  tile  Initialised tile handle
  * @return 1 if driving, 0 otherwise
  */
 uint8_t tile_drive_dc_h_is_running(tile_t* tile);
@@ -796,7 +785,6 @@ uint8_t tile_drive_dc_h_is_running(tile_t* tile);
  * actually settled rather than just "the bridge has been
  * commanded to brake".
  *
- * @param  tile        Initialised tile handle
  * @param  timeout_ms  Maximum time to wait, in milliseconds
  * @return 1 if the rotor settled before timeout, 0 on timeout
  */

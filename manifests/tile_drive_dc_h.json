@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@e95f3f8",
+  "source": "tiles@3edc9ed",
   "tile": "Drive.DC.H",
   "palette": {
     "label": "Drive.DC.H",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_dc_h",
     "header": "tile_drive_dc_h.h",
-    "version": "4.2.0"
+    "version": "4.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -162,6 +162,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Regulation",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -218,10 +227,23 @@
         {
           "name": "code",
           "type": "int",
-          "description": "CS_GAIN_SEL code (0-5)"
+          "range": [
+            0,
+            5
+          ],
+          "description": "CS_GAIN_SEL code"
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "code",
+          "label": "Current range (0 = 4 A … 5 = 0.125 A)",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -241,6 +263,16 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Stall detection",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -256,10 +288,24 @@
         {
           "name": "ms",
           "type": "int",
-          "description": "Inrush blanking time in milliseconds (0 - 6710)"
+          "range": [
+            0,
+            6710
+          ],
+          "unit": "ms",
+          "description": "Inrush blanking time"
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Inrush time",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 100
+        }
+      ],
       "receiver": "tile_t*"
     },
     {
@@ -530,20 +576,57 @@
         {
           "name": "motor_mohm",
           "type": "int",
-          "description": "Winding resistance in milliohms. 0 = leave"
+          "range": [
+            0,
+            65535
+          ],
+          "description": "mΩ Winding resistance. 0 = leave"
         },
         {
           "name": "ripples_per_rev",
           "type": "int",
+          "range": [
+            0,
+            255
+          ],
           "description": "Commutation ripples per shaft revolution"
         },
         {
           "name": "kv_uv_per_rpm",
           "type": "int",
-          "description": "Back-EMF constant in µV/RPM (typical small"
+          "range": [
+            0,
+            5000
+          ],
+          "description": "µV/RPM Back-EMF constant (typical small"
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "ripples_per_rev",
+          "label": "Ripples per revolution",
+          "tier": "basic",
+          "scope": "config",
+          "default": 12
+        },
+        {
+          "param": "motor_mohm",
+          "label": "Motor winding resistance",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "Ω",
+          "default": 0
+        },
+        {
+          "param": "kv_uv_per_rpm",
+          "label": "Motor Kv (back-EMF)",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t*"
     },
     {

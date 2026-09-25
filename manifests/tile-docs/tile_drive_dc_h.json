@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@7738ede",
+  "source": "tiles@3edc9ed",
   "file": "tile_drive_dc_h.h",
   "brief": "H-bridge DC motor driver for the Drive.DC.H tile (rev a).",
-  "description": "Embeds the TI DRV8214, a full H-bridge motor driver with integrated\ncurrent sensing, stall detection, and voltage/speed regulation.\n\nKey specifications:\n  - Output:        full H-bridge, 4 A peak / 2 A RMS continuous\n  - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)\n  - R_DS(on):      240 mOhm (high + low side total)\n  - Regulation:    voltage or speed, via internal PI loop\n  - Current sense: internal current mirror (IPROPI), 3 gain settings\n  - Stall detect:  hardware, configurable via IPROPI/VREF threshold\n  - Ripple count:  sensorless position/speed via commutation ripples\n  - Protection:    UVLO, OCP, OVP, thermal shutdown\n\nThe tile also exposes EN/PH (or IN1/IN2) control pads (pads 2, 3) for\ndirect GPIO/PWM-based motor control without I²C, and an analog\ncurrent-proportional output on pad 6 (NPROP/IPROPI) that mirrors the\nmotor winding current scaled by the CS_GAIN_SEL setting. Switch the\nbridge control source at runtime with set_control_mode().\n\nThe DRV8214 integrates a sensorless ripple counting algorithm\nthat counts commutation ripples in the motor current waveform\nto estimate rotor position and speed without external encoders\nor Hall sensors. In speed regulation mode (DRIVE_DC_H_MODE_SPEED),\nthe chip's internal PI loop maintains constant motor speed across\nvarying supply voltages and loads. The ripple count and estimated\nspeed can be read at any time via get_ripple_count() / get_speed().\nAccurate ripple counting requires motor-specific tuning of the\nINV_R, KMC, and filter parameters (see DRV8214 datasheet\nsection 9.2.3.1).\n\nDatasheet: https://www.bergsonne.io/tiles/drive/dc-h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv8214.pdf\n\n@studio tile label=Drive.DC.H icon=⚙\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"nSLEEP pin (hardware-gated)\" section=advanced\n  Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)\n  is not routed to any tile pad in the Drive.DC.H rev-a layout\n  (verify in kiln/definitions/Drive-DC-H-a.json — pads 1–10 are\n  GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,\n  V+; nSLEEP is strapped active on the PCB). sleep()/wake() only\n  toggle the I²C-side EN_OUT bit; the chip itself can't reach its\n  true quiescent floor. Closing this gap requires a tile hardware\n  revision that routes nSLEEP to a connector pad.\n\n@studio unsupported severity=niche category=\"Address selection (factory variants)\"\n  The DRV8214 derives its 7-bit I²C address from tri-level pins\n  A0/A1, but the Drive.DC.H tile straps these to fixed values per\n  factory variant: A30 (0x30), A31 (0x31), A33 (0x33), A34 (0x34\n  default). Address is chip-gated at order time, not runtime-\n  settable. The 9-entry instance table in this driver covers the\n  full chip address space, but only those four straps are sold —\n  pick a tile variant per Drive.DC.H tile sharing a bus.",
+  "description": "Embeds the TI DRV8214, a full H-bridge motor driver with integrated\ncurrent sensing, stall detection, and voltage/speed regulation.\n\nKey specifications:\n  - Output:        full H-bridge, 4 A peak / 2 A RMS continuous\n  - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)\n  - R_DS(on):      240 mOhm (high + low side total)\n  - Regulation:    voltage or speed, via internal PI loop\n  - Current sense: internal current mirror (IPROPI), 3 gain settings\n  - Stall detect:  hardware, configurable via IPROPI/VREF threshold\n  - Ripple count:  sensorless position/speed via commutation ripples\n  - Protection:    UVLO, OCP, OVP, thermal shutdown\n\nThe tile also exposes EN/PH (or IN1/IN2) control pads (pads 2, 3) for\ndirect GPIO/PWM-based motor control without I²C, and an analog\ncurrent-proportional output on pad 6 (NPROP/IPROPI) that mirrors the\nmotor winding current scaled by the CS_GAIN_SEL setting. Switch the\nbridge control source at runtime with set_control_mode().\n\nThe DRV8214 integrates a sensorless ripple counting algorithm\nthat counts commutation ripples in the motor current waveform\nto estimate rotor position and speed without external encoders\nor Hall sensors. In speed regulation mode (DRIVE_DC_H_MODE_SPEED),\nthe chip's internal PI loop maintains constant motor speed across\nvarying supply voltages and loads. The ripple count and estimated\nspeed can be read at any time via get_ripple_count() / get_speed().\nAccurate ripple counting requires motor-specific tuning of the\nINV_R, KMC, and filter parameters (see DRV8214 datasheet\nsection 9.2.3.1).\n\nDatasheet: https://www.bergsonne.io/tiles/drive/dc-h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv8214.pdf\n\n@studio tile label=Drive.DC.H icon=⚙\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"nSLEEP pin (hardware-gated)\" section=advanced\n  Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)\n  is not routed to any tile pad in the Drive.DC.H rev-a layout\n  (verify in definitions/Drive-DC-H-a.json — pads 1–10 are\n  GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,\n  V+; nSLEEP is strapped active on the PCB). sleep()/wake() only\n  toggle the I²C-side EN_OUT bit; the chip itself can't reach its\n  true quiescent floor. Closing this gap requires a tile hardware\n  revision that routes nSLEEP to a connector pad.\n\n@studio unsupported severity=niche category=\"Address selection (factory variants)\"\n  The DRV8214 derives its 7-bit I²C address from tri-level pins\n  A0/A1, but the Drive.DC.H tile straps these to fixed values per\n  factory variant: A30 (0x30), A31 (0x31), A33 (0x33), A34 (0x34\n  default). Address is chip-gated at order time, not runtime-\n  settable. The 9-entry instance table in this driver covers the\n  full chip address space, but only those four straps are sold —\n  pick a tile variant per Drive.DC.H tile sharing a bus.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -15,7 +15,7 @@
     {
       "severity": "advanced",
       "category": "nSLEEP pin (hardware-gated)",
-      "brief": "Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active) is not routed to any tile pad in the Drive.DC.H rev-a layout (verify in kiln/definitions/Drive-DC-H-a.json — pads 1–10 are GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM, V+; nSLEEP is strapped active on the PCB). sleep()/wake() only toggle the I²C-side EN_OUT bit; the chip itself can't reach its true quiescent floor. Closing this gap requires a tile hardware revision that routes nSLEEP to a connector pad.",
+      "brief": "Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active) is not routed to any tile pad in the Drive.DC.H rev-a layout (verify in definitions/Drive-DC-H-a.json — pads 1–10 are GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM, V+; nSLEEP is strapped active on the PCB). sleep()/wake() only toggle the I²C-side EN_OUT bit; the chip itself can't reach its true quiescent floor. Closing this gap requires a tile hardware revision that routes nSLEEP to a connector pad.",
       "section": "advanced"
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "name": "TILE_DRIVE_DC_H_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -237,12 +237,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_forward(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -252,12 +247,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_reverse(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -267,12 +257,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_brake(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -282,12 +267,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_coast(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -298,10 +278,6 @@
     {
       "signature": "void tile_drive_dc_h_set_control_mode(tile_t* tile, drive_dc_h_control_mode_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "mode",
           "description": "Bridge control source (DRIVE_DC_H_CTRL_*)"
@@ -318,10 +294,6 @@
       "signature": "void tile_drive_dc_h_set_target(tile_t* tile, uint8_t value)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "value",
           "description": "Target setpoint (0-255)"
         }
@@ -330,22 +302,20 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Set the regulation target (WSET_VSET).",
-      "description": "In voltage mode: sets target motor terminal voltage.\n  With VM_GAIN_SEL=0: value * 15700/255 mV (61.6 mV/bit)\n  With VM_GAIN_SEL=1: value * 3920/255 mV  (15.4 mV/bit)\n\nIn speed mode: sets target ripple speed.\n  Target speed = value * W_SCALE rad/s.",
+      "description": "In voltage mode: sets target motor terminal voltage.\n  With VM_GAIN_SEL=0: value * 15700/255 mV (61.6 mV/bit)\n  With VM_GAIN_SEL=1: value * 3920/255 mV  (15.4 mV/bit)\n\nIn speed mode: sets target ripple speed.\n  Target ripple speed = value * W_SCALE rad/s (W_SCALE 16/32/64/128;\n  shaft RPM = that × 60 / (2π × ripples per rev)).",
       "name": "tile_drive_dc_h_set_target"
     },
     {
       "signature": "void tile_drive_dc_h_set_regulation_mode(tile_t* tile, drive_dc_h_reg_mode_t mode)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "mode",
           "description": "Regulation mode (DRIVE_DC_H_REG_*)"
         }
       ],
-      "notes": [],
+      "notes": [
+        "REG_CTRL is only writable with the outputs off (datasheet Table 8-29), so this briefly clears EN_OUT around the write."
+      ],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Select the regulation loop (open-loop / current / voltage / speed).",
@@ -355,10 +325,6 @@
     {
       "signature": "void tile_drive_dc_h_set_current_regulation_mode(tile_t* tile, drive_dc_h_imode_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "mode",
           "description": "Current regulation mode (DRIVE_DC_H_IMODE_*)"
@@ -375,12 +341,8 @@
       "signature": "void tile_drive_dc_h_set_current_sense_gain(tile_t* tile, uint8_t code)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "code",
-          "description": "CS_GAIN_SEL code (0-5)"
+          "description": "[0..5] CS_GAIN_SEL code"
         }
       ],
       "notes": [],
@@ -393,10 +355,6 @@
     {
       "signature": "void tile_drive_dc_h_set_stall_enabled(tile_t* tile, uint8_t enabled)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "enabled",
           "description": "1 = stall detection on, 0 = off"
@@ -413,15 +371,13 @@
       "signature": "void tile_drive_dc_h_set_inrush_time_ms(tile_t* tile, uint16_t ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "ms",
-          "description": "Inrush blanking time in milliseconds (0 - 6710)"
+          "description": "[0..6710] ms Inrush blanking time"
         }
       ],
-      "notes": [],
+      "notes": [
+        "With soft-start on (EN_SS=1, init's default) and voltage or speed regulation active, the chip stretches the window to TINRUSH × WSET_VSET (datasheet §8.3.7.3.1): 100 ms at WSET_VSET=255 is a ~25 s ramp."
+      ],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the inrush blanking time (TINRUSH).",
@@ -431,10 +387,6 @@
     {
       "signature": "void tile_drive_dc_h_set_stall_recovery(tile_t* tile, drive_dc_h_stall_recovery_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
         {
           "name": "mode",
           "description": "DRIVE_DC_H_STALL_LATCH or DRIVE_DC_H_STALL_REPORT"
@@ -451,10 +403,6 @@
       "signature": "void tile_drive_dc_h_set_ripple_threshold(tile_t* tile, uint16_t count)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "count",
           "description": "Threshold count (0 - 65472, larger = coarser scale)"
         }
@@ -470,10 +418,6 @@
       "signature": "void tile_drive_dc_h_set_ripple_filter_gain(tile_t* tile, uint8_t code)",
       "params": [
         {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        },
-        {
           "name": "code",
           "description": "FLT_GAIN_SEL code (0-3)"
         }
@@ -487,12 +431,7 @@
     },
     {
       "signature": "uint8_t tile_drive_dc_h_get_fault(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -503,12 +442,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_clear_fault(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -518,12 +452,7 @@
     },
     {
       "signature": "uint8_t tile_drive_dc_h_is_stalled(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -534,12 +463,7 @@
     },
     {
       "signature": "uint16_t tile_drive_dc_h_get_voltage_mv(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -550,12 +474,7 @@
     },
     {
       "signature": "uint16_t tile_drive_dc_h_get_current_ma(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -566,12 +485,7 @@
     },
     {
       "signature": "uint8_t tile_drive_dc_h_get_speed(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -582,12 +496,7 @@
     },
     {
       "signature": "uint32_t tile_drive_dc_h_get_speed_rpm(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -598,12 +507,7 @@
     },
     {
       "signature": "uint16_t tile_drive_dc_h_get_ripple_count(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -614,12 +518,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_clear_ripple_count(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -629,12 +528,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_sleep(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -644,12 +538,7 @@
     },
     {
       "signature": "void tile_drive_dc_h_wake(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Pointer to tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -661,10 +550,6 @@
       "signature": "void tile_drive_dc_h_set_speed_rpm(tile_t* tile, uint32_t rpm, drive_dc_h_direction_t direction)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "rpm",
           "description": "Target shaft speed in revolutions per minute"
         },
@@ -674,7 +559,7 @@
         }
       ],
       "notes": [
-        "The driver picks the finest W_SCALE (24/40/64/128) whose 8-bit WSET range still reaches the requested speed, so low targets get the best granularity the chip offers: the RPM step is `60 × W_SCALE / ripples_per_rev`, e.g. 120 RPM at ripples_per_rev=12 for targets below ~30 600 RPM. WSET is clamped at 0xFF for targets beyond the coarsest scale, and a nonzero request never rounds down to a stop.",
+        "The driver picks the finest W_SCALE (16/32/64/128 rad/s, datasheet Table 8-24) whose 8-bit WSET range still reaches the requested speed, so low targets get the best granularity the chip offers. W_SCALE is in ripple rad/s (Eq. 8, 11), so the RPM step is `60 × W_SCALE / (2π × ripples_per_rev)`: ~12.7 RPM at ripples_per_rev=12 for targets up to ~3 250 RPM, ~102 RPM per step at the coarsest scale (to ~26 000 RPM). WSET is clamped at 0xFF for targets beyond the coarsest scale, and a nonzero request never rounds down to a stop.",
         "The conversion depends on the ripples-per-rev value from the init config (or set_motor_params()), and closed-loop accuracy depends on the ripple-counter calibration (INV_R, KMC) from `motor_mohm` / `kv_uv_per_rpm`. If those aren't set, speed regulation falls back to chip defaults and the RPM target is approximate. Provide a full motor profile — at init or via set_motor_params() — for accurate low-RPM control."
       ],
       "studio_exposed": true,
@@ -687,20 +572,16 @@
       "signature": "void tile_drive_dc_h_set_motor_params(tile_t* tile, uint16_t motor_mohm, uint16_t ripples_per_rev, uint16_t kv_uv_per_rpm)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "motor_mohm",
-          "description": "Winding resistance in milliohms. 0 = leave"
+          "description": "[0..65535] mΩ Winding resistance. 0 = leave"
         },
         {
           "name": "ripples_per_rev",
-          "description": "Commutation ripples per shaft revolution"
+          "description": "[0..255] Commutation ripples per shaft revolution"
         },
         {
           "name": "kv_uv_per_rpm",
-          "description": "Back-EMF constant in µV/RPM (typical small"
+          "description": "[0..5000] µV/RPM Back-EMF constant (typical small"
         }
       ],
       "notes": [],
@@ -713,10 +594,6 @@
     {
       "signature": "void tile_drive_dc_h_move_distance(tile_t* tile, uint16_t ripples, drive_dc_h_direction_t direction)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "ripples",
           "description": "Number of ripples to advance (0–65472)"
@@ -739,12 +616,7 @@
     },
     {
       "signature": "uint8_t tile_drive_dc_h_is_running(tile_t* tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -756,10 +628,6 @@
     {
       "signature": "uint8_t tile_drive_dc_h_wait_for_stop(tile_t* tile, uint32_t timeout_ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "timeout_ms",
           "description": "Maximum time to wait, in milliseconds"
@@ -775,8 +643,101 @@
     }
   ],
   "source_file": "tile_drive_dc_h.h",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "tile_family": "Drive",
   "tile_name": "DC.H",
-  "display_name": "Drive.DC.H"
+  "display_name": "Drive.DC.H",
+  "vibe_settings": [
+    {
+      "label": "Ripples per revolution",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_motor_params",
+      "param": "ripples_per_rev",
+      "kind": "number",
+      "range": [
+        0,
+        255
+      ],
+      "default": 12
+    },
+    {
+      "label": "Regulation",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_regulation_mode",
+      "param": "mode",
+      "kind": "choice",
+      "choices": [
+        "00b: fixed-off-time current reg only (open-loop drive)",
+        "01b: cycle-by-cycle current reg",
+        "10b: speed regulation (requires ripple counting)",
+        "11b: voltage regulation (default)"
+      ],
+      "default": "11b: voltage regulation (default)"
+    },
+    {
+      "label": "Current range (0 = 4 A … 5 = 0.125 A)",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_current_sense_gain",
+      "param": "code",
+      "kind": "number",
+      "range": [
+        0,
+        5
+      ],
+      "default": 0
+    },
+    {
+      "label": "Stall detection",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_stall_enabled",
+      "param": "enabled",
+      "kind": "bool",
+      "default": 1
+    },
+    {
+      "label": "Inrush time",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_inrush_time_ms",
+      "param": "ms",
+      "kind": "number",
+      "range": [
+        0,
+        6710
+      ],
+      "unit": "ms",
+      "default": 100
+    },
+    {
+      "label": "Motor winding resistance",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_motor_params",
+      "param": "motor_mohm",
+      "kind": "number",
+      "range": [
+        0,
+        65.535
+      ],
+      "unit": "Ω",
+      "default": 0
+    },
+    {
+      "label": "Motor Kv (back-EMF)",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_motor_params",
+      "param": "kv_uv_per_rpm",
+      "kind": "number",
+      "range": [
+        0,
+        5000
+      ],
+      "default": 0
+    }
+  ]
 }

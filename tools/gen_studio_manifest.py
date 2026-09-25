@@ -1514,7 +1514,7 @@ def main():
             "definition": ROOT / "definitions/Drive-DC-H-a.json",
             "prefix": "tile_drive_dc_h",
             "init": "tile_drive_dc_h_init",
-            "version": "4.2.0",
+            "version": "4.3.0",
         },
         {
             "path": ROOT / "drivers/tile_store_o_128.h",
