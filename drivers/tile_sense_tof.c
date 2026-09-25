@@ -18,14 +18,21 @@ static uint8_t resolve_id(uint8_t instance)
     return (instance < NUM_INSTANCES) ? id_table[instance] : 0;
 }
 
+/* SERIAL_NUMBER_0..3, valid after command 0x47 (datasheet §7.6). */
+#define TOF_REG_SERIAL_0                0x28
+/* Factory calibration: 40.96 M iterations, ~2.2 s in 5 m mode. */
+#define TOF_FACTORY_CAL_MIN_TIMEOUT_MS  3000
+
 /* ---- Per-instance state ---- */
 
 typedef struct {
     sense_tof_cfg_t cfg;                        /* Cached measurement config */
     uint8_t calib_data[TMF8806_CALIB_DATA_LEN]; /* Factory calibration data */
     uint8_t calib_valid;                        /* 1 if calib_data is loaded */
+    uint8_t state_data[TMF8806_STATE_DATA_LEN]; /* Restored algorithm state */
     uint8_t state_valid;                        /* 1 if alg state has been restored */
     uint8_t measuring;                          /* 1 if measurement is active */
+    uint8_t calib_mode;                         /* distance mode calib_data is for */
 } tof_state_t;
 
 static tof_state_t tof_state[NUM_INSTANCES];
@@ -105,6 +112,11 @@ static uint8_t build_algo_byte(uint8_t mode)
  * Writes cmd_data9..cmd_data0 (registers 0x06-0x0F) followed by
  * the COMMAND register (0x10) in a single burst.
  */
+/* cmd_data7[5:3] spadDeadTime: "if unsure use default=4" (datasheet Table 23).
+ * The same value is used for calibration and ranging: a calibration only holds
+ * for the dead time it was taken with (§6.9). */
+#define TOF_SPAD_DEAD_TIME_BITS  (4u << 3)
+
 static void tof_write_cmd_payload(tile_t *tile, uint8_t command)
 {
     tof_state_t *s = state_for(tile);
@@ -112,9 +124,14 @@ static void tof_write_cmd_payload(tile_t *tile, uint8_t command)
 
     buf[0]  = 0x00;                              /* cmd_data9: SS SpadChargePump off */
     buf[1]  = 0x00;                              /* cmd_data8: SS VcselChargePump off */
-    /* cmd_data7: calibDataBitmask — bit0=factoryCal, bit1=algState */
-    buf[2]  = (s->calib_valid ? 0x01 : 0x00)
-            | (s->state_valid ? 0x02 : 0x00);
+    /* cmd_data7: bit0 factoryCal, bit1 algState ("if set, also set
+     * factoryCal=1", Table 23), bits 5:3 spadDeadTime. Factory calibration
+     * itself runs without either data bit. */
+    buf[2]  = TOF_SPAD_DEAD_TIME_BITS;
+    if (command == TMF8806_CMD_MEASURE && s->calib_valid) {
+        buf[2] |= 0x01;
+        if (s->state_valid) buf[2] |= 0x02;
+    }
     buf[3]  = build_algo_byte(s->cfg.mode);       /* cmd_data6: algorithm */
     buf[4]  = 0x00;                              /* cmd_data5: GPIO disabled */
     buf[5]  = 0x00;                              /* cmd_data4: delay disabled */
@@ -149,6 +166,34 @@ static uint8_t tof_poll_reg(tile_t *tile, uint8_t reg, uint8_t expected,
         elapsed += TMF8806_POLL_INTERVAL_MS;
     }
     return 0;
+}
+
+/**
+ * @brief  Wait until the chip has finished `cmd`: COMMAND 0x00, PREVIOUS == cmd.
+ * @return 1 when done, 0 on timeout.
+ */
+static uint8_t tof_wait_cmd_done(tile_t *tile, uint8_t cmd, uint32_t timeout_ms)
+{
+    uint32_t elapsed = 0;
+    while (elapsed < timeout_ms) {
+        uint8_t r[2] = { 0xFF, 0x00 };
+        tof_read_regs(tile, TMF8806_REG_COMMAND, r, 2);  /* COMMAND, PREVIOUS */
+        if (r[0] == 0x00 && r[1] == cmd) return 1;
+        tile->hal->delay_ms(TMF8806_POLL_INTERVAL_MS);
+        elapsed += TMF8806_POLL_INTERVAL_MS;
+    }
+    return 0;
+}
+
+/* A command sent while ranging runs is refused ("InvalCmd, no stop command
+ * was sent before"). Stop first; return whether ranging was running so the
+ * caller can restart it. */
+static uint8_t tof_pause(tile_t *tile)
+{
+    tof_state_t *s = state_for(tile);
+    uint8_t was = s->measuring;
+    if (was) tile_sense_tof_stop(tile);
+    return was;
 }
 
 /**
@@ -305,15 +350,25 @@ void tile_sense_tof_wake(tile_t *tile)
 
 void tile_sense_tof_reset(tile_t *tile)
 {
-    /* Assert CPU reset */
+    /* Assert CPU reset: the chip restarts in its bootloader. */
     tof_write_reg(tile, TMF8806_REG_ENABLE, TMF8806_ENABLE_CPU_RESET);
     tile->hal->delay_ms(5);
 
-    /* Clear state */
+    /* Calibration and algorithm state belong to the old session; the
+     * measurement configuration is kept (a zeroed one would be invalid:
+     * kIters must be >= 10). */
     tof_state_t *s = state_for(tile);
-    memzero(s, sizeof(tof_state_t));
+    s->calib_valid = 0;
+    s->state_valid = 0;
+    s->measuring   = 0;
 
-    tile->state = TILE_STATE_NONE;
+    /* Bring App0 back so the tile is usable again, as after init(). */
+    if (!tof_boot_sequence(tile)) {
+        tile->state = TILE_STATE_ERROR;
+        return;
+    }
+    tof_write_reg(tile, TMF8806_REG_INT_ENAB, TMF8806_INT_RESULT);
+    tile->state = TILE_STATE_READY;
 }
 
 /* ---- Measurement control ---- */
@@ -322,10 +377,16 @@ void tile_sense_tof_start(tile_t *tile)
 {
     tof_state_t *s = state_for(tile);
 
-    /* Write factory calibration data if available */
+    /* Calibration (14 B at 0x20), then algorithm state (11 B at 0x2E) when a
+     * saved state was restored: one block, host-driver note §9.1
+     * ("W 20 <CALIB><STATE>"). The state is only meaningful with the
+     * calibration and only for the next start, so it is consumed here. */
     if (s->calib_valid) {
         tof_write_regs(tile, TMF8806_REG_FACTORY_CALIB,
                        s->calib_data, TMF8806_CALIB_DATA_LEN);
+        if (s->state_valid)
+            tof_write_regs(tile, TMF8806_REG_STATE_DATA_WR,
+                           s->state_data, TMF8806_STATE_DATA_LEN);
     }
 
     /* Clear any pending interrupt */
@@ -333,7 +394,8 @@ void tile_sense_tof_start(tile_t *tile)
 
     /* Issue measurement command with configuration */
     tof_write_cmd_payload(tile, TMF8806_CMD_MEASURE);
-    s->measuring = 1;
+    s->state_valid = 0;
+    s->measuring = (s->cfg.period_ms != 0x00);   /* 0 = one shot, ends by itself */
 }
 
 void tile_sense_tof_stop(tile_t *tile)
@@ -341,15 +403,11 @@ void tile_sense_tof_stop(tile_t *tile)
     /* Send stop command */
     tof_write_reg(tile, TMF8806_REG_COMMAND, TMF8806_CMD_STOP);
 
-    /* Wait for command to be acknowledged (COMMAND reads back 0x00 or 0xFF) */
-    uint32_t elapsed = 0;
-    while (elapsed < TMF8806_CMD_TIMEOUT_MS) {
-        uint8_t cmd = tof_read_reg(tile, TMF8806_REG_COMMAND);
-        if (cmd == 0x00 || cmd == TMF8806_CMD_STOP)
-            break;
-        tile->hal->delay_ms(TMF8806_POLL_INTERVAL_MS);
-        elapsed += TMF8806_POLL_INTERVAL_MS;
-    }
+    /* Done when COMMAND reads back 0x00 and PREVIOUS 0xFF (datasheet §6.2.1:
+     * wait for [0x10],2 == [0x00,0xFF]); up to 4.5 ms (host-driver note
+     * §8.10). COMMAND still reading 0xFF only means it hasn't been taken
+     * yet, so it must not end the wait. */
+    tof_wait_cmd_done(tile, TMF8806_CMD_STOP, TMF8806_CMD_TIMEOUT_MS);
 
     /* Clear any pending interrupt */
     tof_write_reg(tile, TMF8806_REG_INT_STATUS,
@@ -363,6 +421,7 @@ uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result,
                                       uint32_t timeout_ms)
 {
     tof_state_t *s = state_for(tile);
+    uint8_t was_measuring = tof_pause(tile);
 
     /* Save and override period to single-shot */
     uint8_t saved_period = s->cfg.period_ms;
@@ -373,28 +432,28 @@ uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result,
 
     /* Restore period setting */
     s->cfg.period_ms = saved_period;
+    uint8_t ok = 0;
 
     /* Poll for result interrupt */
     uint32_t elapsed = 0;
     while (elapsed < timeout_ms) {
         uint8_t int_status = tof_read_reg(tile, TMF8806_REG_INT_STATUS);
         if (int_status & TMF8806_INT_RESULT) {
-            /* Read the result */
-            if (result) {
-                tile_sense_tof_get_result(tile, result);
-            } else {
-                /* Clear interrupt even if result is discarded */
-                tof_write_reg(tile, TMF8806_REG_INT_STATUS, TMF8806_INT_RESULT);
-            }
-            return 1;
+            sense_tof_result_t r = {0};
+            tile_sense_tof_get_result(tile, &r);
+            if (result) *result = r;
+            /* A result block (contents 0x55) with no error status. */
+            ok = (r.status < 0x10) ? 1 : 0;
+            break;
         }
         tile->hal->delay_ms(TMF8806_POLL_INTERVAL_MS);
         elapsed += TMF8806_POLL_INTERVAL_MS;
     }
+    if (elapsed >= timeout_ms) tile_sense_tof_stop(tile);   /* timed out */
 
-    /* Timeout — stop and report */
-    tile_sense_tof_stop(tile);
-    return 0;
+    /* Put continuous ranging back if it was running. */
+    if (was_measuring) tile_sense_tof_start(tile);
+    return ok;
 }
 
 /* ---- Result reading ---- */
@@ -510,6 +569,12 @@ uint8_t tile_sense_tof_result_ready(tile_t *tile)
 uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms)
 {
     tof_state_t *s = state_for(tile);
+    uint8_t was_measuring = tof_pause(tile);
+
+    /* 40.96 M iterations take ~1.1 s in 2.5 m mode and ~2.2 s in 5 m mode;
+     * a shorter wait can't succeed. */
+    if (timeout_ms < TOF_FACTORY_CAL_MIN_TIMEOUT_MS)
+        timeout_ms = TOF_FACTORY_CAL_MIN_TIMEOUT_MS;
 
     /* Factory calibration needs ~40M iterations (40960 kIters) per the TMF8806
      * datasheet §6.9 / host-driver §8.4 — far more than the ranging default —
@@ -538,9 +603,12 @@ uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms)
                 tof_read_regs(tile, TMF8806_REG_FACTORY_CALIB,
                               s->calib_data, TMF8806_CALIB_DATA_LEN);
                 s->calib_valid = 1;
+                s->calib_mode  = s->cfg.mode;
+                s->state_valid = 0;
 
                 /* Clear interrupt */
                 tof_write_reg(tile, TMF8806_REG_INT_STATUS, TMF8806_INT_RESULT);
+                if (was_measuring) tile_sense_tof_start(tile);
                 return 1;
             }
             /* Not calibration data — clear and keep waiting */
@@ -550,6 +618,7 @@ uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms)
         elapsed += TMF8806_POLL_INTERVAL_MS;
     }
 
+    if (was_measuring) tile_sense_tof_start(tile);
     return 0;
 }
 
@@ -559,11 +628,16 @@ void tile_sense_tof_set_calibration(tile_t *tile, const uint8_t *data)
     for (uint8_t i = 0; i < TMF8806_CALIB_DATA_LEN; i++)
         s->calib_data[i] = data[i];
     s->calib_valid = 1;
+    s->calib_mode  = s->cfg.mode;   /* taken to be for the current mode */
 }
 
 void tile_sense_tof_get_calibration(tile_t *tile, uint8_t *data)
 {
-    tof_read_regs(tile, TMF8806_REG_FACTORY_CALIB, data, TMF8806_CALIB_DATA_LEN);
+    /* The driver's copy: registers 0x20.. hold result bytes once a
+     * measurement has run, so reading them back live is not the calibration. */
+    tof_state_t *s = state_for(tile);
+    for (uint8_t i = 0; i < TMF8806_CALIB_DATA_LEN; i++)
+        data[i] = s->calib_valid ? s->calib_data[i] : 0;
 }
 
 /* ---- Info ---- */
@@ -598,6 +672,13 @@ void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mo
         tile_sense_tof_stop(tile);
 
     s->cfg.mode = (uint8_t)mode;
+    /* Short range and 2.5 m share a calibration; 5 m "needs separate
+     * calibration data" (datasheet §6.4). Don't send one across that line. */
+    if (s->calib_valid &&
+        ((s->calib_mode == SENSE_TOF_RANGE_5000MM) != (mode == SENSE_TOF_RANGE_5000MM))) {
+        s->calib_valid = 0;
+        s->state_valid = 0;
+    }
 
     if (was_measuring)
         tile_sense_tof_start(tile);
@@ -654,8 +735,11 @@ void tile_sense_tof_save_state(tile_t *tile, uint8_t *data)
 
 void tile_sense_tof_restore_state(tile_t *tile, const uint8_t *data)
 {
-    tof_write_regs(tile, TMF8806_REG_STATE_DATA_WR, data, TMF8806_STATE_DATA_LEN);
+    /* Kept and written with the calibration at the next start (the state
+     * block follows the calibration at 0x2E, and algState needs factoryCal). */
     tof_state_t *s = state_for(tile);
+    for (uint8_t i = 0; i < TMF8806_STATE_DATA_LEN; i++)
+        s->state_data[i] = data[i];
     s->state_valid = 1;
 }
 
@@ -690,6 +774,8 @@ void tile_sense_tof_get_signal_quality_flat(tile_t *tile,
 
 uint8_t tile_sense_tof_get_serial_number(tile_t *tile, uint8_t *serial)
 {
+    uint8_t was_measuring = tof_pause(tile);
+
     /* Issue serial number command */
     tof_write_reg(tile, TMF8806_REG_COMMAND, TMF8806_CMD_SERIAL);
 
@@ -701,11 +787,12 @@ uint8_t tile_sense_tof_get_serial_number(tile_t *tile, uint8_t *serial)
             /* Check that register contents indicate serial data */
             uint8_t contents = tof_read_reg(tile, TMF8806_REG_REG_CONTENTS);
             if (contents == TMF8806_CONTENTS_SERIAL) {
-                /* Serial number is in result registers 0x20-0x23 */
-                tof_read_regs(tile, TMF8806_REG_RESULT_NUMBER, serial, 4);
+                /* SERIAL_NUMBER_0..3 are 0x28-0x2B (datasheet §7.6) */
+                tof_read_regs(tile, TOF_REG_SERIAL_0, serial, 4);
 
                 /* Clear interrupt */
                 tof_write_reg(tile, TMF8806_REG_INT_STATUS, TMF8806_INT_RESULT);
+                if (was_measuring) tile_sense_tof_start(tile);
                 return 1;
             }
             /* Not serial data — clear and keep waiting */
@@ -715,6 +802,7 @@ uint8_t tile_sense_tof_get_serial_number(tile_t *tile, uint8_t *serial)
         elapsed += TMF8806_POLL_INTERVAL_MS;
     }
 
+    if (was_measuring) tile_sense_tof_start(tile);
     return 0;
 }
 
@@ -765,15 +853,16 @@ uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
                                                uint16_t *low_mm,
                                                uint16_t *high_mm)
 {
-    /* §8.12.2: write 0x09 to COMMAND, wait for PREVIOUS == 0x09,
-     * then read cmd_data4..cmd_data0 (5 bytes starting at 0x0B). */
+    /* Command 0x09: "persistence, low_threshold and high_threshold are
+     * stored in registers 0x20 to 0x24" (datasheet Table 25; the cmd_data
+     * registers are write-only). Done = COMMAND 0x00 with PREVIOUS 0x09, so a
+     * PREVIOUS left over from an earlier call can't pass for this one. */
     tof_write_reg(tile, TMF8806_REG_COMMAND, TMF8806_CMD_RD_ADD_CONFIG);
-    if (!tof_poll_reg(tile, TMF8806_REG_PREVIOUS,
-                      TMF8806_CMD_RD_ADD_CONFIG, 0xFF, 50)) {
+    if (!tof_wait_cmd_done(tile, TMF8806_CMD_RD_ADD_CONFIG, 50)) {
         return 0;
     }
     uint8_t buf[5];
-    tof_read_regs(tile, TMF8806_REG_CMD_DATA4, buf, sizeof(buf));
+    tof_read_regs(tile, TMF8806_REG_FACTORY_CALIB /* 0x20 */, buf, sizeof(buf));
 
     if (persistence) *persistence = buf[0];
     if (low_mm)      *low_mm  = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
@@ -787,19 +876,16 @@ uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
 
 uint32_t tile_sense_tof_get_sys_clock_ticks(tile_t *tile)
 {
-    uint8_t buf[4] = { 0, 0, 0, 0 };
-    /* Per HostDriverCommunication "Always start reading from 0x1D
-     * with a bulk read to correctly read registers SYS_CLOCK_x" —
-     * but that caveat applies when reading them alongside
-     * STATUS/REGISTER_CONTENTS. For a standalone bulk read of just
-     * 0x24..0x27 the sample appears to be coherent enough; we don't
-     * need to start at 0x1D since we're not interpreting the
-     * surrounding result bytes. */
-    tof_read_regs(tile, TMF8806_REG_SYS_CLOCK_0, buf, 4);
-    return (uint32_t)buf[0]
-         | ((uint32_t)buf[1] << 8)
-         | ((uint32_t)buf[2] << 16)
-         | ((uint32_t)buf[3] << 24);
+    /* Datasheet §7.3.5: "an I²C blockread starting from address 0x1D until
+     * 0x27 shall be done", and sys_clock "is only valid if its LSB bit is
+     * one". SYS_CLOCK_0..3 are the last four bytes of that burst. */
+    uint8_t buf[11] = { 0 };
+    tof_read_regs(tile, TMF8806_REG_STATUS /* 0x1D */, buf, sizeof(buf));
+    uint32_t ticks = (uint32_t)buf[7]
+                   | ((uint32_t)buf[8] << 8)
+                   | ((uint32_t)buf[9] << 16)
+                   | ((uint32_t)buf[10] << 24);
+    return (ticks & 1u) ? ticks : 0;
 }
 
 /* ---------------------------------------------------------------- */
@@ -808,7 +894,7 @@ uint32_t tile_sense_tof_get_sys_clock_ticks(tile_t *tile)
 
 #define TMF8806_CMD_HIST_CAPTURE    0x30  /**< Configure histogram capture */
 #define TMF8806_CMD_HIST_READ_BLOCK 0x80  /**< Start histogram block read */
-#define TMF8806_REG_HIST_DATA       0x30  /**< First histogram data byte */
+#define TMF8806_REG_HIST_DATA       0x20  /**< HISTOGRAM_START (datasheet §7.5.1) */
 
 uint8_t tile_sense_tof_read_histogram(tile_t *tile, uint8_t hist_type,
                                       uint8_t *buf128, uint32_t timeout_ms)
@@ -872,11 +958,16 @@ uint8_t tile_sense_tof_read_histogram(tile_t *tile, uint8_t hist_type,
     }
     if (elapsed >= timeout_ms) return 0;
 
-    /* 9. Read the 128-byte histogram block. */
+    /* 9. Read the first 128-byte block in one burst from HISTOGRAM_START:
+     * TDC0 quarter 0, bins 0..63 as little-endian 16-bit (host-driver note
+     * §8.11). The rest of the histogram (more blocks, continued with
+     * command 0x32) is not read here. */
     tof_read_regs(tile, TMF8806_REG_HIST_DATA, buf128, 128);
 
-    /* Clear the interrupt. */
+    /* Clear the interrupt and release the chip, which is otherwise left
+     * waiting for the host to continue the readout. */
     tof_write_reg(tile, TMF8806_REG_INT_STATUS, TMF8806_INT_HISTOGRAM);
+    tile_sense_tof_stop(tile);
     return 1;
 }
 
@@ -897,7 +988,20 @@ void tile_sense_tof_read_histogram_flat(tile_t *tile,
 /* Tier-2 idiomatic helpers                                          */
 /* ---------------------------------------------------------------- */
 
-#define TOF_PRESENCE_SINGLE_TIMEOUT_MS  200  /**< Single-shot upper bound */
+/* Single-shot upper bound: ranging at the 4000 k-iteration maximum in 5 m
+ * mode takes ~213 ms, plus margin. */
+#define TOF_PRESENCE_SINGLE_TIMEOUT_MS  300
+
+/* Reliability (datasheet Table 42): 0 = no object; 1 / 10 = a result from the
+ * short-range algorithm (uncalibrated / calibrated), which is what short-range
+ * mode and anything within ~200 mm return; any other value = long-range
+ * algorithm, 2..63 with 63 best. So 1 and 10 are detections, not "low
+ * confidence" long-range results. */
+static uint8_t tof_is_detection(uint8_t reliability)
+{
+    return (reliability == 1 || reliability == 10 ||
+            reliability >= SENSE_TOF_PRESENCE_RELIABILITY_MIN) ? 1 : 0;
+}
 
 uint8_t tile_sense_tof_is_object_within(tile_t *tile, uint16_t mm)
 {
@@ -906,7 +1010,7 @@ uint8_t tile_sense_tof_is_object_within(tile_t *tile, uint16_t mm)
                                        TOF_PRESENCE_SINGLE_TIMEOUT_MS)) {
         return 0;
     }
-    if (res.reliability < SENSE_TOF_PRESENCE_RELIABILITY_MIN) return 0;
+    if (!tof_is_detection(res.reliability)) return 0;
     if (res.distance_mm == 0) return 0;
     return (res.distance_mm <= mm) ? 1 : 0;
 }
@@ -945,9 +1049,13 @@ uint8_t tile_sense_tof_read_distance_with_confidence(tile_t *tile,
     }
     if (mm) *mm = res.distance_mm;
     if (confidence_pct) {
-        /* Remap reliability 0..63 -> 0..100. Integer math only. */
+        /* Long-range reliability 0..63 -> 0..100. The short-range codes are
+         * not a scale: 10 (calibrated) reads as 100 %, 1 (uncalibrated) as
+         * 50 %. Integer math only. */
         uint16_t rel = (uint16_t)(res.reliability & 0x3F);
-        *confidence_pct = (uint8_t)((rel * 100u) / 63u);
+        if (rel == 10)     *confidence_pct = 100;
+        else if (rel == 1) *confidence_pct = 50;
+        else               *confidence_pct = (uint8_t)((rel * 100u) / 63u);
     }
     return 1;
 }

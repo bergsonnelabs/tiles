@@ -10,7 +10,9 @@
  *  - 16-bit distance output in millimeters
  *  - Configurable measurement period (30 ms to 2000 ms, or single-shot)
  *  - Configurable iteration count for accuracy vs. speed trade-off
- *  - 6-bit reliability indicator (0 = no object, 63 = highest confidence)
+ *  - 6-bit reliability indicator: 0 = no object; 1 / 10 = short-range
+ *    algorithm result (uncalibrated / calibrated); other values 2..63 =
+ *    long-range result, 63 best (datasheet Table 42)
  *  - On-chip factory calibration with host-side storage and reload
  *  - Algorithm state save/restore for ultra-low-power resume
  *  - Embedded 8-bit temperature sensor
@@ -49,14 +51,43 @@
  *
  * @studio unsupported severity=niche category="GPIO0 / GPIO1 runtime control"
  *   GPIO0 is routed to tile pad 3 but is consumed as a hardware
- *   strap: a 100 k on-board pull-up to V+ holds GPIO0 high at
+ *   strap: a 100 k on-board pull-up (R2) to V+ holds GPIO0 high at
  *   startup, selecting the 1.8-3.3 V digital-I/O level required by
- *   this tile's 2.7-3.6 V rail (TMF8806 datasheet §6.7). It is NOT
+ *   this tile's 2.7-3.5 V rail (TMF8806 datasheet §6.7, Table 4).
+ *   The chip's EN pin is tied to V+ on the board and is not on a pad,
+ *   so the sensor cannot be power-cycled from the Core. It is NOT
  *   an I2C-address strap (the address is fixed at 0x41, changed only
- *   via command 0x49). Because the strap fixes GPIO0 high, runtime
- *   GPIO0 output modes (object-detect / VCSEL-sync, command 0x0F)
- *   are not exposed — driving the pad would fight the pull-up and
- *   risk changing the I/O level. GPIO1 is not routed to a pad.
+ *   via command 0x49). Driver-deferred: after startup GPIO0 is a
+ *   normal GPIO (§6.7), and its open-drain object-detect modes
+ *   (cmd 0x02 cmd_data5 gpio0 = 8 / 9) would work with the on-board
+ *   pull-up as a second "object present" line on pad 3; push-pull
+ *   modes would fight R2 and are best avoided. Not exposed yet. GPIO1 is not routed to a pad (held
+ *   low by a 100 k pull-down, R3).
+ *
+ * @studio unsupported severity=niche category="I2C address change / several sensors on one bus"
+ *   Hardware-gated in part. Command 0x49 can move the sensor off 0x41, but
+ *   giving several sensors their own addresses means releasing them one at
+ *   a time through EN, and EN is tied to V+ on the tile. A GPIO0-conditioned
+ *   change through pad 3 is possible but not exposed (driver-deferred).
+ *
+ * @studio unsupported severity=advanced category="Optical stack / cover glass tuning"
+ *   Driver-deferred. spadSelect (cmd_data7[7:6]) and the SPAD dead time
+ *   (cmd_data7[5:3], fixed at the datasheet default of 4) tune the sensor
+ *   for a cover glass or strong sunlight (datasheet §6.5).
+ *
+ * @studio unsupported severity=niche category="Spread spectrum, algKeepReady, immediate interrupt"
+ *   Driver-deferred. The VCSEL / SPAD charge-pump spread spectrum
+ *   (cmd_data9/8), algKeepReady and algImmediateInterrupt are left off.
+ *
+ * @studio unsupported severity=niche category="Ultra-low-power shutdown"
+ *   Hardware-gated. With EN tied to V+ the chip can't be put in its
+ *   0.04 µA shutdown; sleep() (PON off) is the floor, about 85 µA standby.
+ *
+ * @studio unsupported severity=niche category="Oscillator drift correction, calibration per mode"
+ *   Driver-deferred. get_sys_clock_ticks() gives the raw clock, but the
+ *   host-side drift correction and re-trim (host-driver note §10 / §11) are
+ *   not done, and the driver keeps one calibration at a time (switching
+ *   into or out of 5 m drops it) rather than a set per mode.
  *
  * @note All bus I/O is routed through tiles_pal_t function pointers.
  *       This driver contains no platform-specific code.
@@ -70,7 +101,7 @@
 /* ---- Driver version ---- */
 
 #define TILE_SENSE_TOF_VERSION_MAJOR  1
-#define TILE_SENSE_TOF_VERSION_MINOR  5
+#define TILE_SENSE_TOF_VERSION_MINOR  6
 #define TILE_SENSE_TOF_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -223,7 +254,7 @@ typedef enum {
  */
 typedef struct {
     uint8_t  mode;        /**< sense_tof_distance_mode_t (default: RANGE_2500MM). */
-    uint8_t  period_ms;   /**< Repetition period code (default: 0x1E = 30 ms). 0x00 = single shot, 0xFE = 1 s, 0xFF = 2 s. */
+    uint8_t  period_ms;   /**< Repetition period code (default: 0x1E = 30 ms). 0xFE = 1 s, 0xFF = 2 s. 0 here means "default" (30 ms); single shots are measure_single(). */
     uint16_t kilo_iters;  /**< Iterations in thousands (default: 900). Higher values improve SNR at the cost of power. */
     uint8_t  threshold;   /**< Detection threshold, 0-63 (default: 6). Lower values increase sensitivity. */
 } sense_tof_cfg_t;
@@ -238,7 +269,7 @@ typedef struct {
 typedef struct {
     uint16_t distance_mm;   /**< Peak distance in millimeters. 0 if no target. */
     uint8_t  status;        /**< Result status. 0x00-0x0F = valid, 0x10+ = error. */
-    uint8_t  reliability;   /**< Confidence indicator, 0-63. 0 = no object, 63 = highest confidence. */
+    uint8_t  reliability;   /**< 0 = no object; 1 / 10 = short-range algorithm (uncalibrated / calibrated); other values = long-range, 2..63, 63 best. */
     int8_t   temperature;   /**< Die temperature in degrees Celsius. */
     uint8_t  result_number; /**< Monotonically incrementing result counter. */
 } sense_tof_result_t;
@@ -312,7 +343,6 @@ void tile_sense_tof_init(tiles_pal_t *hal, uint8_t instance,
  * Stops any active measurement and powers down the sensor. Use
  * tile_sense_tof_wake() to resume without full re-initialisation.
  *
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_tof_sleep(tile_t *tile);
 
@@ -323,7 +353,6 @@ void tile_sense_tof_sleep(tile_t *tile);
  * Re-executes the bootloader wake and App0 request sequence. Does not
  * restart measurements — call tile_sense_tof_start() after waking.
  *
- * @param  tile  Sleeping tile handle.
  */
 void tile_sense_tof_wake(tile_t *tile);
 
@@ -331,10 +360,11 @@ void tile_sense_tof_wake(tile_t *tile);
  * @brief  Reset the device via the CPU reset bit in ENABLE.
  * @studio expose category=tile name=reset section=lifecycle
  *
- * Performs a full CPU reset and re-runs the boot sequence. All runtime
- * state including calibration is lost. Call init() again after reset.
+ * Performs a full CPU reset and re-runs the boot sequence, so the tile is
+ * ready again afterwards. Calibration and saved algorithm state are
+ * dropped; the measurement configuration (mode, period, iterations,
+ * threshold) is kept. Ranging is stopped: call start() to resume.
  *
- * @param  tile  Tile handle.
  */
 void tile_sense_tof_reset(tile_t *tile);
 
@@ -351,7 +381,6 @@ void tile_sense_tof_reset(tile_t *tile);
  * If period_ms == 0x00 in the config, a single measurement is taken.
  * Otherwise measurements repeat at the configured period.
  *
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_tof_start(tile_t *tile);
 
@@ -362,7 +391,6 @@ void tile_sense_tof_start(tile_t *tile);
  * Sends the stop command and waits for the sensor to acknowledge.
  * No-op if no measurement is active.
  *
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_tof_stop(tile_t *tile);
 
@@ -373,7 +401,6 @@ void tile_sense_tof_stop(tile_t *tile);
  * starts a measurement, polls for the result interrupt, reads the
  * result, and restores the original period setting.
  *
- * @param  tile        Initialised tile handle.
  * @param  result      Output: measurement result (may be NULL to discard).
  * @param  timeout_ms  Maximum wait time in milliseconds.
  * @return 1 if a valid result was obtained, 0 on timeout or error.
@@ -398,7 +425,6 @@ uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result,
  * what it physically means. Use tile_sense_tof_get_result() when you need to
  * tell "no target" from "target at max range"; that reports the raw value.
  *
- * @param  tile  Initialised tile handle.
  * @return Distance in millimeters, saturating at the configured max range.
  */
 uint16_t tile_sense_tof_get_distance_mm(tile_t *tile);
@@ -411,7 +437,6 @@ uint16_t tile_sense_tof_get_distance_mm(tile_t *tile);
  * tile_sense_tof_get_distance_mm() saturates to when no object is detected,
  * so `distance >= max_range_mm()` is the explicit "nothing in range" test.
  *
- * @param  tile  Initialised tile handle.
  * @return Maximum range in millimeters.
  */
 uint16_t tile_sense_tof_max_range_mm(tile_t *tile);
@@ -423,7 +448,6 @@ uint16_t tile_sense_tof_max_range_mm(tile_t *tile);
  * from the sensor in a single bus transaction. Clears the result
  * interrupt flag after reading.
  *
- * @param  tile    Initialised tile handle.
  * @param  result  Output struct to populate.
  */
 void tile_sense_tof_get_result(tile_t *tile, sense_tof_result_t *result);
@@ -441,7 +465,6 @@ void tile_sense_tof_get_result(tile_t *tile, sense_tof_result_t *result);
  * @studio expose category=tile name=get_result returns=int[5] section=runtime
  * @studio out_buffer out type=int32_t length=5
  *
- * @param  tile  Initialised tile handle.
  * @param  out   Output buffer (5 int32_t slots).
  */
 void tile_sense_tof_get_result_flat(tile_t *tile, int32_t *out);
@@ -460,7 +483,6 @@ void tile_sense_tof_get_result_flat(tile_t *tile, int32_t *out);
  * @studio out_scalar temp_c type=int32_t
  * @studio out_scalar seq type=int32_t
  *
- * @param  tile        Initialised tile handle.
  * @param  mm          Output: distance in millimetres.
  * @param  status      Output: result status code.
  * @param  reliability Output: 0–63 reliability score.
@@ -485,7 +507,6 @@ uint8_t tile_sense_tof_measure_single_flat(tile_t *tile,
  * Does not clear the interrupt — that is done by get_result() or
  * get_distance_mm().
  *
- * @param  tile  Initialised tile handle.
  * @return 1 if a new result is pending, 0 otherwise.
  */
 uint8_t tile_sense_tof_result_ready(tile_t *tile);
@@ -501,9 +522,13 @@ uint8_t tile_sense_tof_result_ready(tile_t *tile);
  * the TMF8806 calibration guidelines. Results are stored internally
  * and can be retrieved with tile_sense_tof_get_calibration().
  *
- * This is a blocking call that waits for the calibration to complete.
+ * This is a blocking call that waits for the calibration to complete:
+ * about 1.1 s in 2.5 m mode and 2.2 s in 5 m mode (40.96 M iterations), so
+ * a timeout below 3000 ms is raised to 3000. Continuous ranging is paused
+ * and resumed. The calibration belongs to the current mode's family: short
+ * range and 2.5 m share one, 5 m needs its own (datasheet §6.4), and
+ * switching across that line drops it.
  *
- * @param  tile        Initialised tile handle.
  * @param  timeout_ms  Maximum wait time in milliseconds.
  * @return 1 if calibration completed successfully, 0 on timeout or error.
  */
@@ -519,7 +544,6 @@ uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms);
  * @studio expose category=tile name=set_calibration section=advanced
  * @studio in_buffer data type=uint8_t length=14
  *
- * @param  tile  Initialised tile handle.
  * @param  data  Pointer to 14-byte calibration data array.
  */
 void tile_sense_tof_set_calibration(tile_t *tile, const uint8_t *data);
@@ -534,7 +558,6 @@ void tile_sense_tof_set_calibration(tile_t *tile, const uint8_t *data);
  * @studio expose category=tile name=get_calibration returns=int[14] section=advanced
  * @studio out_buffer data type=uint8_t length=14
  *
- * @param  tile  Initialised tile handle.
  * @param  data  Output buffer for 14 bytes of calibration data.
  */
 void tile_sense_tof_get_calibration(tile_t *tile, uint8_t *data);
@@ -547,7 +570,6 @@ void tile_sense_tof_get_calibration(tile_t *tile, uint8_t *data);
  * Returns the major, minor, and patch version of the App0 measurement
  * application running on the TMF8806.
  *
- * @param  tile     Initialised tile handle.
  * @param  version  Output struct to populate.
  */
 void tile_sense_tof_get_app_version(tile_t *tile, sense_tof_version_t *version);
@@ -562,7 +584,6 @@ void tile_sense_tof_get_app_version(tile_t *tile, sense_tof_version_t *version);
  * @studio out_scalar minor type=int32_t
  * @studio out_scalar patch type=int32_t
  *
- * @param  tile   Initialised tile handle.
  * @param  major  Output: major version number.
  * @param  minor  Output: minor version number.
  * @param  patch  Output: patch version number.
@@ -575,10 +596,10 @@ void tile_sense_tof_get_app_version_flat(tile_t *tile,
 /**
  * @brief  Read the device serial number.
  *
- * Issues the serial number command (0x47) and reads back the response.
- * The serial number is a 4-byte unique device identifier.
+ * Issues the serial number command (0x47) and reads SERIAL_NUMBER_0..3
+ * (0x28-0x2B, datasheet §7.6): a 4-byte unique device identifier.
+ * Continuous ranging is paused for the command and resumed afterwards.
  *
- * @param  tile    Initialised tile handle.
  * @param  serial  Output buffer for 4 bytes of serial data.
  * @return 1 if serial number was read successfully, 0 on error.
  */
@@ -595,7 +616,6 @@ uint8_t tile_sense_tof_get_serial_number(tile_t *tile, uint8_t *serial);
  * @studio expose category=tile name=get_serial_number returns=int[4] section=advanced
  * @studio out_buffer out type=int32_t length=4
  *
- * @param  tile  Initialised tile handle.
  * @param  out   Output buffer (4 int32_t slots).
  */
 void tile_sense_tof_get_serial_number_flat(tile_t *tile, int32_t *out);
@@ -610,7 +630,6 @@ void tile_sense_tof_get_serial_number_flat(tile_t *tile, int32_t *out);
  * Stops any active measurement, updates the cached mode, and restarts.
  * If no measurement was running, only updates the config for the next start().
  *
- * @param  tile  Initialised tile handle.
  * @param  mode  New distance mode.
  */
 void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mode);
@@ -627,7 +646,6 @@ void tile_sense_tof_set_distance_mode(tile_t *tile, sense_tof_distance_mode_t mo
  * Stops any active measurement, updates the cached period, and restarts.
  * If no measurement was running, only updates the config for the next start().
  *
- * @param  tile    Initialised tile handle.
  * @param  period  New repetition period (sense_tof_period_t, or 1-253 ms).
  */
 void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period);
@@ -642,7 +660,6 @@ void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period);
  * Typical range 10-4000 (10k-4M); the ranging default is 900. Stops any
  * active measurement, updates the cached value, and restarts.
  *
- * @param  tile         Initialised tile handle.
  * @param  kilo_iters   [10..4000] Iterations in thousands (e.g. 900 = 900k).
  */
 void tile_sense_tof_set_kilo_iters(tile_t *tile, uint16_t kilo_iters);
@@ -653,10 +670,10 @@ void tile_sense_tof_set_kilo_iters(tile_t *tile, uint16_t kilo_iters);
  * @studio control threshold label="Detection threshold" tier=advanced default=6
  *
  * Sets cmd_data3[5:0] — the minimum confidence for a reported target.
- * Higher values reject weak/spurious returns; 0 reports everything.
+ * Higher values reject weak/spurious returns. 0 is not "everything": the
+ * chip uses 6 instead (datasheet §6.9.3).
  * Stops any active measurement, updates the cached value, and restarts.
  *
- * @param  tile       Initialised tile handle.
  * @param  threshold  [0..63] Detection threshold, 0-63.
  */
 void tile_sense_tof_set_threshold(tile_t *tile, uint8_t threshold);
@@ -670,19 +687,26 @@ void tile_sense_tof_set_threshold(tile_t *tile, uint8_t threshold);
  * recent result block. Useful for assessing return strength and
  * reflectance beyond the reliability byte. Call after a result is ready.
  *
- * @param  tile  Initialised tile handle.
  * @param  sig   Caller-allocated struct, populated on return.
  */
 void tile_sense_tof_get_signal_quality(tile_t *tile, sense_tof_signal_t *sig);
 
 /**
  * @brief  Read signal-quality diagnostics into flat out-params (Studio).
- * @studio expose category=tile name=get_signal_quality returns=int section=runtime
  *
- * @param  tile            Initialised tile handle.
- * @param  reference_hits  Reference-channel hit count (or NULL).
- * @param  object_hits     Object-channel hit count (or NULL).
- * @param  crosstalk       Cross-talk count (or NULL).
+ * Reads the most recent result block (one 10-byte burst). Reference and
+ * object hits are zero when no object was detected (datasheet §7.3.11 to
+ * §7.3.18). Crosstalk is only meaningful with low ambient light and no
+ * target within 40 cm (§7.3.19). Call after a result is ready.
+ *
+ * @studio expose category=tile name=get_signal_quality section=runtime
+ * @studio out_scalar reference_hits type=int32_t
+ * @studio out_scalar object_hits type=int32_t
+ * @studio out_scalar crosstalk type=int32_t
+ *
+ * @param  reference_hits  Output: reference-channel SPAD hit sum (or NULL).
+ * @param  object_hits     Output: object-channel SPAD hit sum (or NULL).
+ * @param  crosstalk       Output: crosstalk peak value, 0-65535 (or NULL).
  */
 void tile_sense_tof_get_signal_quality_flat(tile_t *tile,
                                             int32_t *reference_hits,
@@ -704,7 +728,6 @@ void tile_sense_tof_get_signal_quality_flat(tile_t *tile,
  * @studio expose category=tile name=save_state returns=int[11] section=advanced
  * @studio out_buffer data type=uint8_t length=11
  *
- * @param  tile  Initialised tile handle (measurement should be stopped).
  * @param  data  Output buffer for 11 bytes of state data.
  */
 void tile_sense_tof_save_state(tile_t *tile, uint8_t *data);
@@ -723,7 +746,6 @@ void tile_sense_tof_save_state(tile_t *tile, uint8_t *data);
  * @studio expose category=tile name=restore_state section=advanced
  * @studio in_buffer data type=uint8_t length=11
  *
- * @param  tile  Initialised tile handle (after wake, before start).
  * @param  data  Pointer to 11 bytes of previously saved state data.
  */
 void tile_sense_tof_restore_state(tile_t *tile, const uint8_t *data);
@@ -746,7 +768,6 @@ void tile_sense_tof_restore_state(tile_t *tile, const uint8_t *data);
  *   - persistence = N  → require N consecutive in-range hits
  *   - low_mm > high_mm → no interrupts (no valid range)
  *
- * @param  tile          Initialised tile handle.
  * @param  persistence   0–255; 0 = disabled (every-measurement INT).
  * @param  low_mm        Lower bound (inclusive), millimetres.
  * @param  high_mm       Upper bound (inclusive), millimetres.
@@ -767,7 +788,6 @@ uint8_t tile_sense_tof_set_threshold_interrupt(tile_t *tile,
  * @studio out_scalar low_mm type=uint16_t
  * @studio out_scalar high_mm type=uint16_t
  *
- * @param  tile          Initialised tile handle.
  * @param  persistence   Output (may be NULL).
  * @param  low_mm        Output (may be NULL).
  * @param  high_mm       Output (may be NULL).
@@ -783,7 +803,7 @@ uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
 /**
  * @brief  Read the chip's 32-bit system-clock tick counter.
  *
- * The TMF8806's internal oscillator can drift ±5 % over temperature,
+ * The TMF8806's internal oscillator can drift ±4 % over temperature,
  * which biases distance readings if the host's measurement period
  * doesn't compensate. Reading this register set after each
  * measurement lets the host compute the actual elapsed chip-time
@@ -794,7 +814,6 @@ uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
  *
  * @studio expose category=tile name=get_sys_clock_ticks returns=int section=runtime
  *
- * @param  tile  Initialised tile handle.
  * @return 32-bit system-clock tick count (0 if not in App0 / no
  *         measurement yet).
  */
@@ -812,14 +831,14 @@ uint32_t tile_sense_tof_get_sys_clock_ticks(tile_t *tile);
  * Procedure (handled internally): stop any running measurement,
  * configure histogram-readout mode (cmd 0x30), start cyclic
  * measurement, wait for INT_STATUS bit 1, issue 0x80 to start the
- * histogram block read, wait for TID to advance, then read 128
- * bytes from the histogram register.
+ * histogram block read, wait for TID to advance, then read the first
+ * 128-byte block from HISTOGRAM_START (0x20, datasheet §7.5.1).
  *
- * After this returns, the chip stays in histogram mode. Call
- * `tile_sense_tof_stop()` and re-issue the original measurement
- * config to return to normal distance reads.
+ * That block is TDC0 quarter 0: bins 0..63, each a little-endian 16-bit
+ * count (LSB, MSB). The rest of the histogram (further blocks, continued
+ * with command 0x32) is not read. Ranging is stopped afterwards: call
+ * start() to return to normal distance reads.
  *
- * @param  tile         Initialised tile handle.
  * @param  hist_type    Histogram type byte (see HostDriverCommunication
  *                      §8.11 / TMF8806 datasheet for available types;
  *                      0x10 = short-range example).
@@ -841,7 +860,6 @@ uint8_t tile_sense_tof_read_histogram(tile_t *tile, uint8_t hist_type,
  * @studio expose category=tile name=read_histogram returns=int[128] section=advanced
  * @studio out_buffer out type=int32_t length=128
  *
- * @param  tile        Initialised tile handle.
  * @param  hist_type   Histogram-type byte (see read_histogram() docs).
  * @param  timeout_ms  Maximum wait for the histogram-ready interrupt.
  * @param  out         Output buffer (128 int32_t slots).
@@ -884,16 +902,16 @@ void tile_sense_tof_read_histogram_flat(tile_t *tile,
  *
  * @studio expose category=tile name=is_object_within returns=bool section=runtime
  *
- * Performs one blocking single-shot measurement (up to 200 ms) and
+ * Performs one blocking single-shot measurement (up to 300 ms) and
  * returns 1 iff the reported distance is non-zero, less than or
- * equal to `mm`, and the reliability is at least
- * @ref SENSE_TOF_PRESENCE_RELIABILITY_MIN. A zero distance or
- * low-confidence hit is treated as "no object".
+ * equal to `mm`, and the result counts as a detection: a short-range
+ * result (reliability 1 or 10, which is what short-range mode and any
+ * object within ~200 mm give) or a long-range result with reliability of
+ * at least @ref SENSE_TOF_PRESENCE_RELIABILITY_MIN.
  *
- * Restores the prior measurement period on the way out, so this
- * mixes safely with continuous-mode use.
+ * If continuous ranging was running it is paused for the shot and
+ * resumed afterwards.
  *
- * @param  tile  Initialised tile handle.
  * @param  mm    Distance threshold in millimetres (inclusive).
  * @return 1 if an object is within range with adequate confidence,
  *         0 otherwise (no target, low reliability, or bus timeout).
@@ -916,7 +934,6 @@ uint8_t tile_sense_tof_is_object_within(tile_t *tile, uint16_t mm);
  *       threshold-INT (see @ref tile_sense_tof_set_threshold_interrupt)
  *       to let a sleeping host stay asleep until proximity wakes it.
  *
- * @param  tile        Initialised tile handle.
  * @param  mm          Distance threshold in millimetres (inclusive).
  * @param  timeout_ms  Maximum wait time in milliseconds.
  * @return 1 if an object entered range before timeout, 0 otherwise.
@@ -928,15 +945,15 @@ uint8_t tile_sense_tof_wait_for_object(tile_t *tile, uint16_t mm,
  * @brief  Read distance and confidence in one call.
  *
  * Performs a single-shot measurement and writes the distance (mm)
- * and the confidence remapped from the chip's 0–63 reliability
- * scale to a 0–100 percent value. Confidence is computed as
- * `(reliability * 100) / 63` — integer math, no floats.
+ * and a 0–100 percent confidence. A long-range result maps its 0–63
+ * reliability as `(reliability * 100) / 63`; the short-range codes are not
+ * a scale, so 10 (calibrated) reads as 100 and 1 (uncalibrated) as 50.
+ * Integer math, no floats.
  *
  * @studio expose category=tile name=read_distance_with_confidence returns=bool section=runtime
  * @studio out_scalar mm type=uint16_t
  * @studio out_scalar confidence_pct type=uint8_t
  *
- * @param  tile           Initialised tile handle.
  * @param  mm             Output: distance in millimetres (NULL allowed).
  * @param  confidence_pct Output: 0–100 confidence (NULL allowed).
  * @return 1 on a successful measurement, 0 on timeout / bus error.

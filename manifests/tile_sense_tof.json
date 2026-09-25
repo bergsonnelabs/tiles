@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@c2cc2d1",
+  "source": "tiles@65a4fd8",
   "tile": "Sense.TOF",
   "palette": {
     "label": "Sense.TOF",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_tof",
     "header": "tile_sense_tof.h",
-    "version": "1.5.0"
+    "version": "1.6.0"
   },
   "handle": {
     "type": "tile_t",
@@ -527,22 +527,38 @@
       "params": [
         {
           "name": "reference_hits",
-          "type": "?int32_t *",
-          "description": "Reference-channel hit count (or NULL)."
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: reference-channel SPAD hit sum (or NULL)."
         },
         {
           "name": "object_hits",
-          "type": "?int32_t *",
-          "description": "Object-channel hit count (or NULL)."
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: object-channel SPAD hit sum (or NULL)."
         },
         {
           "name": "crosstalk",
-          "type": "?int32_t *",
-          "description": "Cross-talk count (or NULL)."
+          "type": "int",
+          "out_scalar": true,
+          "description": "Output: crosstalk peak value, 0-65535 (or NULL)."
         }
       ],
       "returns": "void",
-      "dsl_returns": "int",
+      "c_out_scalars": [
+        {
+          "name": "reference_hits",
+          "type": "int32_t"
+        },
+        {
+          "name": "object_hits",
+          "type": "int32_t"
+        },
+        {
+          "name": "crosstalk",
+          "type": "int32_t"
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
