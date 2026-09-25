@@ -1,10 +1,17 @@
 /**
  * core_watchdog.h — Independent Watchdog (IWDG)
  *
- * The IWDG runs on its own 32 kHz LSI clock, independent of SYSCLK.
- * Once started, it CANNOT be stopped — only a full MCU reset
- * disables it. If your code doesn't call core_watchdog_feed()
+ * The IWDG runs on its own LSI clock (32 kHz nominal, 37 kHz on the L0),
+ * independent of SYSCLK. Once started, it CANNOT be stopped — only a full
+ * MCU reset disables it. If your code doesn't call core_watchdog_feed()
  * before the timeout, the MCU resets.
+ *
+ * It also keeps counting in Stop and Standby (see ll_iwdg.h). core_power.h
+ * reads the timeout recorded here and sleeps in fed chunks; Standby, which
+ * can't be chunked, refuses to outlast half the timeout.
+ *
+ * On ROM-DFU builds (L4/H5), feeding also retires the brick-recovery strike
+ * counter once the app has run healthy for a while — see core_recovery.h.
  *
  * Typical usage:
  *
@@ -38,7 +45,13 @@
 #define CORE_WATCHDOG_H
 
 #include "ll_iwdg.h"
+#include "ll_systick.h" /* _systick_ticks: uptime for the strike-counter auto-clear */
 #include "hal_dfu.h"  /* recovery stash: lets caused_reset() survive core_init's RMVF clear */
+
+/* Timeout (ms) of the IWDG this firmware started, or 0 if it hasn't started
+ * one. Set by core_watchdog_start(); defined in core_watchdog.c. The IWDG has
+ * no "running" status bit on the L0/L4, so software has to remember. */
+extern volatile uint32_t _core_watchdog_timeout_ms;
 
 /**
  * Start the independent watchdog with a timeout in milliseconds.
@@ -46,7 +59,9 @@
  *
  * Common values: 1000, 2000, 5000, 10000 (max ~28000).
  *
- * WARNING: Once started, the IWDG cannot be stopped.
+ * WARNING: Once started, the IWDG cannot be stopped, and it keeps running in
+ * Stop and Standby. core_stop_for() wakes to feed it; core_standby_for()
+ * refuses sleeps longer than half the timeout.
  *
  * @studio expose category=watchdog name=start
  * @studio twin full
@@ -54,32 +69,61 @@
  */
 static inline void core_watchdog_start(uint32_t timeout_ms)
 {
-    /* LSI ≈ 32 kHz. Pick prescaler to fit timeout in 12-bit reload (0–4095).
-       tick_ms = prescaler / 32.  reload = timeout_ms / tick_ms - 1.
-       We try prescalers from small to large until reload fits. */
+    /* LSI = LL_LSI_HZ (32 kHz; 37 kHz on the L0 — it used to assume 32 kHz
+       everywhere, so the L0's 5 s watchdog fired at ~4.3 s). Pick the
+       smallest prescaler whose 12-bit reload (1..4096 ticks) fits.
+       tick_ms = psc * 1000 / LSI  →  reload = timeout_ms * (LSI/1000) / psc. */
     static const uint32_t psc_vals[] = { 4, 8, 16, 32, 64, 128, 256 };
     static const uint32_t psc_regs[] = {
         LL_IWDG_PSC_4, LL_IWDG_PSC_8, LL_IWDG_PSC_16, LL_IWDG_PSC_32,
         LL_IWDG_PSC_64, LL_IWDG_PSC_128, LL_IWDG_PSC_256
     };
+    const uint32_t lsi_khz = LL_LSI_HZ / 1000UL;
+
+    if (timeout_ms > 100000UL) timeout_ms = 100000UL;   /* keeps the product in range */
 
     for (int i = 0; i < 7; i++) {
-        /* tick_ms = psc/32 (LSI 32 kHz) → reload = timeout_ms / tick_ms
-         *         = timeout_ms * 32 / psc. (The earlier form divided by an
-         *         extra 1000, making every timeout ~1000x too short.) */
-        uint32_t reload = (timeout_ms * 32UL) / psc_vals[i];
+        /* (The earlier form divided by an extra 1000, making every timeout
+         *  ~1000x too short.) */
+        uint32_t reload = (timeout_ms * lsi_khz) / psc_vals[i];
         if (reload == 0) reload = 1;
         if (reload <= 4096) {
             ll_iwdg_init(psc_regs[i], reload - 1);
+            _core_watchdog_timeout_ms = (reload * psc_vals[i]) / lsi_khz;
+            if (_core_watchdog_timeout_ms == 0) _core_watchdog_timeout_ms = 1;
             return;
         }
     }
-    /* Fallback: max timeout (~28 seconds) */
+    /* Fallback: max timeout (4096 x 256 LSI ticks: ~32.8 s at 32 kHz,
+     * ~28.3 s on the L0) */
     ll_iwdg_init(LL_IWDG_PSC_256, 4095);
+    _core_watchdog_timeout_ms = (4096UL * 256UL) / lsi_khz;
+}
+
+/** Returns 1 if this firmware has started the watchdog (core_watchdog_start). */
+static inline int core_watchdog_running(void)
+{
+    return _core_watchdog_timeout_ms != 0;
+}
+
+/**
+ * The longest a sleep may run between feeds while the watchdog runs: half
+ * its timeout, in ms. 0 when the watchdog isn't running. The RTC that times
+ * the sleep and the IWDG share the LSI, so the margin holds even when the
+ * LSI is far from nominal (the L0's is 26-56 kHz).
+ */
+static inline uint32_t core_watchdog_sleep_chunk_ms(void)
+{
+    uint32_t t = _core_watchdog_timeout_ms;
+    if (t == 0) return 0;
+    return (t >= 2UL) ? t / 2UL : 1UL;
 }
 
 /**
  * Feed the watchdog. Must be called before the timeout expires.
+ *
+ * On ROM-DFU builds this also retires the brick-recovery strike counter, once,
+ * after the app has run for max(10 s, 2 x the timeout) — no call needed.
  *
  * @studio expose category=watchdog name=feed
  * @studio twin full
@@ -87,6 +131,25 @@ static inline void core_watchdog_start(uint32_t timeout_ms)
 static inline void core_watchdog_feed(void)
 {
     ll_iwdg_refresh();
+#if defined(DFU_STRIKE_TAG_ADDR) && defined(ROM_DFU)
+    /* (ROM_DFU only: that is where core_init() keeps the count, and where the
+     * linker reserves these SRAM words; elsewhere they are the stack top.)
+     * Brick recovery (core_recovery.h): core_init() counts consecutive
+     * watchdog resets and parks the Core in the ROM bootloader at the limit.
+     * Nothing used to zero the count on a healthy run, so three unrelated
+     * watchdog resets without a power cycle parked a working board. An app
+     * that is still feeding after max(10 s, 2 x timeout) of uptime is healthy:
+     * zero it here, once. While the count is 0 (every boot not preceded by a
+     * watchdog reset, and every feed after the clear) this costs one SRAM load
+     * and a compare. Uptime includes time in core_stop_for(). */
+    if (DFU_STRIKE_ADDR != 0UL && hal_recovery_valid()) {
+        uint32_t healthy_ms = 2UL * _core_watchdog_timeout_ms;
+        if (healthy_ms < 10000UL) healthy_ms = 10000UL;
+        if (_systick_ticks >= healthy_ms) {
+            hal_recovery_set_strikes(0);
+        }
+    }
+#endif
 }
 
 /** Check if the last reset was caused by the watchdog.

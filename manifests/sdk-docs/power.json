@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@2a1a847",
+  "source": "tiles@4b95d38",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
@@ -23,7 +23,7 @@
       "name": "core_stop_for",
       "signature": "core_stop_for(uint32_t seconds)",
       "returns": "void",
-      "brief": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored.",
+      "brief": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored; core_millis() advances by the time slept, as the RTC measured it. If the watchdog is running, sleeps in chunks of half its timeout and feeds it in between.",
       "params": [
         {
           "name": "seconds",
@@ -42,7 +42,7 @@
       "name": "core_stop_until_on_change",
       "signature": "core_stop_until_on_change(uint8_t pad, uint32_t edge)",
       "returns": "void",
-      "brief": "Enter Stop mode until a GPIO edge occurs on the given pad. Configures the pad as input, enables EXTI, enters Stop, and restores clocks on wake. Returns after the edge is detected.",
+      "brief": "Enter Stop mode until a GPIO edge occurs on the given pad. Configures the pad as input, enables EXTI, enters Stop, and restores clocks on wake. Returns after the edge is detected (right away if the pad can't take an edge interrupt). If the watchdog is running, wakes every half timeout to feed it and goes back to sleep.",
       "params": [
         {
           "name": "pad",
@@ -60,21 +60,28 @@
     },
     {
       "name": "core_standby_for",
-      "signature": "core_standby_for(void)",
-      "returns": "void",
-      "brief": "Enter Standby mode with RTC wakeup after the given seconds. Does not return — MCU resets on wake. Check core_woke_from_standby() at the top of main() to detect a Standby wake.",
-      "params": [],
-      "studio_exposed": false,
-      "attributes": [
-        "noreturn"
+      "signature": "core_standby_for(uint32_t seconds)",
+      "returns": "hal_status_t",
+      "brief": "Enter Standby mode with RTC wakeup after the given seconds. On success it does not return — the MCU resets on wake. Check core_woke_from_standby() at the top of main() to detect a Standby wake. Watchdog: the IWDG keeps counting through Standby and nothing feeds it until main() runs again, and Standby can't be split into fed chunks. So while the watchdog is running this refuses — returns HAL_ERROR without sleeping — unless seconds is at most half the watchdog timeout (2 s with the default 5 s watchdog). Use core_stop_for() for longer sleeps. (Core.ST.H5: no check.)",
+      "params": [
+        {
+          "name": "seconds",
+          "ctype": "uint32_t",
+          "range": [
+            1,
+            65536
+          ],
+          "description": "Seconds in Standby."
+        }
       ],
+      "studio_exposed": false,
       "layer": "core"
     },
     {
       "name": "core_standby_until_on_change",
       "signature": "core_standby_until_on_change(uint8_t pad, uint32_t edge)",
       "returns": "void",
-      "brief": "Enter Standby mode until a GPIO edge on the given pad (via WKUP pin). Does not return — MCU resets on wake. Not all pads support WKUP; returns without entering Standby if the pad has no WKUP capability. On Core.ST.L4.2: pad 8 (PA0 = WKUP1) and pad 7 (PA2 = WKUP4).",
+      "brief": "Enter Standby mode until a GPIO edge on the given pad (via WKUP pin). Does not return — MCU resets on wake. Not all pads support WKUP; returns without entering Standby if the pad has no WKUP capability, or if the watchdog is running (it would reset the Core long before most edges). On Core.ST.L4.2: pad 8 (PA0 = WKUP1) and pad 7 (PA2 = WKUP4).",
       "params": [
         {
           "name": "pad",
@@ -94,7 +101,7 @@
       "name": "core_stop",
       "signature": "core_stop(void)",
       "returns": "void",
-      "brief": "Enter Stop mode (caller manages wakeup source + clock recovery).",
+      "brief": "Enter Stop mode (caller manages wakeup source + clock recovery). A running watchdog keeps counting and is not fed: wake within its timeout. On the WBA the caller also owns the Stop 1 wait-state/HDIV5 rules (RM0493 §11.7.7).",
       "params": [],
       "studio_exposed": false,
       "layer": "core"
@@ -103,7 +110,7 @@
       "name": "core_standby",
       "signature": "core_standby(void)",
       "returns": "void",
-      "brief": "Enter Standby (caller manages wakeup source). Does not return.",
+      "brief": "Enter Standby (caller manages wakeup source). Does not return. A running watchdog keeps counting through Standby and resets the Core at its timeout.",
       "params": [],
       "studio_exposed": false,
       "attributes": [
@@ -115,7 +122,7 @@
       "name": "core_woke_from_standby",
       "signature": "core_woke_from_standby(void)",
       "returns": "int",
-      "brief": "Returns 1 if the MCU woke from Standby.",
+      "brief": "Returns 1 if the MCU woke from Standby. The flag survives later resets until core_clear_standby_flag() — call that once you've handled the wake.",
       "params": [],
       "studio_exposed": true,
       "layer": "core"
@@ -183,7 +190,7 @@
       "name": "ll_pwr_woke_from_standby",
       "signature": "ll_pwr_woke_from_standby(void)",
       "returns": "int",
-      "brief": "Check if we woke from standby",
+      "brief": "Check if we woke from standby. The flag is not cleared by a system reset, so it stays set across later resets until ll_pwr_clear_standby_flag().",
       "params": [],
       "studio_exposed": false,
       "layer": "ll"

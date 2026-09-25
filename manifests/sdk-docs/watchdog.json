@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@0ea79c0",
+  "source": "tiles@4b95d38",
   "category": "watchdog",
   "label": "Core.Watchdog",
   "icon": "🐕",
@@ -14,7 +14,7 @@
       "name": "core_watchdog_start",
       "signature": "core_watchdog_start(uint32_t timeout_ms)",
       "returns": "void",
-      "brief": "Start the independent watchdog with a timeout in milliseconds. Selects the best prescaler/reload combination automatically. Common values: 1000, 2000, 5000, 10000 (max ~28000). WARNING: Once started, the IWDG cannot be stopped.",
+      "brief": "Start the independent watchdog with a timeout in milliseconds. Selects the best prescaler/reload combination automatically. Common values: 1000, 2000, 5000, 10000 (max ~28000). WARNING: Once started, the IWDG cannot be stopped, and it keeps running in Stop and Standby. core_stop_for() wakes to feed it; core_standby_for() refuses sleeps longer than half the timeout.",
       "params": [
         {
           "name": "timeout_ms",
@@ -30,10 +30,28 @@
       "layer": "core"
     },
     {
+      "name": "core_watchdog_running",
+      "signature": "core_watchdog_running(void)",
+      "returns": "int",
+      "brief": "Returns 1 if this firmware has started the watchdog (core_watchdog_start).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_watchdog_sleep_chunk_ms",
+      "signature": "core_watchdog_sleep_chunk_ms(void)",
+      "returns": "uint32_t",
+      "brief": "The longest a sleep may run between feeds while the watchdog runs: half its timeout, in ms. 0 when the watchdog isn't running. The RTC that times the sleep and the IWDG share the LSI, so the margin holds even when the LSI is far from nominal (the L0's is 26-56 kHz).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_watchdog_feed",
       "signature": "core_watchdog_feed(void)",
       "returns": "void",
-      "brief": "Feed the watchdog. Must be called before the timeout expires.",
+      "brief": "Feed the watchdog. Must be called before the timeout expires. On ROM-DFU builds this also retires the brick-recovery strike counter, once, after the app has run for max(10 s, 2 x the timeout) — no call needed.",
       "params": [],
       "studio_exposed": true,
       "layer": "core"

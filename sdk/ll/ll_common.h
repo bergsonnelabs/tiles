@@ -42,6 +42,26 @@
   #error "Unknown MCU — define one of: STM32L011xx, STM32L422xx, STM32WBA55xx, STM32H523xx"
 #endif
 
+/* ---- LSI nominal frequency (Hz) ----
+ * The LSI clocks the IWDG, and the RTC whenever the RTC runs from LSI, so the
+ * watchdog prescaler and the RTC 1 Hz prescalers are both derived from this.
+ * It is an RC oscillator: these are typical values, not calibrated ones.
+ *   L0 (STM32L011): 37 kHz (RM0377 LSI section; DS table "LSI oscillator
+ *                   characteristics": 26 / 38 / 56 kHz min / typ / max).
+ *                   The old 32 kHz assumption made a 5 s watchdog fire at
+ *                   ~4.3 s (as early as ~2.9 s on a fast part).
+ *   L4 (STM32L422): 32 kHz (DS: 29.5-34 kHz over temperature).
+ *   WBA55 (LSI1):   32 kHz (DS: 30.4-33.6 kHz, LSI1PREDIV = 0).
+ *   H5:             32 kHz (unchanged).
+ * No calibration against HSI16 is done; the RTC and IWDG share the LSI, so
+ * durations measured in RTC ticks against the watchdog stay consistent even
+ * when the absolute frequency is off. */
+#if defined(STM32L011xx)
+  #define LL_LSI_HZ         37000UL
+#else
+  #define LL_LSI_HZ         32000UL
+#endif
+
 /* ---- GPIO register structure ---- */
 /* Common across all STM32 families */
 
@@ -170,6 +190,12 @@ static inline void ll_nvic_clear_pending(uint32_t irq)
 static inline void ll_nvic_set_pending(uint32_t irq)
 {
     REG32(LL_NVIC_ISPR_BASE + (irq / 32) * 4) = (1UL << (irq % 32));
+}
+
+/** Returns 1 if the IRQ is enabled in the NVIC (ISER reads back the enables). */
+static inline int ll_nvic_irq_enabled(uint32_t irq)
+{
+    return (REG32(LL_NVIC_ISER_BASE + (irq / 32) * 4) & (1UL << (irq % 32))) != 0;
 }
 
 #endif /* LL_COMMON_H */

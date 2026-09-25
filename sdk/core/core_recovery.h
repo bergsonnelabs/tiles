@@ -12,11 +12,21 @@
  * a power-cycle is always a fresh start. Only meaningful on ROM_DFU builds of a
  * USB-capable core (where hal_dfu.h defines the reserved addresses).
  *
- * Flow, all pre-clock in core_init() before any user code:
- *   note_boot()  → read HW reset cause, stash it, inc/reset strikes, clear RMVF
- *   over_limit() → decide whether to bail to DFU
- *   (app) clear() → once healthy, zero the counter so transient resets don't
- *                   accumulate toward a false park (the starter template calls it)
+ * Flow:
+ *   note_boot()  → (core_init, pre-clock) read HW reset cause, stash it,
+ *                  inc/reset strikes, clear RMVF
+ *   over_limit() → (core_init, pre-clock) decide whether to bail to DFU
+ *   clear        → automatic: core_watchdog_feed() zeroes the counter, once,
+ *                  after max(10 s, 2 x the watchdog timeout) of uptime, so
+ *                  transient resets on a healthy app never add up to a false
+ *                  park. Works for any project that feeds the watchdog (Studio
+ *                  output included) with no template changes. A bad app that
+ *                  hangs before that point never feeds, so it still escalates.
+ *                  core_recovery_clear() remains for apps that want it sooner.
+ *
+ * Before 2026-09-25 the clear was documented as the starter template's job,
+ * but nothing called it (only tests/hw-watchdog-recovery): three watchdog
+ * resets anywhere in a powered session parked a working Core in ROM DFU.
  */
 
 #ifndef CORE_RECOVERY_H
@@ -55,9 +65,9 @@ static inline int core_recovery_over_limit(uint32_t strikes)
 }
 
 /**
- * Clear the strike counter — call from the app once it's proven healthy (e.g.
- * after feeding the watchdog past ~2× its timeout) so a transient hang that
- * recovers never accumulates toward a false DFU park.
+ * Clear the strike counter now. core_watchdog_feed() already does this once
+ * the app has run healthy for max(10 s, 2x the timeout); call this only to
+ * declare health earlier than that.
  */
 static inline void core_recovery_clear(void)
 {

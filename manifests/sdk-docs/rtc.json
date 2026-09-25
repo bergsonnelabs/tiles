@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@4b95d38",
   "category": "rtc",
   "label": "Core.RTC",
   "icon": "◴",
@@ -14,7 +14,7 @@
       "name": "core_rtc_init",
       "signature": "core_rtc_init(void)",
       "returns": "void",
-      "brief": "Initialize the RTC using LSI (~32kHz internal RC). Call once from `on start` before setting time, date, or alarms. For LSE, call ll_rtc_init(1) directly in hand-written C.",
+      "brief": "Initialize the RTC using LSI (internal RC, ~32 kHz; ~37 kHz on Core.ST.L0, scaled so a second is still ~1 s). Call once from `on start` before setting time, date, or alarms. For LSE, call ll_rtc_init(1) directly in hand-written C (Core.ST.L0 has no LSE and stays on LSI).",
       "params": [],
       "studio_exposed": true,
       "layer": "core"
@@ -237,7 +237,7 @@
       "name": "ll_rtc_init",
       "signature": "ll_rtc_init(int use_lse)",
       "returns": "void",
-      "brief": "Initialize the RTC with LSE or LSI. use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (~32kHz) Prerequisites: - PWR clock enabled - Backup domain access enabled",
+      "brief": "Initialize the RTC with LSE or LSI. use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (LL_LSI_HZ) Core.ST.L0 has no LSE: it always uses LSI. Re-enters init mode, which restarts the prescaler; prefer ll_rtc_ensure() when all you need is a running RTC. Prerequisites: - PWR clock enabled - Backup domain access enabled",
       "params": [
         {
           "name": "use_lse",
@@ -347,7 +347,7 @@
       "name": "ll_rtc_wakeup_config",
       "signature": "ll_rtc_wakeup_config(uint32_t seconds)",
       "returns": "void",
-      "brief": "Configure the RTC wakeup timer. seconds: wakeup interval in seconds (1-65535 with 1Hz clock) Uses WUCKSEL = 1Hz (CK_SPRE) for simple second-based intervals. EXTI: line 20 on L0/L4/WBA, line 17 on H5 (direct event).",
+      "brief": "Configure the RTC wakeup timer. seconds: wakeup interval in seconds, 1-65536 with the 1Hz clock (0 is treated as 1; larger values are clamped to 65536). Uses WUCKSEL = 1Hz (CK_SPRE) for simple second-based intervals. Wakes Stop through EXTI line 20 on L0/L4, directly (vector 2, no EXTI line) on WBA, and EXTI line 17 on H5.",
       "params": [
         {
           "name": "seconds",
@@ -419,7 +419,7 @@
       "name": "ll_rtc_bkp_read",
       "signature": "ll_rtc_bkp_read(uint32_t n)",
       "returns": "uint32_t",
-      "brief": "Read backup register n (0–31). No clock setup needed.",
+      "brief": "Read backup register n (0–31; 0–4 on the L0). Needs the RTC/TAMP bus clock.",
       "params": [
         {
           "name": "n",
@@ -433,7 +433,7 @@
       "name": "ll_rtc_bkp_write",
       "signature": "ll_rtc_bkp_write(uint32_t n, uint32_t val)",
       "returns": "void",
-      "brief": "Write backup register n (0–31). Requires backup domain access.",
+      "brief": "Write backup register n (0–31; 0–4 on the L0). Requires backup domain access.",
       "params": [
         {
           "name": "n",

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f356b04",
+  "source": "tiles@4b95d38",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -704,7 +704,7 @@
       "symbol": "core_stop_for",
       "header": "core_power.h",
       "category": "power",
-      "description": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored.",
+      "description": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored; core_millis() advances by the time slept, as the RTC measured it. If the watchdog is running, sleeps in chunks of half its timeout and feeds it in between.",
       "params": [
         {
           "name": "seconds",
@@ -726,7 +726,7 @@
       "symbol": "core_woke_from_standby",
       "header": "core_power.h",
       "category": "power",
-      "description": "Returns 1 if the MCU woke from Standby.",
+      "description": "Returns 1 if the MCU woke from Standby. The flag survives later resets until core_clear_standby_flag() — call that once you've handled the wake.",
       "params": [],
       "returns": "int",
       "dsl_returns": "bool"
@@ -783,7 +783,7 @@
       "symbol": "core_rtc_init",
       "header": "core_rtc.h",
       "category": "rtc",
-      "description": "Initialize the RTC using LSI (~32kHz internal RC). Call once from `on start` before setting time, date, or alarms. For LSE, call ll_rtc_init(1) directly in hand-written C.",
+      "description": "Initialize the RTC using LSI (internal RC, ~32 kHz; ~37 kHz on Core.ST.L0, scaled so a second is still ~1 s). Call once from `on start` before setting time, date, or alarms. For LSE, call ll_rtc_init(1) directly in hand-written C (Core.ST.L0 has no LSE and stays on LSI).",
       "params": [],
       "returns": "void"
     },
@@ -1235,7 +1235,7 @@
       "symbol": "core_watchdog_start",
       "header": "core_watchdog.h",
       "category": "watchdog",
-      "description": "Start the independent watchdog with a timeout in milliseconds. Selects the best prescaler/reload combination automatically. Common values: 1000, 2000, 5000, 10000 (max ~28000). WARNING: Once started, the IWDG cannot be stopped.",
+      "description": "Start the independent watchdog with a timeout in milliseconds. Selects the best prescaler/reload combination automatically. Common values: 1000, 2000, 5000, 10000 (max ~28000). WARNING: Once started, the IWDG cannot be stopped, and it keeps running in Stop and Standby. core_stop_for() wakes to feed it; core_standby_for() refuses sleeps longer than half the timeout.",
       "params": [
         {
           "name": "timeout_ms",
@@ -1257,7 +1257,7 @@
       "symbol": "core_watchdog_feed",
       "header": "core_watchdog.h",
       "category": "watchdog",
-      "description": "Feed the watchdog. Must be called before the timeout expires.",
+      "description": "Feed the watchdog. Must be called before the timeout expires. On ROM-DFU builds this also retires the brick-recovery strike counter, once, after the app has run for max(10 s, 2 x the timeout) — no call needed.",
       "params": [],
       "returns": "void"
     }

@@ -9,9 +9,10 @@
  *   blurb: Wall-clock time + date, periodic wakeup timer, and Alarm A
  *          (calendar-based with per-field wildcards). Tier 2 covers
  *          init / set_time / set_date / wakeup(_stop) / set_alarm /
- *          clear_alarm / alarm_fired. Defaults to LSI (~32 kHz internal
- *          RC) — for LSE precision callers drop into ll_rtc_init(1)
- *          from C.
+ *          clear_alarm / alarm_fired. Defaults to LSI (internal RC,
+ *          ~32 kHz; ~37 kHz on Core.ST.L0) — for LSE precision callers
+ *          drop into ll_rtc_init(1) from C (not on Core.ST.L0, which has
+ *          no crystal).
  */
 
 #ifndef CORE_RTC_H
@@ -24,9 +25,10 @@
  * ============================================================ */
 
 /**
- * Initialize the RTC using LSI (~32kHz internal RC). Call once from
- * `on start` before setting time, date, or alarms.
- * For LSE, call ll_rtc_init(1) directly in hand-written C.
+ * Initialize the RTC using LSI (internal RC, ~32 kHz; ~37 kHz on Core.ST.L0,
+ * scaled so a second is still ~1 s). Call once from `on start` before setting
+ * time, date, or alarms. For LSE, call ll_rtc_init(1) directly in
+ * hand-written C (Core.ST.L0 has no LSE and stays on LSI).
  *
  * @studio expose category=rtc name=init
  * @studio twin full
@@ -182,7 +184,9 @@ static inline int core_rtc_alarm_fired(void)
 //   Capability Coverage close, 2026-05-03) could land them.
 //
 // @studio unsupported tier=1 value=M title="LSE / external crystal not exposed"
-//   core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift).
+//   core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift on the
+//   L4/WBA; the L0's is 26-56 kHz part to part and is not calibrated against
+//   HSI16, so its RTC second can be off by tens of percent).
 //   Cores with an LSE crystal need ll_rtc_init(1) — no Tier 2 wrapper
 //   that takes a clock-source argument.
 //

@@ -63,16 +63,30 @@
     "coregen.spi": "compile",
     "coregen.uart": "compile",
     "power.sleep": "verified",
-    "power.stop": "compile",
-    "power.standby": "compile",
+    "power.stop": {
+      "status": "verified",
+      "note": "Two back-to-back core_stop_for(10) with a 5 s IWDG running: 10 s each by the RTC calendar, no watchdog reset (T3/T4). RM0493 map: LSI1/RTCSEL in RCC_BDCR1, RTCAPBEN (APB7ENR bit 21) set without BLE, RTC SR/SCR at 0x50/0x5C, wake on NVIC vector 2 (no EXTI line), FLASH/SRAM wait states >= 1 before Stop 1 and HDIV5 restored after (§11.7.7). The wake-up timer is no longer enabled through RTC init mode, whose exit reloads RTC_SSR (§36.3.11) and cost 0.5 s of calendar per 2.5 s chunk (10 s read as 8 s); a stale RTC pend in the NVIC no longer turns Stop into a busy-wait (315 M cycles at 32 MHz per 10 s before, ~19 k after). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
+    },
+    "power.standby": {
+      "status": "compile",
+      "note": "LPMS was 011 (reserved); Standby is 10x (RM0493 §11.10.1). Wake flags cleared in PWR_WUSCR 0x48 (0x14 is WUCR1: the old write enabled wake-up pins 1-5); SBF read/cleared in PWR_SR 0x38. Refuses a Standby longer than half the watchdog timeout. Fixed 2026-09-25, awaiting bench"
+    },
+    "power.rtc_wake": {
+      "status": "verified",
+      "note": "LSI1 RTC wake-up timer wakes Stop 1 on NVIC vector 2, enabled under PRIMASK; WUTE set outside init mode (RM0493 §36.3.11). A 2500 ms arm fired at 2488 ms by the HSE. Stop only: Standby wake is not covered by the test. Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
+    },
+    "power.exti_wake": {
+      "status": "compile",
+      "note": "core_stop_until_on_change with the Stop 1 wait-state/HDIV5 handling and fed chunks while the watchdog runs. Implemented 2026-09-25, awaiting bench"
+    },
     "power.wkup_wake": "",
     "power.rtc_alarm": {
-      "status": "compile",
-      "note": "LL+Core Alarm A implemented. Not yet hw-tested on Core.ST.W5"
+      "status": "verified",
+      "note": "ALRMAR at 0x40 (0x1C is RTC_PRIVCFGR) and ALRAF in RTC_SR/SCR 0x50/0x5C, no ALRAWF poll (RM0493 §36.6.16-23); ALRMAR read back 0x80808003 and Alarm A fired at 2900-2940 ms for a 3 s alarm (T2). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
     },
     "power.backup": {
-      "status": "compile",
-      "note": "32 backup registers (BKP0-31) at TAMP+0x100. Not yet hw-tested on Core.ST.W5"
+      "status": "verified",
+      "note": "TAMP_BKP0R-31R at 0x46007C00 + 0x100 (RM0493 §37.6.18); the RTC/TAMP bus clock (RCC_APB7ENR.RTCAPBEN, §12.8.27) is enabled on access, so they work without BLE. Write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
     },
     "security.rng": "verified",
     "security.aes": "verified",
