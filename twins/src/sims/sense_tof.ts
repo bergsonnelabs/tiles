@@ -9,10 +9,12 @@
 // stop / sleep / set_period / set_kilo_iters / set_distance_mode) land in the same
 // fields `power()` reads, so the supply current follows the program.
 //
-// Pads (Sense-TOF-a.json): INT is pad 9 (output), V+ pad 10, GND pad 1. Pad 3 is
-// EN, an INPUT pulled up on-board (sensor enabled by default; ground it to
-// disable) — not driven by the twin, and holding it low is not modeled.
-import type { TileSim } from '../tileSim';
+// Pads (Sense-TOF-a.json): INT is pad 9 (output), V+ pad 10, GND pad 1. Pad 3:
+// the definition calls it EN, but the tile schematic routes it to the chip's
+// GPIO0 with a 100k pull-up (R2) to V+, and ties the chip's EN pin to V+. GPIO0
+// is the I/O-level strap at startup and is left disabled by the driver, so pad 3
+// is not driven by the twin and holding it low is not modeled.
+import type { PowerCtx, TileSim } from '../tileSim';
 
 interface State {
   // ── physical world (controls) ──
@@ -67,7 +69,8 @@ const PRESENCE_RELIABILITY_MIN = 32;
 /** The chip substitutes 6 for a detection threshold of 0 (datasheet §6.9). */
 const DEFAULT_DETECTION_THRESHOLD = 6;
 /** App0 revision (APPREV_MAJOR/MINOR/PATCH) — not the driver version. */
-const APP_VERSION = [1, 2, 0];
+// App0 in ROM reports version 4.14.0 (datasheet §6.4.1).
+const APP_VERSION = [4, 14, 0];
 /** Serial from cmd 0x47: a recognizable non-zero pattern, since the flat variant
  * signals an error with all zeros. */
 const DUMMY_SERIAL = [0xab, 0xcd, 0xef, 0x42];
@@ -102,10 +105,18 @@ function rawDistance(s: State): number {
   if (s.reliability < (s.threshold || DEFAULT_DETECTION_THRESHOLD)) return 0;
   return s.distance_mm;
 }
-/** No object → reliability 0 too. */
+/** No object → reliability 0 too. The short-range algorithm (short-range
+ * mode, and anything within ~200 mm in the other modes) doesn't grade its
+ * results: it reports 1 uncalibrated, 10 calibrated (datasheet Table 42). */
 function rawReliability(s: State): number {
-  return rawDistance(s) > 0 ? s.reliability & 0x3f : 0;
+  const d = rawDistance(s);
+  if (d === 0) return 0;
+  if (s.distance_mode === 0 || d < 200) return s.calib_valid ? 10 : 1;
+  const r = s.reliability & 0x3f;
+  return r === 1 || r === 10 ? r + 1 : r; // long-range never reports 1 or 10
 }
+/** A detection: a short-range result (1 or 10), or a long-range one ≥ 32. */
+const isDetection = (r: number) => r === 1 || r === 10 || r >= PRESENCE_RELIABILITY_MIN;
 function status(s: State): number {
   return s.fault_inject ? 0x10 : 0x00;
 }
@@ -115,17 +126,39 @@ function status(s: State): number {
 function saturatedDistance(s: State): number {
   return rawDistance(s) || maxRangeMm(s.distance_mode);
 }
-/** The presence question (is_object_within): demands confidence ≥ 32 and a real
- * target. Uses the raw distance — the saturated value is never 0. */
+/** The presence question (is_object_within): a detection and a real target.
+ * Uses the raw distance — the saturated value is never 0. */
 function objectWithin(s: State, mm: number): boolean {
   const d = rawDistance(s);
-  return rawReliability(s) >= PRESENCE_RELIABILITY_MIN && d > 0 && d <= mm;
+  return isDetection(rawReliability(s)) && d > 0 && d <= mm;
 }
+/** read_distance_with_confidence: long-range 0..63 → 0..100; the short-range
+ * codes read as 100 (calibrated, 10) and 50 (uncalibrated, 1). */
+const confidencePct = (r: number) => (r === 10 ? 100 : r === 1 ? 50 : Math.floor((r * 100) / 63));
 /** In the threshold-interrupt window (HostDriverComm §8.12): needs an object. */
 function inWindow(s: State): boolean {
   if (s.threshold_low_mm > s.threshold_high_mm) return false;
   const d = rawDistance(s);
   return d > 0 && d >= s.threshold_low_mm && d <= s.threshold_high_mm;
+}
+/** Signal-quality registers 0x34-0x3D (datasheet §7.3.11-7.3.20). Reference
+ * and object hits are zero when no object is detected. The magnitudes are
+ * modeled, not measured: object hits scale with the return strength and the
+ * iteration count, reference hits with the iteration count only; crosstalk is a
+ * fixed small leakage floor. */
+function signalQuality(s: State): {
+  reference_hits: number;
+  object_hits: number;
+  crosstalk: number;
+} {
+  const crosstalk = s.fault_inject ? 0 : 480;
+  if (rawDistance(s) === 0) return { reference_hits: 0, object_hits: 0, crosstalk };
+  const iterScale = s.kilo_iters / 900; // relative to the default integration
+  return {
+    reference_hits: Math.round(180000 * iterScale),
+    object_hits: Math.round((rawReliability(s) / 63) * 150000 * iterScale),
+    crosstalk,
+  };
 }
 /** One single-shot measurement (measure_single and the helpers built on it):
  * a fresh result number. */
@@ -291,17 +324,14 @@ const sim: TileSim<State> = {
     tile_sense_tof_sleep: () => ({ nextState: { measuring: 0, sleeping: 1, in_band_streak: 0 } }),
     // Re-runs the boot sequence; ranging stays stopped until start().
     tile_sense_tof_wake: () => ({ nextState: { sleeping: 0 } }),
-    // CPU reset + memzero of the driver's state: cfg, measuring and calibration
-    // all go to 0; the chip's App0 config (threshold window) is lost too.
+    // CPU reset, then the driver boots App0 again: ranging stops, calibration
+    // and algorithm state are dropped, the measurement config is kept; the
+    // chip's App0 config (threshold window) is lost.
     tile_sense_tof_reset: () => ({
       nextState: {
         measuring: 0,
         sleeping: 0,
         result_number: 0,
-        distance_mode: 0,
-        period_ms: 0,
-        kilo_iters: 0,
-        threshold: 0,
         threshold_persistence: 0,
         threshold_low_mm: 0,
         threshold_high_mm: 0,
@@ -366,9 +396,14 @@ const sim: TileSim<State> = {
       scalar: 1,
       outScalars: {
         mm: rawDistance(state),
-        confidence_pct: Math.floor((rawReliability(state) * 100) / 63),
+        confidence_pct: confidencePct(rawReliability(state)),
       },
       nextState: { result_number: nextResult(state) },
+    }),
+
+    // Latest result block's hit counts; reading does not measure.
+    tile_sense_tof_get_signal_quality_flat: ({ state }) => ({
+      outScalars: signalQuality(state),
     }),
 
     // ── threshold interrupt ──
@@ -393,9 +428,13 @@ const sim: TileSim<State> = {
     }),
 
     // ── configuration (the driver stops/restarts ranging around each) ──
-    tile_sense_tof_set_distance_mode: ({ state, args }) => ({
-      nextState: { distance_mode: arg(args, 0, state.distance_mode) & 0xff },
-    }),
+    // 5 m needs its own calibration (datasheet §6.4): crossing into or out of
+    // it drops the one loaded.
+    tile_sense_tof_set_distance_mode: ({ state, args }) => {
+      const mode = arg(args, 0, state.distance_mode) & 0xff;
+      const crosses = (mode === 2) !== (state.distance_mode === 2);
+      return { nextState: { distance_mode: mode, ...(crosses ? { calib_valid: 0 } : {}) } };
+    },
     tile_sense_tof_set_period: ({ state, args }) => ({
       nextState: { period_ms: arg(args, 0, state.period_ms) & 0xff },
     }),
@@ -446,8 +485,8 @@ const sim: TileSim<State> = {
     tile_sense_tof_max_range_mm: 'canonical', // 200 / 2500 / 5000 by mode
     tile_sense_tof_get_result_flat: 'canonical', // result record layout
     tile_sense_tof_measure_single_flat: 'canonical',
-    tile_sense_tof_read_distance_with_confidence: 'canonical', // reliability*100/63
-    tile_sense_tof_is_object_within: 'canonical', // driver: reliability ≥ 32, distance > 0, ≤ mm
+    tile_sense_tof_read_distance_with_confidence: 'canonical', // long range *100/63; short-range codes 10 / 1
+    tile_sense_tof_is_object_within: 'canonical', // driver: 1 / 10 or ≥ 32, distance > 0, ≤ mm
     tile_sense_tof_wait_for_object: 'inferred', // one evaluation stands in for the poll loop
     tile_sense_tof_set_distance_mode: 'canonical', // algo byte / ranges
     tile_sense_tof_set_period: 'canonical', // repetition period code
@@ -455,12 +494,13 @@ const sim: TileSim<State> = {
     tile_sense_tof_set_threshold: 'canonical', // cmd_data3[5:0]
     tile_sense_tof_set_threshold_interrupt: 'canonical', // WR_ADD_CONFIG, §8.12
     tile_sense_tof_get_threshold_interrupt: 'canonical', // RD_ADD_CONFIG readback
+    tile_sense_tof_get_app_version_flat: 'canonical', // ROM App0 4.14.0, datasheet §6.4.1
     // inferred — behavioral simplifications
     tile_sense_tof_result_ready: 'inferred', // "measuring and awake", not a per-period INT_STATUS bit
-    tile_sense_tof_get_sys_clock_ticks: 'inferred', // fabricated ramp, not the real 4.7 MHz counter
     tile_sense_tof_factory_calibrate: 'inferred',
-    tile_sense_tof_get_app_version_flat: 'inferred',
+    tile_sense_tof_get_signal_quality_flat: 'inferred', // zero-on-no-object is canonical (§7.3.11); magnitudes modeled
     // hallucinated — stubbed / opaque
+    tile_sense_tof_get_sys_clock_ticks: 'hallucinated', // fabricated ramp, not the real 4.7 MHz counter
     tile_sense_tof_read_histogram_flat: 'hallucinated',
     tile_sense_tof_get_serial_number_flat: 'hallucinated',
     tile_sense_tof_get_calibration: 'hallucinated',
@@ -498,15 +538,16 @@ const sim: TileSim<State> = {
   // Electrical: average supply current from the ranging duty cycle — see
   // `averageCurrentUa`. The chip's VCSEL pulses peak ~230 mA internally; what the
   // rail sees is the average.
-  power(state) {
+  power(state, ctx?: PowerCtx) {
     const ua = averageCurrentUa(state);
+    const vdd = ctx?.padVoltage?.['10'] ?? 3300;
     return {
       draw_ua: ua,
       rails: [
         {
           name: 'V+',
           role: 'supply',
-          v_mv: 2800,
+          v_mv: vdd,
           i_ua: ua,
           pads: ['10'],
           note: currentNote(state),
