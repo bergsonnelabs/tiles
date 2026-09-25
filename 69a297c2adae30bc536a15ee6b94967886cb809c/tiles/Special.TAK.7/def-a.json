@@ -1,0 +1,22 @@
+{
+  "rev": "a",
+  "name": "TAK.7",
+  "pads": [],
+  "power": [],
+  "family": "Special",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 60,
+  "headline": "fully integrated piezoelectric sensor/actuator module",
+  "components": [],
+  "interfaces": [],
+  "updated_at": "2026-05-01T06:17:06.506Z",
+  "description": "",
+  "json_version": "0.1",
+  "application_notes": []
+}
