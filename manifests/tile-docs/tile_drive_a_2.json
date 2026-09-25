@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@faf9db5",
+  "source": "tiles@bc1921a",
   "file": "tile_drive_a_2.h",
   "brief": "Dual-channel audio output driver for the Drive.A.2 tile (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers). Supports I2C and SPI bus access via tiles_pal_t.",
-  "description": "        (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).\n        Supports I2C and SPI bus access via tiles_pal_t.\n@version 3.1.0\n\nThe Drive.A.2 tile provides two independent audio output channels,\neach consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.\n\nDAC features (DAC63202W):\n  - 12-bit resolution, dual channel\n  - Voltage output with configurable gain (1x, 1.5x, 2x, 3x, 4x)\n  - Internal 1.21V reference or VDD/external reference\n  - Built-in waveform generation: sine, triangle, sawtooth\n  - I2C (up to 1 MHz) or SPI (up to 50 MHz), auto-detected at boot\n\nAmplifier features (TPA2028D1, x2):\n  - 3W into 4 ohm, 880 mW into 8 ohm per channel\n  - I2C-programmable gain: -28 dB to +30 dB in 1 dB steps\n  - AGC with configurable compression, attack/release/hold times\n  - Both amplifiers share I2C address 0x58 — writes affect both\n\nIn SPI mode, only the DAC is controllable; amplifier functions\nbecome no-ops since the I2C bus pins are repurposed for SPI.\n\n\n\nDatasheet (DAC): https://www.ti.com/product/DAC63202W\nDatasheet (Amp): https://www.ti.com/product/TPA2028D1\n\n@studio tile label=Drive.A.2 icon=♬\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"DAC PWM-output mode (FBx pins)\"\n  The DAC63202W FB0 / FB1 pins (package balls B2 / C2) can be\n  configured as comparator / PWM outputs for driving external\n  power-stage gates. On the Drive.A.2 tile these pins are tied\n  to the on-board TPA2028D1 amplifier inputs (closed-loop voltage-\n  output feedback) and are NOT routed to any tile-connector pad —\n  so even if the driver enabled PWM mode, no Core GPIO could\n  observe or use the output. Closing this gap requires a tile\n  hardware revision that breaks FBx out to a pad.\n\n@studio unsupported severity=niche category=\"Per-amp independent control\"\n  The tile carries 2× TPA2028D1 amps wired to a single shared I²C\n  bus, and the TPA2028D1 has a fixed factory I²C address (0x58) —\n  any write at 0x58 is acknowledged by both amps simultaneously.\n  Independent left / right gain, AGC, or shutdown therefore can't\n  be achieved in software; closing this gap requires either an\n  I²C-mux on the tile or amp ICs with selectable addresses.",
+  "description": "        (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).\n        Supports I2C and SPI bus access via tiles_pal_t.\n@version 3.2.0\n\nThe Drive.A.2 tile provides two independent audio output channels,\neach consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.\n\nDAC features (DAC63202W):\n  - 12-bit resolution, dual channel\n  - Voltage output with configurable gain (1x, 1.5x, 2x, 3x, 4x)\n  - Internal 1.21V reference or VDD/external reference\n  - Built-in waveform generation: sine, triangle, sawtooth\n  - I2C (up to 1 MHz) or SPI (up to 50 MHz), auto-detected at boot\n\nAmplifier features (TPA2028D1, x2):\n  - 3W into 4 ohm, 880 mW into 8 ohm per channel\n  - I2C-programmable gain: -28 dB to +30 dB in 1 dB steps\n  - AGC with configurable compression, attack/release/hold times\n  - Both amplifiers share I2C address 0x58 — writes affect both\n\nIn SPI mode, only the DAC is controllable; amplifier functions\nbecome no-ops since the I2C bus pins are repurposed for SPI.\nThe DAC's SPI is 3-wire (write-only) until INTERFACE-CONFIG.SDO-EN\nis set, and a read takes two access cycles (SLASF73A §6.5.1), so\nthe DEVICE-ID check in init and every read-modify-write setter\nneed that 4-wire readback; this driver does not enable it yet.\n\n\n\nDatasheet (DAC): https://www.ti.com/product/DAC63202W\nDatasheet (Amp): https://www.ti.com/product/TPA2028D1\n\n@studio tile label=Drive.A.2 icon=♬\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"DAC PWM-output mode (FBx pins)\"\n  The DAC63202W FB0 / FB1 pins (package balls B2 / C2) can be\n  configured as comparator / PWM outputs for driving external\n  power-stage gates. On the Drive.A.2 tile these pins are tied\n  to the on-board TPA2028D1 amplifier inputs (closed-loop voltage-\n  output feedback) and are NOT routed to any tile-connector pad —\n  so even if the driver enabled PWM mode, no Core GPIO could\n  observe or use the output. Closing this gap requires a tile\n  hardware revision that breaks FBx out to a pad.\n\n@studio unsupported severity=niche category=\"Per-amp independent control\"\n  The tile carries 2× TPA2028D1 amps wired to a single shared I²C\n  bus, and the TPA2028D1 has a fixed factory I²C address (0x58) —\n  any write at 0x58 is acknowledged by both amps simultaneously.\n  Independent left / right gain, AGC, or shutdown therefore can't\n  be achieved in software; closing this gap requires either an\n  I²C-mux on the tile or amp ICs with selectable addresses.",
   "code_examples": [
     {
       "label": "Quick start (I2C — DAC + amplifiers)",
@@ -36,7 +36,7 @@
     },
     {
       "name": "TILE_DRIVE_A_2_VERSION_MINOR",
-      "value": "1",
+      "value": "2",
       "description": "",
       "section": ""
     },
@@ -150,87 +150,87 @@
     {
       "name": "drive_a_2_slew_t",
       "brief": "Slew-rate control (time per code step) for the DAC.",
-      "description": "Maps to SLEW-RATE-X bits[3:0] in DAC-X-FUNC-CONFIG. Combined with\nCODE-STEP-X this sets both the slewed-update ramp time\n(set_slew_rate / set_code_step) and the function-generator\nfrequency.\nTime per step values from datasheet Table 6-6 (in linear-slew mode):\n  NONE  =    0 µs (no slew, default — output updates immediately)\n  4_US  =    4 µs        18_US =   18 µs        91_US  =   91.13 µs\n  8_US  =    8 µs        27_US =   27 µs        137_US =  136.69 µs\n  12_US =   12 µs        41_US =   40.5 µs      239_US =  239.20 µs\n                         61_US =   60.75 µs     419_US =  418.61 µs\n                                                733_US =  732.56 µs\n                                                1282_US = 1281.98 µs\n                                                2564_US = 2563.96 µs\n                                                5128_US = 5127.92 µs",
+      "description": "Maps to SLEW-RATE-X bits[3:0] in DAC-X-FUNC-CONFIG. Combined with\nCODE-STEP-X this sets the slewed-update ramp time (set_slew_rate /\nset_code_step) and the triangle / sawtooth frequency. The sine\ngenerator uses SLEW-RATE-X alone: f = 1 / (24 × time_step)\n(SLASF73A Eq 8), e.g. 41_US → 1029 Hz.\nTime per step, SLASF73A Table 6-30 (linear-slew mode). NONE is\ninvalid for waveform generation.",
       "members": [
         {
           "name": "DRIVE_A_2_SLEW_NONE",
           "value": "0x0",
-          "description": "No slew (default) — immediate update"
+          "description": "No slew (default): immediate update. Invalid for waveforms"
         },
         {
           "name": "DRIVE_A_2_SLEW_4_US",
           "value": "0x1",
-          "description": ""
+          "description": "4 µs/step (sine 10417 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_8_US",
           "value": "0x2",
-          "description": ""
+          "description": "8 µs/step (sine 5208 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_12_US",
           "value": "0x3",
-          "description": ""
+          "description": "12 µs/step (sine 3472 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_18_US",
           "value": "0x4",
-          "description": ""
+          "description": "18 µs/step (sine 2315 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_27_US",
           "value": "0x5",
-          "description": ""
+          "description": "27.04 µs/step (sine 1541 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_41_US",
           "value": "0x6",
-          "description": ""
+          "description": "40.48 µs/step (sine 1029 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_61_US",
           "value": "0x7",
-          "description": ""
+          "description": "60.72 µs/step (sine 686 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_91_US",
           "value": "0x8",
-          "description": ""
+          "description": "91.12 µs/step (sine 457 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_137_US",
           "value": "0x9",
-          "description": ""
+          "description": "136.72 µs/step (sine 305 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_239_US",
           "value": "0xA",
-          "description": ""
+          "description": "239.2 µs/step (sine 174 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_419_US",
           "value": "0xB",
-          "description": ""
+          "description": "418.64 µs/step (sine 99.5 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_733_US",
           "value": "0xC",
-          "description": ""
+          "description": "732.56 µs/step (sine 56.9 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_1282_US",
           "value": "0xD",
-          "description": ""
+          "description": "1282 µs/step (sine 32.5 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_2564_US",
           "value": "0xE",
-          "description": ""
+          "description": "2563.96 µs/step (sine 16.3 Hz)"
         },
         {
           "name": "DRIVE_A_2_SLEW_5128_US",
           "value": "0xF",
-          "description": ""
+          "description": "5127.92 µs/step (sine 8.1 Hz)"
         }
       ]
     },
@@ -242,42 +242,42 @@
         {
           "name": "DRIVE_A_2_STEP_1_LSB",
           "value": "0x0",
-          "description": "1 LSB per step (default — finest)"
+          "description": "1 LSB per step (default, finest)"
         },
         {
           "name": "DRIVE_A_2_STEP_2_LSB",
           "value": "0x1",
-          "description": ""
+          "description": "2 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_3_LSB",
           "value": "0x2",
-          "description": ""
+          "description": "3 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_4_LSB",
           "value": "0x3",
-          "description": ""
+          "description": "4 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_6_LSB",
           "value": "0x4",
-          "description": ""
+          "description": "6 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_8_LSB",
           "value": "0x5",
-          "description": ""
+          "description": "8 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_16_LSB",
           "value": "0x6",
-          "description": ""
+          "description": "16 LSB per step"
         },
         {
           "name": "DRIVE_A_2_STEP_32_LSB",
           "value": "0x7",
-          "description": ""
+          "description": "32 LSB per step (coarsest)"
         }
       ]
     },
@@ -362,7 +362,7 @@
     {
       "name": "drive_a_2_agc_cfg_t",
       "brief": "Full AGC/DRC configuration for the TPA2028D1 amplifiers.",
-      "description": "Pass to tile_drive_a_2_amp_set_agc() to configure all AGC parameters.\nAll fields default to the TPA2028D1 power-on defaults when zeroed.",
+      "description": "Pass to tile_drive_a_2_amp_set_agc() to configure all AGC parameters.\nEvery field is written as given: a zeroed struct is NOT the chip's\npower-on setup (that is compression 4:1, fixed gain 6 dB, max gain\n30 dB, limiter 6.5 dBV, attack 5, release 11, hold 0, noise gate 1;\nSLOS660C Table 5). With compression 1:1 the fixed gain is only valid\nfrom 0 to +30 dB, and the output limiter is disabled.",
       "fields": [
         {
           "type": "uint8_t",
@@ -372,7 +372,7 @@
         {
           "type": "int8_t",
           "name": "fixed_gain_db",
-          "description": "-28 to +30 dB. 0 = 0 dB."
+          "description": "-28 to +30 dB (0 to +30 with compression 1:1). Clamped."
         },
         {
           "type": "uint8_t",
@@ -382,7 +382,7 @@
         {
           "type": "uint8_t",
           "name": "limiter_level",
-          "description": "0–31 (0.5 dB steps from -6.5 dBV). 0 = -6.5 dBV."
+          "description": "0–31 (0.5 dB steps from -6.5 dBV to 9 dBV; 26 = 6.5 dBV chip default)."
         },
         {
           "type": "uint8_t",
@@ -409,17 +409,17 @@
     {
       "name": "drive_a_2_cfg_t",
       "brief": "Optional configuration for tile_drive_a_2_init().",
-      "description": "Pass NULL for defaults: 1x VDD gain on both channels, 6 dB amp gain.",
+      "description": "Pass NULL for defaults: 1x external-VREF gain on both channels (the\ntile ties VREF to V+), 6 dB amp gain, AGC compression off.",
       "fields": [
         {
           "type": "uint8_t",
           "name": "gain",
-          "description": "DAC gain (drive_a_2_gain_t). Default: DRIVE_A_2_GAIN_1X_VDD."
+          "description": "DAC gain (drive_a_2_gain_t). Default: DRIVE_A_2_GAIN_1X_EXT."
         },
         {
           "type": "int8_t",
           "name": "amp_gain_db",
-          "description": "Amplifier fixed gain in dB (-28 to +30). Default: 6 dB."
+          "description": "Amplifier fixed gain in dB (0 to +30; init turns compression off). 0 = default 6 dB."
         }
       ]
     }
@@ -460,7 +460,7 @@
         },
         {
           "name": "cfg",
-          "description": "Optional config, or NULL for defaults (1x VDD, 6 dB amp)"
+          "description": "Optional config, or NULL for defaults (1x ext VREF, 6 dB amp)"
         }
       ],
       "notes": [],
@@ -500,10 +500,6 @@
       "signature": "void tile_drive_a_2_set(tile_t *tile, uint8_t channel, uint16_t value)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "channel",
           "description": "0 or 1"
         },
@@ -522,10 +518,6 @@
     {
       "signature": "void tile_drive_a_2_set_mv(tile_t *tile, uint8_t channel, uint16_t mv)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -546,10 +538,6 @@
       "signature": "uint16_t tile_drive_a_2_get(tile_t *tile, uint8_t channel)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "channel",
           "description": "0 or 1"
         }
@@ -565,10 +553,6 @@
     {
       "signature": "void tile_drive_a_2_set_gain(tile_t *tile, uint8_t channel, drive_a_2_gain_t gain)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -589,10 +573,6 @@
       "signature": "void tile_drive_a_2_set_waveform(tile_t *tile, uint8_t channel, drive_a_2_wave_t wave)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "channel",
           "description": "0 or 1"
         },
@@ -605,16 +585,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Configure the waveform shape for a channel.",
-      "description": "Sets FUNC-CONFIG-X in DAC-X-FUNC-CONFIG. The waveform oscillates\nbetween DAC-X-MARGIN-LOW and DAC-X-MARGIN-HIGH at the configured\nslew rate. Call start_waveform() to begin output.",
+      "description": "Sets FUNC-CONFIG-X in DAC-X-FUNC-CONFIG. Triangle and sawtooth\nwaves oscillate between DAC-X-MARGIN-LOW and DAC-X-MARGIN-HIGH at\nthe configured slew rate and code step. The sine uses 24 fixed\ncodes (0x19A to 0xE66, about 80 % of full scale) and ignores the\nmargins and code step. Set a non-zero slew rate first, then call\nstart_waveform() to begin output.",
       "name": "tile_drive_a_2_set_waveform"
     },
     {
       "signature": "void tile_drive_a_2_start_waveform(tile_t *tile, uint8_t channel)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -624,16 +600,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Start waveform generation on a channel.",
-      "description": "",
+      "description": "Sets START-FUNC-X in COMMON-DAC-TRIG (read-modify-write, so the\nother channel's generator keeps running).",
       "name": "tile_drive_a_2_start_waveform"
     },
     {
       "signature": "void tile_drive_a_2_stop_waveform(tile_t *tile, uint8_t channel)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -643,16 +615,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Stop waveform generation on a channel.",
-      "description": "",
+      "description": "Clears START-FUNC-X and sets FUNC-CONFIG-X to \"disabled\".",
       "name": "tile_drive_a_2_stop_waveform"
     },
     {
       "signature": "void tile_drive_a_2_set_slew_rate(tile_t *tile, uint8_t channel, drive_a_2_slew_t slew)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -673,10 +641,6 @@
       "signature": "void tile_drive_a_2_set_code_step(tile_t *tile, uint8_t channel, drive_a_2_step_t step)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "channel",
           "description": "0 or 1"
         },
@@ -695,10 +659,6 @@
     {
       "signature": "void tile_drive_a_2_set_margins(tile_t *tile, uint8_t channel, uint16_t low, uint16_t high)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -723,10 +683,6 @@
       "signature": "void tile_drive_a_2_set_phase(tile_t *tile, uint8_t channel, drive_a_2_phase_t phase)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "channel",
           "description": "0 or 1"
         },
@@ -745,10 +701,6 @@
     {
       "signature": "void tile_drive_a_2_set_waveform_params(tile_t *tile, uint8_t channel, drive_a_2_wave_t wave, drive_a_2_step_t step, drive_a_2_slew_t slew)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "channel",
           "description": "0 or 1"
@@ -770,22 +722,20 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Configure the parametric on-chip waveform generator.",
-      "description": "Convenience helper that sets up the waveform shape, full-scale\nmargins (0 → 4095), code step, and slew rate in one call. The\nresulting frequency is approximately:\n\n  f_triangle = 1 / (2 × time_step × ceil((margin_high − margin_low) / code_step))\n  f_sawtooth = 1 / (    time_step × ceil((margin_high − margin_low) / code_step + 1))\n\nCall start_waveform() to begin output once configured. For\nfine-grained control, call set_margins() / set_code_step() /\nset_slew_rate() / set_waveform() / set_phase() individually.",
+      "description": "Convenience helper that sets up the waveform shape, full-scale\nmargins (0 → 4095), code step, and slew rate in one call. The\nresulting frequency is (SLASF73A Eq 6-8):\n\n  f_triangle = 1 / (2 × time_step × ceil((margin_high − margin_low) / code_step))\n  f_sawtooth = 1 / (    time_step × ceil((margin_high − margin_low + 1) / code_step))\n  f_sine     = 1 / (24 × time_step)\n\nCall start_waveform() to begin output once configured. For\nfine-grained control, call set_margins() / set_code_step() /\nset_slew_rate() / set_waveform() / set_phase() individually.",
       "name": "tile_drive_a_2_set_waveform_params"
     },
     {
       "signature": "void tile_drive_a_2_amp_set_gain(tile_t *tile, int8_t gain_db)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "gain_db",
-          "description": "Gain in dB (-28 to +30). Clamped if out of range."
+          "description": "[-28..30] Gain in dB. Clamped if out of range."
         }
       ],
-      "notes": [],
+      "notes": [
+        "init() turns AGC compression off (1:1), and with compression off the TPA2028D1 fixed gain is only specified from 0 to +30 dB (SLOS660C Table 10). Negative gains need compression on (amp_set_agc())."
+      ],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Set the amplifier fixed gain.",
@@ -794,12 +744,7 @@
     },
     {
       "signature": "int8_t tile_drive_a_2_amp_get_gain(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -832,10 +777,6 @@
       "signature": "void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)",
       "params": [
         {
-          "name": "tile",
-          "description": "Tile handle"
-        },
-        {
           "name": "cfg",
           "description": "AGC configuration"
         }
@@ -844,17 +785,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Configure the full AGC/DRC parameters.",
-      "description": "Writes all AGC registers (attack, release, hold, fixed gain,\nlimiter, compression, noise gate, max gain).  Affects both amps.\nNo-op in SPI mode.",
+      "description": "Writes all AGC registers (attack, release, hold, fixed gain,\nlimiter, compression, noise gate, max gain).  Affects both amps.\nNo-op in SPI mode. The compression register is written before the\nlimiter register, because the limiter can only be disabled while\ncompression is 1:1 (SLOS660C Table 11).",
       "name": "tile_drive_a_2_amp_set_agc"
     },
     {
       "signature": "uint8_t tile_drive_a_2_amp_read_status(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -865,12 +801,7 @@
     },
     {
       "signature": "uint16_t tile_drive_a_2_read_status(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -881,12 +812,7 @@
     },
     {
       "signature": "void tile_drive_a_2_nvm_save(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -896,12 +822,7 @@
     },
     {
       "signature": "void tile_drive_a_2_nvm_reload(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -912,10 +833,6 @@
     {
       "signature": "uint16_t tile_drive_a_2_read_reg(tile_t *tile, uint8_t reg)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "reg",
           "description": "Register address (7-bit)"
@@ -932,10 +849,6 @@
     {
       "signature": "void tile_drive_a_2_write_reg(tile_t *tile, uint8_t reg, uint16_t value)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle"
-        },
         {
           "name": "reg",
           "description": "Register address (7-bit)"
@@ -956,16 +869,12 @@
       "signature": "void tile_drive_a_2_play_tone(tile_t *tile, drive_a_2_channel_t channel, uint16_t freq_hz, uint16_t ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
         },
         {
           "name": "freq_hz",
-          "description": "Tone frequency in Hz (1–20000 useful range)"
+          "description": "[8..10417] Tone frequency in Hz (rounded to the nearest generator pitch)"
         },
         {
           "name": "ms",
@@ -978,16 +887,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Play a sine tone on `channel` for `ms` milliseconds.",
-      "description": "Configures DAC margins for full-scale swing, sets a sine\nwaveform, and uses the on-chip parametric generator together\nwith a software-tuned slew rate / code step to approximate\n`freq_hz` (audio range 50–5000 Hz works well; the chip's\nfunction generator is rough at the high end). The amplifier is\nunmuted for the duration of the tone and restored to its prior\nmute state on return.",
+      "description": "Configures DAC margins for full-scale swing, sets a sine\nwaveform, and uses the on-chip parametric generator together\nwith a software-tuned slew rate / code step to approximate\n`freq_hz`. The chip's sine generator runs at 1 / (24 × slew\nstep), so only 15 pitches exist (10417, 5208, 3472, 2315, 1541,\n1029, 686, 457, 305, 174, 99.5, 56.9, 32.5, 16.3, 8.1 Hz); the\nnearest one is played. The sine spans about 80 % of the DAC's\nrange. The amplifier is unmuted for the duration of the tone and\nrestored to its prior mute state on return.",
       "name": "tile_drive_a_2_play_tone"
     },
     {
       "signature": "void tile_drive_a_2_play_silence(tile_t *tile, drive_a_2_channel_t channel, uint16_t ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
@@ -1009,10 +914,6 @@
     {
       "signature": "void tile_drive_a_2_play_chirp(tile_t *tile, drive_a_2_channel_t channel, uint16_t start_hz, uint16_t end_hz, uint16_t ms)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH"
@@ -1043,32 +944,24 @@
       "signature": "void tile_drive_a_2_set_volume_pct(tile_t *tile, drive_a_2_channel_t channel, uint8_t pct)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
         },
         {
           "name": "pct",
-          "description": "0–100 percent (clamped if out of range)"
+          "description": "[0..100] Percent (clamped if out of range)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Map a 0–100 percent volume to amplifier fixed gain.",
-      "description": "Linear mapping from `pct` to the TPA2028D1's full -28 dB to\n+30 dB programmable range:\n\n  gain_db = -28 + (pct × 58) / 100\n\n0 % → -28 dB (near-mute), 50 % → +1 dB, 100 % → +30 dB. The\nmapping is intentionally linear-in-dB rather than perceptually\nweighted; for finer dB control use @ref\ntile_drive_a_2_amp_set_gain directly. Because both amps share\nan I²C address, the channel argument is accepted for symmetry\nwith the rest of the tier-2 API but the write lands on both\nphysical amps.",
+      "description": "Linear mapping from `pct` to the TPA2028D1's full -28 dB to\n+30 dB programmable range:\n\n  gain_db = -28 + (pct × 58) / 100\n\n0 % → -28 dB (near-mute), 50 % → +1 dB, 100 % → +30 dB. Below\n49 % the gain is negative, which the TPA2028D1 only specifies with\nAGC compression on; init() turns compression off. The\nmapping is intentionally linear-in-dB rather than perceptually\nweighted; for finer dB control use @ref\ntile_drive_a_2_amp_set_gain directly. Because both amps share\nan I²C address, the channel argument is accepted for symmetry\nwith the rest of the tier-2 API but the write lands on both\nphysical amps.",
       "name": "tile_drive_a_2_set_volume_pct"
     },
     {
       "signature": "void tile_drive_a_2_mute(tile_t *tile, drive_a_2_channel_t channel)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
@@ -1085,10 +978,6 @@
       "signature": "void tile_drive_a_2_unmute(tile_t *tile, drive_a_2_channel_t channel)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "channel",
           "description": "DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)"
         }
@@ -1102,8 +991,29 @@
     }
   ],
   "source_file": "tile_drive_a_2.h",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "tile_family": "Drive",
   "tile_name": "A.2",
-  "display_name": "Drive.A.2"
+  "display_name": "Drive.A.2",
+  "vibe_settings": [
+    {
+      "label": "Amplifier gain",
+      "tier": "basic",
+      "scope": "config",
+      "function": "amp_set_gain",
+      "param": "gain_db",
+      "kind": "number",
+      "range": [
+        -28,
+        30
+      ],
+      "default": 6
+    }
+  ],
+  "vibe_rules": [
+    {
+      "function": "amp_set_gain",
+      "message": "With AGC compression off (init's default) the amplifier's gain is only specified from 0 to +30 dB. Use 0 dB or more, or turn compression on first."
+    }
+  ]
 }
