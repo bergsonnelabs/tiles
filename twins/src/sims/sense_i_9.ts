@@ -21,7 +21,7 @@
 //     does the same.
 //
 // Pads (Sense-I-9-c.json): INT = pad 9, V+ = pad 10 (1.71–1.95 V), GND = pad 1.
-import type { TileSim } from "../tileSim";
+import type { TileSim } from '../tileSim';
 
 interface State {
   // ── the physical world (controls) ──
@@ -147,9 +147,7 @@ function atan2Centi(y: number, x: number): number {
     return Math.max(0, Math.min(4500, a));
   };
   let angle =
-    ax >= ay
-      ? core(Math.trunc((ay * 1000) / ax))
-      : 9000 - core(Math.trunc((ax * 1000) / ay));
+    ax >= ay ? core(Math.trunc((ay * 1000) / ax)) : 9000 - core(Math.trunc((ax * 1000) / ay));
   if (x < 0) angle = 18000 - angle;
   if (y < 0) angle = -angle;
   return angle;
@@ -164,19 +162,11 @@ const gyroLsb = (s: State) => GYRO_LSB_PER_DPS[s.gyro_range & 0x06] ?? 131;
 
 const accelRaw = (s: State) => {
   const k = accelLsb(s) / 1000;
-  return [
-    clampI16(s.accel_x_mg * k),
-    clampI16(s.accel_y_mg * k),
-    clampI16(s.accel_z_mg * k),
-  ];
+  return [clampI16(s.accel_x_mg * k), clampI16(s.accel_y_mg * k), clampI16(s.accel_z_mg * k)];
 };
 const gyroRaw = (s: State) => {
   const k = gyroLsb(s);
-  return [
-    clampI16(s.gyro_x_dps * k),
-    clampI16(s.gyro_y_dps * k),
-    clampI16(s.gyro_z_dps * k),
-  ];
+  return [clampI16(s.gyro_x_dps * k), clampI16(s.gyro_y_dps * k), clampI16(s.gyro_z_dps * k)];
 };
 const magCount = (ut: number) => {
   const r = Math.round(ut / MAG_UT_PER_LSB);
@@ -190,21 +180,17 @@ const magOverflow = (s: State) =>
 
 /** Sample rate while awake: the faster of accel / gyro, Hz. */
 const sampleHz = (s: State) =>
-  s.sleeping
-    ? 0
-    : Math.max(1125 / (1 + s.accel_divider), 1125 / (1 + s.gyro_divider));
+  s.sleeping ? 0 : Math.max(1125 / (1 + s.accel_divider), 1125 / (1 + s.gyro_divider));
 
 /** Bytes one sample adds to the FIFO (accel 6, gyro 6, temp 2). */
 const fifoSampleBytes = (s: State) =>
-  (s.fifo_accel_en ? 6 : 0) +
-  (s.fifo_gyro_en ? 6 : 0) +
-  (s.fifo_temp_en ? 2 : 0);
+  (s.fifo_accel_en ? 6 : 0) + (s.fifo_gyro_en ? 6 : 0) + (s.fifo_temp_en ? 2 : 0);
 
 /** Magnetometer current, µA: DS-000189 gives 90 µA at 8 Hz; scaled by rate. */
 const magUa = (s: State) => ((MAG_HZ[s.mag_mode] ?? 0) * 90) / 8;
 
 const sim: TileSim<State> = {
-  tile: "Sense.I.9",
+  tile: 'Sense.I.9',
 
   defaultState: {
     accel_x_mg: 0,
@@ -258,101 +244,100 @@ const sim: TileSim<State> = {
 
   controls: [
     {
-      type: "slider",
-      field: "accel_x_mg",
-      label: "Accel X",
+      type: 'slider',
+      field: 'accel_x_mg',
+      label: 'Accel X',
       min: -16000,
       max: 16000,
       step: 50,
-      unit: "mg",
+      unit: 'mg',
     },
     {
-      type: "slider",
-      field: "accel_y_mg",
-      label: "Accel Y",
+      type: 'slider',
+      field: 'accel_y_mg',
+      label: 'Accel Y',
       min: -16000,
       max: 16000,
       step: 50,
-      unit: "mg",
+      unit: 'mg',
     },
     {
-      type: "slider",
-      field: "accel_z_mg",
-      label: "Accel Z",
+      type: 'slider',
+      field: 'accel_z_mg',
+      label: 'Accel Z',
       min: -16000,
       max: 16000,
       step: 50,
-      unit: "mg",
+      unit: 'mg',
     },
     {
-      type: "slider",
-      field: "gyro_x_dps",
-      label: "Gyro X",
+      type: 'slider',
+      field: 'gyro_x_dps',
+      label: 'Gyro X',
       min: -2000,
       max: 2000,
       step: 5,
-      unit: "dps",
+      unit: 'dps',
     },
     {
-      type: "slider",
-      field: "gyro_y_dps",
-      label: "Gyro Y",
+      type: 'slider',
+      field: 'gyro_y_dps',
+      label: 'Gyro Y',
       min: -2000,
       max: 2000,
       step: 5,
-      unit: "dps",
+      unit: 'dps',
     },
     {
-      type: "slider",
-      field: "gyro_z_dps",
-      label: "Gyro Z",
+      type: 'slider',
+      field: 'gyro_z_dps',
+      label: 'Gyro Z',
       min: -2000,
       max: 2000,
       step: 5,
-      unit: "dps",
+      unit: 'dps',
     },
     {
-      type: "slider",
-      field: "mag_x_ut",
-      label: "Mag X",
+      type: 'slider',
+      field: 'mag_x_ut',
+      label: 'Mag X',
       min: -4900,
       max: 4900,
       step: 5,
-      unit: "µT",
+      unit: 'µT',
     },
     {
-      type: "slider",
-      field: "mag_y_ut",
-      label: "Mag Y",
+      type: 'slider',
+      field: 'mag_y_ut',
+      label: 'Mag Y',
       min: -4900,
       max: 4900,
       step: 5,
-      unit: "µT",
+      unit: 'µT',
     },
     {
-      type: "slider",
-      field: "mag_z_ut",
-      label: "Mag Z",
+      type: 'slider',
+      field: 'mag_z_ut',
+      label: 'Mag Z',
       min: -4900,
       max: 4900,
       step: 5,
-      unit: "µT",
+      unit: 'µT',
     },
     {
-      type: "slider",
-      field: "temperature_c",
-      label: "Temperature",
+      type: 'slider',
+      field: 'temperature_c',
+      label: 'Temperature',
       min: -40,
       max: 85,
       step: 0.5,
-      unit: "°C",
+      unit: '°C',
     },
     {
-      type: "toggle",
-      field: "fault_inject",
-      label: "Fault",
-      description:
-        "A faulty part: self-tests fail and mag_overflowed returns 1.",
+      type: 'toggle',
+      field: 'fault_inject',
+      label: 'Fault',
+      description: 'A faulty part: self-tests fail and mag_overflowed returns 1.',
     },
   ],
 
@@ -360,86 +345,86 @@ const sim: TileSim<State> = {
   // magnet near it, warm it.
   stimuli: [
     {
-      id: "orientation",
-      label: "Orientation",
+      id: 'orientation',
+      label: 'Orientation',
       controls: [
         {
-          kind: "attitude",
-          id: "attitude",
-          label: "orientation",
-          accel: { x: "accel_x_mg", y: "accel_y_mg", z: "accel_z_mg" },
+          kind: 'attitude',
+          id: 'attitude',
+          label: 'orientation',
+          accel: { x: 'accel_x_mg', y: 'accel_y_mg', z: 'accel_z_mg' },
         },
       ],
     },
     {
-      id: "accel",
-      label: "Accelerations",
-      controls: (["x", "y", "z"] as const).map((a) => ({
-        kind: "slider" as const,
+      id: 'accel',
+      label: 'Accelerations',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
         id: `accel_${a}_mg`,
         label: `accel ${a}`,
         field: `accel_${a}_mg`,
         min: -16000,
         max: 16000,
         step: 50,
-        unit: "mg",
+        unit: 'mg',
       })),
     },
     {
-      id: "shake",
-      label: "Shake intensity",
+      id: 'shake',
+      label: 'Shake intensity',
       controls: [
         {
-          kind: "shake",
-          id: "shake",
-          label: "shake",
+          kind: 'shake',
+          id: 'shake',
+          label: 'shake',
           max: 2000,
-          unit: "mg",
-          accel: { x: "accel_x_mg", y: "accel_y_mg", z: "accel_z_mg" },
+          unit: 'mg',
+          accel: { x: 'accel_x_mg', y: 'accel_y_mg', z: 'accel_z_mg' },
         },
       ],
     },
     {
-      id: "gyro",
-      label: "Gyro rates",
-      controls: (["x", "y", "z"] as const).map((a) => ({
-        kind: "slider" as const,
+      id: 'gyro',
+      label: 'Gyro rates',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
         id: `gyro_${a}_dps`,
         label: `gyro ${a}`,
         field: `gyro_${a}_dps`,
         min: -2000,
         max: 2000,
         step: 5,
-        unit: "°/s",
+        unit: '°/s',
       })),
     },
     {
-      id: "magnetic",
-      label: "Magnetic field",
-      controls: (["x", "y", "z"] as const).map((a) => ({
-        kind: "slider" as const,
+      id: 'magnetic',
+      label: 'Magnetic field',
+      controls: (['x', 'y', 'z'] as const).map((a) => ({
+        kind: 'slider' as const,
         id: `mag_${a}_ut`,
         label: `field ${a}`,
         field: `mag_${a}_ut`,
         min: -4900,
         max: 4900,
         step: 5,
-        unit: "µT",
+        unit: 'µT',
       })),
     },
     {
-      id: "temperature",
-      label: "Temperature",
+      id: 'temperature',
+      label: 'Temperature',
       controls: [
         {
-          kind: "slider",
-          id: "temperature_c",
-          label: "temperature",
-          field: "temperature_c",
+          kind: 'slider',
+          id: 'temperature_c',
+          label: 'temperature',
+          field: 'temperature_c',
           min: -40,
           max: 85,
           step: 0.5,
-          unit: "°C",
+          unit: '°C',
         },
       ],
     },
@@ -525,17 +510,12 @@ const sim: TileSim<State> = {
       if (!magReachable(state)) return undefined;
       if (!magMeasuring(state)) return { array: [0, 0, 0] };
       return {
-        array: [
-          magCount(state.mag_x_ut),
-          magCount(state.mag_y_ut),
-          magCount(state.mag_z_ut),
-        ],
+        array: [magCount(state.mag_x_ut), magCount(state.mag_y_ut), magCount(state.mag_z_ut)],
       };
     },
     tile_sense_i_9_mag_overflowed: ({ state }) => ({
       scalar:
-        magReachable(state) &&
-        (state.fault_inject || (magMeasuring(state) && magOverflow(state)))
+        magReachable(state) && (state.fault_inject || (magMeasuring(state) && magOverflow(state)))
           ? 1
           : 0,
     }),
@@ -580,8 +560,7 @@ const sim: TileSim<State> = {
     // ACCEL_WOM_THR = round(mg / 4), clamped to 0xFF (1020 mg).
     tile_sense_i_9_wom_config: ({ args }) => ({
       nextState: {
-        wom_threshold_mg:
-          Math.min(0xff, Math.trunc(((args[0] ?? 0) + 2) / 4)) * 4,
+        wom_threshold_mg: Math.min(0xff, Math.trunc(((args[0] ?? 0) + 2) / 4)) * 4,
         wom_mode: args[1] === 1 ? 1 : 0,
       },
     }),
@@ -657,21 +636,17 @@ const sim: TileSim<State> = {
     // ── tier-2 helpers: the driver's integer math on raw counts ──
     tile_sense_i_9_is_face_up: ({ state }) => {
       const [x, y, z] = accelRaw(state);
-      if (Math.abs(x) > FACE_XY_MAX || Math.abs(y) > FACE_XY_MAX)
-        return { scalar: 0 };
+      if (Math.abs(x) > FACE_XY_MAX || Math.abs(y) > FACE_XY_MAX) return { scalar: 0 };
       return { scalar: z > FACE_Z_MIN ? 1 : 0 };
     },
     tile_sense_i_9_is_face_down: ({ state }) => {
       const [x, y, z] = accelRaw(state);
-      if (Math.abs(x) > FACE_XY_MAX || Math.abs(y) > FACE_XY_MAX)
-        return { scalar: 0 };
+      if (Math.abs(x) > FACE_XY_MAX || Math.abs(y) > FACE_XY_MAX) return { scalar: 0 };
       return { scalar: z < -FACE_Z_MIN ? 1 : 0 };
     },
     tile_sense_i_9_is_moving: ({ state, args }) => {
       const [x, y, z] = accelRaw(state);
-      const delta2 = Math.abs(
-        x * x + y * y + z * z - LSB_PER_G_2G * LSB_PER_G_2G,
-      );
+      const delta2 = Math.abs(x * x + y * y + z * z - LSB_PER_G_2G * LSB_PER_G_2G);
       const thrLsb = Math.trunc(((args[0] ?? 0) * LSB_PER_G_2G) / 1000);
       return { scalar: delta2 > thrLsb * 2 * LSB_PER_G_2G ? 1 : 0 };
     },
@@ -712,37 +687,37 @@ const sim: TileSim<State> = {
   },
 
   provenance: {
-    tile_sense_i_9_find: "canonical",
-    tile_sense_i_9_init: "canonical",
-    tile_sense_i_9_reset: "canonical", // PWR_MGMT_1 / INT_PIN_CFG reset values
-    tile_sense_i_9_sleep: "canonical",
-    tile_sense_i_9_wake: "canonical",
-    tile_sense_i_9_set_accel_range: "canonical",
-    tile_sense_i_9_set_gyro_range: "canonical",
-    tile_sense_i_9_get_raw_accels: "canonical", // LSB/g table
-    tile_sense_i_9_get_raw_gyros: "canonical", // LSB/dps table
-    tile_sense_i_9_get_raw_6dof: "canonical",
-    tile_sense_i_9_get_raw_mags: "canonical", // 0.15 µT/LSB
-    tile_sense_i_9_mag_overflowed: "canonical", // HOFL at 4912 µT
-    tile_sense_i_9_get_temperature: "canonical", // /333.87 + 21
-    tile_sense_i_9_int_config: "canonical",
-    tile_sense_i_9_get_int_status: "canonical",
-    tile_sense_i_9_wom_config: "canonical", // 4 mg/LSB
-    tile_sense_i_9_is_face_up: "canonical", // driver constants
-    tile_sense_i_9_is_face_down: "canonical",
-    tile_sense_i_9_is_moving: "canonical",
-    tile_sense_i_9_fifo_count: "canonical", // bytes
-    tile_sense_i_9_data_ready: "inferred", // "always fresh" at the 10 Hz tick
-    tile_sense_i_9_self_test: "inferred", // pass assumed; side effects canonical
-    tile_sense_i_9_mag_self_test: "inferred",
-    tile_sense_i_9_fifo_read_packet_flat: "inferred",
-    tile_sense_i_9_get_int_status_fifo_watermark: "inferred", // WM level not modeled
-    tile_sense_i_9_read_tilt_centi_degrees_flat: "canonical", // driver integer math
-    tile_sense_i_9_read_heading_centi_degrees_flat: "inferred", // mag axis remap unverified
-    tile_sense_i_9_dmp_start_quat9: "inferred", // needs dmp_load (not exposed)
-    tile_sense_i_9_dmp_read_quat9: "inferred",
-    tile_sense_i_9_dmp_data_ready: "inferred",
-    power: "inferred", // 9-axis LN 3.11 mA / sleep 8 µA / mag 90 µA@8 Hz canonical; split scaled
+    tile_sense_i_9_find: 'canonical',
+    tile_sense_i_9_init: 'canonical',
+    tile_sense_i_9_reset: 'canonical', // PWR_MGMT_1 / INT_PIN_CFG reset values
+    tile_sense_i_9_sleep: 'canonical',
+    tile_sense_i_9_wake: 'canonical',
+    tile_sense_i_9_set_accel_range: 'canonical',
+    tile_sense_i_9_set_gyro_range: 'canonical',
+    tile_sense_i_9_get_raw_accels: 'canonical', // LSB/g table
+    tile_sense_i_9_get_raw_gyros: 'canonical', // LSB/dps table
+    tile_sense_i_9_get_raw_6dof: 'canonical',
+    tile_sense_i_9_get_raw_mags: 'canonical', // 0.15 µT/LSB
+    tile_sense_i_9_mag_overflowed: 'canonical', // HOFL at 4912 µT
+    tile_sense_i_9_get_temperature: 'canonical', // /333.87 + 21
+    tile_sense_i_9_int_config: 'canonical',
+    tile_sense_i_9_get_int_status: 'canonical',
+    tile_sense_i_9_wom_config: 'canonical', // 4 mg/LSB
+    tile_sense_i_9_is_face_up: 'canonical', // driver constants
+    tile_sense_i_9_is_face_down: 'canonical',
+    tile_sense_i_9_is_moving: 'canonical',
+    tile_sense_i_9_fifo_count: 'canonical', // bytes
+    tile_sense_i_9_data_ready: 'inferred', // "always fresh" at the 10 Hz tick
+    tile_sense_i_9_self_test: 'inferred', // pass assumed; side effects canonical
+    tile_sense_i_9_mag_self_test: 'inferred',
+    tile_sense_i_9_fifo_read_packet_flat: 'inferred',
+    tile_sense_i_9_get_int_status_fifo_watermark: 'inferred', // WM level not modeled
+    tile_sense_i_9_read_tilt_centi_degrees_flat: 'canonical', // driver integer math
+    tile_sense_i_9_read_heading_centi_degrees_flat: 'inferred', // mag axis remap unverified
+    tile_sense_i_9_dmp_start_quat9: 'inferred', // needs dmp_load (not exposed)
+    tile_sense_i_9_dmp_read_quat9: 'inferred',
+    tile_sense_i_9_dmp_data_ready: 'inferred',
+    power: 'inferred', // 9-axis LN 3.11 mA / sleep 8 µA / mag 90 µA@8 Hz canonical; split scaled
   },
 
   deriveState(state, { t }) {
@@ -751,8 +726,7 @@ const sim: TileSim<State> = {
 
     // RAW_DATA_RDY at the sample rate.
     if (hz > 0 && t - state.last_drdy_ms >= 1000 / hz) {
-      if (!(state.int_status_1 & RAW_DATA_RDY))
-        u.int_status_1 = state.int_status_1 | RAW_DATA_RDY;
+      if (!(state.int_status_1 & RAW_DATA_RDY)) u.int_status_1 = state.int_status_1 | RAW_DATA_RDY;
       u.last_drdy_ms = t;
     }
 
@@ -769,8 +743,7 @@ const sim: TileSim<State> = {
             // snapshot stops when full; stream overwrites the oldest data
             u.fifo_bytes =
               state.fifo_mode === FIFO_SNAPSHOT
-                ? state.fifo_bytes +
-                  Math.floor((FIFO_BYTES - state.fifo_bytes) / per) * per
+                ? state.fifo_bytes + Math.floor((FIFO_BYTES - state.fifo_bytes) / per) * per
                 : Math.floor(FIFO_BYTES / per) * per;
             u.int_status_fifo_ovf = state.int_status_fifo_ovf | FIFO0;
           } else {
@@ -784,34 +757,19 @@ const sim: TileSim<State> = {
     // Wake-on-motion: any axis |a − ref| > threshold, on a fresh crossing.
     if (state.wom_global_en && !state.sleeping) {
       const thr = state.wom_threshold_mg;
-      const ax =
-        thr > 0 && Math.abs(state.accel_x_mg - state.wom_ref_x_mg) > thr
-          ? 1
-          : 0;
-      const ay =
-        thr > 0 && Math.abs(state.accel_y_mg - state.wom_ref_y_mg) > thr
-          ? 1
-          : 0;
-      const az =
-        thr > 0 && Math.abs(state.accel_z_mg - state.wom_ref_z_mg) > thr
-          ? 1
-          : 0;
+      const ax = thr > 0 && Math.abs(state.accel_x_mg - state.wom_ref_x_mg) > thr ? 1 : 0;
+      const ay = thr > 0 && Math.abs(state.accel_y_mg - state.wom_ref_y_mg) > thr ? 1 : 0;
+      const az = thr > 0 && Math.abs(state.accel_z_mg - state.wom_ref_z_mg) > thr ? 1 : 0;
       const fresh =
-        (ax && !state.prev_wom_x) ||
-        (ay && !state.prev_wom_y) ||
-        (az && !state.prev_wom_z);
-      if (fresh && !(state.int_status & INT_WOM))
-        u.int_status = state.int_status | INT_WOM;
+        (ax && !state.prev_wom_x) || (ay && !state.prev_wom_y) || (az && !state.prev_wom_z);
+      if (fresh && !(state.int_status & INT_WOM)) u.int_status = state.int_status | INT_WOM;
       if (ax !== state.prev_wom_x) u.prev_wom_x = ax;
       if (ay !== state.prev_wom_y) u.prev_wom_y = ay;
       if (az !== state.prev_wom_z) u.prev_wom_z = az;
       if (state.wom_mode === 1) {
-        if (state.wom_ref_x_mg !== state.accel_x_mg)
-          u.wom_ref_x_mg = state.accel_x_mg;
-        if (state.wom_ref_y_mg !== state.accel_y_mg)
-          u.wom_ref_y_mg = state.accel_y_mg;
-        if (state.wom_ref_z_mg !== state.accel_z_mg)
-          u.wom_ref_z_mg = state.accel_z_mg;
+        if (state.wom_ref_x_mg !== state.accel_x_mg) u.wom_ref_x_mg = state.accel_x_mg;
+        if (state.wom_ref_y_mg !== state.accel_y_mg) u.wom_ref_y_mg = state.accel_y_mg;
+        if (state.wom_ref_z_mg !== state.accel_z_mg) u.wom_ref_z_mg = state.accel_z_mg;
       }
     } else {
       if (state.prev_wom_x) u.prev_wom_x = 0;
@@ -828,11 +786,10 @@ const sim: TileSim<State> = {
     const asserted =
       (state.int_dry_en === 1 && (state.int_status_1 & RAW_DATA_RDY) !== 0) ||
       (state.int_wom_en === 1 && (state.int_status & INT_WOM) !== 0) ||
-      (state.int_fifo_ovf_en === 1 &&
-        (state.int_status_fifo_ovf & 0x1f) !== 0) ||
+      (state.int_fifo_ovf_en === 1 && (state.int_status_fifo_ovf & 0x1f) !== 0) ||
       (state.int_fifo_wm_en === 1 && (state.int_status_fifo_wm & 0x1f) !== 0);
     const activeLow = (state.int_pin_cfg & 0x80) !== 0;
-    return { "9": (activeLow ? !asserted : asserted) ? 1 : 0 };
+    return { '9': (activeLow ? !asserted : asserted) ? 1 : 0 };
   },
 
   // V+ (pad 10), DS-000189 §3.4 typicals: 9-axis low-noise with the compass
@@ -848,11 +805,11 @@ const sim: TileSim<State> = {
       draw_ua: ua,
       rails: [
         {
-          name: "V+",
-          role: "supply",
-          v_mv: ctx?.padVoltage["10"] ?? 1800,
+          name: 'V+',
+          role: 'supply',
+          v_mv: ctx?.padVoltage['10'] ?? 1800,
           i_ua: ua,
-          pads: ["10"],
+          pads: ['10'],
         },
       ],
     };

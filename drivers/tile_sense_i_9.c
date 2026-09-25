@@ -1458,7 +1458,7 @@ uint8_t tile_sense_i_9_dmp_data_ready(tile_t* tile)
     return (tile_sense_i_9_fifo_count(tile) >= DMP_QUAT9_TOTAL_BYTES) ? 1 : 0;
 }
 
-uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t out_q[4],
+uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t* out_q,
                                       uint16_t* out_accuracy)
 {
     if (tile == NULL || out_q == NULL) return 0;
