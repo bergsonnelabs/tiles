@@ -1,13 +1,13 @@
 {
   "rev": "a",
-  "name": "ST.C0.1",
+  "name": "ST.C0",
   "pads": [],
   "power": [],
-  "family": "Core",
+  "family": "mCore",
   "package": {
     "pads": 10,
-    "type": "T44",
-    "size_x": 4000,
+    "type": "T24",
+    "size_x": 2000,
     "size_y": 4000,
     "size_z": 0
   },
@@ -16,14 +16,14 @@
   "components": [
     {
       "url": "",
-      "part": "STM32C031",
+      "part": "STM32C071",
       "datasheet": "",
       "manufacturer": "ST Microelectronics"
     }
   ],
   "interfaces": [],
-  "updated_at": "2026-06-05T15:38:03.861Z",
+  "updated_at": "2026-09-25T15:09:05.935Z",
   "description": "",
-  "json_version": "0.1",
+  "json_version": "0.3",
   "application_notes": []
 }

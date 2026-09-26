@@ -1,6 +1,6 @@
 {
   "rev": "a",
-  "name": "ST.L4.1",
+  "name": "ST.L4",
   "pads": [
     {
       "pad": "1",
@@ -1493,7 +1493,7 @@
     }
   ],
   "updated_at": "2026-06-24T07:57:35.222Z",
-  "description": "The USB-programmable Core.ST.L4.1 (formerly Core.U.1) is based on the 80-MHz 32-bit Cortex-M4 STM32L422 with 128KB flash, 40KB SRAM, and a CoreMark score of 273.55.  The exposed pads provide a user-configurable combination of two fast-mode-plus I2C ports, one SPI port, three 12-bit ADCs, multiple timers, USART, an onboard comparator, and capacitive-touch input.  A programmable onboard LED provides a convenient status indicator.  If more I/O is needed, consider the larger Core.ST.L4.2 in a T48-22 package.",
+  "description": "The USB-programmable Core.ST.L4 (formerly Core.U.1) is based on the 80-MHz 32-bit Cortex-M4 STM32L422 with 128KB flash, 40KB SRAM, and a CoreMark score of 273.55.  The exposed pads provide a user-configurable combination of two fast-mode-plus I2C ports, one SPI port, three 12-bit ADCs, multiple timers, USART, an onboard comparator, and capacitive-touch input.  A programmable onboard LED provides a convenient status indicator.  If more I/O is needed, consider the larger Core.ST.L4.2 in a T48-22 package.",
   "json_version": "0.35",
   "application_notes": [
     {

@@ -1,13 +1,13 @@
 {
   "rev": "a",
-  "name": "A.3",
+  "name": "R.2",
   "pads": [
     {
       "pad": "1",
       "geometry": {
         "size_x": 1000,
         "size_y": 400,
-        "center_x": -1500,
+        "center_x": -500,
         "center_y": 1600
       },
       "functions": [
@@ -24,7 +24,7 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": -1600,
+        "center_x": -600,
         "center_y": 800
       },
       "functions": [
@@ -41,7 +41,7 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": -1600,
+        "center_x": -600,
         "center_y": 0
       },
       "functions": [
@@ -58,41 +58,27 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": -1600,
+        "center_x": -600,
         "center_y": -800
       },
-      "functions": [
-        {
-          "note": "",
-          "type": "interface",
-          "function": "I2C.CLK",
-          "direction": "bidirectional"
-        }
-      ]
+      "functions": []
     },
     {
       "pad": "5",
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": -1600,
+        "center_x": -600,
         "center_y": -1600
       },
-      "functions": [
-        {
-          "note": "",
-          "type": "interface",
-          "function": "I2C.DAT",
-          "direction": "bidirectional"
-        }
-      ]
+      "functions": []
     },
     {
       "pad": "6",
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": 1600,
+        "center_x": 600,
         "center_y": -1600
       },
       "functions": [
@@ -109,7 +95,7 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": 1600,
+        "center_x": 600,
         "center_y": -800
       },
       "functions": [
@@ -126,7 +112,7 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": 1600,
+        "center_x": 600,
         "center_y": 0
       },
       "functions": [
@@ -143,7 +129,7 @@
       "geometry": {
         "size_x": 800,
         "size_y": 400,
-        "center_x": 1600,
+        "center_x": 600,
         "center_y": 800
       },
       "functions": [
@@ -158,9 +144,9 @@
     {
       "pad": "10",
       "geometry": {
-        "size_x": 800,
+        "size_x": 600,
         "size_y": 400,
-        "center_x": 1600,
+        "center_x": 700,
         "center_y": 1600
       },
       "functions": [
@@ -174,7 +160,7 @@
     }
   ],
   "power": [],
-  "family": "Sense",
+  "family": "mPower",
   "package": {
     "pads": 10,
     "type": "T24",
@@ -182,19 +168,12 @@
     "size_y": 4000,
     "size_z": 0
   },
-  "tile_id": 94,
-  "headline": "",
-  "components": [
-    {
-      "url": "",
-      "part": "BMA580",
-      "datasheet": "",
-      "manufacturer": "Bosch Sensortec"
-    }
-  ],
+  "tile_id": 95,
+  "headline": "dual regulator",
+  "components": [],
   "interfaces": [],
-  "updated_at": "2026-09-25T14:24:29.189Z",
+  "updated_at": "2026-09-26T12:02:36.139Z",
   "description": "",
-  "json_version": "0.2",
+  "json_version": "0.1",
   "application_notes": []
 }

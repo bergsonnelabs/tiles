@@ -1,0 +1,200 @@
+{
+  "rev": "a",
+  "name": "A.3",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "interface",
+          "function": "I2C.CLK",
+          "direction": "bidirectional"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "interface",
+          "function": "I2C.DAT",
+          "direction": "bidirectional"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 600,
+        "center_y": 0
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "",
+          "function": "",
+          "direction": ""
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 600,
+        "size_y": 400,
+        "center_x": 700,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [],
+  "family": "mSense",
+  "package": {
+    "pads": 10,
+    "type": "T24",
+    "size_x": 2000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 94,
+  "headline": "",
+  "components": [
+    {
+      "url": "",
+      "part": "BMA580",
+      "datasheet": "",
+      "manufacturer": "Bosch Sensortec"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-09-25T15:49:00.505Z",
+  "description": "",
+  "json_version": "0.4",
+  "application_notes": []
+}
