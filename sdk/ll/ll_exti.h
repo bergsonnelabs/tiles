@@ -57,8 +57,10 @@ static inline void ll_rcc_syscfg_clk_enable(void)
 #elif defined(STM32WBA55xx)
     /* WBA: EXTICR is inside EXTI peripheral, no separate SYSCFG clock needed */
 #elif defined(STM32H523xx)
-    SET_BITS(REG32(RCC_BASE + 0x9CUL), (1UL << 1));   /* APB1LENR: not needed? */
-    /* H5: SBS (System Block) replaces SYSCFG, usually always clocked */
+    /* H5: the port select is in EXTI itself (EXTI_EXTICRx), which needs no
+     * clock enable. This used to set RCC_APB1LENR bit 1, which is TIM3EN.
+     * SBSEN (RCC_APB3ENR bit 1, RM0481 §11.8.32) is set for SBS users. */
+    SET_BITS(REG32(RCC_BASE + 0xA8UL), (1UL << 1));
 #endif
     (void)REG32(RCC_BASE);
 }
@@ -91,11 +93,13 @@ static inline void ll_exti_set_source(uint32_t line, uint32_t port_index)
     MOD_BITS(REG32(EXTI_BASE + reg_offset), 0xFFUL << shift, port_index << shift);
 
 #elif defined(STM32H523xx)
-    /* H5: SBS_EXTICR1..4 at SBS (0x44000400) offset 0x58, 0x5C, 0x60, 0x64 */
-    uint32_t sbs_base = 0x44000400UL;
-    uint32_t reg_offset = 0x58UL + (line / 4) * 4;
+    /* H5: EXTI_EXTICR1..4 at EXTI offset 0x060-0x06C, 8 bits per line
+     * (RM0481 §18.6.15-18). This used to write SBS + 0x58.., which on the
+     * H523 is not a port-select register at all, so every H5 pad interrupt
+     * listened to port A. */
+    uint32_t reg_offset = 0x60UL + (line / 4) * 4;
     uint32_t shift = (line % 4) * 8;
-    MOD_BITS(REG32(sbs_base + reg_offset), 0xFFUL << shift, port_index << shift);
+    MOD_BITS(REG32(EXTI_BASE + reg_offset), 0xFFUL << shift, port_index << shift);
 #endif
 }
 

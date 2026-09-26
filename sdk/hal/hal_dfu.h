@@ -46,7 +46,20 @@
   #define DFU_STRIKE_ADDR     (*(volatile uint32_t *)0x20043FF4UL)
   #define DFU_STRIKE_TAG_ADDR (*(volatile uint32_t *)0x20043FF8UL)
   #define DFU_CAUSE_ADDR      (*(volatile uint32_t *)0x20043FFCUL)
-  #define DFU_ROM_ADDR      0x0BF97000UL  /* AN2606: H523/H533 bootloader entry */
+  /* ST ROM bootloader vector table, in system flash bank 2 (0x0BF9_0000-
+   * 0x0BF9_FFFF, RM0481 §7.3.3). 0x0BF97000 is BOOTLOADER_BASE_NS in
+   * STM32CubeH5 v1.5.1 (NUCLEO-H533RE OEMiROT flash_layout.h; the H533 is the
+   * H523 with crypto). AN2606 could not be fetched to confirm it (2026-09-26).
+   * Bench, same day: from core_init, before the clocks, on a clean BOOT0-low
+   * boot, the read and the jump work (make flash-dfu lands in ROM DFU). Reads
+   * of 0x0BF9xxxx faulted only after a BOOT0-high ROM leave, which leaves
+   * GTZC1_TZSC set (see hal_dfu_started_by_rom), with the ICACHE on. The jump
+   * stays guarded by DFU_MAGIC_TRYING in case such a state recurs. */
+  #define DFU_ROM_ADDR      0x0BF97000UL
+  /* Written just before the H5 reads the ROM's vector table. A fault there
+   * lands in hal_dfu_reboot() (via hal_fault), which then resets plainly
+   * instead of asking for DFU again: no reboot loop. */
+  #define DFU_MAGIC_TRYING  0xDEADBEE1UL
 #endif
 
 /* Validity tag for the recovery words: distinguishes "carried across a warm
@@ -84,6 +97,35 @@ static inline uint32_t hal_recovery_stashed_cause(void)
 }
 #endif /* DFU_STRIKE_TAG_ADDR */
 
+#if defined(STM32H523xx)
+/**
+ * 1 when this image was started by the ST ROM bootloader (DFU "leave" jumps
+ * to 0x08000000 without a reset) rather than by a reset.
+ *
+ * The H5 case this matters for: with BOOT0 high, the 1200-baud touch's reset
+ * goes straight to the ROM, so the DFU magic it wrote is still set when the
+ * ROM later starts the new image — which would take it as a request and jump
+ * back into the ROM. (In practice the ROM also clears the top of SRAM, where
+ * the magic lives; this doesn't rely on that.)
+ *
+ * The same state has a cost: the peripherals the ROM secured (TIM1-TIM8,
+ * TIM15, CRS, ADC, I2C1/2, USART6, UART4/5, LPUART1, LPTIM1/2, ...) can't
+ * be clocked by the image — their RCC enable bits ignore non-secure writes —
+ * until the next reset. USB, SPI1-3, I2C3, USART1-3, EXTI, flash and the
+ * IWDG are not affected. A reset clears it; with BOOT0 high a reset goes back
+ * to the ROM, so a bench board strapped that way only ever runs this state.
+ */
+static inline int hal_dfu_started_by_rom(void)
+{
+    /* GTZC1_TZSC_SECCFGR1..3 (0x40032410..18, RM0481 §5.6.2-4): zero after
+     * every reset (§5.4.6). The ROM bootloader secures peripherals for itself
+     * and leaves them so when its DFU "leave" jumps to the image, non-secure
+     * code can't clear them. Bench 2026-09-26: 0xC335827F / 0x12009500 /
+     * 0x05BFE006 after a leave. */
+    return (REG32(0x40032410UL) | REG32(0x40032414UL) | REG32(0x40032418UL)) != 0;
+}
+#endif
+
 /* SCB AIRCR: Application Interrupt and Reset Control Register */
 #define SCB_AIRCR           REG32(0xE000ED0CUL)
 #define SCB_AIRCR_SYSRESETREQ  (1UL << 2)
@@ -108,7 +150,14 @@ static inline uint32_t hal_recovery_stashed_cause(void)
 static inline void hal_dfu_reboot(void) __attribute__((noreturn));
 static inline void hal_dfu_reboot(void)
 {
+#if defined(STM32H523xx)
+    /* Arriving here from a fault while hal_dfu_jump_to_rom() read the ROM's
+     * vector table means the ROM can't be entered from this boot: reset
+     * plainly (BOOT0 low: back into the app) rather than try again. */
+    DFU_MAGIC_ADDR = (DFU_MAGIC_ADDR == DFU_MAGIC_TRYING) ? 0UL : DFU_MAGIC;
+#else
     DFU_MAGIC_ADDR = DFU_MAGIC;
+#endif
 
     __asm volatile ("dsb" ::: "memory");
 
@@ -134,7 +183,9 @@ static inline void hal_dfu_reboot(void)
  *
  * H5 (Cortex-M33): No MEMRMP equivalent in SBS. Instead, sets VTOR
  *   directly to the ROM bootloader base — the M33 always respects VTOR
- *   for vector fetches, so no memory remap is needed.
+ *   for vector fetches, so no memory remap is needed. Only reached with
+ *   BOOT0 low: with BOOT0 high the touch's reset already lands in the ROM
+ *   (RM0481 §4.1, Table 23).
  */
 static inline void hal_dfu_jump_to_rom(void) __attribute__((noreturn));
 static inline void hal_dfu_jump_to_rom(void)
@@ -149,12 +200,6 @@ static inline void hal_dfu_jump_to_rom(void)
      * SYSCFG_MEMRMP (0x40010000) bits [2:0] = 001 (System Flash) */
     MOD_BITS(REG32(0x40010000UL), 0x07UL, 0x01UL);
 
-#elif defined(STM32H523xx)
-    /* H5 Cortex-M33: Set VTOR to ROM bootloader base.
-     * SBS has no MEMRMP — VTOR handles vector relocation directly. */
-    REG32(0xE000ED08UL) = DFU_ROM_ADDR;
-#endif
-
     __asm volatile ("dsb" ::: "memory");
     __asm volatile ("isb" ::: "memory");
 
@@ -162,6 +207,20 @@ static inline void hal_dfu_jump_to_rom(void)
     volatile uint32_t *rom = (volatile uint32_t *)DFU_ROM_ADDR;
     uint32_t sp = rom[0];
     uint32_t rv = rom[1];
+
+#elif defined(STM32H523xx)
+    /* Read the ROM's SP and reset vector while VTOR is still ours, so a bus
+     * fault here is handled (DFU_MAGIC_TRYING, above), then set VTOR to the
+     * ROM's table (SBS has no MEMRMP; the M33 fetches vectors from VTOR). */
+    DFU_MAGIC_ADDR = DFU_MAGIC_TRYING;
+    __asm volatile ("dsb" ::: "memory");
+    volatile uint32_t *rom = (volatile uint32_t *)DFU_ROM_ADDR;
+    uint32_t sp = rom[0];
+    uint32_t rv = rom[1];
+    REG32(0xE000ED08UL) = DFU_ROM_ADDR;
+    __asm volatile ("dsb" ::: "memory");
+    __asm volatile ("isb" ::: "memory");
+#endif
 
     __asm volatile (
         "msr msp, %0 \n"

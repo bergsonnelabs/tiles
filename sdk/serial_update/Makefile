@@ -1,11 +1,11 @@
-# Serial-update flasher blob (STM32L422).
+# Serial-update flasher blobs (STM32L422 and STM32H523).
 #
-# Builds the SRAM-resident flasher and regenerates the committed header the
-# app embeds (sdk/hal/hal_serial_update_blob_l4.h). Standalone: no coregen, no
-# config.json. Run after editing anything under sdk/serial_update/:
+# Builds the SRAM-resident flashers and regenerates the committed headers the
+# app embeds (sdk/hal/hal_serial_update_blob_{l4,h5}.h). Standalone: no
+# coregen, no config.json. Run after editing anything under sdk/serial_update/:
 #
-#   make -C sdk/serial_update          # build + regenerate the header
-#   make -C sdk/serial_update check    # header matches the sources (CI)
+#   make -C sdk/serial_update          # build both + regenerate the headers
+#   make -C sdk/serial_update check    # headers match the sources (CI)
 #   make -C sdk/serial_update test     # protocol tests on the host (no hardware)
 #
 # -ffreestanding + -nostdlib: the flasher runs while flash is being erased, so
@@ -20,41 +20,41 @@ PYTHON ?= python3
 
 SDK_ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))../..)
 BUILD_DIR := build
-TARGET    := $(BUILD_DIR)/flasher_l4
-HEADER    := $(SDK_ROOT)/sdk/hal/hal_serial_update_blob_l4.h
 GEN       := $(SDK_ROOT)/tools/gen_serial_update_blob.py
 
-SOURCES = flasher_l4.c su_core.c
+COMMON  = -mthumb -Os -std=gnu11 -ffreestanding -fno-builtin -fno-tree-loop-distribute-patterns
+COMMON += -ffunction-sections -fdata-sections -fno-common
+COMMON += -Wall -Wextra -Werror -I. -I$(SDK_ROOT)/sdk/ll
 
-CFLAGS  = -mcpu=cortex-m4 -mthumb -mfloat-abi=soft
-CFLAGS += -DSTM32L422xx -I. -I$(SDK_ROOT)/sdk/ll
-CFLAGS += -Os -std=gnu11 -ffreestanding -fno-builtin -fno-tree-loop-distribute-patterns
-CFLAGS += -ffunction-sections -fdata-sections -fno-common
-CFLAGS += -Wall -Wextra -Werror
+# STM32L422: the protocol defaults (2 KB pages, 8-byte program unit, v1).
+CFLAGS_l4 = -mcpu=cortex-m4 -mfloat-abi=soft -DSTM32L422xx $(COMMON)
+# STM32H523: 8 KB sectors as pages, 128-bit flash words, READY v2.
+CFLAGS_h5 = -mcpu=cortex-m33 -mfloat-abi=soft -DSTM32H523xx $(COMMON) \
+            -DSU_MAX_PAYLOAD=8192u -DSU_PROG_UNIT=16u -DSU_PROTOCOL_VERSION=2u
 
-LDFLAGS  = -nostdlib -nostartfiles -Wl,--gc-sections -Wl,-T,flasher_l4.ld
-LDFLAGS += -Wl,--no-warn-rwx-segments
+LDFLAGS  = -nostdlib -nostartfiles -Wl,--gc-sections -Wl,--no-warn-rwx-segments
 
 Q = $(if $(V),,@)
 
 .PHONY: all check test clean
 
-all: $(HEADER)
+all: $(SDK_ROOT)/sdk/hal/hal_serial_update_blob_l4.h $(SDK_ROOT)/sdk/hal/hal_serial_update_blob_h5.h
 
-$(TARGET).elf: $(SOURCES) su_core.h su_protocol.h flasher_l4.ld | $(BUILD_DIR)
+$(BUILD_DIR)/flasher_%.elf: flasher_%.c su_core.c su_core.h su_protocol.h flasher_%.ld $(wildcard $(SDK_ROOT)/sdk/ll/*.h) | $(BUILD_DIR)
 	@echo "  LD    $(notdir $@)"
-	$(Q)$(CC) $(CFLAGS) $(SOURCES) $(LDFLAGS) -o $@
+	$(Q)$(CC) $(CFLAGS_$*) flasher_$*.c su_core.c $(LDFLAGS) -Wl,-T,flasher_$*.ld -o $@
 	$(Q)$(SIZE) $@
 
-$(TARGET).bin: $(TARGET).elf
+$(BUILD_DIR)/flasher_%.bin: $(BUILD_DIR)/flasher_%.elf
 	$(Q)$(OBJCOPY) -O binary $< $@
 
-$(HEADER): $(TARGET).bin $(GEN)
+$(SDK_ROOT)/sdk/hal/hal_serial_update_blob_%.h: $(BUILD_DIR)/flasher_%.bin $(GEN)
 	@echo "  GEN   $(notdir $@)"
-	$(Q)$(PYTHON) $(GEN) --bin $< --out $@
+	$(Q)$(PYTHON) $(GEN) --chip $* --bin $< --out $@
 
 check:
-	$(Q)$(PYTHON) $(GEN) --check --out $(HEADER)
+	$(Q)$(PYTHON) $(GEN) --chip l4 --check --out $(SDK_ROOT)/sdk/hal/hal_serial_update_blob_l4.h
+	$(Q)$(PYTHON) $(GEN) --chip h5 --check --out $(SDK_ROOT)/sdk/hal/hal_serial_update_blob_h5.h
 
 test:
 	$(Q)$(MAKE) -C test

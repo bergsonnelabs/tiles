@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Tests for serial update: the real protocol core (su_core.c) on a simulated
-L4 flash, driven by the real host client (tools/serial_update.py).
+L4 or H5 flash, driven by the real host client (tools/serial_update.py).
 
-    make -C sdk/serial_update test       # builds su_sim, then runs this
+    make -C sdk/serial_update test       # builds su_sim / su_sim_h5, runs this for both
 
 The claim these defend is the one the design rests on: whatever happens, the
-Core boots EITHER the old app (flash untouched), OR the ROM bootloader (page 0
-erased — the L4's empty check), OR the complete new image. Never a mix.
+flash holds EITHER the old app (untouched), OR an erased vector table (the L4's
+empty check then boots the ROM bootloader; an H5 needs BOOT0 for it), OR the
+complete new image. Never a mix.
 """
 
 import argparse
@@ -22,9 +23,16 @@ import zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import serial_update as su  # noqa: E402
 
-FLASH = 128 * 1024
-PAGE = 2048
-ERASED = b"\xff" * 8
+CHIPS = {
+    # flash, page, program unit, DEV_ID, initial SP, top of flash kept for core_nvm
+    "l4": dict(flash=128 * 1024, page=2048, unit=8, dev=0x464, sp=0x20009FF0,
+               reserved=4096, old=6 * 1024 + 100, new=9 * 1024 + 300),
+    "h5": dict(flash=512 * 1024, page=8192, unit=16, dev=0x478, sp=0x20043FF0,
+               reserved=16384, old=3 * 8192 + 100, new=4 * 8192 + 1300),
+}
+C = CHIPS["l4"]
+FLASH = PAGE = DEV = RESERVED = 0
+ERASED = b""
 
 
 class ProcessLink(su.Link):
@@ -50,19 +58,28 @@ class ProcessLink(su.Link):
         return data
 
 
-def image(size, seed, sp=0x20009FF0, entry=0x080001C1):
+def image(size, seed, sp=None, entry=0x080001C1):
     rnd = random.Random(seed)
     body = bytes(rnd.getrandbits(8) for _ in range(size - 8))
-    return struct.pack("<II", sp, entry) + body
+    return struct.pack("<II", C["sp"] if sp is None else sp, entry) + body
 
 
-OLD = image(6 * 1024 + 100, seed=1)
-NEW = image(9 * 1024 + 300, seed=2)            # 5 pages, the last one partial
-OLD_FLASH = OLD + b"\xff" * (FLASH - len(OLD))
+OLD = NEW = OLD_FLASH = b""
+
+
+def set_chip(name):
+    global C, FLASH, PAGE, DEV, RESERVED, ERASED, OLD, NEW, OLD_FLASH
+    C = CHIPS[name]
+    FLASH, PAGE, DEV, RESERVED = C["flash"], C["page"], C["dev"], C["reserved"]
+    ERASED = b"\xff" * C["unit"]
+    OLD = image(C["old"], seed=1)
+    NEW = image(C["new"], seed=2)              # 5 pages, the last one partial
+    OLD_FLASH = OLD + b"\xff" * (FLASH - len(OLD))
 
 
 class Sim:
-    def __init__(self, sim_path, *extra, flash=OLD_FLASH):
+    def __init__(self, sim_path, *extra, flash=None):
+        flash = OLD_FLASH if flash is None else flash
         self.dir = tempfile.mkdtemp(prefix="su_sim_")
         self.fin = os.path.join(self.dir, "in.bin")
         self.fout = os.path.join(self.dir, "out.bin")
@@ -84,8 +101,9 @@ class Sim:
 
 
 def boots(flash):
-    """What an L4 would boot from this flash after a power cycle."""
-    if flash[:8] == ERASED:
+    """What the flash holds: "rom" = an erased vector table (an L4 boots its
+    ROM bootloader; an H5 needs BOOT0 high)."""
+    if flash[:len(ERASED)] == ERASED:
         return "rom"
     if flash == OLD_FLASH:
         return "old"
@@ -107,7 +125,8 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def frames_for(img, dev_id=0x464):
+def frames_for(img, dev_id=None):
+    dev_id = DEV if dev_id is None else dev_id
     fs = [su.frame(su.T_QUERY), su.frame(su.T_BEGIN, len(img), zlib.crc32(img), struct.pack("<I", dev_id))]
     for off in range(0, len(img), PAGE):
         chunk = img[off:off + PAGE]
@@ -116,30 +135,32 @@ def frames_for(img, dev_id=0x464):
     return fs
 
 
-def run(sim_path):
-    print("serial update — protocol core on a simulated L4")
+def run(sim_path, chip="l4"):
+    set_chip(chip)
+    print(f"serial update — protocol core on a simulated {chip.upper()}")
 
     s = Sim(sim_path)
-    su.update(s.link, NEW, log=quiet)
+    su.update(s.link, NEW, dev_id=DEV, log=quiet)
     code, fl = s.finish()
     check("happy path: new image written, Core rebooted", code == 0 and boots(fl) == "new", f"exit {code}, boots {boots(fl)}")
     check("happy path: pages past the image left alone", fl[len(NEW) + PAGE:] == OLD_FLASH[len(NEW) + PAGE:])
 
-    # core_nvm keeps its data in the top 4 KB (two pages): an update never
-    # reaches it. Largest image that fits, over flash whose NVM pages hold data.
-    nvm = bytes(random.Random(7).getrandbits(8) for _ in range(su.NVM_RESERVED))
-    top = FLASH - su.NVM_RESERVED
+    # core_nvm keeps its data in the top pages (4 KB L4, 16 KB H5): an update
+    # never reaches it. Largest image that fits, over flash whose NVM pages
+    # hold data. (The H5 flasher reports the limit in READY; the L4's doesn't.)
+    nvm = bytes(random.Random(7).getrandbits(8) for _ in range(RESERVED))
+    top = FLASH - RESERVED
     with_nvm = OLD_FLASH[:top] + nvm
     big = image(top, seed=3)
     s = Sim(sim_path, flash=with_nvm)
-    su.update(s.link, big, log=quiet)
+    su.update(s.link, big, dev_id=DEV, log=quiet)
     code, fl = s.finish()
-    check("largest image (flash - 4 KB): written, core_nvm pages untouched",
+    check(f"largest image (flash - {RESERVED // 1024} KB): written, core_nvm pages untouched",
           code == 0 and fl[:top] == big and fl[top:] == nvm, f"exit {code}")
 
     s = Sim(sim_path, flash=with_nvm)
     try:
-        su.update(s.link, image(top + 8, seed=3), log=quiet)
+        su.update(s.link, image(top + 8, seed=3), dev_id=DEV, log=quiet)
         refused = False
     except su.UpdateError as e:
         refused = "core_nvm" in str(e)
@@ -151,7 +172,7 @@ def run(sim_path):
     s.link.write(su.frame(su.T_QUERY))
     su.reply(s.link, 1)
     over = image(top + 8, seed=3)
-    s.link.write(su.frame(su.T_BEGIN, len(over), zlib.crc32(over), struct.pack("<I", 0x464)))
+    s.link.write(su.frame(su.T_BEGIN, len(over), zlib.crc32(over), struct.pack("<I", DEV)))
     r = su.reply(s.link, 1)
     code, fl = s.finish()
     check("image reaching the core_nvm pages: flasher says SU ERR 3, flash untouched",
@@ -176,10 +197,10 @@ def run(sim_path):
 
     for label, bad in (("SP outside SRAM", image(len(NEW), 2, sp=0x30000000)),
                        ("reset vector not Thumb", image(len(NEW), 2, entry=0x080001C0)),
-                       ("reset vector past the image", image(len(NEW), 2, entry=0x08010001))):
+                       ("reset vector past the image", image(len(NEW), 2, entry=0x08000001 + len(NEW) + 64))):
         s = Sim(sim_path)
         try:
-            su.update(s.link, bad, log=quiet)
+            su.update(s.link, bad, dev_id=DEV, log=quiet)
             refused = False
         except su.UpdateError as e:
             refused = "vector table" in str(e)
@@ -203,7 +224,7 @@ def run(sim_path):
 
     s = Sim(sim_path)
     lie = frames_for(NEW)
-    lie[1] = su.frame(su.T_BEGIN, len(NEW), zlib.crc32(NEW) ^ 1, struct.pack("<I", 0x464))
+    lie[1] = su.frame(su.T_BEGIN, len(NEW), zlib.crc32(NEW) ^ 1, struct.pack("<I", DEV))
     rs = []
     for fr in lie:
         s.link.write(fr)
@@ -247,7 +268,7 @@ def run(sim_path):
     for n in range(1, 40):
         s = Sim(sim_path, "--fail-program-at", str(n))
         try:
-            su.update(s.link, NEW, log=quiet)
+            su.update(s.link, NEW, dev_id=DEV, log=quiet)
         except su.UpdateError:
             pass
         code, fl = s.finish()
@@ -261,7 +282,10 @@ def run(sim_path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sim", required=True, help="path to the built su_sim")
-    return run(os.path.abspath(ap.parse_args().sim))
+    ap.add_argument("--chip", choices=sorted(CHIPS), default="l4",
+                    help="the flash geometry su_sim was built for")
+    a = ap.parse_args()
+    return run(os.path.abspath(a.sim), a.chip)
 
 
 if __name__ == "__main__":

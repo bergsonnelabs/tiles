@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@6af026f",
   "category": "recovery",
   "label": "Core.Recovery",
   "icon": "⟲",
@@ -46,7 +46,7 @@
       "name": "hal_dfu_jump_to_rom",
       "signature": "hal_dfu_jump_to_rom(void)",
       "returns": "void",
-      "brief": "Jump to the STM32 ROM (system memory) bootloader. Does not return. Called from core_init() when ROM_DFU is enabled and the DFU magic was found. Runs before ANY peripheral or clock init, so the MCU is in near-reset state. The ROM bootloader configures its own clocks (HSI48 + CRS for USB) and enumerates as 0483:DF11 with DfuSe. L4 (Cortex-M4): Remaps system memory to 0x00000000 via SYSCFG_MEMRMP, then jumps. The remap ensures the ROM bootloader reads its own vectors from address 0 and doesn't bounce back to flash. H5 (Cortex-M33): No MEMRMP equivalent in SBS. Instead, sets VTOR directly to the ROM bootloader base — the M33 always respects VTOR for vector fetches, so no memory remap is needed.",
+      "brief": "Jump to the STM32 ROM (system memory) bootloader. Does not return. Called from core_init() when ROM_DFU is enabled and the DFU magic was found. Runs before ANY peripheral or clock init, so the MCU is in near-reset state. The ROM bootloader configures its own clocks (HSI48 + CRS for USB) and enumerates as 0483:DF11 with DfuSe. L4 (Cortex-M4): Remaps system memory to 0x00000000 via SYSCFG_MEMRMP, then jumps. The remap ensures the ROM bootloader reads its own vectors from address 0 and doesn't bounce back to flash. H5 (Cortex-M33): No MEMRMP equivalent in SBS. Instead, sets VTOR directly to the ROM bootloader base — the M33 always respects VTOR for vector fetches, so no memory remap is needed. Only reached with BOOT0 low: with BOOT0 high the touch's reset already lands in the ROM (RM0481 §4.1, Table 23).",
       "params": [],
       "studio_exposed": false,
       "attributes": [

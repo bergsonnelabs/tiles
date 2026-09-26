@@ -8,8 +8,10 @@
  * endpoints, same data toggles, no re-enumeration), receives the image and
  * rewrites flash. Spec: tiles docs/serial-update-protocol.md.
  *
- * Shared by the flasher blob (sdk/serial_update/flasher_l4.c) and the app hook
- * (sdk/hal/hal_usb_cdc.c). Keep it free of anything either side can't compile.
+ * Shared by the flasher blobs (sdk/serial_update/flasher_l4.c, flasher_h5.c)
+ * and the app hook (sdk/hal/hal_usb_cdc.c). Keep it free of anything either
+ * side can't compile. The values a flasher build may override (-D) are the
+ * ones under #ifndef; the L4 build uses the defaults.
  */
 
 #ifndef SU_PROTOCOL_H
@@ -22,7 +24,11 @@
  * uses to talk to a USB CDC device, whose baud rate is otherwise meaningless. */
 #define SU_TRIGGER_BAUD         2400u
 
+/* 1: READY has 7 tokens. 2 (Core.ST.H5): READY appends the largest image the
+ * flasher accepts, in bytes, so the host needs no per-chip table. */
+#ifndef SU_PROTOCOL_VERSION
 #define SU_PROTOCOL_VERSION     1u
+#endif
 
 /* ---- Host → Core frames ----
  *
@@ -34,7 +40,16 @@
 #define SU_SYNC0                'S'
 #define SU_SYNC1                'U'
 #define SU_HDR_LEN              16u
-#define SU_MAX_PAYLOAD          2048u
+#ifndef SU_MAX_PAYLOAD
+#define SU_MAX_PAYLOAD          2048u   /* one flash page: 2 KB L4, 8 KB H5 */
+#endif
+
+/* Flash programming unit, bytes: the L4 programs double-words, the H5
+ * 128-bit flash words with ECC (RM0481 §7.3.5), which must each be written
+ * exactly once. */
+#ifndef SU_PROG_UNIT
+#define SU_PROG_UNIT            8u
+#endif
 
 #define SU_T_QUERY              'Q'   /* → "SU READY ..." */
 #define SU_T_BEGIN              'B'   /* arg0 = image size, arg1 = CRC-32; payload = u32 DEV_ID */
@@ -45,7 +60,7 @@
 /* ---- Core → host replies ----
  *
  * One ASCII line per frame, each shorter than one 64-byte USB packet:
- *   SU READY <ver> <dev_id hex> <flash KB> <page bytes> <page0 erased 0|1>
+ *   SU READY <ver> <dev_id hex> <flash KB> <page bytes> <page0 erased 0|1> [<image limit bytes>, v2]
  *   SU OK <type> [next offset]
  *   SU ERR <code> <word>
  *   SU DONE
@@ -61,21 +76,25 @@
 #define SU_ERR_STATE            9u    /* frame not valid in this state */
 
 /* The top of flash kept for core_nvm (its last two 2 KB pages on the L4,
- * sdk/core/core_nvm.h). The flasher refuses an image that would reach it
- * (SU_ERR_SIZE) and so never erases it. */
+ * sdk/core/core_nvm.h; two 8 KB sectors on the H5, where core_nvm is still to
+ * come). The flasher refuses an image that would reach it (SU_ERR_SIZE) and so
+ * never erases it. */
 #define SU_NVM_RESERVED         4096u
+#define SU_NVM_RESERVED_H5      16384u
 
 /* Without a BEGIN for this long, and with flash untouched, the flasher resets
  * back into the old app. Once page 0 is erased it never gives up on its own. */
 #define SU_IDLE_TIMEOUT_MS      10000u
 
-/* ---- App → flasher handoff (STM32L422) ----
+/* ---- App → flasher handoff (STM32L422, STM32H523) ----
  *
- * SRAM map while the flasher runs:
+ * SRAM map while the flasher runs (the same on both; the H5 has 272 KB but
+ * the flasher stays in the L4's first 40 KB):
  *   0x20000000  flasher image (vector table first) + .bss   (< 0x7000)
  *   0x20007000  su_handoff_t, written by the app just before the jump
  *   0x20007100  flasher stack, growing down from SU_STACK_TOP
- *   0x20009FF0  DFU magic + brick-recovery words — never touched
+ *   top - 16    DFU magic + brick-recovery words — never touched
+ *               (0x20009FF0 L4, 0x20043FF0 H5)
  */
 #define SU_FLASHER_BASE         0x20000000UL
 #define SU_HANDOFF_ADDR         0x20007000UL

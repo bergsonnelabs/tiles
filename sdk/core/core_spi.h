@@ -28,7 +28,8 @@
  * the next call starts clean.
  *
  * Fastest SCK is the kernel clock / 2 (the kernel clock is SYSCLK at every
- * coregen clock level):
+ * coregen clock level on the L4 / W5; on the H5 it is the HSI, 64 MHz, or
+ * 16 MHz at "low"):
  *   Core.ST.L4: 8 MHz (low/medium, 16 MHz), 24 MHz (high), 40 MHz (max).
  *               Above 16 MHz needs VDD >= 2.7 V (STM32L422 DS Table 80).
  *   Core.ST.W5: 8 MHz (low), 16 MHz (medium), 32 MHz (high), 50 MHz (max).
@@ -389,13 +390,14 @@ static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx
 //   the array-IN / array-OUT host-call ABI prototyped on the tile-
 //   driver side — track with the DSL Capability Coverage close.
 //
-// @studio unsupported tier=1 value=M title="Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI has no clock"
+// @studio unsupported tier=1 value=M title="Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI still stalls"
 //   Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3,
 //   1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE
 //   sessions, GPDMA) but has not run it on hardware yet; the camera tile's
 //   LL half-duplex path is the only W5 SPI use proven on silicon.
-//   Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled), so a
-//   transfer returns HAL_TIMEOUT instead of moving data.
+//   Core.ST.H5: the kernel clock is now per_ck (the HSI), but on the bench
+//   SPI1 still never clocks a frame and a transfer returns HAL_TIMEOUT
+//   (2026-09-26, only tried on a board started by the ROM bootloader).
 //
 // @studio unsupported tier=1 value=L title="SPI DMA not on Core.ST.H5"
 //   core_spi_exchange_dma / core_spi_xfer_dma run on Core.ST.L4 (DMA1)

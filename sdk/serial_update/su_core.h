@@ -1,7 +1,8 @@
 /**
  * su_core.h — Serial update protocol state machine (hardware-free)
  *
- * The flasher (flasher_l4.c) and the native test harness (test/su_sim.c) both
+ * The flashers (flasher_l4.c, flasher_h5.c) and the native test harness
+ * (test/su_sim.c) all
  * drive this: feed it received bytes, tick it, and give it the handful of
  * operations below. Everything that decides whether the Core can be left
  * unbootable lives here, so the host tests exercise the real logic.
@@ -9,7 +10,8 @@
  * Safety order: page 0 (the vector table) is checked before anything is
  * erased, erased before any other page is touched, held in RAM, and written
  * only after the whole image has been verified. Until then the chip is
- * "empty", which the L4 boots into the ROM bootloader.
+ * "empty", which the L4 boots into the ROM bootloader (the H5 needs BOOT0
+ * for that: docs/serial-update-protocol.md §5).
  */
 
 #ifndef SU_CORE_H
@@ -29,9 +31,10 @@ typedef struct {
     const uint8_t *flash_read;    /* memory-mapped view of flash_base */
 
     int  (*erase_page)(uint32_t page);                       /* 0 = ok */
-    int  (*program)(uint32_t addr, const uint8_t *buf, uint32_t len); /* 0 = ok; len % 8 == 0 */
+    int  (*program)(uint32_t addr, const uint8_t *buf, uint32_t len); /* 0 = ok; len % SU_PROG_UNIT == 0 */
     void (*send)(const char *line, uint32_t len);            /* one reply line */
-    void (*reboot)(void);         /* reset; the chip re-checks page 0 as it boots */
+    void (*reboot)(void);         /* leave the flasher: L4 resets (the chip re-checks page 0
+                                     as it boots), H5 starts the image in place */
 } su_ops_t;
 
 /** Initialise with the platform operations. */

@@ -121,6 +121,8 @@
   #undef  FLASH_SR_ERR_MASK
 
   #define FLASH_SR_BSY        (1UL << 0)
+  #define FLASH_SR_WBNE       (1UL << 1)    /* write buffer waiting for data */
+  #define FLASH_SR_DBNE       (1UL << 3)    /* 16-bit data buffer in use */
   #define FLASH_SR_EOP        (1UL << 16)
   #define FLASH_SR_WRPERR     (1UL << 17)
   #define FLASH_SR_PGSERR     (1UL << 18)
@@ -149,6 +151,15 @@
   #define FLASH_CR_SNB_MASK   (0x7FUL << FLASH_CR_SNB_SHIFT)
   #define FLASH_CR_PNB_SHIFT  FLASH_CR_SNB_SHIFT  /* Alias */
   #define FLASH_CR_PNB_MASK   FLASH_CR_SNB_MASK   /* Alias */
+  #define FLASH_CR_BKSEL      (1UL << 31)   /* erase in physical bank 2 */
+
+  /* RM0481 §7.3.3: two banks of 32 x 8 KB. SNB is the sector within the
+   * bank (0x1F max on the H523, §7.11.11) and BKSEL picks the physical bank,
+   * ignoring SWAP_BANK, so a flat page number 32-63 has to become BKSEL + SNB
+   * (the old code wrote SNB = 32..63 into a 5-bit field). */
+  #define FLASH_SECTORS_PER_BANK  32
+  #define FLASH_OPTSR_CUR     REG32(FLASH_BASE + 0x50UL)
+  #define FLASH_OPTSR_SWAP_BANK (1UL << 31)
 #endif
 
 /* ============================================================
@@ -173,8 +184,14 @@ static inline void ll_flash_lock(void)
 /** Spin until flash is not busy. */
 static inline void ll_flash_wait_bsy(void)
 {
+#if defined(STM32H523xx)
+    /* H5: also the write buffer and the 16-bit data buffer (§7.3.5 steps 2) */
+    while (FLASH_SR & (FLASH_SR_BSY | FLASH_SR_WBNE | FLASH_SR_DBNE))
+        ;
+#else
     while (FLASH_SR & FLASH_SR_BSY)
         ;
+#endif
 }
 
 /** Clear all error flags. */
@@ -203,6 +220,21 @@ static inline int ll_flash_erase_page(uint32_t page)
     MOD_BITS(FLASH_CR, FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_PNB_MASK,
              FLASH_CR_PER | ((page << FLASH_CR_PNB_SHIFT) & FLASH_CR_PNB_MASK));
     SET_BITS(FLASH_CR, FLASH_CR_STRT);
+#elif defined(STM32H523xx)
+    /* RM0481 §7.3.6 "Standard flash sector erase sequence": BKSEL + SER + SNB,
+     * then STRT; the ICACHE is off meanwhile (ll_rcc.h). `page` is the flat
+     * 8 KB page from 0x08000000; with SWAP_BANK set that address range is
+     * physical bank 2. */
+    int ic = ll_icache_disable();
+    uint32_t bank = page / FLASH_SECTORS_PER_BANK;
+    if (FLASH_OPTSR_CUR & FLASH_OPTSR_SWAP_BANK) bank ^= 1UL;
+    FLASH_CR = (bank ? FLASH_CR_BKSEL : 0UL) | FLASH_CR_SER
+             | ((page % FLASH_SECTORS_PER_BANK) << FLASH_CR_SNB_SHIFT);
+    SET_BITS(FLASH_CR, FLASH_CR_START);
+    ll_flash_wait_bsy();
+    CLR_BITS(FLASH_CR, FLASH_CR_SER | FLASH_CR_BKSEL | FLASH_CR_SNB_MASK);
+    if (ic) ll_icache_enable();
+    return (FLASH_SR & FLASH_SR_ERR_MASK) ? -1 : 0;
 #else
     /* Set sector/page erase + number, then start */
     FLASH_CR = FLASH_CR_PER | (page << FLASH_CR_PNB_SHIFT) | FLASH_CR_STRT;
@@ -260,6 +292,9 @@ static inline int ll_flash_program_dword(uint32_t addr, uint32_t word0, uint32_t
  */
 static inline int ll_flash_program_qword(uint32_t addr, const uint32_t w[4])
 {
+#if defined(STM32H523xx)
+    int ic = ll_icache_disable();       /* cacheable writes are ICACHE errors */
+#endif
     ll_flash_wait_bsy();
     ll_flash_clear_errors();
 
@@ -283,6 +318,9 @@ static inline int ll_flash_program_qword(uint32_t addr, const uint32_t w[4])
 
     /* Clear PG */
     CLR_BITS(FLASH_CR, FLASH_CR_PG);
+#if defined(STM32H523xx)
+    if (ic) ll_icache_enable();
+#endif
 
     if (FLASH_SR & FLASH_SR_ERR_MASK)
         return -1;

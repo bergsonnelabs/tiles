@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Host side of tests/hw-usb-robust (Core.ST.L4). Needs python3 + pyserial.
+"""Host side of tests/hw-usb-robust (Core.ST.L4, Core.ST.H5). Needs python3 + pyserial.
 
     python3 host_test.py            # robustness checks (~45 s)
     python3 host_test.py sleep      # sleep + reachability (flash-serial while asleep)
+    TILE=Core.ST.H5 python3 host_test.py --no-reset
+                                    # a board strapped BOOT0-high: a reset lands
+                                    # in the ROM bootloader, so "early" restarts
+                                    # the Core with make flash-serial instead
 
 Robustness checks, in order:
   early   after a reset, the first line a terminal sees is the EARLY line the
@@ -102,9 +106,18 @@ def read_lines(s, until=None, timeout=3.0, quiet=None):
     return lines, None
 
 
+NO_RESET = "--no-reset" in sys.argv
+
+
 def check_early(s, p):
-    send(s, "X")                                    # reset the Core
-    s.close()
+    if NO_RESET:                                    # restart it by reflashing it
+        s.close()
+        r = subprocess.run(["make", "flash-serial"], cwd=HERE, capture_output=True, text=True)
+        if r.returncode != 0:
+            log("  (make flash-serial failed: " + (r.stdout + r.stderr).strip().splitlines()[-1] + ")")
+    else:
+        send(s, "X")                                # reset the Core
+        s.close()
     wait_gone(p.device)
     s, p = open_core()
     lines, _ = read_lines(s, timeout=2.0, quiet=0.8)
@@ -241,9 +254,10 @@ def sleep_mode(secs=60):
 
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "robust"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    mode = args[0] if args else "robust"
     if mode == "sleep":
-        sleep_mode(int(sys.argv[2]) if len(sys.argv) > 2 else 60)
+        sleep_mode(int(args[1]) if len(args) > 1 else 60)
     else:
         robust()
     bad = [n for n, ok, _ in results if not ok]

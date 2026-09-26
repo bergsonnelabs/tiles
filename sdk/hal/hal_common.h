@@ -213,34 +213,44 @@ static inline void hal_nvic_clear_pending(uint32_t irqn)
   #define HAL_IRQ_HASH          61
 
 #elif defined(STM32H523xx)
+  /* RM0481 Rev 4 Table 147 (STM32H523/533xx). Until 2026-09-26 everything
+   * from position 27 on was taken from a shifted table (the H503's): I2C1 at
+   * 55, SPI1 at 51, GPDMA1 at 29, TIM1_UP at 41, and "no TIM6/TIM7". */
+  #define HAL_IRQ_GPDMA1_CH0    27
+  #define HAL_IRQ_GPDMA1_CH1    28
+  #define HAL_IRQ_GPDMA1_CH2    29
+  #define HAL_IRQ_GPDMA1_CH3    30
+  #define HAL_IRQ_GPDMA1_CH4    31
+  #define HAL_IRQ_GPDMA1_CH5    32
+  #define HAL_IRQ_GPDMA1_CH6    33
+  #define HAL_IRQ_GPDMA1_CH7    34
+  #define HAL_IRQ_IWDG          35
+  #define HAL_IRQ_ADC1          37
+  #define HAL_IRQ_TIM1_BRK      41
+  #define HAL_IRQ_TIM1_UP       42
+  #define HAL_IRQ_TIM1_TRG_COM  43
+  #define HAL_IRQ_TIM1_CC       44
+  #define HAL_IRQ_TIM2          45
+  #define HAL_IRQ_TIM3          46
+  #define HAL_IRQ_TIM6          49
+  #define HAL_IRQ_TIM7          50
+  #define HAL_IRQ_I2C1_EV       51
+  #define HAL_IRQ_I2C1_ER       52
+  #define HAL_IRQ_I2C2_EV       53
+  #define HAL_IRQ_I2C2_ER       54
+  #define HAL_IRQ_SPI1          55
+  #define HAL_IRQ_SPI2          56
+  #define HAL_IRQ_SPI3          57
   #define HAL_IRQ_USART1        58
   #define HAL_IRQ_USART2        59
   #define HAL_IRQ_USART3        60
   #define HAL_IRQ_LPUART1       63
-  #define HAL_IRQ_I2C1_EV       55
-  #define HAL_IRQ_I2C1_ER       56
-  #define HAL_IRQ_I2C2_EV       57
-  #define HAL_IRQ_I2C2_ER       58
-  #define HAL_IRQ_SPI1          51
-  #define HAL_IRQ_SPI2          52
-  #define HAL_IRQ_SPI3          53
-  #define HAL_IRQ_TIM1_UP       41
-  #define HAL_IRQ_TIM1_CC       44
-  #define HAL_IRQ_TIM2          45
-  #define HAL_IRQ_TIM3          46
-  /* Note: TIM6 and TIM7 have NO dedicated NVIC interrupt on the STM32H523.
-     Position 54 is reserved and 55 is I2C1_EV.  These basic timers can still
-     be used for DAC triggering and timebase, but cannot generate tick callbacks. */
-  #define HAL_IRQ_ADC1          37
-  #define HAL_IRQ_GPDMA1_CH0    29
-  #define HAL_IRQ_GPDMA1_CH1    30
-  #define HAL_IRQ_GPDMA1_CH2    31
-  #define HAL_IRQ_GPDMA1_CH3    32
-  #define HAL_IRQ_GPDMA1_CH4    33
-  #define HAL_IRQ_GPDMA1_CH5    34
-  #define HAL_IRQ_GPDMA1_CH6    35
-  #define HAL_IRQ_GPDMA1_CH7    36
-  #define HAL_IRQ_USB            74    /* USB_DRD_FS — RM0492 Table, vector 0x0168 */
+  #define HAL_IRQ_USB           74    /* USB FS */
+  #define HAL_IRQ_CRS           75
+  #define HAL_IRQ_I2C3_EV       80
+  #define HAL_IRQ_I2C3_ER       81
+  #define HAL_IRQ_ICACHE        104
+  #define HAL_IRQ_RNG           114
 #endif
 
 /* ============================================================

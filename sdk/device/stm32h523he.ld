@@ -1,9 +1,13 @@
 /* Linker script for STM32H523HE */
 /* 512KB Flash, 272KB SRAM */
 
+/* The top two 8 KB sectors (0x0807C000-0x0807FFFF) are kept out of every
+ * image, as the L4 keeps its top 4 KB: they are the NVM store's place
+ * (core_nvm on the H5 is still to come), and the serial-update flasher
+ * refuses an image that reaches them (SU_NVM_RESERVED_H5). */
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K - 16K
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 272K - 16  /* Last 16 bytes reserved for DFU magic */
 }
 

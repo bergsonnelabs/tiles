@@ -99,6 +99,24 @@ cores/
     └── ...
 ```
 
+**Core.ST.H5 (STM32H523) specifics** (RM0481; fixed and benched 2026-09-26):
+- Clocks: `core_clock_init()` calls `ll_rcc_h5_clock_config()`, which works
+  from any starting state and sets HSIDIV (the HSI resets to /2), the voltage
+  scale, and the flash wait states + WRHIGHFREQ per RM0481 Table 45. "low" is
+  HSI/4 = 16 MHz (USB needs APB2 >= 12 MHz), not CSI. The ICACHE is on;
+  `ll_flash.h` turns it off around every erase/program (`ll_icache_*`).
+- Starts without a reset: the ST ROM's DFU `leave` and the serial-update
+  flasher jump to 0x08000000. The startup code resets VTOR, NVIC, SysTick,
+  MPU and CONTROL first. After a ROM `leave`, GTZC1_TZSC keeps many
+  peripherals (TIM1-8, CRS, ADC, I2C2, ...) secured until the next reset, so
+  their clocks can't be enabled (`hal_dfu_started_by_rom()`). With BOOT0
+  strapped high that is the only way the app runs; with BOOT0 low it starts
+  from a reset and everything is available.
+- No empty-flash check: BOOT0 high always boots the ROM bootloader (the
+  1200-baud touch just resets), BOOT0 low always boots the app (the touch
+  jumps to the ROM from `core_init`, before the clocks). Keep BOOT0
+  reachable: an interrupted flash-serial needs it to recover.
+
 **Starting a new project:** copy the `templates/` folder for your Core rather
 than hand-assembling one. Each is a complete, building project, and the
 USB-capable ones (Core.ST.L4 / L4.2 / H5) come pre-wired in the fleet-standard
@@ -134,6 +152,7 @@ make TILE=Core.ST.W5 PROJECT=my-project V=1 # Verbose build
 make generate                                  # Run coregen only (no compile)
 make flash                                     # Flash via OpenOCD / ST-Link
 make flash-dfu                                 # Flash via USB DFU
+make flash-serial                              # Flash a running Core.ST.L4 / H5 over its CDC port (docs/serial-update-protocol.md)
 make clean                                     # Remove build artefacts
 make distclean                                 # Remove build + coregen output
 make doctor                                    # Check the toolchain, report what's missing
@@ -376,7 +395,7 @@ Enums: `HAL_ADC_RES_6/8/10/12BIT` (all families, plus `14BIT` on H5). Sampling: 
 | L0 (L011)  | 17        | 16      | 3.0 V       |
 | L4 (L422)  | 0         | 17      | 3.0 V       |
 | WBA (WBA55)| 13        | 12      | 3.3 V       |
-| H5 (H523)  | 19        | 16      | 3.3 V       |
+| H5 (H523)  | 17        | 16      | 3.3 V       |
 
 `hal_adc_start_dma` uses DMA1 CH1 (L0/L4) or GPDMA1 CH0 (WBA/H5) in circular mode with HT+TC interrupts for double-buffered processing.
 

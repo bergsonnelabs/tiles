@@ -27,9 +27,8 @@
 #if defined(STM32H523xx)
 
 /* ============================================================
- * USB DRD peripheral base addresses
- *
- * TODO: verify USB_DRD_BASE from RM0492 memory map.
+ * USB DRD peripheral base addresses: USB_FS 0x4001_6000, USB_FS RAM
+ * (USBSRAM) 0x4001_6400-0x4001_6BFF (RM0481 Table 6, non-secure aliases).
  * ============================================================ */
 
 #define USB_DRD_BASE        0x40016000UL
@@ -177,7 +176,7 @@
 
 #define USB_BCDR            REG32(USB_DRD_BASE + 0x58UL)
 
-#define USB_BCDR_DPPU_DPD   (1UL << 15)   /* DP pull-up (device) / pull-down (host) */
+#define USB_BCDR_DPPU_DPD   (1UL << 15)   /* DP pull-up (device) / pull-down (host), §55.6.6 */
 
 /* ============================================================
  * CHEP register helpers
@@ -254,6 +253,18 @@ static inline void ll_usb_drd_chep_set_stat(uint8_t ep, uint32_t stat_tx, uint32
     if (stat_rx & 1) reg ^= (1UL << 12);
     if (stat_rx & 2) reg ^= (1UL << 13);
     USB_CHEPnR(ep) = reg | USB_CHEP_VTRX | USB_CHEP_VTTX;
+}
+
+/** Current STATTX / STATRX (USB_CHEP_STAT_*). The hardware moves VALID to NAK
+ *  when a transfer completes, so these say whether a packet is still pending. */
+static inline uint32_t ll_usb_drd_chep_stat_tx(uint8_t ep)
+{
+    return (USB_CHEPnR(ep) & USB_CHEP_STATTX_MASK) >> 4;
+}
+
+static inline uint32_t ll_usb_drd_chep_stat_rx(uint8_t ep)
+{
+    return (USB_CHEPnR(ep) & USB_CHEP_STATRX_MASK) >> 12;
 }
 
 /**
@@ -405,27 +416,43 @@ static inline void ll_usb_drd_bdt_set_tx_count(uint8_t ep, uint16_t count)
     ll_usb_drd_pma_wr32(bdt_offset, val);
 }
 
-/** Set RX buffer address and allocate size */
+/** Set RX buffer address and allocate size (RM0481 §55.7.3, Table 622:
+ *  BLSIZE = 0 allocates NUM_BLOCK x 2 bytes, BLSIZE = 1 (NUM_BLOCK + 1) x 32
+ *  bytes). This wrote max/32 with BLSIZE = 1, which allocated 96 bytes for a
+ *  64-byte buffer, so a babbling host could overrun into the next buffer. */
 static inline void ll_usb_drd_bdt_set_rx(uint8_t ep, uint16_t pma_addr, uint16_t max_bytes)
 {
     uint32_t bdt_offset = USB_DRD_BDT_ENTRY_SIZE * ep + 4;
     uint32_t alloc;
 
     if (max_bytes <= 62) {
-        /* BLSIZE=0: allocate max_bytes/2 blocks of 2 bytes */
         alloc = (uint32_t)(max_bytes / 2) << 26;
     } else {
-        /* BLSIZE=1: allocate max_bytes/32 blocks of 32 bytes */
-        alloc = ((uint32_t)(max_bytes / 32) << 26) | (1UL << 31);
+        alloc = ((uint32_t)(max_bytes / 32 - 1) << 26) | (1UL << 31);
     }
-    ll_usb_drd_pma_wr32(bdt_offset, alloc | (pma_addr & 0xFFFF));
+    ll_usb_drd_pma_wr32(bdt_offset, alloc | (pma_addr & 0xFFFC));
 }
 
-/** Get the number of bytes received (COUNT_RX [25:16]) */
+/**
+ * Get the number of bytes received (COUNT_RX [25:16]).
+ *
+ * The descriptor is written back a little after VTRX is set: read at once
+ * from a fast interrupt, COUNT_RX is still short. Seen on the bench
+ * (2026-09-26, 248 MHz): 11-byte packets arrived as 7, 19 as 11, the tail of
+ * every command line lost. ST's own H5 driver waits "a few cycles for RX PMA
+ * descriptor to update" (PCD_GET_EP_RX_CNT, PCD_RX_PMA_CNT = 10 loops in
+ * STM32CubeH5 stm32h5xx_hal_pcd.h). This waits longer (~1 us at 250 MHz),
+ * then re-reads until two reads agree.
+ */
 static inline uint16_t ll_usb_drd_bdt_get_rx_count(uint8_t ep)
 {
     uint32_t bdt_offset = USB_DRD_BDT_ENTRY_SIZE * ep + 4;
-    return (uint16_t)((ll_usb_drd_pma_rd32(bdt_offset) >> 16) & 0x3FF);
+    for (volatile uint32_t i = 0; i < 64; i++)
+        ;
+    uint32_t a = ll_usb_drd_pma_rd32(bdt_offset), b;
+    for (int n = 0; n < 8 && (b = ll_usb_drd_pma_rd32(bdt_offset)) != a; n++)
+        a = b;
+    return (uint16_t)((a >> 16) & 0x3FF);
 }
 
 /* ============================================================
@@ -438,14 +465,11 @@ static inline uint16_t ll_usb_drd_bdt_get_rx_count(uint8_t ep)
  */
 static inline void ll_usb_drd_power_on(void)
 {
-    /* RM0492 §40.5.2: Power-on sequence
-     * 1. Clear PDWN to enable analog transceiver, keep USBRST asserted
-     * 2. Wait tSTARTUP for transceiver to stabilize
-     * 3. Clear USBRST to release reset
-     * 4. Ensure device mode (HOST=0)
-     * 5. Clear pending interrupts */
+    /* RM0481 §55.5.2: clear PDWN (CNTR resets to PDWN | USBRST, §55.6.1),
+     * wait tSTARTUP (1 us max, DS14540 Table 112), release USBRST,
+     * clear ISTR. ~2000 loop iterations is >= 8 us at 250 MHz. */
     USB_CNTR = USB_CNTR_USBRST;        /* PDWN=0, USBRST=1 */
-    for (volatile int i = 0; i < 200; i++)  /* Wait tSTARTUP (~1µs) */
+    for (volatile int i = 0; i < 2000; i++)
         ;
     USB_CNTR = 0;                       /* USBRST=0, HOST=0 */
     USB_ISTR = 0;
@@ -476,19 +500,21 @@ static inline void ll_usb_drd_set_address(uint8_t addr)
 }
 
 /**
- * Configure an endpoint: type and address.
- * Clears data toggles and sets STAT to NAK for both directions.
+ * Configure an endpoint: type and address, EPKIND clear, both data toggles
+ * DATA0 and both directions NAK, in one write; stale VTRX/VTTX are cleared
+ * (written 0) and the host-mode upper half is written 0. A USB reset zeroes
+ * the toggles, SET_CONFIGURATION without one does not, and RM0481 §55.6.7
+ * makes initializing DTOG mandatory for non-control endpoints. (This used to
+ * leave the toggles as they were: a re-configure, or an app started after
+ * the ROM bootloader, could lose the first packet as a "duplicate".)
  */
 static inline void ll_usb_drd_chep_config(uint8_t ep, uint32_t type, uint8_t addr)
 {
-    /* Read current register, preserve REG_MASK bits, set type + address.
-     * Write VTRX + VTTX as 1 to preserve them. */
-    uint32_t reg = USB_CHEPnR(ep) & USB_CHEP_REG_MASK;
-    reg = (reg & ~(USB_CHEP_UTYPE_MASK | USB_CHEP_EA_MASK)) | type | (addr & USB_CHEP_EA_MASK);
-    USB_CHEPnR(ep) = reg | USB_CHEP_VTRX | USB_CHEP_VTTX;
-
-    /* Set both directions to NAK initially */
-    ll_usb_drd_chep_set_stat(ep, USB_CHEP_STAT_NAK, USB_CHEP_STAT_NAK);
+    uint32_t reg = USB_CHEPnR(ep);
+    USB_CHEPnR(ep) = type | (addr & USB_CHEP_EA_MASK)
+                   | (reg & (USB_CHEP_DTOGRX | USB_CHEP_DTOGTX))
+                   | ((reg ^ (USB_CHEP_STAT_NAK << 12)) & USB_CHEP_STATRX_MASK)
+                   | ((reg ^ (USB_CHEP_STAT_NAK << 4)) & USB_CHEP_STATTX_MASK);
 }
 
 #endif /* STM32H523xx */

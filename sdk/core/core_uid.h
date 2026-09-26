@@ -57,6 +57,26 @@
 static inline void core_uid_read(uint32_t out[3])
 {
     const volatile uint32_t *uid = (const volatile uint32_t *)CORE_UID_BASE;
+#if defined(STM32H523xx)
+    /* The H5's UID is in the flash's read-only area (RM0481 §7.3.9: 16/32-bit
+     * reads only, parsed from 137-bit ECC words). That area is in the code
+     * region the ICACHE caches (cacheability is the MPU's call, RM0481
+     * §7.6.12, and the MPU is off), and a read of it through the ICACHE is a
+     * precise bus fault: seen on the bench 2026-09-26 at 0x08FFF80C (BFAR).
+     * So read it with the ICACHE off. ICACHE_CR (0x40030400) bit 0 = EN; clearing
+     * it invalidates, and re-enabling waits for that to end (ICACHE_SR.BUSYF). */
+    volatile uint32_t *icr = (volatile uint32_t *)0x40030400UL;
+    uint32_t ic = *icr & 1UL;
+    if (ic) *icr &= ~1UL;
+    out[0] = uid[0];
+    out[1] = uid[1];
+    out[2] = uid[2];
+    if (ic) {
+        for (uint32_t t = 100000UL; (*(volatile uint32_t *)0x40030404UL & 1UL) && t; t--) { }
+        *icr |= 1UL;
+    }
+    return;
+#endif
     out[0] = uid[0];
     out[1] = uid[1];
 #if defined(STM32L011xx)

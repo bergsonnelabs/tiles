@@ -93,9 +93,10 @@ static uint32_t _tim_irq(TIM_TypeDef *instance)
     if (instance == TIM1)  return HAL_IRQ_TIM1_UP;
     if (instance == TIM2)  return HAL_IRQ_TIM2;
     if (instance == TIM3)  return HAL_IRQ_TIM3;
-    /* TIM6/TIM7 have no NVIC interrupt on H523 — trigger-only, cannot
-       generate tick callbacks.  _tim_irq returns 0 → hal_timer_tick_init
-       will fail gracefully. */
+    /* TIM6/TIM7 have their own vectors, 49/50 (RM0481 Table 147); an earlier
+     * shifted table said they had none. */
+    if (instance == TIM6)  return HAL_IRQ_TIM6;
+    if (instance == TIM7)  return HAL_IRQ_TIM7;
 #endif
     return 0;
 }
@@ -165,6 +166,16 @@ void TIM17_IRQHandler(void)
 void TIM1_UP_IRQHandler(void)
 {
     _tim_isr(_tim_handles[0]);
+}
+
+void TIM6_IRQHandler(void)
+{
+    _tim_isr(_tim_handles[3]);
+}
+
+void TIM7_IRQHandler(void)
+{
+    _tim_isr(_tim_handles[4]);
 }
 #endif
 
