@@ -1668,7 +1668,7 @@ def main():
             "definition": ROOT / "definitions/Drive-A-2-a.json",
             "prefix": "tile_drive_a_2",
             "init": "tile_drive_a_2_init",
-            "version": "3.2.0",
+            "version": "3.3.0",
         },
         {
             "path": ROOT / "drivers/tile_drive_p.h",
