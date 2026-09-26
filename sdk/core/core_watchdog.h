@@ -69,35 +69,39 @@ extern volatile uint32_t _core_watchdog_timeout_ms;
  */
 static inline void core_watchdog_start(uint32_t timeout_ms)
 {
-    /* LSI = LL_LSI_HZ (32 kHz; 37 kHz on the L0 — it used to assume 32 kHz
-       everywhere, so the L0's 5 s watchdog fired at ~4.3 s). Pick the
-       smallest prescaler whose 12-bit reload (1..4096 ticks) fits.
-       tick_ms = psc * 1000 / LSI  →  reload = timeout_ms * (LSI/1000) / psc. */
+    /* LSI = ll_lsi_hz(): 32 kHz nominal; on the L0 measured once at the
+       first call (it is untrimmed, 26-56 kHz), so a 5 s timeout is 5 s rather
+       than anything from 3.3 to 7.1 s. Pick the smallest prescaler whose
+       12-bit reload (1..4096 ticks) fits.
+       tick_ms = psc * 1000 / LSI  →  reload = timeout_ms * LSI / (psc * 1000).
+       In Hz, not kHz: a measured 36.99 kHz as "36" would be 2.7 % short. */
     static const uint32_t psc_vals[] = { 4, 8, 16, 32, 64, 128, 256 };
     static const uint32_t psc_regs[] = {
         LL_IWDG_PSC_4, LL_IWDG_PSC_8, LL_IWDG_PSC_16, LL_IWDG_PSC_32,
         LL_IWDG_PSC_64, LL_IWDG_PSC_128, LL_IWDG_PSC_256
     };
-    const uint32_t lsi_khz = LL_LSI_HZ / 1000UL;
+    const uint32_t lsi_hz = ll_lsi_hz();
 
-    if (timeout_ms > 100000UL) timeout_ms = 100000UL;   /* keeps the product in range */
+    /* The longest the hardware can do is 4096 x 256 ticks (~40 s at the L0's
+     * slowest LSI), and 60 s x 70 kHz still fits in 32 bits. */
+    if (timeout_ms > 60000UL) timeout_ms = 60000UL;
 
     for (int i = 0; i < 7; i++) {
         /* (The earlier form divided by an extra 1000, making every timeout
          *  ~1000x too short.) */
-        uint32_t reload = (timeout_ms * lsi_khz) / psc_vals[i];
+        uint32_t reload = (timeout_ms * lsi_hz) / (psc_vals[i] * 1000UL);
         if (reload == 0) reload = 1;
         if (reload <= 4096) {
             ll_iwdg_init(psc_regs[i], reload - 1);
-            _core_watchdog_timeout_ms = (reload * psc_vals[i]) / lsi_khz;
+            _core_watchdog_timeout_ms = (reload * psc_vals[i] * 1000UL) / lsi_hz;
             if (_core_watchdog_timeout_ms == 0) _core_watchdog_timeout_ms = 1;
             return;
         }
     }
     /* Fallback: max timeout (4096 x 256 LSI ticks: ~32.8 s at 32 kHz,
-     * ~28.3 s on the L0) */
+     * ~28.3 s at the L0's nominal 37 kHz) */
     ll_iwdg_init(LL_IWDG_PSC_256, 4095);
-    _core_watchdog_timeout_ms = (4096UL * 256UL) / lsi_khz;
+    _core_watchdog_timeout_ms = (4096UL * 256UL * 1000UL) / lsi_hz;
 }
 
 /** Returns 1 if this firmware has started the watchdog (core_watchdog_start). */

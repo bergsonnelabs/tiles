@@ -16,11 +16,13 @@
  *       are TAMP_BKPxR at TAMP + 0x100. The L422 is NOT the L43x layout: RM0394
  *       §37 (the older RTC) applies to L43x..L46x only.
  *
- * RTC is clocked from LSE (32.768kHz crystal) or LSI (LL_LSI_HZ, ll_common.h).
- * The async/sync prescalers divide the clock to get a 1Hz tick:
+ * RTC is clocked from LSE (32.768kHz crystal) or LSI (ll_lsi_hz(), ll_common.h:
+ * nominal, or measured on the L0). The async/sync prescalers divide the clock
+ * to get a 1Hz tick:
  *   LSE: PREDIV_A=127, PREDIV_S=255 → 32768/128/256 = 1Hz
- *   LSI: PREDIV_A=127, PREDIV_S=LL_LSI_HZ/128-1 (249 at 32 kHz, 288 on the
- *        37 kHz L0) → ~1Hz
+ *   LSI: PREDIV_A=127, PREDIV_S=round(LSI/128)-1 (249 at 32 kHz; 288 at the
+ *        L0's nominal 37 kHz, 202-436 across its 26-56 kHz band) → 1Hz to
+ *        within half a PREDIV_S step (±0.17 % at 37 kHz)
  */
 
 #ifndef LL_RTC_H
@@ -190,7 +192,8 @@ static inline int ll_rcc_lse_ready(void)
 }
 
 /**
- * Enable LSI (internal RC, LL_LSI_HZ nominal). On the WBA55 this is LSI1.
+ * Enable LSI (internal RC, LL_LSI_HZ nominal; see ll_lsi_hz()). On the WBA55
+ * this is LSI1.
  */
 static inline void ll_rcc_lsi_enable(void)
 {
@@ -388,15 +391,17 @@ static inline void ll_rtc_resync(void)
     ll_rtc_lock();
 }
 
-/** Synchronous prescaler (PREDIV_S) that gives a 1 Hz ck_spre from `use_lse`. */
+/** Synchronous prescaler (PREDIV_S) that gives a 1 Hz ck_spre from `use_lse`.
+ *  LSI: the nearest step to ll_lsi_hz() / 128 (the nominal 32 kHz divides
+ *  exactly, so that is unchanged: 249). */
 static inline uint32_t ll_rtc_prediv_s(int use_lse)
 {
-    return use_lse ? 255UL : (LL_LSI_HZ / 128UL) - 1UL;
+    return use_lse ? 255UL : ((ll_lsi_hz() + 64UL) / 128UL) - 1UL;
 }
 
 /**
  * Initialize the RTC with LSE or LSI.
- *   use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (LL_LSI_HZ)
+ *   use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (ll_lsi_hz())
  *   Core.ST.L0 has no LSE: it always uses LSI.
  *
  * Re-enters init mode, which restarts the prescaler; prefer ll_rtc_ensure()
@@ -558,16 +563,27 @@ static inline void ll_rtc_ensure(void)
     }
     if (use_lse >= 0 && ll_rcc_rtc_enabled()) {
         ll_rtc_bus_clk_enable();
-        if (RTC_PRER == ((127UL << 16) | ll_rtc_prediv_s(use_lse)))
+        uint32_t want = ll_rtc_prediv_s(use_lse);
+        uint32_t prer = RTC_PRER;
+#if defined(STM32L011xx)
+        /* The L0's PREDIV_S comes from a measured LSI, which can land a step
+         * either side from one boot to the next: keep a running RTC within one
+         * step (±0.35 %) rather than restart its prescaler every boot. */
+        uint32_t have = prer & 0x7FFFUL;
+        if ((prer >> 16) == 127UL && have + 1UL >= want && have <= want + 1UL)
+            return;
+#else
+        if (prer == ((127UL << 16) | want))
             return;                         /* already running at 1 Hz */
+#endif
     }
     ll_rtc_init(use_lse > 0 ? 1 : 0);
 }
 
-/** RTCCLK frequency in Hz for the selected source (LSE 32768, else LL_LSI_HZ). */
+/** RTCCLK frequency in Hz for the selected source (LSE 32768, else ll_lsi_hz()). */
 static inline uint32_t ll_rtc_clk_hz(void)
 {
-    return (ll_rcc_rtc_get_source() == 1) ? 32768UL : LL_LSI_HZ;
+    return (ll_rcc_rtc_get_source() == 1) ? 32768UL : ll_lsi_hz();
 }
 
 /* ============================================================

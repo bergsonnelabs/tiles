@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@4b95d38",
+  "source": "tiles@8f1266b",
   "category": "rtc",
   "label": "Core.RTC",
   "icon": "◴",
@@ -237,7 +237,7 @@
       "name": "ll_rtc_init",
       "signature": "ll_rtc_init(int use_lse)",
       "returns": "void",
-      "brief": "Initialize the RTC with LSE or LSI. use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (LL_LSI_HZ) Core.ST.L0 has no LSE: it always uses LSI. Re-enters init mode, which restarts the prescaler; prefer ll_rtc_ensure() when all you need is a running RTC. Prerequisites: - PWR clock enabled - Backup domain access enabled",
+      "brief": "Initialize the RTC with LSE or LSI. use_lse: 1 = use LSE (32.768kHz crystal), 0 = use LSI (ll_lsi_hz()) Core.ST.L0 has no LSE: it always uses LSI. Re-enters init mode, which restarts the prescaler; prefer ll_rtc_ensure() when all you need is a running RTC. Prerequisites: - PWR clock enabled - Backup domain access enabled",
       "params": [
         {
           "name": "use_lse",
