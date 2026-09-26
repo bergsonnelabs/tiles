@@ -1,0 +1,660 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@cd2d6a4",
+  "tile": "Sense.M.3G",
+  "palette": {
+    "label": "Sense.M.3G",
+    "icon": "🧭"
+  },
+  "driver": {
+    "prefix": "tile_sense_m_3g",
+    "header": "tile_sense_m_3g.h",
+    "version": "1.0.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_m_3g_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "read"
+      ],
+      "symbol": "tile_sense_m_3g_read",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read one sample and apply the full compensation chain.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_sense_m_3g_process",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Poll for a new sample, then read and dispatch it.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_data"
+      ],
+      "symbol": "tile_sense_m_3g_on_data",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Register or change the new-sample callback.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?sense_m_3g_data_cb_t",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "type": "?void *",
+          "description": "User context passed to the callback"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_x_nt"
+      ],
+      "symbol": "tile_sense_m_3g_get_x_nt",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Compensated X field from the last read, in nanotesla.",
+      "params": [],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_y_nt"
+      ],
+      "symbol": "tile_sense_m_3g_get_y_nt",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Compensated Y field from the last read, in nanotesla.",
+      "params": [],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_z_nt"
+      ],
+      "symbol": "tile_sense_m_3g_get_z_nt",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Compensated Z field from the last read, in nanotesla.",
+      "params": [],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_temperature_mc"
+      ],
+      "symbol": "tile_sense_m_3g_get_temperature_mc",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Die temperature from the last read, in milli-degrees Celsius.",
+      "params": [],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_magnitude_nt"
+      ],
+      "symbol": "tile_sense_m_3g_get_magnitude_nt",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Field magnitude of the last sample, in nanotesla.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "data_ready"
+      ],
+      "symbol": "tile_sense_m_3g_data_ready",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Check whether the device has a new sample waiting.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_sensortime"
+      ],
+      "symbol": "tile_sense_m_3g_get_sensortime",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read the 24-bit sensor-time counter.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_mode"
+      ],
+      "symbol": "tile_sense_m_3g_set_mode",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Set the power mode.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Target mode (sense_m_3g_mode_t)",
+          "choices": [
+            {
+              "name": "SENSE_M_3G_MODE_SUSPEND",
+              "value": 0,
+              "label": "Suspend: no conversions, ~1.8 uA, settings kept"
+            },
+            {
+              "name": "SENSE_M_3G_MODE_NORMAL",
+              "value": 1,
+              "label": "Normal: free-running at the configured ODR"
+            },
+            {
+              "name": "SENSE_M_3G_MODE_FORCED",
+              "value": 3,
+              "label": "One conversion (full CRST recharge), then suspend"
+            },
+            {
+              "name": "SENSE_M_3G_MODE_FORCED_FAST",
+              "value": 4,
+              "label": "One conversion (fast CRST recharge; ODR 25 Hz or faster), then suspend"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "trigger_measurement"
+      ],
+      "symbol": "tile_sense_m_3g_trigger_measurement",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Trigger a single forced-mode conversion and wait for it.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_m_3g_sleep",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Put the device in suspend mode (lowest power, settings kept).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_m_3g_wake",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Return the device to normal (free-running) mode.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_m_3g_reset",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Soft-reset the device and re-run the full init sequence.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "magnetic_reset"
+      ],
+      "symbol": "tile_sense_m_3g_magnetic_reset",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Run a magnetic reset (bit reset, then flip-gain reset).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_odr_averaging"
+      ],
+      "symbol": "tile_sense_m_3g_set_odr_averaging",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Set output data rate and averaging together.",
+      "params": [
+        {
+          "name": "odr",
+          "type": "int",
+          "description": "Output data rate (sense_m_3g_odr_t)",
+          "choices": [
+            {
+              "name": "SENSE_M_3G_ODR_400HZ",
+              "value": 2,
+              "label": "400 Hz (no averaging only)",
+              "quantity": 400
+            },
+            {
+              "name": "SENSE_M_3G_ODR_200HZ",
+              "value": 3,
+              "label": "200 Hz (averaging up to 2x)",
+              "quantity": 200
+            },
+            {
+              "name": "SENSE_M_3G_ODR_100HZ",
+              "value": 4,
+              "label": "100 Hz (averaging up to 4x)",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_M_3G_ODR_50HZ",
+              "value": 5,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_M_3G_ODR_25HZ",
+              "value": 6,
+              "label": "25 Hz (driver default)",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_M_3G_ODR_12_5HZ",
+              "value": 7,
+              "label": "12.5 Hz",
+              "quantity": 12.5
+            },
+            {
+              "name": "SENSE_M_3G_ODR_6_25HZ",
+              "value": 8,
+              "label": "6.25 Hz",
+              "quantity": 6.25
+            },
+            {
+              "name": "SENSE_M_3G_ODR_3_125HZ",
+              "value": 9,
+              "label": "3.125 Hz",
+              "quantity": 3.125
+            },
+            {
+              "name": "SENSE_M_3G_ODR_1_5625HZ",
+              "value": 10,
+              "label": "1.5625 Hz",
+              "quantity": 1.5625
+            }
+          ]
+        },
+        {
+          "name": "averaging",
+          "type": "int",
+          "description": "Averaging (sense_m_3g_avg_t)",
+          "choices": [
+            {
+              "name": "SENSE_M_3G_AVG_NONE",
+              "value": 0,
+              "label": "1 sample (low power)"
+            },
+            {
+              "name": "SENSE_M_3G_AVG_2",
+              "value": 1,
+              "label": "2 samples (regular power)"
+            },
+            {
+              "name": "SENSE_M_3G_AVG_4",
+              "value": 2,
+              "label": "4 samples (low noise, driver default)"
+            },
+            {
+              "name": "SENSE_M_3G_AVG_8",
+              "value": 3,
+              "label": "8 samples (ultra low noise, 50 Hz or slower)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Output data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 6
+        },
+        {
+          "param": "averaging",
+          "label": "Averaging",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 2
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_axes"
+      ],
+      "symbol": "tile_sense_m_3g_set_axes",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Enable or disable individual measurement axes.",
+      "params": [
+        {
+          "name": "mask",
+          "type": "int",
+          "range": [
+            0,
+            7
+          ],
+          "description": "OR of BMM350_EN_X (1) / _Y (2) / _Z (4)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "configure_interrupt"
+      ],
+      "symbol": "tile_sense_m_3g_configure_interrupt",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Configure the data-ready interrupt on the INT pin.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 to drive the INT pin, 0 to leave it idle"
+        },
+        {
+          "name": "active_high",
+          "type": "int",
+          "description": "1 for active-high, 0 for active-low"
+        },
+        {
+          "name": "push_pull",
+          "type": "int",
+          "description": "1 for push-pull, 0 for open-drain (needs a pull-up)"
+        },
+        {
+          "name": "latched",
+          "type": "int",
+          "description": "1 to latch until INT_STATUS is read, 0 for a pulse"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_pad_drive"
+      ],
+      "symbol": "tile_sense_m_3g_set_pad_drive",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Set the INT/SDA/SCL pad drive strength (0-7, weakest to strongest).",
+      "params": [
+        {
+          "name": "drive",
+          "type": "int",
+          "range": [
+            0,
+            7
+          ],
+          "description": "Drive strength (reset value 7)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_i2c_watchdog"
+      ],
+      "symbol": "tile_sense_m_3g_set_i2c_watchdog",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Enable or disable the device's I2C watchdog.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 to enable, 0 to disable"
+        },
+        {
+          "name": "long_wdt",
+          "type": "int",
+          "description": "1 for the ~40 ms timeout, 0 for ~1.28 ms"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_sensortime_always_on"
+      ],
+      "symbol": "tile_sense_m_3g_set_sensortime_always_on",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Keep the sensor-time counter running outside normal mode.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 to keep counting in suspend and forced mode"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_error"
+      ],
+      "symbol": "tile_sense_m_3g_get_error",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read the device's error register.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_pmu_status"
+      ],
+      "symbol": "tile_sense_m_3g_get_pmu_status",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read the PMU command status register.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_otp_word"
+      ],
+      "symbol": "tile_sense_m_3g_get_otp_word",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read one of the 32 OTP trim words cached at init.",
+      "params": [
+        {
+          "name": "word",
+          "type": "int",
+          "range": [
+            0,
+            31
+          ],
+          "description": "Word index"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_raw"
+      ],
+      "symbol": "tile_sense_m_3g_get_raw",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read the uncompensated 21-bit signed counts for one axis.",
+      "params": [
+        {
+          "name": "axis",
+          "type": "int",
+          "range": [
+            0,
+            3
+          ],
+          "description": "0 = X, 1 = Y, 2 = Z, 3 = temperature"
+        }
+      ],
+      "returns": "int32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_reg"
+      ],
+      "symbol": "tile_sense_m_3g_read_reg",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Read a raw 8-bit register, dummy bytes handled.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            127
+          ],
+          "description": "Register address"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_reg"
+      ],
+      "symbol": "tile_sense_m_3g_write_reg",
+      "header": "tile_sense_m_3g.h",
+      "category": "tile",
+      "description": "Write a raw 8-bit register.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            127
+          ],
+          "description": "Register address"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Value to write"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x14",
+        "is_default": true
+      }
+    ]
+  }
+}
