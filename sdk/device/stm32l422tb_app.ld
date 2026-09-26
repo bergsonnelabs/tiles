@@ -1,15 +1,26 @@
 /* Linker script for STM32L422TB — Application with DFU bootloader
  *
  * Bootloader occupies first 8KB (0x08000000–0x08001FFF).
- * Application starts at 0x08002000 with 120KB available.
+ * Application starts at 0x08002000 with 116KB available (the top 4KB is
+ * core_nvm, below).
  *
  * Use this linker script with BOOTLOADER=1 in the build. */
 
+/* The last two 2 KB pages, 0x0801F000-0x0801FFFF, are core_nvm's flash
+ * emulation (sdk/core/core_nvm.h). FLASH ends below them so no image can
+ * overlap them: they survive reflashing, since flash-serial, DFU and SWD
+ * tools erase only the pages an image covers. */
+
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 120K
+    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 116K   /* 120K - core_nvm */
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 40K - 16
 }
+
+/* core_nvm checks this at run time: a custom linker script without the
+ * reservation fails with CORE_NVM_ERR_LAYOUT instead of erasing code. */
+__core_nvm_start = 0x0801F000;
+__core_nvm_end   = 0x08020000;
 
 /* Entry point */
 ENTRY(Reset_Handler)

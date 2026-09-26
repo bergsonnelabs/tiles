@@ -62,12 +62,12 @@ OLD_FLASH = OLD + b"\xff" * (FLASH - len(OLD))
 
 
 class Sim:
-    def __init__(self, sim_path, *extra):
+    def __init__(self, sim_path, *extra, flash=OLD_FLASH):
         self.dir = tempfile.mkdtemp(prefix="su_sim_")
         self.fin = os.path.join(self.dir, "in.bin")
         self.fout = os.path.join(self.dir, "out.bin")
         with open(self.fin, "wb") as f:
-            f.write(OLD_FLASH)
+            f.write(flash)
         self.proc = subprocess.Popen([sim_path, self.fin, self.fout, *extra],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.link = ProcessLink(self.proc)
@@ -124,6 +124,38 @@ def run(sim_path):
     code, fl = s.finish()
     check("happy path: new image written, Core rebooted", code == 0 and boots(fl) == "new", f"exit {code}, boots {boots(fl)}")
     check("happy path: pages past the image left alone", fl[len(NEW) + PAGE:] == OLD_FLASH[len(NEW) + PAGE:])
+
+    # core_nvm keeps its data in the top 4 KB (two pages): an update never
+    # reaches it. Largest image that fits, over flash whose NVM pages hold data.
+    nvm = bytes(random.Random(7).getrandbits(8) for _ in range(su.NVM_RESERVED))
+    top = FLASH - su.NVM_RESERVED
+    with_nvm = OLD_FLASH[:top] + nvm
+    big = image(top, seed=3)
+    s = Sim(sim_path, flash=with_nvm)
+    su.update(s.link, big, log=quiet)
+    code, fl = s.finish()
+    check("largest image (flash - 4 KB): written, core_nvm pages untouched",
+          code == 0 and fl[:top] == big and fl[top:] == nvm, f"exit {code}")
+
+    s = Sim(sim_path, flash=with_nvm)
+    try:
+        su.update(s.link, image(top + 8, seed=3), log=quiet)
+        refused = False
+    except su.UpdateError as e:
+        refused = "core_nvm" in str(e)
+    code, fl = s.finish()
+    check("image reaching the core_nvm pages: host refuses, flash untouched",
+          refused and fl == with_nvm)
+
+    s = Sim(sim_path, flash=with_nvm)
+    s.link.write(su.frame(su.T_QUERY))
+    su.reply(s.link, 1)
+    over = image(top + 8, seed=3)
+    s.link.write(su.frame(su.T_BEGIN, len(over), zlib.crc32(over), struct.pack("<I", 0x464)))
+    r = su.reply(s.link, 1)
+    code, fl = s.finish()
+    check("image reaching the core_nvm pages: flasher says SU ERR 3, flash untouched",
+          r[:3] == ["SU", "ERR", "3"] and fl == with_nvm, str(r))
 
     s = Sim(sim_path)
     try:

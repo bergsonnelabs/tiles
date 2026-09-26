@@ -36,6 +36,7 @@
 #include "svc_ctl.h"
 #include "ll_sys.h"
 #include "ll_sys_if.h"
+#include "ble_flash.h"
 #include "bpka.h"
 #include "hw.h"
 
@@ -322,6 +323,11 @@ void ble_app_init(void)
     /* 4. Initialize timer server */
     UTIL_TIMER_Init();
 
+    /* 4b. Flash manager (ble_flash.c): from here on core_nvm and the bond
+     *     store erase and program flash through it, in radio-safe windows
+     *     once the stack is up (ble_flash_ll_started, below). */
+    ble_flash_init();
+
     /* 5. Initialize link layer controller
      *    ll_sys_ble_cntrl_init calls ll_sys_bg_process_init and
      *    ll_sys_config_params internally. Pass HostStack_Process as the
@@ -457,6 +463,9 @@ void ble_app_init(void)
 
     /* Init application GATT services (registered via ble_app_register_services_cb) */
     if (_register_services_cb) _register_services_cb();
+
+    /* The link layer runs: flash access now waits for time windows. */
+    ble_flash_ll_started();
 
     ble_init_done = 1;
 }

@@ -623,6 +623,7 @@ void su_main(void)
 
     ops.flash_base = SU_FLASH_START;
     ops.flash_size = (uint32_t)FLASHSIZE_KB * 1024u;
+    ops.image_limit = ops.flash_size - SU_NVM_RESERVED;
     ops.page_size  = FLASH_PAGE_SIZE;
     ops.dev_id     = DBGMCU_IDCODE & 0xFFFu;
     ops.sram_start = SU_SRAM_START;

@@ -163,7 +163,10 @@ static void on_query(void)
 static void on_begin(uint32_t size, uint32_t crc, const uint8_t *p, uint32_t len)
 {
     if (len != 4 || (le32(p) & 0xFFFu) != O->dev_id) { reply_err(SU_ERR_DEVICE, "device"); return; }
-    if (size < 8u || size > O->flash_size)            { reply_err(SU_ERR_SIZE, "size"); return; }
+    /* image_limit, not flash_size: the pages above it hold core_nvm's data,
+     * which an update must leave alone (an image is erased page by page, so
+     * one that ends below them never touches them). */
+    if (size < 8u || size > O->image_limit)           { reply_err(SU_ERR_SIZE, "size"); return; }
     begun      = 1;
     img_size   = size;
     img_crc    = crc;

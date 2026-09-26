@@ -369,7 +369,7 @@
           "id": "nvm.flash_emu",
           "layer": "Core",
           "name": "flash emulation",
-          "desc": "Emulated byte-level NVM on Cores without real EEPROM, including the wear levelling that needs. Not implemented: core_nvm_write returns -1 on those parts."
+          "desc": "Emulated byte-level NVM on Cores without real EEPROM (core_nvm, 1 KB): an append log in two flash pages, compacted when full. Writes are atomic across power loss and the data survives reflashing. Where it isn't implemented, core_nvm_write returns -1."
         },
         {
           "id": "nvm.otp",

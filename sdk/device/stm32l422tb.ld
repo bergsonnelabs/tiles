@@ -1,11 +1,21 @@
 /* Linker script for STM32L422TB */
 /* 128KB Flash, 40KB SRAM */
 
+/* The last two 2 KB pages, 0x0801F000-0x0801FFFF, are core_nvm's flash
+ * emulation (sdk/core/core_nvm.h). FLASH ends below them so no image can
+ * overlap them: they survive reflashing, since flash-serial, DFU and SWD
+ * tools erase only the pages an image covers. */
+
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 128K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 124K   /* 128K - core_nvm */
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 40K
 }
+
+/* core_nvm checks this at run time: a custom linker script without the
+ * reservation fails with CORE_NVM_ERR_LAYOUT instead of erasing code. */
+__core_nvm_start = 0x0801F000;
+__core_nvm_end   = 0x08020000;
 
 /* Entry point */
 ENTRY(Reset_Handler)

@@ -96,6 +96,7 @@ int main(int argc, char **argv)
     static const su_ops_t ops = {
         .flash_base = SIM_FLASH_BASE,
         .flash_size = SIM_FLASH_SIZE,
+        .image_limit = SIM_FLASH_SIZE - SU_NVM_RESERVED,
         .page_size  = SIM_PAGE,
         .dev_id     = 0x464,
         .sram_start = 0x20000000u,

@@ -52,13 +52,18 @@
  */
 #define SU_ERR_LENGTH           1u    /* DATA chunk empty, too long, or short mid-image */
 #define SU_ERR_DEVICE           2u    /* DEV_ID in BEGIN is not this chip */
-#define SU_ERR_SIZE             3u    /* image empty or larger than flash */
+#define SU_ERR_SIZE             3u    /* image empty, or reaches the core_nvm pages */
 #define SU_ERR_VECTORS          4u    /* image's SP / reset vector implausible */
 #define SU_ERR_FLASH            5u    /* erase / program / verify failed */
 #define SU_ERR_ORDER            6u    /* not the next expected offset */
 #define SU_ERR_CRC              7u    /* chunk CRC mismatch (resend it) */
 #define SU_ERR_IMAGE_CRC        8u    /* whole-image CRC mismatch at END */
 #define SU_ERR_STATE            9u    /* frame not valid in this state */
+
+/* The top of flash kept for core_nvm (its last two 2 KB pages on the L4,
+ * sdk/core/core_nvm.h). The flasher refuses an image that would reach it
+ * (SU_ERR_SIZE) and so never erases it. */
+#define SU_NVM_RESERVED         4096u
 
 /* Without a BEGIN for this long, and with flash untouched, the flasher resets
  * back into the old app. Once page 0 is erased it never gives up on its own. */

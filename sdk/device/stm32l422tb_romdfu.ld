@@ -1,17 +1,28 @@
 /* Linker script for STM32L422TB — ROM DFU mode
  *
- * Application at 0x08000000 with full 128KB flash (no custom bootloader).
+ * Application at 0x08000000, up to 124KB (no custom bootloader; the top 4KB
+ * is core_nvm, below).
  * DFU updates use the factory ROM bootloader in system memory.
  *
  * The last 16 bytes of SRAM are reserved for the DFU magic value
  * (noinit region at 0x20009FF0). The startup code does not zero this
  * area, so it survives system reset for bootloader signaling. */
 
+/* The last two 2 KB pages, 0x0801F000-0x0801FFFF, are core_nvm's flash
+ * emulation (sdk/core/core_nvm.h). FLASH ends below them so no image can
+ * overlap them: they survive reflashing, since flash-serial, DFU and SWD
+ * tools erase only the pages an image covers. */
+
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 128K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 124K   /* 128K - core_nvm */
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 40K - 16
 }
+
+/* core_nvm checks this at run time: a custom linker script without the
+ * reservation fails with CORE_NVM_ERR_LAYOUT instead of erasing code. */
+__core_nvm_start = 0x0801F000;
+__core_nvm_end   = 0x08020000;
 
 /* Entry point */
 ENTRY(Reset_Handler)

@@ -9,6 +9,9 @@
 #define LOG_ERROR_APP(...)    ((void)0)
 #define LOG_WARNING_APP(...)  ((void)0)
 #define LOG_DEBUG_APP(...)    ((void)0)
+#define LOG_INFO_SYSTEM(...)    ((void)0)   /* flash_manager.c */
+#define LOG_ERROR_SYSTEM(...)   ((void)0)
+#define LOG_DEBUG_SYSTEM(...)   ((void)0)
 
 /* Log regions and levels */
 typedef enum {
