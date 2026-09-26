@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@3af6291",
+  "source": "tiles@f70bca2",
   "file": "tile_drive_p.h",
   "brief": "Piezoelectric haptic driver for the Drive.P tile (rev a).",
-  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential, up to 820 nF capacitive load\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE FIFO IS FILLED, NOT DRAINED — the waveform\n    keeps playing after it returns. Account for that in teardown / discharge\n    timing (don't switch to SENSE or read status assuming playback is done).\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
+  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential, up to 820 nF capacitive load\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to\n    1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.\n    Account for that in teardown / discharge timing (don't switch to SENSE or\n    read status assuming playback is done). Streaming paces on FIFO_SPACE\n    and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)\n    bus — at 100 kHz two bytes per sample top out near 5.5 ksps.\n\n  - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on\n    the output (datasheet §6.6). The click / sine / buzz / pulse-train\n    helpers end at exactly 0 V; play_samples() plays the caller's buffer\n    as-is, so make its last sample 0.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -33,7 +33,7 @@
     },
     {
       "name": "TILE_DRIVE_P_VERSION_MINOR",
-      "value": "4",
+      "value": "5",
       "description": "",
       "section": ""
     },
@@ -107,6 +107,18 @@
       "name": "BOS_STATUS_FAULT_MASK",
       "value": "0x00FC",
       "description": "Fault bits in IC_STATUS (bits 7:2, excluding FULL and PLAYST).",
+      "section": "* @brief  STATE field in IC_STATUS (bits 9:8)."
+    },
+    {
+      "name": "BOS_FIFO_STATE_SPACE_MASK",
+      "value": "0x03FF",
+      "description": "",
+      "section": "* @brief  STATE field in IC_STATUS (bits 9:8)."
+    },
+    {
+      "name": "BOS1921_FIFO_DEPTH",
+      "value": "1024",
+      "description": "FIFO depth in samples (chip default; the driver never changes it).",
       "section": "* @brief  STATE field in IC_STATUS (bits 9:8)."
     },
     {
@@ -312,7 +324,7 @@
       ],
       "notes": [],
       "brief": "Perform a software reset.",
-      "description": "",
+      "description": "Follows the datasheet's safe order (§6.2.8): output to 0 V (Direct / FIFO\nmodes) and OE = 0, wait for IC_STATUS.STATE to leave RUN (bounded at\n150 ms: a full FIFO keeps playing 128 ms after OE = 0), then RST. The\nchip and the driver's shadow return to power-on defaults (the I2C address\nis kept) and the tile goes to NONE: re-run init() afterwards. To reset and\nkeep your configuration, use @ref tile_drive_p_check_and_recover.",
       "name": "tile_drive_p_reset"
     },
     {
@@ -421,14 +433,23 @@
     {
       "signature": "void tile_drive_p_sleep(tile_t* tile)",
       "params": [],
-      "notes": [
-        "There is no wake() yet: after sleep() set_mode() refuses (tile not READY). Re-run init() to use the tile again; with retention off (RET = 1) the chip also loses PARCAP / SUP_RISE."
-      ],
+      "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Enter low-power sleep mode.",
-      "description": "",
+      "description": "Writes CONFIG with DS = 1 and OE = 0 (datasheet §6.2.6): the output stops\nand the chip drops to SLEEP — ~2.4 µA with retention, ~0.6 µA without\n(see @ref tile_drive_p_set_sleep_retention). Any I2C traffic wakes the\nchip, so leave the bus alone until @ref tile_drive_p_wake; set_mode() and\nthe play / sense helpers call wake() for you.",
       "name": "tile_drive_p_sleep"
+    },
+    {
+      "signature": "uint8_t tile_drive_p_wake(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "return": "1 if the chip answered with the expected CHIP_ID (tile READY),",
+      "brief": "Wake the chip from SLEEP and restore the driver's configuration.",
+      "description": "Follows the datasheet start-up sequence (§7.4.1 steps 3-6, §7.4.2): a\ndummy write wakes the chip (its data is ignored, §6.2.6), a 1 ms settle\ncovers the 50 µs SLEEP→IDLE time, then CONFIG (DS = 0, OE = 0, GAINS /\nGAIND / RET), PARCAP (with UPI), SUP_RISE and COMM (TOUT) are rewritten\nfrom the driver's shadow, and CHIP_ID is read back. Rewriting everything\ncovers both retention settings: with retention off (RET = 1) the chip loses\nits registers in SLEEP; its I2C address survives either way (§6.10.8).\nRAM contents (RAM-playback / synthesis waveforms) are not restored — re-load\nthem after a no-retention sleep. The tile returns to IDLE mode.\n\nAlso use it after a COMM.TOUT auto-sleep (@ref tile_drive_p_set_auto_sleep),\nwhich leaves the tile READY but the chip asleep. Harmless on an awake chip.\n\n        0 otherwise (tile ERROR, or the tile was never initialized)",
+      "name": "tile_drive_p_wake"
     },
     {
       "signature": "uint8_t tile_drive_p_check_and_recover(tile_t* tile, drive_p_mode_t restore_mode)",
@@ -443,7 +464,7 @@
       "studio_section": "advanced",
       "return": "1 if recovery was performed, 0 if device was healthy",
       "brief": "Check status and recover from error/fault states.",
-      "description": "",
+      "description": "If IC_STATUS shows STATE = ERROR or any fault bit, resets the chip in the\n§6.2.8 order (see @ref tile_drive_p_reset; blocks up to ~150 ms while a\nFIFO drains), then rewrites the full configuration — init's tuned PARCAP\n(with UPI), SUP_RISE, output range, sense gain, sleep retention and\nauto-sleep — and re-enters restore_mode. A sleeping tile is woken first.",
       "name": "tile_drive_p_check_and_recover"
     },
     {
@@ -490,7 +511,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Configure register and RAM retention during SLEEP (CONFIG.RET).",
-      "description": "Default is retain (~2.4 µA quiescent) so that RAM contents and\nregister configuration survive a sleep cycle. Disabling retention\n(~0.6 µA) is useful for ultra-low-power applications that re-init\non every wake anyway. Set this before calling sleep().",
+      "description": "Default is retain (~2.4 µA quiescent) so that RAM contents and\nregister configuration survive a sleep cycle. Disabling retention\n(~0.6 µA) is useful for ultra-low-power applications; wake() rewrites\nthe driver's register configuration either way, but RAM contents are\nlost. Set this before calling sleep().",
       "name": "tile_drive_p_set_sleep_retention"
     },
     {
@@ -502,7 +523,7 @@
         }
       ],
       "notes": [
-        "After a timeout-triggered sleep, PLAY_SRATE is reset to 0x7 (8 ksps) — re-set the sample rate before the next playback if you were using a faster rate."
+        "After a timeout-triggered sleep, PLAY_SRATE is reset to 0x7 (8 ksps) — re-set the sample rate before the next playback if you were using a faster rate. The driver's tile state stays READY; the first I2C write after the timeout only wakes the chip and is discarded, so call @ref tile_drive_p_wake before the next command."
       ],
       "studio_exposed": true,
       "studio_section": "config",
@@ -537,7 +558,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Fire a single sharp tactile click.",
-      "description": "Streams a half-sine pulse through the FIFO at 8 ksps. Intensity\nscales the peak output amplitude in the configured voltage range\n(default ±95 V; see @ref tile_drive_p_set_output_range to switch\nto ±13.28 V for low-voltage piezos). Returns when the FIFO has\nbeen written; the chip continues playing the click after the\ncall returns.",
+      "description": "Streams a 2 ms half-sine pulse through the FIFO at 8 ksps in one\nburst, framed by 0 V samples: two before it (discharges residual\npiezo charge, §6.2.18) and the pulse itself ends at exactly 0 V, so\nthe output rests at 0 V when the FIFO drains (§6.6). Intensity\nscales the peak output amplitude in the configured voltage range\n(default ±95 V; see @ref tile_drive_p_set_output_range to switch\nto ±13.28 V for low-voltage piezos). Returns when the FIFO has\nbeen written; the chip continues playing the click after the\ncall returns. The output is switched off (OE = 0) right after the\nlast sample is queued; the chip finishes the FIFO first (§6.6), then\nidles. The next play / set_mode call turns it back on.",
       "name": "tile_drive_p_play_click"
     },
     {
@@ -560,7 +581,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Play a continuous sine wave for `ms` milliseconds.",
-      "description": "Generates and streams sine samples at 8 ksps. Frequency is\nsoftware-quantised to the sample rate (max useful ~3 kHz). The\ncall blocks until the FIFO is filled; for streams longer than\nthe 1024-sample FIFO depth (~128 ms at 8 ksps) the call refills\nas the chip drains.",
+      "description": "Generates and streams sine samples at 8 ksps. Frequency is\nsoftware-quantised to the sample rate (max useful ~3 kHz). The\nlast 2 ms fade linearly to exactly 0 V, so the output never parks\nat a DC level (§6.6). Streaming paces on FIFO_STATE.FIFO_SPACE and\nwrites 32-sample bursts: the call returns once the last sample is\nqueued, i.e. it blocks for about (ms − 128) ms on long tones and\nthe chip plays out the final ≤ 128 ms after it returns. Gapless\noutput needs a ≥ 400 kHz bus. Stops early if the chip reports ERROR\nor stops draining for 20 ms. Like play_click(), turns the output off\n(OE = 0) after queuing the last sample; the chip idles once the FIFO\nhas drained.",
       "name": "tile_drive_p_play_sine"
     },
     {
@@ -602,7 +623,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Play N clicks separated by gaps.",
-      "description": "The classic \"tick-tick-tick\" pattern. Composes @ref\ntile_drive_p_play_click with `core_delay_ms` between clicks.",
+      "description": "The classic \"tick-tick-tick\" pattern. Composes @ref\ntile_drive_p_play_click with `core_delay_ms` between clicks. The\noutput stays on between clicks and goes off (OE = 0) once, after the\nlast click is queued.",
       "name": "tile_drive_p_play_pulse_train"
     },
     {
@@ -661,7 +682,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Stream a buffer of pre-computed samples through the FIFO.",
-      "description": "Switches into FIFO play mode (if not already there) and writes\n`count` samples to REFERENCE[11:0] (signed 12-bit, two's\ncomplement), 8 ksps. Values beyond ±BOS1921_REFERENCE_MAX (±1743,\nthe ±95 V rated output) are clamped. Start and end the waveform at\n0: the last sample stays on the output when the FIFO drains. Use\nthis for arbitrary waveforms that don't fit the click / sine /\nbuzz / pulse-train idioms — e.g., recorded waveforms or\nDSP-generated patterns.",
+      "description": "Switches into FIFO play mode (if not already there) and writes\n`count` samples to REFERENCE[11:0] (signed 12-bit, two's\ncomplement), 8 ksps. Values beyond ±BOS1921_REFERENCE_MAX (±1743,\nthe ±95 V rated output) are clamped. Start and end the waveform at\n0: the last sample stays on the output when the FIFO drains, and\nthe driver does not append one (so back-to-back calls can stream a\nlong waveform in pieces). Paced on FIFO_SPACE with 32-sample burst\nwrites; returns once the last sample is queued (up to 128 ms of it\nstill playing). Stops early if the chip reports ERROR or stops\ndraining for 20 ms. Leaves the output on (OE = 1) so calls chain;\ncall set_mode(DRIVE_P_MODE_IDLE) when done to switch it off. Use\nthis for arbitrary waveforms that don't fit the click / sine /\nbuzz / pulse-train idioms — e.g., recorded waveforms or\nDSP-generated patterns.",
       "name": "tile_drive_p_play_samples"
     },
     {
@@ -685,7 +706,7 @@
     }
   ],
   "source_file": "tile_drive_p.h",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "tile_family": "Drive",
   "tile_name": "P",
   "display_name": "Drive.P",

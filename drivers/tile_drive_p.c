@@ -42,11 +42,15 @@ static uint8_t resolve_id(uint8_t instance)
  * - parcap: full PARCAP value (init computes the lower 8 bits;
  *   set_upi() flips bit 9). Tracked so we can rewrite it without
  *   reading back through the RDADDR path.
+ * - cfg_mode: the mode part of the last CONFIG write (PLAY_MODE / OE /
+ *   SENSE / DS / PLAY_SRATE), so the safe reset can clear OE without
+ *   changing the play mode, and knows whether REFERENCE is a sample.
  */
 typedef struct {
     uint16_t cfg_persistent_bits;
     uint16_t comm_persistent_bits;
     uint16_t parcap;
+    uint16_t cfg_mode;
 } drive_p_state_t;
 
 static drive_p_state_t drv_state[ID_TABLE_LEN];
@@ -105,6 +109,75 @@ static uint16_t cfg_with_persistent(tile_t* tile, uint16_t base)
                                BOS_CONFIG_GAIND_BIT |
                                BOS_CONFIG_RET_BIT);
     return (uint16_t)((base & ~mask) | st->cfg_persistent_bits);
+}
+
+/* Write CONFIG = mode bits + persistent GAINS/GAIND/RET, and remember the
+ * mode bits. */
+static void bos_config(tile_t* tile, uint16_t base)
+{
+    state_for(tile)->cfg_mode = base;
+    bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, base));
+}
+
+/* SUP_RISE as init writes it: tuned supply-rise timing 0x09E2 plus this
+ * chip's I2C_ADDR nibble (bits [15:12]). The nibble only latches with
+ * COMM.GPIODIR = 1 and GPIO low (§6.10.8), and it equals the current
+ * address anyway, so rewriting it never moves the chip. */
+static uint16_t sup_rise_value(tile_t* tile)
+{
+    return (uint16_t)(((uint16_t)(tile->id & 0x0Fu) << BOS_SUP_RISE_I2C_ADDR_POS)
+                      | 0x09E2u);
+}
+
+/* Rewrite every register the driver configures from the shadow: CONFIG
+ * (IDLE: OE=0, DS=0, plus GAINS/GAIND/RET), PARCAP (tuned value + CCM +
+ * UPI), SUP_RISE, COMM (TOUT). Then read CHIP_ID back and leave RDADDR on
+ * IC_STATUS. Used after a no-retention SLEEP (wake) and after a software
+ * reset (check_and_recover), both of which return registers to defaults.
+ * Returns 1 if CHIP_ID matched. */
+static uint8_t bos_apply_config(tile_t* tile)
+{
+    drive_p_state_t *st = state_for(tile);
+    bos_config(tile, 0x0000);
+    bos_write(tile, BOS1921_REG_PARCAP,   st->parcap);
+    bos_write(tile, BOS1921_REG_SUP_RISE, sup_rise_value(tile));
+    bos_set_return_reg(tile, BOS1921_REG_CHIP_ID);
+    uint16_t chip_id = bos_read(tile);
+    bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
+    return ((chip_id & 0x0FFF) == BOS1921_CHIP_ID_DEFAULT) ? 1 : 0;
+}
+
+/* Longest wait for the chip to leave RUN before a reset: with OE=0 a FIFO
+ * waveform keeps playing until the FIFO is empty (§6.6), and a full
+ * 1024-sample FIFO is 128 ms at 8 ksps. */
+#define DRIVE_P_STOP_MS  150u
+
+/* Software reset in the datasheet's order (§6.2.8): output to 0 and OE=0,
+ * wait for IC_STATUS.STATE to leave RUN (IDLE, or ERROR on a faulted chip,
+ * which does not go IDLE), then RST. REFERENCE must be 0 at RST in Direct /
+ * FIFO mode (§6.10.6 RST); in the RAM modes REFERENCE takes WFS commands, so
+ * it is not written there. RST self-clears; registers return to defaults,
+ * except the I2C address (§6.10.8). Bounded by DRIVE_P_STOP_MS. */
+static void bos_safe_reset(tile_t* tile)
+{
+    drive_p_state_t *st = state_for(tile);
+    uint16_t play_mode = (uint16_t)(st->cfg_mode & 0x0600u);   /* PLAY_MODE[1:0] */
+
+    if (play_mode == 0x0000u || play_mode == 0x0200u) {        /* Direct / FIFO */
+        bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
+    }
+    bos_config(tile, (uint16_t)(st->cfg_mode & ~(BOS_CONFIG_OE_BIT | BOS_CONFIG_DS_BIT)));
+
+    bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
+    for (uint16_t ms = 0; ms < DRIVE_P_STOP_MS; ms++) {
+        uint16_t state = (uint16_t)(bos_read(tile) & BOS_STATUS_STATE_MASK);
+        if (state == BOS_STATUS_STATE_IDLE || state == BOS_STATUS_STATE_ERROR) break;
+        tile->hal->delay_ms(1);
+    }
+
+    bos_write(tile, BOS1921_REG_CONFIG, BOS_CONFIG_RST_BIT);
+    tile->hal->delay_ms(1);
+    st->cfg_mode = 0x0000;   /* chip default CONFIG 0x1000: Direct, OE=0 */
 }
 
 /* -------------------------------------------------------------- */
@@ -170,6 +243,7 @@ void tile_drive_p_init_at(tiles_pal_t* hal, uint8_t addr, tile_t* tile,
     st->cfg_persistent_bits  = BOS_CONFIG_GAINS_BIT;
     st->comm_persistent_bits = 0;
     st->parcap               = 0x043A;
+    st->cfg_mode             = 0x0000;
 
     /* Configure for 260nF piezo, L1=10µH, Rsense=0.2Ω, VDD=3.7V LiPo.
      * The tuned supply-rise timing is 0x09E2; the I2C_ADDR nibble
@@ -177,8 +251,7 @@ void tile_drive_p_init_at(tiles_pal_t* hal, uint8_t addr, tile_t* tile,
      * chip keeps its address instead of being staged back to 0x44. For an
      * address of 0x44 this evaluates to the original 0x49E2. */
     bos_write(tile, BOS1921_REG_PARCAP,   st->parcap);
-    bos_write(tile, BOS1921_REG_SUP_RISE,
-              (uint16_t)(((uint16_t)(addr & 0x0Fu) << BOS_SUP_RISE_I2C_ADDR_POS) | 0x09E2u));
+    bos_write(tile, BOS1921_REG_SUP_RISE, sup_rise_value(tile));
 
     tile->state = TILE_STATE_READY;
 }
@@ -238,11 +311,17 @@ uint8_t tile_drive_p_reassign_address(tiles_pal_t* hal, uint8_t cur_addr,
 
 void tile_drive_p_reset(tile_t* tile)
 {
-    /* RST bit self-clears; chip returns to its power-on defaults
-     * (CONFIG=0x1000, COMM=0x001E, PARCAP=0x003A). Mirror that in
-     * the driver shadow so subsequent set_mode()/sleep() writes
-     * are coherent until the caller re-runs init or the setters. */
-    bos_write(tile, BOS1921_REG_CONFIG, 0x0040);
+    /* Safe order (§6.2.8): output 0, OE=0, wait for IDLE, then RST. RST
+     * self-clears; chip returns to its power-on defaults (CONFIG=0x1000,
+     * COMM=0x001E, PARCAP=0x003A). Mirror that in the driver shadow so
+     * subsequent set_mode()/sleep() writes are coherent until the caller
+     * re-runs init or the setters. */
+    if (tile->state == TILE_STATE_SLEEPING) {
+        /* The first write would only wake the chip (§6.2.6). */
+        bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
+        tile->hal->delay_ms(1);
+    }
+    bos_safe_reset(tile);
     drive_p_state_t *st = state_for(tile);
     st->cfg_persistent_bits  = BOS_CONFIG_GAINS_BIT;
     st->comm_persistent_bits = 0;
@@ -252,6 +331,11 @@ void tile_drive_p_reset(tile_t* tile)
 
 void tile_drive_p_set_mode(tile_t* tile, drive_p_mode_t mode)
 {
+    /* A sleeping chip discards the first write it sees (§6.2.6), so wake it
+     * properly first instead of refusing. */
+    if (tile->state == TILE_STATE_SLEEPING) {
+        (void)tile_drive_p_wake(tile);
+    }
     if (tile->state != TILE_STATE_READY) {
         TILE_ON_ERROR(tile, "set_mode: not ready");
         return;
@@ -262,7 +346,7 @@ void tile_drive_p_set_mode(tile_t* tile, drive_p_mode_t mode)
     switch (mode) {
     default:
     case DRIVE_P_MODE_IDLE:
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0000));
+        bos_config(tile, 0x0000);
         bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
         break;
 
@@ -271,37 +355,37 @@ void tile_drive_p_set_mode(tile_t* tile, drive_p_mode_t mode)
          * the shadow so subsequent set_sense_gain() calls have a
          * coherent starting point. */
         st->cfg_persistent_bits |= BOS_CONFIG_GAINS_BIT;
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0010));
+        bos_config(tile, 0x0010);
         bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
         tile->hal->delay_ms(5);
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0000));
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x3010));
+        bos_config(tile, 0x0000);
+        bos_config(tile, 0x3010);
         bos_set_return_reg(tile, BOS1921_REG_SENSE_VAL);
         break;
 
     case DRIVE_P_MODE_SENSE_COARSE:
         /* SENSE_COARSE explicitly selects 54.5 mV LSB. */
         st->cfg_persistent_bits &= (uint16_t)~BOS_CONFIG_GAINS_BIT;
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0010));
+        bos_config(tile, 0x0010);
         bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
         tile->hal->delay_ms(5);
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0000));
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x2010));
+        bos_config(tile, 0x0000);
+        bos_config(tile, 0x2010);
         bos_set_return_reg(tile, BOS1921_REG_SENSE_VAL);
         break;
 
     case DRIVE_P_MODE_PLAY_DIRECT:
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0010));
+        bos_config(tile, 0x0010);
         bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
         break;
 
     case DRIVE_P_MODE_PLAY_FIFO:
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0217));
+        bos_config(tile, 0x0217);
         bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
         break;
 
     case DRIVE_P_MODE_PLAY_RAM_SYNTH:
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0610));
+        bos_config(tile, 0x0610);
         bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
         break;
     }
@@ -353,14 +437,51 @@ void tile_drive_p_wfs_write(tile_t* tile, const uint16_t* words, uint16_t count)
 
 void tile_drive_p_sleep(tile_t* tile)
 {
-    /* DS=1 selects SLEEP. RET (bit 8) is folded in via the
-     * persistent shadow so set_sleep_retention() takes effect. */
-    bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0008));
+    /* DS=1 selects SLEEP while OE=0 (§6.2.6, §6.10.6). RET (bit 8) is
+     * folded in via the persistent shadow so set_sleep_retention() takes
+     * effect. */
+    bos_config(tile, BOS_CONFIG_DS_BIT);
     tile->state = TILE_STATE_SLEEPING;
+}
+
+uint8_t tile_drive_p_wake(tile_t* tile)
+{
+    /* Only a tile that init() brought up (now READY, or SLEEPING after
+     * sleep()) can be woken; NONE / ERROR need init() or recovery. */
+    if (tile->hal == NULL ||
+        (tile->state != TILE_STATE_READY && tile->state != TILE_STATE_SLEEPING)) {
+        TILE_ON_ERROR(tile, "wake: tile not initialized");
+        return 0;
+    }
+
+    /* 1. Dummy write: any bus traffic wakes the chip and its data is
+     *    ignored (§6.2.6; start-up sequence §7.4.1 step 3). On an awake chip
+     *    in FIFO mode this queues one 0 V sample, which is harmless. */
+    bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
+
+    /* 2. SLEEP -> IDLE takes 50 µs (§7.4.1 step 4); 1 ms is the PAL's
+     *    coarsest delay and amply long. */
+    tile->hal->delay_ms(1);
+
+    /* 3. Program the registers (§7.4.1 step 5). All of them, from the
+     *    shadow: with RET=1 the chip dropped them in SLEEP, with RET=0 the
+     *    rewrite is a no-op. CONFIG first so DS=0 (stay in IDLE, not SLEEP,
+     *    while OE=0) and OE=0 (output off). Then confirm CHIP_ID. */
+    if (!bos_apply_config(tile)) {
+        TILE_ON_ERROR(tile, "wake: unexpected chip ID");
+        tile->state = TILE_STATE_ERROR;
+        return 0;
+    }
+    tile->state = TILE_STATE_READY;
+    return 1;
 }
 
 uint8_t tile_drive_p_check_and_recover(tile_t* tile, drive_p_mode_t restore_mode)
 {
+    /* A sleeping chip would discard the COMM write below (§6.2.6). */
+    if (tile->state == TILE_STATE_SLEEPING) {
+        (void)tile_drive_p_wake(tile);
+    }
     bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
     uint16_t status = bos_read(tile);
 
@@ -374,8 +495,16 @@ uint8_t tile_drive_p_check_and_recover(tile_t* tile, drive_p_mode_t restore_mode
     }
 
     if (needs_recovery) {
-        tile_drive_p_reset(tile);
-        tile->hal->delay_ms(1);
+        /* Reset in the §6.2.8 order, then put back everything init and the
+         * setters configured (tuned PARCAP + CCM + UPI, GAINS/GAIND/RET,
+         * SUP_RISE, COMM.TOUT): the shadow is kept, not reset to chip
+         * defaults. Before v3.5 recovery left PARCAP at 0x003A — UPI off. */
+        bos_safe_reset(tile);
+        if (!bos_apply_config(tile)) {
+            TILE_ON_ERROR(tile, "recover: unexpected chip ID");
+            tile->state = TILE_STATE_ERROR;
+            return needs_recovery;
+        }
         tile->state = TILE_STATE_READY;  /* restore before set_mode */
         tile_drive_p_set_mode(tile, restore_mode);
     }
@@ -401,7 +530,7 @@ void tile_drive_p_set_output_range(tile_t* tile, drive_p_output_range_t range)
      * intentional and matches the datasheet's "set OE=0 before changing
      * gain" guidance (§7.5). */
     if (tile->state == TILE_STATE_READY) {
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0000));
+        bos_config(tile, 0x0000);
     }
 }
 
@@ -414,7 +543,7 @@ void tile_drive_p_set_sense_gain(tile_t* tile, drive_p_sense_gain_t gain)
         st->cfg_persistent_bits &= (uint16_t)~BOS_CONFIG_GAINS_BIT;
     }
     if (tile->state == TILE_STATE_READY) {
-        bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, 0x0000));
+        bos_config(tile, 0x0000);
     }
 }
 
@@ -443,14 +572,12 @@ void tile_drive_p_set_auto_sleep(tile_t* tile, uint8_t enabled)
     } else {
         st->comm_persistent_bits &= (uint16_t)~BOS_COMM_TOUT_BIT;
     }
-    /* Re-issue the COMM write so the new TOUT bit lands. Use the
-     * current return-register selection (CHIP_ID=0x1E is the reset
-     * default; we keep the existing RDADDR by reading what we last
-     * configured). The driver doesn't track RDADDR explicitly, but
-     * write-via-set_return_reg with IC_STATUS is the pre-play
-     * default — safe choice for live updates. */
-    if (tile->state == TILE_STATE_READY ||
-        tile->state == TILE_STATE_SLEEPING) {
+    /* Re-issue the COMM write so the new TOUT bit lands. The driver
+     * doesn't track RDADDR explicitly; IC_STATUS is the pre-play default
+     * and a safe choice for live updates. Not while SLEEPING: the write
+     * would only wake the chip and be discarded (§6.2.6) — wake() applies
+     * the shadow instead. */
+    if (tile->state == TILE_STATE_READY) {
         bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
     }
 }
@@ -467,7 +594,11 @@ void tile_drive_p_set_upi(tile_t* tile, uint8_t enabled)
     } else {
         st->parcap &= (uint16_t)~BOS_PARCAP_UPI_BIT;
     }
-    bos_write(tile, BOS1921_REG_PARCAP, st->parcap);
+    /* While SLEEPING the write would only wake the chip and be discarded
+     * (§6.2.6); wake() rewrites PARCAP from the shadow. */
+    if (tile->state != TILE_STATE_SLEEPING) {
+        bos_write(tile, BOS1921_REG_PARCAP, st->parcap);
+    }
 }
 
 /* ============================================================== */
@@ -525,16 +656,179 @@ static int16_t clamp_ref(int16_t s)
     return s;
 }
 
+/* -------------------------------------------------------------- */
+/* FIFO streaming                                                  */
+/* -------------------------------------------------------------- */
+
+/*
+ * FIFO mode plays REFERENCE samples at 8 ksps from a 1024-deep FIFO
+ * (§6.6). The host keeps it fed per the datasheet's typical sequence
+ * (§6.6.2): read FIFO_STATE (RDADDR = 0x11), then write as many samples as
+ * FIFO_SPACE allows. Writes are bursts: a write to register 0x00 sends every
+ * following 2-byte word to REFERENCE, whatever COMM.STR says (§6.3.1.1,
+ * Table 43 STR), and the FIFO accepts packed words (§6.6).
+ *
+ * Burst size: 32 samples = 1 register byte + 64 data bytes, well under the
+ * STM32 I2C NBYTES limit of 255 per transfer. At 400 kHz a burst takes
+ * ~1.5 ms and carries 4 ms of audio.
+ *
+ * Blocking: the call returns once the last sample is queued. While the FIFO
+ * is full it waits in 1 ms steps (one FIFO_STATE read each). PLAY_SRATE 0x7
+ * (8 ksps) is the slowest rate, so a FIFO that frees no space for 20 ms is
+ * not draining at all (chip asleep, output off, error) and the stream stops
+ * instead of spinning.
+ */
+#define DRIVE_P_BURST          32u  /* samples per REFERENCE burst write */
+#define DRIVE_P_STALL_MS       20u  /* give up after this long with no drain */
+#define DRIVE_P_ZERO_LEAD       2u  /* 0 V samples ahead of tier-2 waveforms */
+
+typedef int16_t (*stream_fn_t)(const void *ctx, uint32_t i);
+
+/* Free FIFO locations from a FIFO_STATE word (§6.10.14): FIFO_SPACE = 0
+ * means 1024 free if EMPTY, else full. */
+static uint16_t fifo_space(uint16_t fifo_state)
+{
+    uint16_t space = (uint16_t)(fifo_state & BOS_FIFO_STATE_SPACE_MASK);
+    if (space == 0 && (fifo_state & BOS_FIFO_STATE_EMPTY_BIT)) {
+        space = BOS1921_FIFO_DEPTH;
+    }
+    return space;
+}
+
+/* Stream samples fn(ctx, 0..total-1) into the FIFO. Expects FIFO mode with
+ * OE set (set_mode(PLAY_FIFO)). Leaves RDADDR on IC_STATUS, as set_mode()
+ * does. Returns 1 if every sample was queued. Does not change tile->state:
+ * a chip fault stays visible through read_status() / check_and_recover(). */
+static uint8_t stream_fifo(tile_t* tile, uint32_t total,
+                           stream_fn_t fn, const void *ctx)
+{
+    uint8_t  buf[DRIVE_P_BURST * 2u];
+    uint32_t sent       = 0;
+    uint16_t last_space = 0;
+    uint16_t stall_ms   = 0;
+    uint8_t  ok         = 1;
+
+    bos_set_return_reg(tile, BOS1921_REG_FIFO_STATE);
+
+    while (sent < total) {
+        uint16_t fs = bos_read(tile);
+        if (fs & BOS_FIFO_STATE_ERROR_BIT) {
+            TILE_ON_ERROR(tile, "stream: chip in ERROR");
+            ok = 0;
+            break;
+        }
+
+        uint16_t space = fifo_space(fs);
+        uint32_t left  = total - sent;
+        uint32_t want  = (left < DRIVE_P_BURST) ? left : DRIVE_P_BURST;
+
+        if (space < want) {
+            /* Wait for the chip to drain a burst's worth (4 ms at most). */
+            if (space > last_space) {
+                stall_ms = 0;
+            } else if (++stall_ms > DRIVE_P_STALL_MS) {
+                TILE_ON_ERROR(tile, "stream: FIFO not draining");
+                ok = 0;
+                break;
+            }
+            last_space = space;
+            tile->hal->delay_ms(1);
+            continue;
+        }
+
+        /* Fill the free space, one burst per I2C transaction. Space only
+         * grows while we write, so the reading taken above stays safe. */
+        uint32_t n = (space < left) ? space : left;
+        while (n > 0) {
+            uint16_t chunk = (uint16_t)((n < DRIVE_P_BURST) ? n : DRIVE_P_BURST);
+            for (uint16_t k = 0; k < chunk; k++) {
+                uint16_t v = (uint16_t)fn(ctx, sent + k);
+                buf[2u * k]      = (uint8_t)(v >> 8);
+                buf[2u * k + 1u] = (uint8_t)(v & 0xFF);
+            }
+            tile->hal->i2c_write(tile->hal->handle, tile->id,
+                                 BOS1921_REG_REFERENCE, buf,
+                                 (uint16_t)(chunk * 2u));
+            sent += chunk;
+            n    -= chunk;
+        }
+        stall_ms   = 0;
+        last_space = 0;
+    }
+
+    bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
+    return ok;
+}
+
+/* Click: DRIVE_P_ZERO_LEAD x 0 V (discharges residual piezo charge,
+ * §6.2.18), then a half-sine over i = 0..16 (phase 0..π, 16 steps = 2 ms).
+ * The last sample (i = 16) is exactly 0 V: the FIFO holds its last entry on
+ * the output (§6.6), and before v3.5 the click stopped at i = 15, leaving
+ * ~20 % of the peak parked on the piezo. */
+#define DRIVE_P_CLICK_STEPS    16u
+#define DRIVE_P_CLICK_SAMPLES  (DRIVE_P_ZERO_LEAD + DRIVE_P_CLICK_STEPS + 1u)
+
+static int16_t click_sample(const void *ctx, uint32_t i)
+{
+    uint8_t pct = *(const uint8_t *)ctx;
+    if (i < DRIVE_P_ZERO_LEAD) return 0;
+    i -= DRIVE_P_ZERO_LEAD;
+    if (i >= DRIVE_P_CLICK_STEPS) return 0;          /* phase π: 0 V */
+    return scale_intensity(sine_q12((uint16_t)(i * 2048u)), pct);
+}
+
+/* Sine: DRIVE_P_ZERO_LEAD x 0 V, then `body` samples starting at phase 0
+ * whose last DRIVE_P_SINE_FADE samples ramp linearly to exactly 0 V. */
+#define DRIVE_P_SINE_FADE      16u  /* 2 ms release at 8 ksps */
+
+typedef struct {
+    uint32_t step;   /* Q16 phase increment per sample */
+    uint32_t body;   /* samples of tone, fade included */
+    uint8_t  pct;
+} sine_src_t;
+
+static int16_t sine_sample(const void *ctx, uint32_t i)
+{
+    const sine_src_t *src = (const sine_src_t *)ctx;
+    if (i < DRIVE_P_ZERO_LEAD) return 0;
+    i -= DRIVE_P_ZERO_LEAD;
+    if (i >= src->body) return 0;
+    /* Phase is i x step mod 2^16; unsigned wrap keeps the low 16 bits exact. */
+    int32_t s = scale_intensity(sine_q12((uint16_t)(i * src->step)), src->pct);
+    uint32_t left = src->body - 1u - i;              /* 0 on the last sample */
+    if (left < DRIVE_P_SINE_FADE) {
+        s = (s * (int32_t)left) / (int32_t)DRIVE_P_SINE_FADE;
+    }
+    return (int16_t)s;
+}
+
+static int16_t buffer_sample(const void *ctx, uint32_t i)
+{
+    return clamp_ref(((const int16_t *)ctx)[i]);
+}
+
+/* Stop sequence step 6 (§6.5.1 / §6.6.2): OE=0 once the waveform is done.
+ * Written right after the last (0 V) sample is queued — no waiting: with
+ * OE=0 the chip keeps playing until the FIFO is empty (§6.6), so it stops
+ * after the drain, at 0 V, and drops to IDLE (530 µA) instead of holding
+ * 0 V in RUN. FIFO mode and 8 ksps stay selected. The next set_mode()
+ * turns OE back on (< 300 µs start-up, §6.2.7). */
+static void fifo_output_off_after_drain(tile_t* tile)
+{
+    bos_config(tile, (uint16_t)(0x0217u & ~BOS_CONFIG_OE_BIT));
+}
+
+/* One click, output left on (pulse_train chains these). */
+static uint8_t click_once(tile_t* tile, uint8_t intensity_pct)
+{
+    tile_drive_p_set_mode(tile, DRIVE_P_MODE_PLAY_FIFO);
+    if (tile->state != TILE_STATE_READY) return 0;
+    return stream_fifo(tile, DRIVE_P_CLICK_SAMPLES, click_sample, &intensity_pct);
+}
+
 void tile_drive_p_play_click(tile_t* tile, uint8_t intensity_pct)
 {
-    /* Half-sine over 16 samples ≈ 2 ms at 8 ksps — sharp tactile
-     * click, well above the piezo's mechanical resonance. */
-    tile_drive_p_set_mode(tile, DRIVE_P_MODE_PLAY_FIFO);
-    for (uint8_t i = 0; i < 16; i++) {
-        int16_t s = sine_q12((uint16_t)(i * 2048));  /* 0..π over 16 samples */
-        s = scale_intensity(s, intensity_pct);
-        tile_drive_p_write_fifo(tile, s);
-    }
+    if (click_once(tile, intensity_pct)) fifo_output_off_after_drain(tile);
 }
 
 void tile_drive_p_play_sine(tile_t* tile, uint16_t freq_hz,
@@ -543,28 +837,17 @@ void tile_drive_p_play_sine(tile_t* tile, uint16_t freq_hz,
     if (freq_hz == 0 || ms == 0) return;
 
     tile_drive_p_set_mode(tile, DRIVE_P_MODE_PLAY_FIFO);
+    if (tile->state != TILE_STATE_READY) return;
 
-    /* Phase delta per sample = freq × 65536 / sample_rate, Q16. */
-    uint32_t phase = 0;
-    uint32_t step  = ((uint32_t)freq_hz * 65536u) / DRIVE_P_SAMPLE_RATE_HZ;
-    /* Total samples = ms × 8 (samples per ms at 8 ksps). */
-    uint32_t total = (uint32_t)ms * (DRIVE_P_SAMPLE_RATE_HZ / 1000);
+    sine_src_t src;
+    /* Phase delta per sample = freq x 65536 / sample_rate, Q16. */
+    src.step = ((uint32_t)freq_hz * 65536u) / DRIVE_P_SAMPLE_RATE_HZ;
+    /* Samples = ms x 8 at 8 ksps. */
+    src.body = (uint32_t)ms * (DRIVE_P_SAMPLE_RATE_HZ / 1000u);
+    src.pct  = intensity_pct;
 
-    /* 1024-deep FIFO — refill every 64 samples (8 ms) so the chip
-     * never starves. The chip drains at the sample rate; we wait
-     * 8 ms between refill chunks to let the FIFO drain by the same
-     * amount we're about to push. */
-    const uint32_t CHUNK = 64;
-    while (total > 0) {
-        uint32_t n = (total < CHUNK) ? total : CHUNK;
-        for (uint32_t i = 0; i < n; i++) {
-            int16_t s = sine_q12((uint16_t)(phase >> 0));
-            s = scale_intensity(s, intensity_pct);
-            tile_drive_p_write_fifo(tile, s);
-            phase = (phase + step) & 0xFFFF;
-        }
-        total -= n;
-        if (total > 0) tile->hal->delay_ms(8);
+    if (stream_fifo(tile, DRIVE_P_ZERO_LEAD + src.body, sine_sample, &src)) {
+        fifo_output_off_after_drain(tile);
     }
 }
 
@@ -577,12 +860,17 @@ void tile_drive_p_play_buzz(tile_t* tile, uint8_t intensity_pct, uint16_t ms)
 void tile_drive_p_play_pulse_train(tile_t* tile, uint8_t intensity_pct,
                                    uint8_t count, uint16_t gap_ms)
 {
+    /* Output stays on between clicks (no OE toggling mid-drain) and goes
+     * off once, after the last click is queued. */
+    uint8_t ok = 0;
     for (uint8_t i = 0; i < count; i++) {
-        tile_drive_p_play_click(tile, intensity_pct);
+        ok = click_once(tile, intensity_pct);
+        if (!ok) break;
         if (i + 1 < count && gap_ms > 0) {
             tile->hal->delay_ms(gap_ms);
         }
     }
+    if (ok) fifo_output_off_after_drain(tile);
 }
 
 uint8_t tile_drive_p_is_touched(tile_t* tile, uint16_t threshold_mv)
@@ -620,18 +908,12 @@ void tile_drive_p_play_samples(tile_t* tile, const int16_t* samples,
     if (!samples || count == 0) return;
 
     tile_drive_p_set_mode(tile, DRIVE_P_MODE_PLAY_FIFO);
+    if (tile->state != TILE_STATE_READY) return;
 
-    /* Refill in chunks to avoid overrunning the 1024-deep FIFO. */
-    const uint16_t CHUNK = 64;
-    uint16_t i = 0;
-    while (i < count) {
-        uint16_t n = ((count - i) < CHUNK) ? (uint16_t)(count - i) : CHUNK;
-        for (uint16_t j = 0; j < n; j++) {
-            tile_drive_p_write_fifo(tile, clamp_ref(samples[i + j]));
-        }
-        i += n;
-        if (i < count) tile->hal->delay_ms(8);
-    }
+    /* Played as given (clamped to the rated range): no 0 V lead-in or tail,
+     * and the output stays on (OE=1), so back-to-back calls can stream one
+     * long waveform in pieces without a stop/start between them. */
+    (void)stream_fifo(tile, count, buffer_sample, samples);
 }
 
 void tile_drive_p_read_sense_samples(tile_t* tile, int16_t* buf,
