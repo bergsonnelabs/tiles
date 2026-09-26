@@ -4,8 +4,10 @@
 #   make                            # Core.ST.L4.1 (report over USB CDC)
 #   make TILE=Core.ST.L4.2          # config-l42.json: MISO on pad 18, CS on pad 19
 #   make TILE=Core.ST.W5            # config-w5.json: SPI3; result in g_spi_lb over SWD
+#   make TWO_TILES=1                # config-2tiles.json: two SPI1 tiles, CS pads 9 and 4 (T7)
+#   make TILE=Core.ST.W5 TWO_TILES=1 # config-w5-2tiles.json: two SPI3 tiles, CS pads 3 and 4 (T7)
 #
-# Switching Cores: `make distclean` first — coregen/ is kept by `make clean`
+# Switching Cores or configs: `make distclean` first — coregen/ is kept by `make clean`
 # and would otherwise carry the previous Core's generated init.
 #
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in the configs gives
@@ -19,13 +21,19 @@ PROJECT_DIR   := $(abspath $(CURDIR))
 SDK_ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 V             ?= 0
 
+# TWO_TILES=1 adds T7: two tiles on the bus, each with its own chip select.
+TWO := $(filter 1,$(TWO_TILES))
 ifeq ($(TILE),Core.ST.L4.2)
-  CONFIG := CONFIG_JSON=$(PROJECT_DIR)/config-l42.json EXTRA_CFLAGS="-DLB_MISO=18 -DLB_CS=19"
+  CFG := config-l42.json
+  LB  := -DLB_MISO=18 -DLB_CS=19
 else ifeq ($(TILE),Core.ST.W5)
-  CONFIG := CONFIG_JSON=$(PROJECT_DIR)/config-w5.json EXTRA_CFLAGS="-DLB_MOSI=6 -DLB_MISO=7 -DLB_CS=3 -DLB_SCK=2"
+  CFG := config-w5$(if $(TWO),-2tiles).json
+  LB  := -DLB_MOSI=6 -DLB_MISO=7 -DLB_CS=3 -DLB_SCK=2 $(if $(TWO),-DLB_CS2=4)
 else
-  CONFIG :=
+  CFG := config$(if $(TWO),-2tiles).json
+  LB  := $(if $(TWO),-DLB_CS2=4)
 endif
+CONFIG := CONFIG_JSON=$(PROJECT_DIR)/$(CFG) EXTRA_CFLAGS="$(LB)"
 
 .PHONY: all clean distclean flash flash-dfu flash-rom flash-serial flash-coreprobe size generate
 all clean distclean flash flash-dfu flash-rom flash-serial flash-coreprobe size generate:

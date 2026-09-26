@@ -219,8 +219,10 @@ list in `definitions/<Core>.json`.)
 
 Notes:
 - **SPI `CS` is software-managed.** `SPI*.CS` pads are configured as plain GPIO
-  outputs driven by `hal_spi_set_cs()` — not hardware NSS. You cannot change
-  this from config.
+  outputs, driven high (deasserted) before the SPI starts, and driven by the SPI
+  HAL, not hardware NSS. So `SPI*.CS` is valid on **any** GPIO pad, not only the
+  pad with the NSS function. You cannot change this from config. A bus may have
+  several CS pads, one per tile (see §9).
 - **ADC differential negative inputs are not supported** — only single-ended
   positive inputs are emitted (a trailing `+` is fine; bare `-` variants are
   excluded until the HAL exposes them). Today coregen emits a single
@@ -367,13 +369,46 @@ spelling matters.
 |------------|--------|-----------------|----------------------------------------------------|
 | `tile`     | string | **yes**         | a name in coregen's `TILE_DRIVER_MAP`              |
 | `bus`      | string | **yes**         | must match a configured `I2C*`/`SPI*` interface    |
-| `instance` | int    | no (default 0)  | I2C: address slot · SPI: per-CS instance index     |
-| `cs_pad`   | string | **SPI only**    | pad number of this tile's chip-select              |
+| `instance` | int    | no (default 0)  | I2C: address slot · SPI: the tile's chip-select id (see below) |
+| `cs_pad`   | string | **SPI only**    | pad number of this tile's chip-select (any free GPIO pad) |
 
 Validation (each fails → exit): `tile` must be in `TILE_DRIVER_MAP`; `bus` must
-be a real configured interface; an SPI tile must give a `cs_pad` that resolves to
-a GPIO port/pin. coregen emits a per-tile handle like
-`tile_sense_i_6p6_i2c1_0` and adds the driver sources to the build.
+be a real configured interface; an SPI tile's `cs_pad` must resolve to a GPIO
+port/pin. coregen emits a per-tile handle like `tile_sense_i_6p6_i2c1_0` and
+adds the driver sources to the build.
+
+**Several SPI tiles on one bus.** Give each tile its own `cs_pad` and its own
+`instance`, and they share SCK/MOSI/MISO:
+
+```json
+"pads":  { "2": "SPI1.MOSI", "3": "SPI1.CLK", "8": "SPI1.MISO" },
+"tiles": [
+  { "tile": "Store.O.128", "bus": "SPI1", "instance": 0, "cs_pad": "9" },
+  { "tile": "Sense.I.6P6", "bus": "SPI1", "instance": 1, "cs_pad": "4" }
+]
+```
+
+How the chip select is assigned:
+
+- Every `cs_pad` is claimed as `<bus>.CS` in `pads` (listing it there too, as
+  Studio does, is fine; a pad set to `GPIO.OUT` becomes the chip select; any
+  other function there is an error). Each is set high, then made an output,
+  before the SPI peripheral is enabled.
+- **One CS pad on the bus** (one tile, or a hand-written `SPIn.CS` and no
+  tiles): it is the bus's own chip select, as before. `core_spi_select()` and
+  the tile bridge drive it whatever `cs` a driver passes.
+- **Several CS pads**: coregen emits a chip-select map, `instance` → pad, and
+  attaches it with `hal_spi_set_cs_map()`. A driver passes `tile->id` as the
+  `cs` argument of its SPI calls, which for an SPI tile is its `instance`
+  (Store.O.128, Sense.I.6P6, Drive.A.2), so the bridge (`core_tiles_pal()`)
+  asserts only that tile's pad, for the whole transaction. A `cs` in no map
+  entry returns -1 and selects nothing. `core_spi_select()` drives none of the
+  map's pads; use `hal_spi_select_id(&core_spiN, instance)` by hand.
+- Errors: two tiles on one bus with the same `cs_pad`, or (with several CS
+  pads) the same `instance`; a tile with no `cs_pad` on a bus with several;
+  two tiles on a bus with only one CS pad. A CS pad no tile claims is a NOTE.
+- Store.O.128 accepts only instance 0 today, so on a shared bus give it
+  instance 0 and the other tiles 1, 2, ….
 
 The set of valid `tile` names is the `TILE_DRIVER_MAP` dict in
 `tools/coregen/coregen.py` (~line 1148) — check there for the current list
@@ -574,7 +609,9 @@ bad config won't silently generate wrong code. Things that **exit**:
 - I2C `speed` not in the allowed set, or kernel clock too low for it
 - SPI `mode`/`prescaler` out of range
 - an unknown tile name, a tile on an unconfigured bus, or an SPI tile whose
-  `cs_pad` doesn't resolve
+  `cs_pad` doesn't resolve or is another function's pad
+- SPI tiles on one bus sharing a `cs_pad` (or an `instance`, when the bus has
+  several CS pads), or several tiles on a bus with one CS pad (§9)
 - an invalid `bootloader` value
 
 Things that only **warn** (non-fatal):
@@ -671,7 +708,7 @@ Things that are **silent** (no message):
 - [ ] Every bus has *all* its pads (`CLK`+`DAT`, or `CLK`+`MOSI`+`MISO`)
 - [ ] `interfaces`/`tiles` only reference buses you actually created in `pads`
 - [ ] Requested I2C `speed` is legal for your `clock` level (kernel-clock minimums, §7)
-- [ ] SPI tiles have a `cs_pad`; the CS pad is also assigned `SPI*.CS` in `pads`
+- [ ] SPI tiles have a `cs_pad`; several tiles on one SPI bus each have their own `cs_pad` and `instance`
 - [ ] `clock` is a level *name*, not a frequency
 - [ ] No reliance on the ignored keys in §11
 - [ ] Regenerate and build all targets you care about (don't commit generated files between coregen markers)
