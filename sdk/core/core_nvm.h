@@ -196,7 +196,7 @@ static inline uint32_t core_nvm_size(void)
 static inline int core_nvm_read_byte(uint32_t offset)
 {
     uint8_t b = 0;
-    if (core_nvm_read(offset, &b, 1) != 1) return -1;
+    if (core_nvm_read(offset, &b, 1) != 0) return -1;
     return (int)b;
 }
 
@@ -211,7 +211,7 @@ static inline int core_nvm_read_byte(uint32_t offset)
  */
 static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
 {
-    if (core_nvm_write(offset, &value, 1) != 1) return -1;
+    if (core_nvm_write(offset, &value, 1) != 0) return -1;
     return 1;
 }
 
