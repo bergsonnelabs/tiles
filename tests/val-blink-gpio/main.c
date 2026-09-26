@@ -1,7 +1,7 @@
 /**
  * val-blink-gpio -- Validation: GPIO output, input with EXTI, LED, watchdog
  *
- * Core.ST.L0.1, clock=max
+ * Core.ST.L0, clock=max
  * Pad 11 = GPIO.OUT (B9), Pad 8 = GPIO.IN with EXTI
  *
  * Exercises: core_init, core_led_init, LED_TOGGLE, core_delay_ms,

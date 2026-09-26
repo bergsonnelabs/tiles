@@ -1,7 +1,7 @@
 # Compile check for the onboard-LED helpers, including the VDD-scaled on-time.
 # coregen follows config.json's "core", so to build another Core change it there
 # (or build a copy with SDK_ROOT pointed back here).
-TILE         ?= Core.ST.L4.1
+TILE         ?= Core.ST.L4
 TILES_ENABLED := 0
 BLE_ENABLED  := 0
 BOOTLOADER   := 0

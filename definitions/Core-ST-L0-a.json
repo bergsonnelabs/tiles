@@ -1,6 +1,6 @@
 {
   "rev": "a",
-  "name": "ST.H5.1",
+  "name": "ST.L0",
   "pads": [
     {
       "pad": "1",
@@ -15,7 +15,7 @@
           "note": "",
           "type": "power",
           "function": "GND",
-          "direction": "input"
+          "direction": ""
         }
       ]
     },
@@ -31,54 +31,50 @@
         {
           "note": "",
           "type": "digital",
-          "function": "A8",
+          "function": "A3",
           "direction": "bidirectional",
           "is_default": true
         },
         {
-          "af": 10,
           "note": "",
-          "type": "digital",
-          "function": "USB.SOF",
-          "direction": "",
-          "interface": "USB"
+          "type": "analog",
+          "function": "ADC3",
+          "direction": ""
+        },
+        {
+          "af": 0,
+          "note": "",
+          "type": "timer",
+          "function": "TIM21.2",
+          "direction": ""
+        },
+        {
+          "af": 2,
+          "note": "",
+          "type": "timer",
+          "function": "TIM2.4",
+          "direction": ""
         },
         {
           "af": 4,
           "note": "",
           "type": "digital",
-          "function": "I2C3.CLK",
+          "function": "USART2.RX",
           "direction": "",
-          "interface": "I2C3"
+          "interface": "USART2"
         },
         {
-          "af": 9,
+          "af": 6,
           "note": "",
           "type": "digital",
-          "function": "I3C2.CLK",
+          "function": "LPUART1.RX",
           "direction": "",
-          "interface": "I3C2"
+          "interface": "LPUART1"
         },
         {
-          "af": 5,
           "note": "",
-          "type": "digital",
-          "function": "SPI1.RDY",
-          "direction": "",
-          "interface": "SPI1"
-        },
-        {
-          "af": 1,
-          "note": "",
-          "type": "timer",
-          "function": "TIM1.1",
-          "direction": ""
-        },
-        {
-          "af": 3,
-          "note": "",
-          "type": "timer",
-          "function": "TIM8.BKIN2",
+          "type": "other",
+          "function": "COMP2.IN+",
           "direction": ""
         }
       ]
@@ -95,46 +91,72 @@
         {
           "note": "",
           "type": "digital",
-          "function": "B4",
+          "function": "A0",
           "direction": "bidirectional",
           "is_default": true
         },
         {
-          "af": 9,
           "note": "",
-          "type": "digital",
-          "function": "I2C3.DAT",
-          "direction": "",
-          "interface": "I2C3"
-        },
-        {
-          "af": 10,
-          "note": "",
-          "type": "digital",
-          "function": "I3C2.DAT",
-          "direction": "",
-          "interface": "I3C2"
-        },
-        {
-          "af": 5,
-          "note": "",
-          "type": "digital",
-          "function": "SPI1.MISO",
-          "direction": "",
-          "interface": "SPI1"
+          "type": "analog",
+          "function": "ADC0",
+          "direction": ""
         },
         {
           "af": 2,
           "note": "",
           "type": "timer",
-          "function": "TIM3.1",
+          "function": "TIM2.1",
           "direction": ""
+        },
+        {
+          "af": 5,
+          "note": "",
+          "type": "timer",
+          "function": "TIM2.ETR",
+          "direction": ""
+        },
+        {
+          "af": 1,
+          "note": "",
+          "type": "timer",
+          "function": "LPTIM1.1",
+          "direction": ""
+        },
+        {
+          "af": 0,
+          "note": "",
+          "type": "digital",
+          "function": "USART2.RX",
+          "direction": "",
+          "interface": "USART2"
         },
         {
           "af": 4,
           "note": "",
-          "type": "timer",
-          "function": "LPTIM1.2",
+          "type": "digital",
+          "function": "USART2.CTS",
+          "direction": "",
+          "interface": "USART2"
+        },
+        {
+          "af": 6,
+          "note": "",
+          "type": "digital",
+          "function": "LPUART1.RX",
+          "direction": "",
+          "interface": "LPUART1"
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP1.OUT",
+          "direction": ""
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP1.IN-",
           "direction": ""
         }
       ]
@@ -151,12 +173,12 @@
         {
           "note": "",
           "type": "digital",
-          "function": "B8",
+          "function": "B6",
           "direction": "bidirectional",
           "is_default": true
         },
         {
-          "af": 4,
+          "af": 1,
           "note": "",
           "type": "digital",
           "function": "I2C1.CLK",
@@ -164,35 +186,40 @@
           "interface": "I2C1"
         },
         {
-          "af": 3,
+          "af": 5,
           "note": "",
-          "type": "digital",
-          "function": "I3C1.CLK",
-          "direction": "",
-          "interface": "I3C1"
+          "type": "timer",
+          "function": "TIM2.3",
+          "direction": ""
         },
         {
           "af": 2,
           "note": "",
           "type": "timer",
-          "function": "TIM4.3",
+          "function": "LPTIM1.ETR",
           "direction": ""
         },
         {
-          "af": 8,
+          "af": 0,
           "note": "",
           "type": "digital",
-          "function": "UART4.RX",
+          "function": "USART2.TX",
           "direction": "",
-          "interface": "UART4"
+          "interface": "USART2"
         },
         {
-          "af": 9,
+          "af": 6,
           "note": "",
           "type": "digital",
-          "function": "FDCAN1.RX",
+          "function": "LPUART1.TX",
           "direction": "",
-          "interface": "FDCAN1"
+          "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN+",
+          "direction": ""
         }
       ]
     },
@@ -213,7 +240,7 @@
           "is_default": true
         },
         {
-          "af": 4,
+          "af": 1,
           "note": "",
           "type": "digital",
           "function": "I2C1.DAT",
@@ -221,27 +248,40 @@
           "interface": "I2C1"
         },
         {
-          "af": 3,
+          "af": 5,
           "note": "",
-          "type": "digital",
-          "function": "I3C1.DAT",
-          "direction": "",
-          "interface": "I3C1"
+          "type": "timer",
+          "function": "TIM2.4",
+          "direction": ""
         },
         {
           "af": 2,
           "note": "",
           "type": "timer",
-          "function": "TIM4.2",
+          "function": "LPTIM1.2",
           "direction": ""
         },
         {
-          "af": 9,
+          "af": 0,
           "note": "",
           "type": "digital",
-          "function": "FDCAN1.TX",
+          "function": "USART2.RX",
           "direction": "",
-          "interface": "FDCAN1"
+          "interface": "USART2"
+        },
+        {
+          "af": 6,
+          "note": "",
+          "type": "digital",
+          "function": "LPUART1.RX",
+          "direction": "",
+          "interface": "LPUART1"
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN+",
+          "direction": ""
         }
       ]
     },
@@ -257,40 +297,66 @@
         {
           "note": "",
           "type": "digital",
-          "function": "A12",
+          "function": "A1",
           "direction": "bidirectional",
           "is_default": true
         },
         {
-          "af": 10,
+          "af": 3,
           "note": "",
           "type": "digital",
-          "function": "USB.DP",
+          "function": "I2C1.SMBA",
           "direction": "",
-          "interface": "USB"
+          "interface": "I2C1"
+        },
+        {
+          "note": "",
+          "type": "analog",
+          "function": "ADC1",
+          "direction": ""
+        },
+        {
+          "af": 2,
+          "note": "",
+          "type": "timer",
+          "function": "TIM2.2",
+          "direction": ""
+        },
+        {
+          "af": 5,
+          "note": "",
+          "type": "timer",
+          "function": "TIM21.ETR",
+          "direction": ""
         },
         {
           "af": 1,
           "note": "",
           "type": "timer",
-          "function": "TIM1.ETR",
+          "function": "LPTIM1.2",
           "direction": ""
+        },
+        {
+          "af": 4,
+          "note": "",
+          "type": "digital",
+          "function": "USART2.RTS_DE",
+          "direction": "",
+          "interface": "USART2"
         },
         {
           "af": 6,
           "note": "",
           "type": "digital",
-          "function": "UART4.TX",
+          "function": "LPUART1.TX",
           "direction": "",
-          "interface": "UART4"
+          "interface": "LPUART1"
         },
         {
-          "af": 9,
           "note": "",
-          "type": "digital",
-          "function": "FDCAN1.TX",
-          "direction": "",
-          "interface": "FDCAN1"
+          "type": "other",
+          "function": "COMP1.IN+",
+          "direction": ""
         }
       ]
     },
@@ -306,40 +372,58 @@
         {
           "note": "",
           "type": "digital",
-          "function": "A11",
+          "function": "A2",
           "direction": "bidirectional",
           "is_default": true
         },
         {
-          "af": 10,
           "note": "",
-          "type": "digital",
-          "function": "USB.DM",
-          "direction": "",
-          "interface": "USB"
+          "type": "analog",
+          "function": "ADC2",
+          "direction": ""
         },
         {
-          "af": 1,
+          "af": 0,
           "note": "",
           "type": "timer",
-          "function": "TIM1.4",
+          "function": "TIM21.1",
           "direction": ""
+        },
+        {
+          "af": 2,
+          "note": "",
+          "type": "timer",
+          "function": "TIM2.3",
+          "direction": ""
+        },
+        {
+          "af": 4,
+          "note": "",
+          "type": "digital",
+          "function": "USART2.TX",
+          "direction": "",
+          "interface": "USART2"
         },
         {
           "af": 6,
           "note": "",
           "type": "digital",
-          "function": "UART4.RX",
+          "function": "LPUART1.TX",
           "direction": "",
-          "interface": "UART4"
+          "interface": "LPUART1"
         },
         {
-          "af": 9,
           "note": "",
-          "type": "digital",
-          "function": "FDCAN1.RX",
-          "direction": "",
-          "interface": "FDCAN1"
+          "type": "other",
+          "function": "COMP2.IN-",
+          "direction": ""
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP2.OUT",
+          "direction": ""
         }
       ]
     },
@@ -355,49 +439,47 @@
         {
           "note": "",
           "type": "digital",
-          "function": "A7",
+          "function": "A5",
           "direction": "bidirectional",
           "is_default": true
         },
         {
+          "note": "",
+          "type": "analog",
+          "function": "ADC5",
+          "direction": ""
+        },
+        {
           "af": 5,
           "note": "",
-          "type": "digital",
-          "function": "SPI1.MOSI",
-          "direction": "",
-          "interface": "SPI1"
-        },
-        {
-          "note": "",
-          "type": "analog",
-          "function": "ADC7+",
-          "direction": ""
-        },
-        {
-          "note": "",
-          "type": "analog",
-          "function": "ADC3-",
-          "direction": ""
-        },
-        {
-          "af": 1,
-          "note": "",
           "type": "timer",
-          "function": "TIM1.1N",
+          "function": "TIM2.1",
           "direction": ""
         },
         {
           "af": 2,
           "note": "",
           "type": "timer",
-          "function": "TIM3.2",
+          "function": "TIM2.ETR",
           "direction": ""
         },
         {
-          "af": 3,
+          "af": 1,
           "note": "",
           "type": "timer",
-          "function": "TIM8.1N",
+          "function": "LPTIM1.2",
+          "direction": ""
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP1.IN-",
+          "direction": ""
+        },
+        {
+          "note": "",
+          "type": "other",
+          "function": "COMP2.IN-",
           "direction": ""
         }
       ]
@@ -414,56 +496,36 @@
         {
           "note": "",
           "type": "digital",
-          "function": "A5",
-          "direction": "bidirectional",
-          "is_default": true
+          "function": "B0",
+          "direction": "bidirectional"
+        },
+        {
+          "note": "",
+          "type": "analog",
+          "function": "ADC8",
+          "direction": ""
+        },
+        {
+          "af": 2,
+          "note": "",
+          "type": "timer",
+          "function": "TIM2.2",
+          "direction": ""
         },
         {
           "af": 5,
           "note": "",
+          "type": "timer",
+          "function": "TIM2.3",
+          "direction": ""
+        },
+        {
+          "af": 4,
+          "note": "",
           "type": "digital",
-          "function": "SPI1.CLK",
+          "function": "USART2.RTS_DE",
           "direction": "",
-          "interface": "SPI1"
-        },
-        {
-          "note": "",
-          "type": "analog",
-          "function": "ADC19+",
-          "direction": ""
-        },
-        {
-          "note": "",
-          "type": "analog",
-          "function": "ADC18-",
-          "direction": ""
-        },
-        {
-          "af": 1,
-          "note": "",
-          "type": "timer",
-          "function": "TIM2.1",
-          "direction": ""
-        },
-        {
-          "af": 3,
-          "note": "",
-          "type": "timer",
-          "function": "TIM8.1N",
-          "direction": ""
-        },
-        {
-          "af": 14,
-          "note": "",
-          "type": "timer",
-          "function": "TIM2.ETR",
-          "direction": ""
-        },
-        {
-          "note": "",
-          "type": "other",
-          "function": "DAC1.OUT",
-          "direction": ""
+          "interface": "USART2"
         }
       ]
     },
@@ -477,7 +539,7 @@
       },
       "functions": [
         {
-          "note": "",
+          "note": "1.8-3.6V",
           "type": "power",
           "function": "V+",
           "direction": "input"
@@ -493,6 +555,12 @@
         "center_y": 1600
       },
       "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "B9",
+          "direction": "bidirectional"
+        },
         {
           "note": "",
           "type": "system",
@@ -535,10 +603,48 @@
           "is_default": true
         },
         {
+          "af": 3,
+          "note": "",
+          "type": "digital",
+          "function": "I2C1.SMBA",
+          "direction": "",
+          "interface": "I2C1"
+        },
+        {
+          "af": 1,
+          "note": "",
+          "type": "timer",
+          "function": "LPTIM1.OUT",
+          "direction": ""
+        },
+        {
+          "af": 4,
+          "note": "",
+          "type": "digital",
+          "function": "USART2.TX",
+          "direction": "",
+          "interface": "USART2"
+        },
+        {
+          "af": 6,
+          "note": "",
+          "type": "digital",
+          "function": "LPUART1.TX",
+          "direction": "",
+          "interface": "LPUART1"
+        },
+        {
           "af": 0,
           "note": "",
           "type": "system",
           "function": "SWCLK",
+          "direction": ""
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP2.OUT",
           "direction": ""
         }
       ]
@@ -560,6 +666,36 @@
           "is_default": true
         },
         {
+          "af": 3,
+          "note": "",
+          "type": "digital",
+          "function": "I2C1.DAT",
+          "direction": "",
+          "interface": "I2C1"
+        },
+        {
+          "af": 1,
+          "note": "",
+          "type": "timer",
+          "function": "LPTIM1.ETR",
+          "direction": ""
+        },
+        {
+          "af": 6,
+          "note": "",
+          "type": "digital",
+          "function": "LPUART1.RX",
+          "direction": "",
+          "interface": "LPUART1"
+        },
+        {
+          "af": 7,
+          "note": "",
+          "type": "other",
+          "function": "COMP1.OUT",
+          "direction": ""
+        },
+        {
           "af": 0,
           "note": "",
           "type": "system",
@@ -572,9 +708,9 @@
   "power": [
     {
       "max": 3.6,
-      "min": 1.71,
+      "min": 1.8,
       "type": "system",
-      "notes": "note that a voltage of at least 3.0V is required for USB communications",
+      "notes": "",
       "gnd_pad": [
         "1"
       ],
@@ -691,127 +827,151 @@
       "perPad": {
         "2": {
           "label": "Pad 2",
-          "default": "A8",
+          "default": "A3",
           "options": [
             {
-              "value": "A8",
+              "value": "A3",
               "derived": {
                 "role": "gpio"
               }
             },
             {
-              "af": 10,
-              "value": "USB.SOF",
-              "interface": "USB"
+              "value": "ADC3",
+              "derived": {
+                "role": "analog"
+              }
             },
             {
-              "af": 4,
-              "value": "I2C3.CLK",
-              "interface": "I2C3"
-            },
-            {
-              "af": 9,
-              "value": "I3C2.CLK",
-              "interface": "I3C2"
-            },
-            {
-              "af": 5,
-              "value": "SPI1.RDY",
-              "interface": "SPI1"
-            },
-            {
-              "af": 1,
-              "value": "TIM1.1",
+              "af": 0,
+              "value": "TIM21.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 3,
-              "value": "TIM8.BKIN2",
+              "af": 2,
+              "value": "TIM2.4",
               "derived": {
-                "role": "timer-input"
+                "role": "timer-output"
               }
+            },
+            {
+              "af": 4,
+              "value": "USART2.RX",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.RX",
+              "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
         "3": {
           "label": "Pad 3",
-          "default": "B4",
+          "default": "A0",
           "options": [
             {
-              "value": "B4",
+              "value": "A0",
               "derived": {
                 "role": "gpio"
               }
             },
             {
-              "af": 9,
-              "value": "I2C3.DAT",
-              "interface": "I2C3"
-            },
-            {
-              "af": 10,
-              "value": "I3C2.DAT",
-              "interface": "I3C2"
-            },
-            {
-              "af": 5,
-              "value": "SPI1.MISO",
-              "interface": "SPI1"
+              "value": "ADC0",
+              "derived": {
+                "role": "analog"
+              }
             },
             {
               "af": 2,
-              "value": "TIM3.1",
+              "value": "TIM2.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
-              "value": "LPTIM1.2",
+              "af": 5,
+              "value": "TIM2.ETR",
+              "derived": {
+                "role": "timer-input"
+              }
+            },
+            {
+              "af": 1,
+              "value": "LPTIM1.1",
               "derived": {
                 "role": "timer-output"
               }
+            },
+            {
+              "af": 0,
+              "value": "USART2.RX",
+              "interface": "USART2"
+            },
+            {
+              "af": 4,
+              "value": "USART2.CTS",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.RX",
+              "interface": "LPUART1"
+            },
+            {
+              "af": 7,
+              "value": "COMP1.OUT"
+            },
+            {
+              "value": "COMP1.IN-"
             }
           ]
         },
         "4": {
           "label": "Pad 4",
-          "default": "B8",
+          "default": "B6",
           "options": [
             {
-              "value": "B8",
+              "value": "B6",
               "derived": {
                 "role": "gpio"
               }
             },
             {
-              "af": 4,
+              "af": 1,
               "value": "I2C1.CLK",
               "interface": "I2C1"
             },
             {
-              "af": 3,
-              "value": "I3C1.CLK",
-              "interface": "I3C1"
-            },
-            {
-              "af": 2,
-              "value": "TIM4.3",
+              "af": 5,
+              "value": "TIM2.3",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 8,
-              "value": "UART4.RX",
-              "interface": "UART4"
+              "af": 2,
+              "value": "LPTIM1.ETR",
+              "derived": {
+                "role": "timer-input"
+              }
             },
             {
-              "af": 9,
-              "value": "FDCAN1.RX",
-              "interface": "FDCAN1"
+              "af": 0,
+              "value": "USART2.TX",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.TX",
+              "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
@@ -826,149 +986,147 @@
               }
             },
             {
-              "af": 4,
+              "af": 1,
               "value": "I2C1.DAT",
               "interface": "I2C1"
             },
             {
-              "af": 3,
-              "value": "I3C1.DAT",
-              "interface": "I3C1"
-            },
-            {
-              "af": 2,
-              "value": "TIM4.2",
+              "af": 5,
+              "value": "TIM2.4",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 9,
-              "value": "FDCAN1.TX",
-              "interface": "FDCAN1"
+              "af": 2,
+              "value": "LPTIM1.2",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "af": 0,
+              "value": "USART2.RX",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.RX",
+              "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN+"
             }
           ]
         },
         "6": {
           "label": "Pad 6",
-          "default": "A12",
+          "default": "A1",
           "options": [
             {
-              "value": "A12",
+              "value": "A1",
               "derived": {
                 "role": "gpio"
               }
             },
             {
-              "af": 10,
-              "value": "USB.DP",
-              "interface": "USB"
+              "af": 3,
+              "value": "I2C1.SMBA",
+              "interface": "I2C1"
             },
             {
-              "af": 1,
-              "value": "TIM1.ETR",
+              "value": "ADC1",
               "derived": {
-                "role": "timer-input"
+                "role": "analog"
               }
             },
             {
-              "af": 6,
-              "value": "UART4.TX",
-              "interface": "UART4"
-            },
-            {
-              "af": 9,
-              "value": "FDCAN1.TX",
-              "interface": "FDCAN1"
-            }
-          ]
-        },
-        "7": {
-          "label": "Pad 7",
-          "default": "A11",
-          "options": [
-            {
-              "value": "A11",
-              "derived": {
-                "role": "gpio"
-              }
-            },
-            {
-              "af": 10,
-              "value": "USB.DM",
-              "interface": "USB"
-            },
-            {
-              "af": 1,
-              "value": "TIM1.4",
+              "af": 2,
+              "value": "TIM2.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 6,
-              "value": "UART4.RX",
-              "interface": "UART4"
+              "af": 5,
+              "value": "TIM21.ETR",
+              "derived": {
+                "role": "timer-input"
+              }
             },
             {
-              "af": 9,
-              "value": "FDCAN1.RX",
-              "interface": "FDCAN1"
+              "af": 1,
+              "value": "LPTIM1.2",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "af": 4,
+              "value": "USART2.RTS_DE",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.TX",
+              "interface": "LPUART1"
+            },
+            {
+              "value": "COMP1.IN+"
             }
           ]
         },
-        "8": {
-          "label": "Pad 8",
-          "default": "A7",
+        "7": {
+          "label": "Pad 7",
+          "default": "A2",
           "options": [
             {
-              "value": "A7",
+              "value": "A2",
               "derived": {
                 "role": "gpio"
               }
             },
             {
-              "af": 5,
-              "value": "SPI1.MOSI",
-              "interface": "SPI1"
-            },
-            {
-              "value": "ADC7+",
+              "value": "ADC2",
               "derived": {
                 "role": "analog"
               }
             },
             {
-              "value": "ADC3-",
-              "derived": {
-                "role": "analog"
-              }
-            },
-            {
-              "af": 1,
-              "value": "TIM1.1N",
+              "af": 0,
+              "value": "TIM21.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
               "af": 2,
-              "value": "TIM3.2",
+              "value": "TIM2.3",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 3,
-              "value": "TIM8.1N",
-              "derived": {
-                "role": "timer-output"
-              }
+              "af": 4,
+              "value": "USART2.TX",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.TX",
+              "interface": "LPUART1"
+            },
+            {
+              "value": "COMP2.IN-"
+            },
+            {
+              "af": 7,
+              "value": "COMP2.OUT"
             }
           ]
         },
-        "9": {
-          "label": "Pad 9",
+        "8": {
+          "label": "Pad 8",
           "default": "A5",
           "options": [
             {
@@ -978,45 +1136,92 @@
               }
             },
             {
+              "value": "ADC5",
+              "derived": {
+                "role": "analog"
+              }
+            },
+            {
               "af": 5,
-              "value": "SPI1.CLK",
-              "interface": "SPI1"
-            },
-            {
-              "value": "ADC19+",
-              "derived": {
-                "role": "analog"
-              }
-            },
-            {
-              "value": "ADC18-",
-              "derived": {
-                "role": "analog"
-              }
-            },
-            {
-              "af": 1,
               "value": "TIM2.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 3,
-              "value": "TIM8.1N",
-              "derived": {
-                "role": "timer-output"
-              }
-            },
-            {
-              "af": 14,
+              "af": 2,
               "value": "TIM2.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "value": "DAC1.OUT"
+              "af": 1,
+              "value": "LPTIM1.2",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "value": "COMP1.IN-"
+            },
+            {
+              "value": "COMP2.IN-"
+            }
+          ]
+        },
+        "9": {
+          "label": "Pad 9",
+          "default": "B0",
+          "options": [
+            {
+              "value": "B0",
+              "derived": {
+                "role": "gpio"
+              }
+            },
+            {
+              "value": "ADC8",
+              "derived": {
+                "role": "analog"
+              }
+            },
+            {
+              "af": 2,
+              "value": "TIM2.2",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "af": 5,
+              "value": "TIM2.3",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "af": 4,
+              "value": "USART2.RTS_DE",
+              "interface": "USART2"
+            }
+          ]
+        },
+        "11": {
+          "label": "Pad 11",
+          "default": "B9",
+          "options": [
+            {
+              "value": "B9",
+              "derived": {
+                "role": "gpio"
+              }
+            },
+            {
+              "value": "BOOT0",
+              "derived": {
+                "role": "system"
+              }
             }
           ]
         },
@@ -1031,11 +1236,37 @@
               }
             },
             {
+              "af": 3,
+              "value": "I2C1.SMBA",
+              "interface": "I2C1"
+            },
+            {
+              "af": 1,
+              "value": "LPTIM1.OUT",
+              "derived": {
+                "role": "timer-output"
+              }
+            },
+            {
+              "af": 4,
+              "value": "USART2.TX",
+              "interface": "USART2"
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.TX",
+              "interface": "LPUART1"
+            },
+            {
               "af": 0,
               "value": "SWCLK",
               "derived": {
                 "role": "system"
               }
+            },
+            {
+              "af": 7,
+              "value": "COMP2.OUT"
             }
           ]
         },
@@ -1048,6 +1279,27 @@
               "derived": {
                 "role": "gpio"
               }
+            },
+            {
+              "af": 3,
+              "value": "I2C1.DAT",
+              "interface": "I2C1"
+            },
+            {
+              "af": 1,
+              "value": "LPTIM1.ETR",
+              "derived": {
+                "role": "timer-input"
+              }
+            },
+            {
+              "af": 6,
+              "value": "LPUART1.RX",
+              "interface": "LPUART1"
+            },
+            {
+              "af": 7,
+              "value": "COMP1.OUT"
             },
             {
               "af": 0,
@@ -1068,50 +1320,47 @@
       "default": "medium",
       "options": [
         {
-          "label": "Low (4MHz, CSI)",
+          "label": "Low (1MHz, MSI)",
           "value": "low",
           "firmware_contract": [
             {
               "type": "clock",
-              "source": "csi",
-              "sysclk_mhz": 4
+              "source": "msi",
+              "sysclk_mhz": 1
             }
           ]
         },
         {
-          "label": "Medium (64MHz, HSI)",
+          "label": "Medium (2MHz, MSI)",
           "value": "medium",
           "firmware_contract": [
             {
               "type": "clock",
-              "source": "hsi",
-              "sysclk_mhz": 64
+              "source": "msi",
+              "sysclk_mhz": 2
             }
           ]
         },
         {
-          "label": "High (128MHz, HSI + PLL)",
+          "label": "High (16MHz, HSI16)",
           "value": "high",
           "firmware_contract": [
             {
-              "pll": true,
-              "note": "64÷4×16÷2, VCO=256",
               "type": "clock",
-              "source": "hsi",
-              "sysclk_mhz": 128
+              "source": "hsi16",
+              "sysclk_mhz": 16
             }
           ]
         },
         {
-          "label": "Max (248MHz, HSI + PLL)",
+          "label": "Max (32MHz, HSI16 + PLL)",
           "value": "max",
           "firmware_contract": [
             {
               "pll": true,
-              "note": "64÷8×62÷2, VCO=496",
               "type": "clock",
-              "source": "hsi",
-              "sysclk_mhz": 248
+              "source": "hsi16",
+              "sysclk_mhz": 32
             }
           ]
         }
@@ -1124,31 +1373,10 @@
       "default": [],
       "options": [
         {
-          "value": "USB_DFU"
-        },
-        {
-          "value": "USART1"
-        },
-        {
           "value": "USART2"
         },
         {
-          "value": "USART3"
-        },
-        {
-          "value": "I2C1"
-        },
-        {
-          "value": "I2C2"
-        },
-        {
           "value": "SPI1"
-        },
-        {
-          "value": "SPI2"
-        },
-        {
-          "value": "FDCAN1"
         }
       ]
     },
@@ -1189,77 +1417,6 @@
         }
       },
       "perInstance": {
-        "USB": {
-          "fields": {
-            "role": {
-              "kind": "select",
-              "when": {
-                "enabled": true
-              },
-              "default": "device",
-              "options": [
-                {
-                  "value": "host"
-                },
-                {
-                  "value": "device"
-                }
-              ]
-            },
-            "deviceClass": {
-              "kind": "select",
-              "when": {
-                "enabled": true
-              },
-              "default": "cdc",
-              "options": [
-                {
-                  "value": "none"
-                },
-                {
-                  "value": "cdc"
-                },
-                {
-                  "value": "hid"
-                },
-                {
-                  "value": "dfu"
-                },
-                {
-                  "value": "msc"
-                }
-              ]
-            }
-          },
-          "netlist": {
-            "when": {
-              "enabled": true
-            },
-            "buses": [
-              {
-                "bus": "usb",
-                "tag": "USB.bus",
-                "signalsFrom": "interfaces.USB.pad_assignments"
-              }
-            ]
-          },
-          "requires": {
-            "predicates": {
-              "pads.6": "USB.DP",
-              "pads.7": "USB.DM"
-            }
-          },
-          "firmware_contract": {
-            "entries": [
-              {
-                "via": "register",
-                "type": "register",
-                "value": 1,
-                "register": "RCC.CLK_EN.USB"
-              }
-            ]
-          }
-        },
         "I2C1": {
           "fields": {
             "address": {
@@ -1285,12 +1442,6 @@
               }
             ]
           },
-          "requires": {
-            "predicates": {
-              "pads.4": "I2C1.CLK",
-              "pads.5": "I2C1.DAT"
-            }
-          },
           "firmware_contract": {
             "entries": [
               {
@@ -1302,194 +1453,7 @@
             ]
           }
         },
-        "I2C3": {
-          "fields": {
-            "address": {
-              "max": 119,
-              "min": 8,
-              "kind": "number",
-              "unit": "7-bit",
-              "when": {
-                "role": "slave"
-              },
-              "default": 66
-            }
-          },
-          "netlist": {
-            "when": {
-              "enabled": true
-            },
-            "buses": [
-              {
-                "bus": "i2c",
-                "tag": "I2C3.bus",
-                "signalsFrom": "interfaces.I2C3.pad_assignments"
-              }
-            ]
-          },
-          "requires": {
-            "predicates": {
-              "pads.2": "I2C3.CLK",
-              "pads.3": "I2C3.DAT"
-            }
-          },
-          "firmware_contract": {
-            "entries": [
-              {
-                "via": "register",
-                "type": "register",
-                "value": 1,
-                "register": "RCC.CLK_EN.I2C3"
-              }
-            ]
-          }
-        },
-        "I3C1": {
-          "fields": {
-            "role": {
-              "kind": "select",
-              "when": {
-                "enabled": true
-              },
-              "default": "controller",
-              "options": [
-                {
-                  "value": "controller"
-                },
-                {
-                  "value": "target"
-                }
-              ]
-            },
-            "address": {
-              "max": 119,
-              "min": 8,
-              "kind": "number",
-              "unit": "7-bit",
-              "when": {
-                "role": "target"
-              },
-              "default": 66
-            }
-          },
-          "netlist": {
-            "when": {
-              "enabled": true
-            },
-            "buses": [
-              {
-                "bus": "i3c",
-                "tag": "I3C1.bus",
-                "signalsFrom": "interfaces.I3C1.pad_assignments"
-              }
-            ]
-          },
-          "requires": {
-            "predicates": {
-              "pads.4": "I3C1.CLK",
-              "pads.5": "I3C1.DAT"
-            }
-          },
-          "firmware_contract": {
-            "entries": [
-              {
-                "via": "register",
-                "type": "register",
-                "value": 1,
-                "register": "RCC.CLK_EN.I3C1"
-              }
-            ]
-          }
-        },
-        "I3C2": {
-          "fields": {
-            "role": {
-              "kind": "select",
-              "when": {
-                "enabled": true
-              },
-              "default": "controller",
-              "options": [
-                {
-                  "value": "controller"
-                },
-                {
-                  "value": "target"
-                }
-              ]
-            },
-            "address": {
-              "max": 119,
-              "min": 8,
-              "kind": "number",
-              "unit": "7-bit",
-              "when": {
-                "role": "target"
-              },
-              "default": 66
-            }
-          },
-          "netlist": {
-            "when": {
-              "enabled": true
-            },
-            "buses": [
-              {
-                "bus": "i3c",
-                "tag": "I3C2.bus",
-                "signalsFrom": "interfaces.I3C2.pad_assignments"
-              }
-            ]
-          },
-          "requires": {
-            "predicates": {
-              "pads.2": "I3C2.CLK",
-              "pads.3": "I3C2.DAT"
-            }
-          },
-          "firmware_contract": {
-            "entries": [
-              {
-                "via": "register",
-                "type": "register",
-                "value": 1,
-                "register": "RCC.CLK_EN.I3C2"
-              }
-            ]
-          }
-        },
-        "SPI1": {
-          "netlist": {
-            "when": {
-              "enabled": true
-            },
-            "buses": [
-              {
-                "bus": "spi",
-                "tag": "SPI1.bus",
-                "signalsFrom": "interfaces.SPI1.pad_assignments"
-              }
-            ]
-          },
-          "requires": {
-            "predicates": {
-              "pads.3": "SPI1.MISO",
-              "pads.8": "SPI1.MOSI",
-              "pads.9": "SPI1.CLK"
-            }
-          },
-          "firmware_contract": {
-            "entries": [
-              {
-                "via": "register",
-                "type": "register",
-                "value": 1,
-                "register": "RCC.CLK_EN.SPI1"
-              }
-            ]
-          }
-        },
-        "UART4": {
+        "USART2": {
           "netlist": {
             "when": {
               "enabled": true
@@ -1497,8 +1461,8 @@
             "buses": [
               {
                 "bus": "uart",
-                "tag": "UART4.bus",
-                "signalsFrom": "interfaces.UART4.pad_assignments"
+                "tag": "USART2.bus",
+                "signalsFrom": "interfaces.USART2.pad_assignments"
               }
             ]
           },
@@ -1508,21 +1472,21 @@
                 "via": "register",
                 "type": "register",
                 "value": 1,
-                "register": "RCC.CLK_EN.UART4"
+                "register": "RCC.CLK_EN.USART2"
               }
             ]
           }
         },
-        "FDCAN1": {
+        "LPUART1": {
           "netlist": {
             "when": {
               "enabled": true
             },
             "buses": [
               {
-                "bus": "can",
-                "tag": "FDCAN1.bus",
-                "signalsFrom": "interfaces.FDCAN1.pad_assignments"
+                "bus": "uart",
+                "tag": "LPUART1.bus",
+                "signalsFrom": "interfaces.LPUART1.pad_assignments"
               }
             ]
           },
@@ -1532,7 +1496,7 @@
                 "via": "register",
                 "type": "register",
                 "value": 1,
-                "register": "RCC.CLK_EN.FDCAN1"
+                "register": "RCC.CLK_EN.LPUART1"
               }
             ]
           }
@@ -1548,44 +1512,44 @@
     "size_y": 4000,
     "size_z": 0
   },
-  "tile_id": 11,
+  "tile_id": 12,
   "features": {
     "led": {
       "kind": "led",
       "color": "red",
       "label": "Status LED",
       "control": {
-        "pin": "PA15",
+        "pin": "PA8",
         "via": "gpio",
         "polarity": "active-high"
       },
-      "center_x": -1650,
-      "center_y": -600,
+      "center_x": 1550,
+      "center_y": -200,
       "rotation": 90
     },
     "clock": {
       "kind": "clock",
       "sources": [
         {
-          "type": "hsi",
-          "description": "64MHz internal RC oscillator",
-          "frequency_mhz": 64
+          "type": "msi",
+          "description": "Multi-speed internal RC (65kHz–4.194MHz)",
+          "frequency_mhz": 4
         },
         {
-          "type": "csi",
-          "description": "4MHz low-power internal RC",
-          "frequency_mhz": 4
+          "type": "hsi16",
+          "description": "16MHz internal RC",
+          "frequency_mhz": 16
         }
       ],
-      "boot_source": "hsi"
+      "boot_source": "msi"
     }
   },
-  "headline": "250MHz Cortex-M33",
+  "headline": "ultra-low-power Cortex-M0+",
   "components": [
     {
-      "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32h523he.html",
-      "part": "STM32H523HE",
-      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/11/ST_Microelectronics-STM32H523HE.pdf",
+      "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32l011e4.html",
+      "part": "STM32L011E4",
+      "datasheet": "https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/12/ST_Microelectronics-STM32L011.pdf",
       "manufacturer": "ST Microelectronics"
     }
   ],
@@ -1607,256 +1571,147 @@
         {
           "pad": "4",
           "role": "bus",
-          "function": "I2C1.CLK",
-          "is_required": true
+          "function": "I2C1.CLK"
         },
         {
           "pad": "5",
           "role": "bus",
-          "function": "I2C1.DAT",
-          "is_required": true
+          "function": "I2C1.DAT"
+        },
+        {
+          "pad": "6",
+          "role": "bus",
+          "function": "I2C1.SMBA"
+        },
+        {
+          "pad": "13",
+          "role": "bus",
+          "function": "I2C1.SMBA"
+        },
+        {
+          "pad": "14",
+          "role": "bus",
+          "function": "I2C1.DAT"
         }
-      ],
-      "mutually_exclusive": [
-        "I3C1"
       ]
     },
     {
-      "name": "I2C3",
-      "type": "I2C",
+      "name": "USART2",
+      "type": "USART",
       "parameters": {
-        "modes": [
-          "master, slave"
-        ],
-        "addresses": [
-          {
-            "address": "programmable"
-          }
-        ]
+        "modes": []
       },
       "pad_assignments": [
         {
           "pad": "2",
           "role": "bus",
-          "function": "I2C3.CLK",
-          "is_required": true
+          "function": "USART2.RX"
         },
         {
           "pad": "3",
           "role": "bus",
-          "function": "I2C3.DAT",
-          "is_required": true
-        }
-      ],
-      "mutually_exclusive": [
-        "I3C2",
-        "SPI1"
-      ]
-    },
-    {
-      "name": "SPI1",
-      "type": "SPI",
-      "parameters": {
-        "modes": [
-          "master"
-        ],
-        "max_clock_speed": "45MHz"
-      },
-      "pad_assignments": [
-        {
-          "pad": "2",
-          "role": "bus",
-          "function": "SPI1.RDY"
+          "function": "USART2.RX"
         },
         {
           "pad": "3",
           "role": "bus",
-          "function": "SPI1.MISO",
-          "is_required": true
+          "function": "USART2.CTS"
         },
         {
-          "pad": "8",
+          "pad": "4",
           "role": "bus",
-          "function": "SPI1.MOSI",
-          "is_required": true
+          "function": "USART2.TX"
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "USART2.RX"
+        },
+        {
+          "pad": "6",
+          "role": "bus",
+          "function": "USART2.RTS_DE"
+        },
+        {
+          "pad": "7",
+          "role": "bus",
+          "function": "USART2.TX"
         },
         {
           "pad": "9",
           "role": "bus",
-          "function": "SPI1.CLK",
-          "is_required": true
+          "function": "USART2.RTS_DE"
+        },
+        {
+          "pad": "13",
+          "role": "bus",
+          "function": "USART2.TX"
         }
-      ],
-      "mutually_exclusive": [
-        "I2C3",
-        "I3C2"
       ]
     },
     {
-      "name": "UART4",
-      "type": "UART",
+      "name": "LPUART1",
+      "type": "LPUART",
       "parameters": {
         "modes": []
-      },
-      "pad_assignments": [
-        {
-          "pad": "4",
-          "role": "bus",
-          "function": "UART4.RX"
-        },
-        {
-          "pad": "6",
-          "role": "bus",
-          "function": "UART4.TX"
-        },
-        {
-          "pad": "7",
-          "role": "bus",
-          "function": "UART4.RX"
-        }
-      ],
-      "mutually_exclusive": [
-        "USB"
-      ]
-    },
-    {
-      "name": "FDCAN1",
-      "type": "FD CAN",
-      "parameters": {
-        "modes": []
-      },
-      "pad_assignments": [
-        {
-          "pad": "4",
-          "role": "bus",
-          "function": "FDCAN1.RX"
-        },
-        {
-          "pad": "5",
-          "role": "bus",
-          "function": "FDCAN1.TX"
-        },
-        {
-          "pad": "6",
-          "role": "bus",
-          "function": "FDCAN1.TX"
-        },
-        {
-          "pad": "7",
-          "role": "bus",
-          "function": "FDCAN1.RX"
-        }
-      ]
-    },
-    {
-      "name": "USB",
-      "type": "USB",
-      "parameters": {
-        "modes": []
-      },
-      "pad_assignments": [
-        {
-          "pad": "6",
-          "role": "bus",
-          "function": "USB.DP",
-          "is_required": true
-        },
-        {
-          "pad": "7",
-          "role": "bus",
-          "function": "USB.DM",
-          "is_required": true
-        },
-        {
-          "pad": "2",
-          "role": "bus",
-          "function": "USB.SOF"
-        }
-      ],
-      "mutually_exclusive": [
-        "UART4"
-      ]
-    },
-    {
-      "name": "I3C2",
-      "type": "I3C",
-      "parameters": {
-        "modes": [
-          "master, slave"
-        ]
       },
       "pad_assignments": [
         {
           "pad": "2",
           "role": "bus",
-          "function": "I3C2.CLK",
-          "is_required": true
+          "function": "LPUART1.RX"
         },
         {
           "pad": "3",
           "role": "bus",
-          "function": "I3C2.DAT",
-          "is_required": true
-        }
-      ],
-      "mutually_exclusive": [
-        "I2C3",
-        "SPI1"
-      ]
-    },
-    {
-      "name": "I3C1",
-      "type": "I3C",
-      "parameters": {
-        "modes": [
-          "master, slave"
-        ],
-        "address_bits": []
-      },
-      "pad_assignments": [
+          "function": "LPUART1.RX"
+        },
         {
           "pad": "4",
           "role": "bus",
-          "function": "I3C1.CLK",
-          "is_required": true
+          "function": "LPUART1.TX"
         },
         {
           "pad": "5",
           "role": "bus",
-          "function": "I3C1.DAT",
-          "is_required": true
+          "function": "LPUART1.RX"
+        },
+        {
+          "pad": "6",
+          "role": "bus",
+          "function": "LPUART1.TX"
+        },
+        {
+          "pad": "7",
+          "role": "bus",
+          "function": "LPUART1.TX"
+        },
+        {
+          "pad": "13",
+          "role": "bus",
+          "function": "LPUART1.TX"
+        },
+        {
+          "pad": "14",
+          "role": "bus",
+          "function": "LPUART1.RX"
         }
-      ],
-      "mutually_exclusive": [
-        "I2C1"
       ]
     }
   ],
-  "updated_at": "2026-06-24T07:58:04.623Z",
-  "description": "The Core.ST.H5.1 is built around the high-performance STM32H523 250-MHz 32-bit Cortex-M33 processor into a single T44 tile, providing a user-configurable combination of multiple communication interfaces (USB 2.0 full-speed, I2C/I3C, SPI, FDCAN, and UART), along with two 12-bit 5-Msps ADC inputs, one DAC output, and multiple timers.",
-  "json_version": "0.41",
+  "updated_at": "2026-05-01T12:36:01.031Z",
+  "description": "Ultra-low-power ARM Cortex-M0+ core tile built around the STM32L011E4 with 16KB flash, 2KB RAM, and 512 bytes of data EEPROM. Optimized for battery-powered and energy-harvesting applications, with flexible I/O across 14 pads including I2C, USART, and LPUART interfaces, 6 ADC inputs, multiple timer channels, and an analog comparator. Runs from 1.8–3.6V with bootloading and hardware debug via SWD.",
+  "json_version": "0.33",
   "application_notes": [
     {
       "sort": 0,
-      "details": "To utilize the USB 2.0 Full-Speed (12Mbit/s) port, the supply voltage needs to be at least 3.0V.  The Core.H.1 can serve as either a peripheral or a host.",
-      "heading": "USB 2.0 Full-Speed Port",
-      "image_url": ""
-    },
-    {
-      "sort": 1,
-      "details": "Similar to the Core.U tiles, when the chip is blank, it will default into the bootloader when connected over USB. Once there is code in the program space, you need to hold the BOOT0 pin HIGH during reset (either power-on or via the NRST pin) to enter the bootloader.",
-      "heading": "USB Bootloading",
-      "image_url": ""
-    },
-    {
-      "sort": 2,
       "details": "The single-wire debug port is available on pads 13 (SWCLK) and 14 (SWDIO). While not absolutely required, it is often helpful to have the ability to hold pad 12 (NRST) low when connecting to the debugger. You can likely also use BOOT0 to help the debugger connect.",
       "heading": "Single-Wire Debug & Bootloading",
       "image_url": ""
     },
     {
-      "sort": 3,
-      "details": "The onboard LED is connected to PA15 in an active-high configuration.",
+      "sort": 1,
+      "details": "The onboard LED is connected to PA8 in an active-high configuration.",
       "heading": "LED",
       "image_url": ""
     }

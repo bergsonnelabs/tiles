@@ -1,5 +1,5 @@
 {
-  "core": "Core.ST.L0.1",
+  "core": "Core.ST.L0",
   "clock": "max",
   "iwdg": {
     "enabled": false

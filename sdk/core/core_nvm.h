@@ -4,7 +4,7 @@
  * One offset-based byte store with the same API on every Core, so a project
  * that keeps its settings or calibration here ports between Cores unchanged:
  *   - Core.ST.L0 (STM32L011): true data EEPROM, 512 B at 0x08080000.
- *   - Core.ST.L4.1 / L4.2 (STM32L422): 1024 B, emulated in the last two 2 KB
+ *   - Core.ST.L4 / L4.2 (STM32L422): 1024 B, emulated in the last two 2 KB
  *     flash pages (0x0801F000-0x0801FFFF).
  *   - Core.ST.W5 (STM32WBA55): 1024 B, emulated in flash pages 125-126
  *     (0x080FA000-0x080FDFFF). Page 127 above it is the BLE bond store.
@@ -31,7 +31,7 @@
  * power loss at any instant, the bytes it covered read either all old or all
  * new, never a mix. Writing the bytes that are already stored costs nothing.
  *
- * Timing (flash emulation, measured on a Core.ST.L4.1 at 16 MHz):
+ * Timing (flash emulation, measured on a Core.ST.L4 at 16 MHz):
  *   - A write programs its record and reads it back: a few hundred us for a
  *     few bytes, ~10 ms for 600 bytes (L4: 82 us per 8 B; W5: 118 us per 16 B).
  *   - A compaction erases one page, then copies the contents over: 35-45 ms

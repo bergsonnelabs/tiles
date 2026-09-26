@@ -5,7 +5,7 @@
  * instead of I2C bridge control. I2C is used only for initial
  * configuration and monitoring (voltage, current, faults).
  *
- * Core.ST.L4.1, clock=max
+ * Core.ST.L4, clock=max
  *   Pad 3  (TIM2.2)  → Drive.DC.H EN  (tile pad 2) — PWM speed
  *   Pad 9  (GPIO)    → Drive.DC.H PH  (tile pad 3) — direction
  *   I2C1 @ 400 kHz   → Disp.RGBW (status LED)

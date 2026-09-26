@@ -1,6 +1,9 @@
-# Starter project for Core.ST.L0.1
+# Starter project for Core.ST.L4 (formerly Core.ST.L4.1). Not the Core.ST.L4.2:
+# that board has its own template, templates/core-st-l4-2.
 #
 #   make              # build
+#   make flash-dfu    # flash over USB DFU (first time, and recovery)
+#   make flash-serial # flash over USB serial — no bootloader, no driver
 #   make flash        # flash over SWD (OpenOCD + ST-Link)
 #   make doctor       # check the toolchain, report what's missing
 #   make clean
@@ -13,7 +16,7 @@
 #
 # Windows: run this from Git Bash or MSYS2, not cmd.exe / PowerShell.
 
-TILE := Core.ST.L0.1
+TILE := Core.ST.L4
 
 # Set to 1 once config.json declares a "tiles" array.
 TILES_ENABLED ?= 0
@@ -36,6 +39,6 @@ endif
 # Bootloader mode is deliberately NOT passed through: config.json's
 # "bootloader" key is the single source of truth, and the SDK Makefile reads it.
 
-.PHONY: all clean distclean flash flash-dfu flash-rom size generate doctor
-all clean distclean flash flash-dfu flash-rom size generate doctor:
+.PHONY: all clean distclean flash flash-dfu flash-rom flash-serial size generate doctor
+all clean distclean flash flash-dfu flash-rom flash-serial size generate doctor:
 	$(MAKE) --no-print-directory -C $(SDK_ROOT) TILE=$(TILE) PROJECT=$(PROJECT) PROJECT_DIR=$(PROJECT_DIR) TILES_ENABLED=$(TILES_ENABLED) V=$(V) $@

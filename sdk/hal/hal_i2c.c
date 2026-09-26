@@ -174,8 +174,8 @@ static _i2c_pins_t _i2c_pins(I2C_TypeDef *instance)
         p = (const _i2c_pins_t){ GPIOB, 10, 4, GPIOB, 11, 4 };
     }
 #elif defined(STM32L011xx)
-    /* Core.ST.L0.1 routes I2C1 to pads 4/5 = PB6 (SCL) / PB7 (SDA), AF1
-     * (definitions/Core-ST-L0-1-a.json; STM32L011 DS Table 14: AF1). This used to
+    /* Core.ST.L0 routes I2C1 to pads 4/5 = PB6 (SCL) / PB7 (SDA), AF1
+     * (definitions/Core-ST-L0-a.json; STM32L011 DS Table 14: AF1). This used to
      * bit-bang PA9/PA10 — not on this Core's pads — and then muxed them as
      * I2C1, leaving the real bus stuck and two stray pins in AF mode. */
     if (instance == I2C1) {

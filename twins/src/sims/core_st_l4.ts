@@ -1,11 +1,12 @@
-// Digital twin for Core.ST.L4.1 (formerly Core.U.1): the MCU host board itself.
+// Digital twin for Core.ST.L4 (formerly Core.ST.L4.1, and before that Core.U.1):
+// the MCU host board itself. Not the Core.ST.L4.2, a different board.
 //
 // A Core, not a peripheral: no tile driver and no host calls. The twin models the
 // board-level standards: STM32L422 power across run / low-power / stop / standby
 // modes, the on-board status LED, and the two software-switched I2C1 pull-ups.
 //
 // MCU: STM32L422TB (Cortex-M4). Power numbers from its datasheet (DS12470 Rev 6,
-// TYP @ 3.0 V / 25 °C, all peripherals disabled). Pad map per Core-ST-L4-1-b.json
+// TYP @ 3.0 V / 25 °C, all peripherals disabled). Pad map per Core-ST-L4-b.json
 // (V+ pad 10, GND pad 1, I2C1 CLK/DAT pads 4/5). Board parts per the tile
 // schematic: red LED on PA8 through R1 = 40 Ω; R3 = 2.2k from PC15 to pad 4
 // (I2C1 SCL) and R4 = 2.2k from PA9 to pad 5 (I2C1 SDA). PC15 sits behind the
@@ -92,7 +93,7 @@ function coreUa(s: State): number {
 }
 
 const sim: TileSim<State> = {
-  tile: 'Core.ST.L4.1',
+  tile: 'Core.ST.L4',
 
   defaultState: {
     power_mode: 0, // run

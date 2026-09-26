@@ -1,7 +1,7 @@
 /**
  * val-adc-uart -- Validation: ADC reads + UART serial output
  *
- * Core.ST.L0.1, clock=high
+ * Core.ST.L0, clock=high
  * Pad 6 = ADC1, Pad 7 = USART2.TX, Pad 2 = USART2.RX
  *
  * Exercises: core_init, hal_uart_t, core_serial_init (no pclk_hz),

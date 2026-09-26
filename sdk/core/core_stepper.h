@@ -25,7 +25,7 @@
  * edges instead, pick that with core_stepper_set_polarity().
  *
  * STEP must be on a pad with a timer output channel (a TIMx.y function in the
- * tile definition, e.g. Core.ST.L4.1 pad 3 = TIM2.2). Declare it as that
+ * tile definition, e.g. Core.ST.L4 pad 3 = TIM2.2). Declare it as that
  * function in config.json so coregen routes the pin; core_stepper_init() then
  * finds the timer and channel from the pad. Without coregen, use
  * core_stepper_init_ch() and set the pad's alternate function yourself. DIR

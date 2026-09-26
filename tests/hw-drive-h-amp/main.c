@@ -17,7 +17,7 @@
  * the strongest level that calibrated cleanly and heartbeat-clicks
  * every 3 s.
  *
- * Core.ST.L4.1, clock=max, ROM-DFU bootloader
+ * Core.ST.L4, clock=max, ROM-DFU bootloader
  *   I2C1 @ 400 kHz — Disp.RGBW (status LED, optional)
  *   I2C3 @ 400 kHz — Drive.H   (falls back to I2C1 if not found)
  *

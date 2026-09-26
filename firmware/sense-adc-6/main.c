@@ -1,7 +1,7 @@
 /**
  * l0-adc-mux — six-channel ADC sensor hub with an I2C target interface.
  *
- * A Core.ST.L0.1 that answers as an I2C device at 0x28. It samples six
+ * A Core.ST.L0 that answers as an I2C device at 0x28. It samples six
  * analog inputs into a DMA ring at a TIM2-paced scan rate, averages each
  * channel over a configurable window, and publishes calibrated millivolts
  * into a register file the host reads. 100 Hz output by default; the

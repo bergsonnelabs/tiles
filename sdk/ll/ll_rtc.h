@@ -163,7 +163,7 @@ static inline void ll_rtc_lock(void)
 static inline void ll_rcc_lse_enable(void)
 {
 #if defined(STM32L011xx)
-    /* Deliberately empty. Core.ST.L0.1 has no 32 kHz crystal, and LSEON would
+    /* Deliberately empty. Core.ST.L0 has no 32 kHz crystal, and LSEON would
      * hand PC14/PC15 (OSC32_IN/OUT) to the oscillator, taking them from the
      * board. (LSEON is RCC_CSR bit 8, RM0377 §7.3.20 — this used to set bit 0,
      * which is LSION.) */
@@ -418,7 +418,7 @@ static inline void ll_rtc_init(int use_lse)
     ll_pwr_enable_backup_access();
 
 #if defined(STM32L011xx)
-    use_lse = 0;             /* no crystal on Core.ST.L0.1 — see ll_rcc_lse_enable() */
+    use_lse = 0;             /* no crystal on Core.ST.L0 — see ll_rcc_lse_enable() */
     ll_rtc_l0_lse_off();
 #endif
 

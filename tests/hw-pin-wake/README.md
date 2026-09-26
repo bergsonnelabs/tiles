@@ -1,7 +1,7 @@
 # hw-pin-wake
 
 Bench test for pin-change wake from Stop (`core_stop_until_on_change`,
-`sdk/core/core_power.h`) on **Core.ST.L4.1**.
+`sdk/core/core_power.h`) on **Core.ST.L4**.
 
 | Test | What passes |
 |------|-------------|
@@ -20,12 +20,12 @@ returned at once, and T5 is a 3 s timed wait.
 
 ## Hardware
 
-- **Needs a production Core.ST.L4.1 (rev b) with the pull-ups fitted.** Early
+- **Needs a production Core.ST.L4 (rev b) with the pull-ups fitted.** Early
   prototype L4 boards have no 2.2 kOhm pull-ups on pads 4/5; there T1 fails
   (the pads follow only the internal pulls), T4 is skipped, and that is the
   board, not the SDK (seen 2026-09-25).
 - Pad 4 (PB6) has a 2.2 kOhm on-tile pull-up switched by chip pin **PC15**
-  (`definitions/Core-ST-L4-1-b.json`, `config.pullups`: pad 4 via PC15, pad 5
+  (`definitions/Core-ST-L4-b.json`, `config.pullups`: pad 4 via PC15, pad 5
   via PA9). Driving PC15 high/low pulls pad 4 high/low. `config.json` turns
   it on through coregen (`"pullups": ["pad4"]`). Until 2026-09-25 the test
   drove PA9, which is pad 5's.
@@ -84,7 +84,7 @@ software reset) marks T3 FAIL and is called out explicitly.
 ## Build and flash
 
 ```sh
-make distclean && make      # Core.ST.L4.1 only — config.json pins the core
+make distclean && make      # Core.ST.L4 only — config.json pins the core
 make flash-dfu               # or: make flash-serial
 ```
 

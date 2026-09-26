@@ -1,7 +1,8 @@
 name: firmware-build
 
 # Compiles firmware for every Core on every PR that touches the SDK, the
-# generators, or the starter templates.
+# generators, the starter templates, or a Core definition (a Core JSON change
+# or DB rename re-runs the builds rather than passing as "skipped").
 #
 # Why this exists: `core_watchdog.h` includes `hal_dfu.h`, which defined its
 # reserved-SRAM addresses only for the USB-capable parts while leaving the DFU
@@ -52,6 +53,8 @@ jobs:
             'drivers/**'
             'templates/**'
             'tools/coregen/**'
+            'definitions/Core-*'
+            'definitions/mCore-*'
             'tools/test_ble_contract.py'
             'tools/test_coregen_spi_cs.py'
             'tests/val-watchdog/**'
@@ -118,7 +121,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        core: [Core.ST.L0.1, Core.ST.L4.1, Core.ST.W5, Core.ST.H5.1]
+        # Public names (Core.ST.L4 was Core.ST.L4.1 until the 2026-09 rename).
+        # Core.ST.L4.2 is not built here: it won't go to production.
+        core: [Core.ST.L0, Core.ST.L4, Core.ST.W5, Core.ST.H5]
     steps:
       - uses: actions/checkout@v4
 
@@ -152,10 +157,10 @@ jobs:
       - name: starter template (${{ matrix.core }})
         run: |
           case "${{ matrix.core }}" in
-            Core.ST.L0.1) DIR=core-st-l0-1 ;;
-            Core.ST.L4.1) DIR=core-st-l4-1 ;;
-            Core.ST.W5)   DIR=core-st-w5   ;;
-            Core.ST.H5.1) DIR=core-st-h5-1 ;;
+            Core.ST.L0) DIR=core-st-l0 ;;
+            Core.ST.L4) DIR=core-st-l4 ;;
+            Core.ST.W5) DIR=core-st-w5 ;;
+            Core.ST.H5) DIR=core-st-h5 ;;
           esac
           make -C "templates/$DIR" SDK_ROOT="$GITHUB_WORKSPACE"
 

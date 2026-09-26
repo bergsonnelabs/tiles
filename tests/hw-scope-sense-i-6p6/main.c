@@ -1,7 +1,7 @@
 /**
  * hw-scope-sense-i-6p6 — stream a Sense.I.6P6 to the Scope over USB.
  *
- * Board: Core.ST.L4.1 + Sense.I.6P6 (ICM-42686P) on I2C1, Core pads 4/5.
+ * Board: Core.ST.L4 + Sense.I.6P6 (ICM-42686P) on I2C1, Core pads 4/5.
  * Driver defaults: ±8 g, ±1000 dps, 100 Hz, polled.
  *
  * Channels (physical units, converted here so any Scope host plots them

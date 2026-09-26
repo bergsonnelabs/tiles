@@ -1,6 +1,6 @@
 /**
  * hw-led-scale — bench test for core_led_scaled_on_ms() (sdk/core/core_led.c)
- * on Core.ST.L0.1, one build per clock level. The LED code stretches a short
+ * on Core.ST.L0, one build per clock level. The LED code stretches a short
  * on-time by VDD, which it reads through VREFINT with a throwaway ADC; on the
  * L0 that never worked until VREFINT was connected (2026-09-22) and the ADC
  * got a clock at the MSI levels (tiles#283).
@@ -25,7 +25,7 @@
 #include "hal_adc.h"
 
 #if !defined(STM32L011xx)
-#error "hw-led-scale is written for Core.ST.L0.1"
+#error "hw-led-scale is written for Core.ST.L0"
 #endif
 
 #ifndef REG32

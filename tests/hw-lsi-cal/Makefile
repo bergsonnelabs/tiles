@@ -1,4 +1,4 @@
-# Bench test for the Core.ST.L0.1's LSI calibration (ll_lsi_hz(),
+# Bench test for the Core.ST.L0's LSI calibration (ll_lsi_hz(),
 # sdk/hal/hal_lsi.c), one build per clock level: the reference it measures
 # against is SYSCLK, HSI16 at high / max and MSI at low / medium. Results: main.c.
 #
@@ -8,7 +8,7 @@
 # The L0 has no USB: flash it over SWD (app at 0x08000000). Never build this
 # with BOOTLOADER := 1.
 
-TILE          ?= Core.ST.L0.1
+TILE          ?= Core.ST.L0
 CLOCK         ?= low
 TILES_ENABLED := 0
 BLE_ENABLED   := 0

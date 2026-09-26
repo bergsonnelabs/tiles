@@ -1,4 +1,4 @@
-# Bench test for core_nvm on the Core.ST.L0.1's data EEPROM (STM32L011).
+# Bench test for core_nvm on the Core.ST.L0's data EEPROM (STM32L011).
 # One build per clock level: `low` runs in voltage range 3, where the EEPROM
 # can't be programmed, so it exercises core_nvm's step up to range 2; `max`
 # is what firmware/sense-adc-6 runs at. Reading the result: main.c.
@@ -10,7 +10,7 @@
 # The L0 has no USB: flash it over SWD (app at 0x08000000). Never build this
 # with BOOTLOADER := 1.
 
-TILE          ?= Core.ST.L0.1
+TILE          ?= Core.ST.L0
 CLOCK         ?= low
 TILES_ENABLED := 0
 BLE_ENABLED   := 0

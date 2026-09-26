@@ -104,9 +104,9 @@
  *
  * @studio unsupported severity=common category="320x240 on a 40 KB Core"
  *   A QVGA frame is 76800 bytes and must be read in 4800-byte buffers, each
- *   within a few ms. It cannot be buffered in a Core.ST.L4.1's 40 KB of SRAM
+ *   within a few ms. It cannot be buffered in a Core.ST.L4's 40 KB of SRAM
  *   and tears if streamed over the Core's USB. Use 160x120 (19200 B) there;
- *   320x240 needs a Core with >= 77 KB free (Core.ST.W5, Core.ST.H5.1) or DMA
+ *   320x240 needs a Core with >= 77 KB free (Core.ST.W5, Core.ST.H5) or DMA
  *   to a faster sink. Core-gated, not a driver limit.
  *
  * @studio unsupported severity=common category="Low-power standby"

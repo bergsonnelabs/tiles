@@ -1,8 +1,8 @@
-# Bench test for the clock levels (low / medium / high / max) on Core.ST.L0.1,
-# Core.ST.L4.1 / L4.2 and Core.ST.W5. One build per level. See README.md.
+# Bench test for the clock levels (low / medium / high / max) on Core.ST.L0,
+# Core.ST.L4 / L4.2 and Core.ST.W5. One build per level. See README.md.
 #
-#   make CLOCK=high                      # Core.ST.L4.1 (report over USB CDC)
-#   make CLOCK=max TILE=Core.ST.L0.1     # LED + SWD-readable result
+#   make CLOCK=high                      # Core.ST.L4 (report over USB CDC)
+#   make CLOCK=max TILE=Core.ST.L0     # LED + SWD-readable result
 #   make CLOCK=low TILE=Core.ST.W5
 #
 # Each level has its own config-<level>.json. Changing CLOCK or TILE throws
@@ -12,7 +12,7 @@
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in the configs gives
 # the ROM-DFU layout (app @ 0x08000000). The custom-bootloader layout is
 # parked, and flashing it onto a ROM-DFU board corrupts the resident app.
-TILE          ?= Core.ST.L4.1
+TILE          ?= Core.ST.L4
 CLOCK         ?= medium
 TILES_ENABLED := 0
 BLE_ENABLED   := 0

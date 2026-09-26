@@ -1,5 +1,5 @@
 /**
- * hw-nvm-flash — bench test for core_nvm's flash emulation on Core.ST.L4.1 /
+ * hw-nvm-flash — bench test for core_nvm's flash emulation on Core.ST.L4 /
  * L4.2 and Core.ST.W5. See README.md; host_test.py drives the reflash test.
  *
  * config.json arms the 5 s watchdog in core_init(), as in a Studio project.

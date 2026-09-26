@@ -1,7 +1,7 @@
 /**
  * hw-sense-cap -- touch-event bench for the Sense.CAP tile (driver v1.0).
  *
- * Board: Core.ST.L4.1 + Sense.CAP rev a (IQS7211A) + an electrode surface.
+ * Board: Core.ST.L4 + Sense.CAP rev a (IQS7211A) + an electrode surface.
  * I2C1 on Core pads 4/5. Polled (rev a has no RDY); Core pad 3 drives the
  * chip's MCLR (tile pad 3) open-drain, idle released.
  *

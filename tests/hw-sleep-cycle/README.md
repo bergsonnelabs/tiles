@@ -1,7 +1,7 @@
 # hw-sleep-cycle
 
 Bench test for the 2026-09-25 sleep / RTC / backup-register / watchdog fixes
-on **Core.ST.L0.1**, **Core.ST.L4.1 / L4.2** and **Core.ST.W5**. It runs
+on **Core.ST.L0**, **Core.ST.L4 / L4.2** and **Core.ST.W5**. It runs
 unattended in about 30 s, with the 5 s watchdog armed by `core_init()` exactly
 as in a Studio project.
 
@@ -27,11 +27,11 @@ the test again.
 would carry the previous Core's generated init.
 
 ```sh
-make distclean && make                                   # Core.ST.L4.1
+make distclean && make                                   # Core.ST.L4
 make flash-dfu            # or: make flash-serial
 
-make distclean && make TILE=Core.ST.L0.1
-make TILE=Core.ST.L0.1 flash-coreprobe                   # SWD
+make distclean && make TILE=Core.ST.L0
+make TILE=Core.ST.L0 flash-coreprobe                   # SWD
 
 make distclean && make TILE=Core.ST.W5
 make TILE=Core.ST.W5 flash-coreprobe                     # or: flash (CubeProgrammer)
@@ -67,7 +67,7 @@ They survive resets, so they can be read at any time after the run.
 
 | Core | BKP0 address | probe-rs |
 |------|--------------|----------|
-| Core.ST.L0.1 | `0x40002850` (RTC_BKP0R, RM0377 §22.7.20) | `probe-rs read --chip STM32L011K4 b32 0x40002850 5` |
+| Core.ST.L0 | `0x40002850` (RTC_BKP0R, RM0377 §22.7.20) | `probe-rs read --chip STM32L011K4 b32 0x40002850 5` |
 | Core.ST.L4.x | `0x40003500` (TAMP_BKP0R, RM0394 §36.6.8) | `probe-rs read --chip STM32L422KB b32 0x40003500 5` |
 | Core.ST.W5   | `0x46007D00` (TAMP_BKP0R, RM0493 §37.6.18) | `probe-rs read --chip STM32WBA55CG b32 0x46007D00 5` |
 

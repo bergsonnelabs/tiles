@@ -1,9 +1,9 @@
 # Default Core is the W5 — the one this test exists for (see main.c). Build the
 # others by overriding TILE:
 #   make                        # Core.ST.W5  (no USB, no DFU path)
-#   make TILE=Core.ST.L4.1
-#   make TILE=Core.ST.H5.1
-#   make TILE=Core.ST.L0.1
+#   make TILE=Core.ST.L4
+#   make TILE=Core.ST.H5
+#   make TILE=Core.ST.L0
 TILE         ?= Core.ST.W5
 TILES_ENABLED := 0
 BLE_ENABLED  := 0

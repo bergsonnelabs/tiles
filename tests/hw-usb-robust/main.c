@@ -1,5 +1,5 @@
 /**
- * hw-usb-robust — USB CDC robustness and USB-reachable sleep on Core.ST.L4.1.
+ * hw-usb-robust — USB CDC robustness and USB-reachable sleep on Core.ST.L4.
  * Driven from the host by host_test.py (python3 + pyserial); see README.md.
  *
  * The Core prints "EARLY ..." right after core_init(), before any delay: with

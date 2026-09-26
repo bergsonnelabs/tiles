@@ -1,7 +1,7 @@
 /**
  * hw-scope-sense-hr — stream a Sense.HR (MAX86174A) PPG to the Scope over USB.
  *
- * Board: Core.ST.L4.1 + Sense.HR on I2C1, Core pads 4/5. The tile needs its
+ * Board: Core.ST.L4 + Sense.HR on I2C1, Core pads 4/5. The tile needs its
  * own 1.8 V on pad 10 and VLED on pad 9 (validators/sense-hr/README.md).
  *
  * Uses the tile_sense_hr driver from drivers/ (1.0.0, tiles#276).

@@ -1,86 +1,7 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@6af026f",
   "tiles": [
-    {
-      "family": "Sense",
-      "name": "A.3",
-      "rev": "a",
-      "headline": "",
-      "i2c": [],
-      "pads": {
-        "1": {
-          "default": {
-            "name": "GND",
-            "type": "power"
-          },
-          "alt": []
-        },
-        "2": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "3": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "4": {
-          "default": {
-            "name": "I2C.CLK",
-            "type": "interface"
-          },
-          "alt": []
-        },
-        "5": {
-          "default": {
-            "name": "I2C.DAT",
-            "type": "interface"
-          },
-          "alt": []
-        },
-        "6": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "7": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "8": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "9": {
-          "default": {
-            "name": "",
-            "type": ""
-          },
-          "alt": []
-        },
-        "10": {
-          "default": {
-            "name": "V+",
-            "type": "power"
-          },
-          "alt": []
-        }
-      }
-    },
     {
       "family": "Sense",
       "name": "A.D3H",
@@ -2568,10 +2489,162 @@
       "pads": {}
     },
     {
+      "family": "mSense",
+      "name": "A.3",
+      "rev": "a",
+      "headline": "",
+      "i2c": [],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
       "family": "Flow",
       "name": "ICE.P5.1",
       "rev": "a",
       "headline": "ICE40 FPGA w/ on-board flash",
+      "i2c": [],
+      "pads": {}
+    },
+    {
+      "family": "mPower",
+      "name": "R.2",
+      "rev": "a",
+      "headline": "dual regulator",
+      "i2c": [],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
+      "family": "mCore",
+      "name": "ST.C0",
+      "rev": "a",
+      "headline": "low cost Cortex MCU",
       "i2c": [],
       "pads": {}
     }

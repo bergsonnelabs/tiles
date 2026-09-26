@@ -5,7 +5,7 @@ the ST ROM bootloader. No new USB device appears, so there is no driver to
 install (no Zadig / WinUSB on Windows), no device picker in the browser, and no
 unplug-and-replug afterwards.
 
-Status: **Core.ST.L4.1 / L4.2 (STM32L422), ROM-DFU layout.** Hardware-verified
+Status: **Core.ST.L4 / L4.2 (STM32L422), ROM-DFU layout.** Hardware-verified
 2026-09-24. Other Cores need their own flasher and their own check of the boot
 rules in §5 before they get this.
 
@@ -184,7 +184,7 @@ write; the first bench run stalled on exactly that.
 - The trigger is any `SET_LINE_CODING` at 2400 baud. Something that opens the
   Core's port at 2400 by accident gets a 10 s pause and a reset into the same app.
 
-## 8. Bench record (2026-09-24, Core.ST.L4.1 rev b, macOS)
+## 8. Bench record (2026-09-24, Core.ST.L4 rev b, macOS)
 
 | | |
 |-|-|

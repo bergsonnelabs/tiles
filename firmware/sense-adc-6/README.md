@@ -1,6 +1,6 @@
 # Sense.ADC.6 firmware
 
-The firmware that makes a Core.ST.L0.1 into a **Sense.ADC.6** tile. Flash
+The firmware that makes a Core.ST.L0 into a **Sense.ADC.6** tile. Flash
 this onto an L0 and it stops being a Core and becomes a six-channel analog
 input peripheral: hosts see an I2C device, not an MCU.
 
@@ -8,7 +8,7 @@ Paired with the `tile_sense_adc_6` driver in `drivers/`, which is what
 host firmware and Studio talk to. This README documents the wire-level
 register map behind that driver; day to day, use the driver.
 
-Six-channel ADC sensor hub on a Core.ST.L0.1, answering as an I2C device
+Six-channel ADC sensor hub on a Core.ST.L0, answering as an I2C device
 at address **0x28**. The Core samples six analog inputs into a DMA ring at
 a TIM2-paced scan rate, averages each channel over a configurable window,
 and publishes calibrated millivolts into a register file the host reads.
@@ -236,7 +236,7 @@ and publish all verified. Rate and window changes verified by writing the
 staging registers and pending flag over SWD: scan rates exact (800, 960,
 80 Hz), invalid settings rejected with registers restored.
 
-**Over a real I2C host (2026-09-22): 20/20.** A Core.ST.L4.1 running
+**Over a real I2C host (2026-09-22): 20/20.** A Core.ST.L4 running
 `tests/hw-adc-mux-host` read the hub at 100 kHz and 400 kHz: 99.8 Hz
 publish rate, zero bus errors and zero missed samples across ~4,000
 transactions, and rate/window changes written over I2C applied live

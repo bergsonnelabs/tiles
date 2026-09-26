@@ -1,4 +1,4 @@
-# Starter project for Core.ST.L0.1
+# Starter project for Core.ST.L0
 #
 #   make              # build
 #   make flash        # flash over SWD (OpenOCD + ST-Link)
@@ -13,7 +13,7 @@
 #
 # Windows: run this from Git Bash or MSYS2, not cmd.exe / PowerShell.
 
-TILE := Core.ST.L0.1
+TILE := Core.ST.L0
 
 # Set to 1 once config.json declares a "tiles" array.
 TILES_ENABLED ?= 0

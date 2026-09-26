@@ -1,4 +1,4 @@
-# Starter project for Core.ST.L4.1
+# Starter project for Core.ST.L4
 #
 #   make              # build
 #   make flash-dfu    # flash over USB DFU (the normal inner loop)
@@ -14,7 +14,7 @@
 #
 # Windows: run this from Git Bash or MSYS2, not cmd.exe / PowerShell.
 
-TILE := Core.ST.L4.1
+TILE := Core.ST.L4
 
 # Set to 1 once config.json declares a "tiles" array.
 TILES_ENABLED ?= 1

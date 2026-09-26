@@ -5,7 +5,7 @@
  * and Disp.RGBW LED for pass/fail indication. Requires an LRA
  * connected to Drive.H outputs.
  *
- * Core.ST.L4.1, clock=max
+ * Core.ST.L4, clock=max
  *   I2C1 @ 400 kHz — Disp.RGBW (status LED)
  *   I2C3 @ 400 kHz — Drive.H   (haptic driver)
  *
@@ -22,7 +22,7 @@
 #include "tile_display_rgbw.h"
 #include "tile_drive_h.h"
 
-#define TRIG_PAD  3  /* Core.ST.L4.1 pad 3 → Drive.H IN/TRIG */
+#define TRIG_PAD  3  /* Core.ST.L4 pad 3 → Drive.H IN/TRIG */
 
 static tile_t led;
 static tile_t haptic;

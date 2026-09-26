@@ -164,7 +164,7 @@
     "adv.i3c_target": "na",
     "adv.comp": {
       "status": "compile",
-      "note": "L011 has COMP1/COMP2 but not routed on Core.ST.L0.1 pinout"
+      "note": "L011 has COMP1/COMP2 but not routed on Core.ST.L0 pinout"
     },
     "adv.dac": "na",
     "ble.adv": "na",

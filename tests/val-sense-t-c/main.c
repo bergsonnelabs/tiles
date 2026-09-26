@@ -4,7 +4,7 @@
  * Exercises every public API function in tile_sense_t_c.h to verify
  * compilation. Does not require hardware — all results are cast to void.
  *
- * Core.ST.L4.1, clock=max, I2C1 at 400 kHz.
+ * Core.ST.L4, clock=max, I2C1 at 400 kHz.
  */
 
 #include "core.h"

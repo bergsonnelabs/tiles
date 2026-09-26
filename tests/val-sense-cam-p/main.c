@@ -6,7 +6,7 @@
  * the bench validator (validators/sense-c-pag): tile 6/7/8/9 (MISO/CLK/CS/
  * MOSI) to Core pads 8/3/9/2. Does not require hardware.
  *
- * Core.ST.L4.1, clock=max.
+ * Core.ST.L4, clock=max.
  */
 
 #include "core.h"

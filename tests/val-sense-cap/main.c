@@ -4,7 +4,7 @@
  * Exercises every public API function in tile_sense_cap.h to verify
  * compilation. Does not require hardware -- all results are cast to void.
  *
- * Core.ST.L4.1, clock=max, I2C1 at 400 kHz, tile pad 3 (MCLR) on Core
+ * Core.ST.L4, clock=max, I2C1 at 400 kHz, tile pad 3 (MCLR) on Core
  * pad 3 as an open-drain output, idle released.
  */
 

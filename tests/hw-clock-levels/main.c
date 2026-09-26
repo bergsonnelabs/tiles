@@ -1,6 +1,6 @@
 /**
  * hw-clock-levels — bench test for the generated clock levels on
- * Core.ST.L0.1, Core.ST.L4.1 / L4.2 and Core.ST.W5. One build per level
+ * Core.ST.L0, Core.ST.L4 / L4.2 and Core.ST.W5. One build per level
  * (make CLOCK=low|medium|high|max). See README.md.
  *
  * Each check reads the hardware back and compares it with the reference

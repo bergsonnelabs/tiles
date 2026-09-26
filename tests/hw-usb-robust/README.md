@@ -1,6 +1,6 @@
 # hw-usb-robust
 
-Bench test for the USB CDC stack on **Core.ST.L4.1** (`sdk/hal/hal_usb_cdc.c`,
+Bench test for the USB CDC stack on **Core.ST.L4** (`sdk/hal/hal_usb_cdc.c`,
 STM32L422 branch) and for reaching a Core that sleeps in `core_stop_for()`.
 The Core answers commands over CDC; `host_test.py` (python3 + pyserial) drives
 it and scores the result.

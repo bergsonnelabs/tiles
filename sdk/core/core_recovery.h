@@ -29,7 +29,7 @@
  * resets anywhere in a powered session parked a working Core in ROM DFU.
  *
  * Core.ST.L4 and Core.ST.H5 only (the USB Cores). Bench-verified on a
- * Core.ST.L4.1; compile-only on the H5.
+ * Core.ST.L4; compile-only on the H5.
  *
  * @studio category recovery label=Core.Recovery icon=⟲
  *

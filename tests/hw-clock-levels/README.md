@@ -1,7 +1,7 @@
 # hw-clock-levels
 
 Bench test for the generated clock levels (`"clock": "low" | "medium" | "high"
-| "max"`) on **Core.ST.L0.1**, **Core.ST.L4.1 / L4.2** and **Core.ST.W5**,
+| "max"`) on **Core.ST.L0**, **Core.ST.L4 / L4.2** and **Core.ST.W5**,
 written for the 2026-09-25 clock fixes. One build per level; each build checks
 the hardware against the reference manual and against an independent clock.
 
@@ -44,8 +44,8 @@ errors (a wrong multiplier, a SysTick reload off by a factor).
 
 | Core | low | medium | high | max |
 |------|-----|--------|------|-----|
-| L0.1 | MSI 1.048576 MHz, range 3, 0 WS (range 2 if the project has I2C) | MSI 2.097152 MHz, range 2, 0 WS | HSI16, range 1, 0 WS | HSI16 x4 /2 = 32 MHz (VCO 64), range 1, 1 WS |
-| L4.x | **MSI 16 MHz** (USB needs APB >= 10 MHz), range 1, 0 WS | MSI 16 MHz, 0 WS | MSI 48 MHz, 2 WS | HSI16 /1 x10 /2 = 80 MHz (VCO 160), 4 WS |
+| L0 | MSI 1.048576 MHz, range 3, 0 WS (range 2 if the project has I2C) | MSI 2.097152 MHz, range 2, 0 WS | HSI16, range 1, 0 WS | HSI16 x4 /2 = 32 MHz (VCO 64), range 1, 1 WS |
+| L4, L4.2 | **MSI 16 MHz** (USB needs APB >= 10 MHz), range 1, 0 WS | MSI 16 MHz, 0 WS | MSI 48 MHz, 2 WS | HSI16 /1 x10 /2 = 80 MHz (VCO 160), 4 WS |
 | W5 | HSI16, range 2, 1 WS, hclk5 8 MHz | HSE32, range 1, 0 WS, hclk5 32 MHz | HSE /2 x8 /2 = 64 MHz (VCO 128), 1 WS, hclk5 32 | HSE /4 x25 /2 = 100 MHz (VCO 200), 3 WS, hclk5 25 |
 
 ## Build and flash
@@ -55,11 +55,11 @@ Each level has its own `config-<level>.json`. The Makefile starts from a clean
 carries another level's clock setup.
 
 ```sh
-make CLOCK=high                              # Core.ST.L4.1 (default TILE)
+make CLOCK=high                              # Core.ST.L4 (default TILE)
 make CLOCK=high flash-serial                 # or: flash-dfu
 
-make CLOCK=max TILE=Core.ST.L0.1
-make CLOCK=max TILE=Core.ST.L0.1 flash-coreprobe
+make CLOCK=max TILE=Core.ST.L0
+make CLOCK=max TILE=Core.ST.L0 flash-coreprobe
 
 make CLOCK=low TILE=Core.ST.W5
 make CLOCK=low TILE=Core.ST.W5 flash-coreprobe

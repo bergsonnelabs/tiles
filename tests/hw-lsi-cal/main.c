@@ -1,5 +1,5 @@
 /**
- * hw-lsi-cal — bench test for the Core.ST.L0.1's LSI calibration
+ * hw-lsi-cal — bench test for the Core.ST.L0's LSI calibration
  * (ll_lsi_hz(), sdk/hal/hal_lsi.c), one build per clock level.
  *
  * The L0's LSI is untrimmed (26 / 38 / 56 kHz, DS Table 39). ll_lsi_hz()
@@ -41,7 +41,7 @@
 #include "core_backup.h"
 
 #if !defined(STM32L011xx)
-#error "hw-lsi-cal is written for Core.ST.L0.1"
+#error "hw-lsi-cal is written for Core.ST.L0"
 #endif
 
 #ifndef REG32

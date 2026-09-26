@@ -1,7 +1,7 @@
 /**
  * hw-adc-mux-host — I2C host for the l0-adc-mux bring-up.
  *
- * A Core.ST.L4.1 on I2C1 (pads 4/5) talks to a Core.ST.L0.1 running
+ * A Core.ST.L4 on I2C1 (pads 4/5) talks to a Core.ST.L0 running
  * projects/l0-adc-mux at 0x28 and reports over USB-CDC. This is the first
  * time the hub is exercised over a real bus: until now it was driven by
  * writing its RAM over SWD, which bypassed the target ISR's byte path and
@@ -131,7 +131,7 @@ static void run_sequence(void)
     uint8_t reg[R_COUNT], d[14];
     pass_n = fail_n = 0;
 
-    P("\r\n=== hw-adc-mux-host: L4.1 reading l0-adc-mux at 0x%02X ===\r\n", HUB);
+    P("\r\n=== hw-adc-mux-host: Core.ST.L4 reading l0-adc-mux at 0x%02X ===\r\n", HUB);
 
     /* 1. Scan */
     P("\r\n--- bus scan (100 kHz) ---\r\n");

@@ -1,4 +1,4 @@
-# Bench test for USB CDC robustness and USB-reachable sleep on Core.ST.L4.1.
+# Bench test for USB CDC robustness and USB-reachable sleep on Core.ST.L4.
 # See README.md; the host side is host_test.py (python3 + pyserial).
 #
 #   make && make flash-serial && python3 host_test.py
@@ -6,7 +6,7 @@
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in config.json gives
 # the ROM-DFU layout (app @ 0x08000000). The custom-bootloader layout is
 # parked, and flashing it onto a ROM-DFU board corrupts the resident app.
-TILE          ?= Core.ST.L4.1
+TILE          ?= Core.ST.L4
 TILES_ENABLED := 0
 BLE_ENABLED   := 0
 PROJECT       := $(notdir $(CURDIR))

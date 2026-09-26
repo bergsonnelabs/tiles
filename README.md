@@ -38,11 +38,15 @@ The folder name becomes the project name, so that produces
 
 | Public name    | MCU            | Core                          | USB DFU |
 | -------------- | -------------- | ----------------------------- | ------- |
-| `Core.ST.L0.1` | STM32L011E4    | Cortex-M0+, 32 MHz, low power | —       |
-| `Core.ST.L4.1` | STM32L422TB    | Cortex-M4F, 80 MHz            | ✓       |
+| `Core.ST.L0`   | STM32L011E4    | Cortex-M0+, 32 MHz, low power | —       |
+| `Core.ST.L4`   | STM32L422TB    | Cortex-M4F, 80 MHz            | ✓       |
 | `Core.ST.L4.2` | STM32L422TB    | Cortex-M4F, 80 MHz, more pads | ✓       |
 | `Core.ST.W5`   | STM32WBA55HGF6 | Cortex-M33, 100 MHz, BLE      | —       |
-| `Core.ST.H5.1` | STM32H523HE    | Cortex-M33, 250 MHz           | ✓       |
+| `Core.ST.H5`   | STM32H523HE    | Cortex-M33, 250 MHz           | ✓       |
+
+`Core.ST.L4` and `Core.ST.L4.2` are different boards: use the name printed on
+yours. The names match the silkscreens since the 2026-09 rename; the old names
+`Core.ST.L4.1`, `Core.ST.L0.1` and `Core.ST.H5.1` still build, with a NOTE.
 
 Every Core flashes over SWD. The USB-capable ones also take a runtime DFU
 update over a plain USB cable — no probe, no jumpers, no buttons.

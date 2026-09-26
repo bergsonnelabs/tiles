@@ -2,7 +2,7 @@
 """Host side of tests/hw-nvm-flash: the whole run, plus T4 (NVM survives a
 reflash). Needs python3 + pyserial (L4) or probe-rs (W5).
 
-    python3 host_test.py               # Core.ST.L4.1, reflash with flash-serial
+    python3 host_test.py               # Core.ST.L4, reflash with flash-serial
     python3 host_test.py --dfu         # ... the T4 reflashes with flash-dfu instead
     python3 host_test.py --tile Core.ST.L4.2
     python3 host_test.py --w5          # Core.ST.W5 on a probe: probe-rs download
@@ -28,7 +28,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 SDK = os.path.abspath(os.path.join(HERE, "..", ".."))
 VID = 0x1209
-TEMPLATE = {"Core.ST.L4.1": "core-st-l4-1", "Core.ST.L4.2": "core-st-l4-2", "Core.ST.W5": "core-st-w5"}
+TEMPLATE = {"Core.ST.L4": "core-st-l4", "Core.ST.L4.2": "core-st-l4-2", "Core.ST.W5": "core-st-w5"}
 W5_CHIP = "STM32WBA55CG"
 
 
@@ -234,7 +234,7 @@ def w5_main(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tile", default="Core.ST.L4.1", choices=["Core.ST.L4.1", "Core.ST.L4.2"])
+    ap.add_argument("--tile", default="Core.ST.L4", choices=["Core.ST.L4", "Core.ST.L4.2"])
     ap.add_argument("--dfu", action="store_true", help="L4: reflash with flash-dfu (ROM DFU)")
     ap.add_argument("--w5", action="store_true", help="Core.ST.W5 over probe-rs")
     ap.add_argument("--ble", action="store_true", help="W5: the BLE build (T5)")

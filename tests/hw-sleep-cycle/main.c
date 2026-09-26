@@ -1,6 +1,6 @@
 /**
  * hw-sleep-cycle — bench test for the 2026-09-25 sleep / RTC / backup-register /
- * watchdog-during-sleep fixes on Core.ST.L0.1, Core.ST.L4.1 / L4.2 and
+ * watchdog-during-sleep fixes on Core.ST.L0, Core.ST.L4 / L4.2 and
  * Core.ST.W5. See README.md for flashing and reading the result.
  *
  * config.json arms the 5 s watchdog in core_init(), the same as a Studio

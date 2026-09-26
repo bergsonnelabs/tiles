@@ -9,8 +9,8 @@
  *
  * No pads are assigned, so nothing here is expected to run correctly on a
  * board. Build only:
- *   make TILE=Core.ST.L0.1 && make TILE=Core.ST.L4.1
- *   make TILE=Core.ST.W5   && make TILE=Core.ST.H5.1
+ *   make TILE=Core.ST.L0 && make TILE=Core.ST.L4
+ *   make TILE=Core.ST.W5   && make TILE=Core.ST.H5
  */
 
 #include "core.h"

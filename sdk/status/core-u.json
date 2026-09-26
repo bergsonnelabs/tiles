@@ -15,7 +15,7 @@
     "system.uid": "compile",
     "system.recovery": {
       "status": "verified",
-      "note": "Healthy feed, hang, 1-2-3 strikes, SOS, ROM DFU, reflash: bench-verified on Core.ST.L4.1 (tests/hw-watchdog-recovery, 2026-07-13). Since 2026-09-25 core_watchdog_feed() clears the count after max(10 s, 2x the timeout) of uptime."
+      "note": "Healthy feed, hang, 1-2-3 strikes, SOS, ROM DFU, reflash: bench-verified on Core.ST.L4 (tests/hw-watchdog-recovery, 2026-07-13). Since 2026-09-25 core_watchdog_feed() clears the count after max(10 s, 2x the timeout) of uptime."
     },
     "system.swo": "compile",
     "system.wamr": {
@@ -26,12 +26,12 @@
     "clocks.hse": "na",
     "clocks.msi": {
       "status": "verified",
-      "note": "Wait states now raised before the MSI range goes up (RM0394 §3.3.3; 'high' switched to 48 MHz at 0 WS). 'low' runs 16 MHz, not 8: USB is always on and needs APB >= 10 MHz (RM0394 §46.4). low/medium/high bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-clock-levels: latency, range, SysTick vs USB SOF within 0.6 %)"
+      "note": "Wait states now raised before the MSI range goes up (RM0394 §3.3.3; 'high' switched to 48 MHz at 0 WS). 'low' runs 16 MHz, not 8: USB is always on and needs APB >= 10 MHz (RM0394 §46.4). low/medium/high bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-clock-levels: latency, range, SysTick vs USB SOF within 0.6 %)"
     },
     "clocks.csi": "na",
     "clocks.pll": {
       "status": "verified",
-      "note": "HSI16 /1 x10 /2 = 80 MHz, VCO 160 MHz, 4 WS. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-clock-levels max: SysTick vs USB SOF 0 ppm)"
+      "note": "HSI16 /1 x10 /2 = 80 MHz, VCO 160 MHz, 4 WS. Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-clock-levels max: SysTick vs USB SOF 0 ppm)"
     },
     "gpio.digital": "verified",
     "gpio.exti": "verified",
@@ -56,7 +56,7 @@
     "i2c.smbus": "",
     "spi.master": {
       "status": "verified",
-      "note": "tests/hw-spi-loopback on a Core.ST.L4.1, 2026-09-26 (7/7, max and medium clock): full duplex 1-4096 B, modes 0-3, LSB first, /256 to /2 (40 MHz SCK at max), CS-held command + data via core_tiles_pal. Every wait bounded: a forced stall returns HAL_TIMEOUT in ~2 ms and the SPI is reset. L4.2 builds, not benched"
+      "note": "tests/hw-spi-loopback on a Core.ST.L4, 2026-09-26 (7/7, max and medium clock): full duplex 1-4096 B, modes 0-3, LSB first, /256 to /2 (40 MHz SCK at max), CS-held command + data via core_tiles_pal. Every wait bounded: a forced stall returns HAL_TIMEOUT in ~2 ms and the SPI is reset. L4.2 builds, not benched"
     },
     "spi.octo": "na",
     "timer.tick": {
@@ -117,15 +117,15 @@
     },
     "power.stop": {
       "status": "verified",
-      "note": "Two back-to-back 10 s stop_for with a 5 s IWDG running, no watchdog reset. Wake flag now cleared in RTC_SCR 0x5C (was RTC_TSDR 0x34, RM0394 §35.6.20); sleeps in watchdog-safe chunks. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
+      "note": "Two back-to-back 10 s stop_for with a 5 s IWDG running, no watchdog reset. Wake flag now cleared in RTC_SCR 0x5C (was RTC_TSDR 0x34, RM0394 §35.6.20); sleeps in watchdog-safe chunks. Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.standby": {
       "status": "verified",
-      "note": "Standby wake plus woke_from_standby() clear (T6/T7); refuses a Standby longer than half the watchdog timeout (T5). PWR_SCR is 0x18, not 0x14 (RM0394 §5.4.7). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
+      "note": "Standby wake plus woke_from_standby() clear (T6/T7); refuses a Standby longer than half the watchdog timeout (T5). PWR_SCR is 0x18, not 0x14 (RM0394 §5.4.7). Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.rtc_wake": {
       "status": "verified",
-      "note": "LSI RTC wakeup from Stop and Standby; WUTF cleared in RTC_SCR, wake vector enabled under PRIMASK. Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
+      "note": "LSI RTC wakeup from Stop and Standby; WUTF cleared in RTC_SCR, wake vector enabled under PRIMASK. Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.exti_wake": {
       "status": "compile",
@@ -137,11 +137,11 @@
     },
     "power.rtc_alarm": {
       "status": "verified",
-      "note": "Alarm A at 0x40 on the L422's newer RTC (RM0394 §35); fired at 2980 ms for a 3 s alarm (T2). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
+      "note": "Alarm A at 0x40 on the L422's newer RTC (RM0394 §35); fired at 2980 ms for a 3 s alarm (T2). Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "power.backup": {
       "status": "verified",
-      "note": "TAMP_BKPxR at 0x40003400 + 0x100 (RM0394 §36.6.8); write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
+      "note": "TAMP_BKPxR at 0x40003400 + 0x100 (RM0394 §36.6.8); write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-sleep-cycle, all 8 pass, 0 watchdog resets across two 10 s stops)."
     },
     "security.rng": {
       "status": "compile",
@@ -152,7 +152,7 @@
     "security.hash": "na",
     "conn.usb_cdc": {
       "status": "verified",
-      "note": "Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-usb-robust, 7/7): text printed before the port opens arrives after it does; serial number = chip UID; 64/128-byte writes arrive without a ZLP wait; a 4 KB host burst to a slow reader arrives intact (EP1 NAKs while the ring is full); DTR drop/raise; host not reading for 30 s: slowest write 49.8 ms (50 ms bound), then drops. EPnR writes race-free, CLEAR_FEATURE(HALT) resets the data toggle, bMaxPower 100 mA"
+      "note": "Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-usb-robust, 7/7): text printed before the port opens arrives after it does; serial number = chip UID; 64/128-byte writes arrive without a ZLP wait; a 4 KB host burst to a slow reader arrives intact (EP1 NAKs while the ring is full); DTR drop/raise; host not reading for 30 s: slowest write 49.8 ms (50 ms bound), then drops. EPnR writes race-free, CLEAR_FEATURE(HALT) resets the data toggle, bMaxPower 100 mA"
     },
     "conn.scope_usb": "compile",
     "conn.scope_ble": "na",
@@ -162,13 +162,13 @@
     },
     "conn.usb_wake": {
       "status": "partial",
-      "note": "Reachable while asleep, bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-usb-robust sleep): during core_stop_for(60) a line got PONG in 53 ms and make flash-serial succeeded in 3.0 s. A host awake on the bus keeps the wait in Sleep mode (Stop would stop HSI48). Stop + wake on a real host resume (EXTI 17) not benched: macOS never suspends the bus; the wake chain itself is (forced suspend, W: 5/5 Stops ended by the USB wakeup, CDC fine after)"
+      "note": "Reachable while asleep, bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-usb-robust sleep): during core_stop_for(60) a line got PONG in 53 ms and make flash-serial succeeded in 3.0 s. A host awake on the bus keeps the wait in Sleep mode (Stop would stop HSI48). Stop + wake on a real host resume (EXTI 17) not benched: macOS never suspends the bus; the wake chain itself is (forced suspend, W: 5/5 Stops ended by the USB wakeup, CDC fine after)"
     },
     "conn.usb_msc": "",
     "conn.dfu": "verified",
     "conn.serial_update": {
       "status": "verified",
-      "note": "Bench-verified on Core.ST.L4.1 (tiles#254, 2026-09-24): 13 x 120 KB and 10 x 15 KB updates, lost-reply resend, abort, and a power pull mid-update. Not yet run on Windows."
+      "note": "Bench-verified on Core.ST.L4 (tiles#254, 2026-09-24): 13 x 120 KB and 10 x 15 KB updates, lost-reply resend, abort, and a power pull mid-update. Not yet run on Windows."
     },
     "conn.swd": {
       "status": "none",
@@ -193,7 +193,7 @@
     "nvm.eeprom": "na",
     "nvm.flash_emu": {
       "status": "verified",
-      "note": "1 KB in the last two 2 KB pages (0x0801F000). Bench-verified on Core.ST.L4.1 (tests/hw-nvm-flash, 2026-09-26): read-back, 3 compactions, boot counter across a reset, 24 window-watchdog resets inside appends and compactions (21 old, 3 new, 0 garbage), data intact across flash-serial and flash-dfu reflashes. A compaction stalls the CPU ~22 ms (page erase)."
+      "note": "1 KB in the last two 2 KB pages (0x0801F000). Bench-verified on Core.ST.L4 (tests/hw-nvm-flash, 2026-09-26): read-back, 3 compactions, boot counter across a reset, 24 window-watchdog resets inside appends and compactions (21 old, 3 new, 0 garbage), data intact across flash-serial and flash-dfu reflashes. A compaction stalls the CPU ~22 ms (page erase)."
     },
     "nvm.otp": {
       "status": "none",

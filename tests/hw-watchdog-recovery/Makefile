@@ -1,4 +1,4 @@
-TILE         := Core.ST.L4.1
+TILE         := Core.ST.L4
 TILES_ENABLED := 0
 BLE_ENABLED  := 0
 PROJECT      := $(notdir $(CURDIR))
