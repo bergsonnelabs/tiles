@@ -579,24 +579,125 @@ def _tile_type(tile_entry):
     return tile_entry.get("tile", tile_entry.get("type", ""))
 
 
+def _configured_buses(pads):
+    """Buses some pad creates (a chip select alone does not create one)."""
+    out = set()
+    for f in (pads or {}).values():
+        m = re.match(r'^((?:SPI|I2C|I3C)\d+)\.(CLK|MOSI|MISO|DAT|SDA|SCL)$', str(f))
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def tile_spi_bus(tile_entry):
+    """The SPI bus a tile's chip select is on: `bus` when that is SPI, else
+    `bus2` when that is (a dual-bus tile such as Sense.CAM.P: I2C `bus` for
+    configuration, SPI `bus2` for data). None for a tile with no SPI bus."""
+    for key in ("bus", "bus2"):
+        b = str(tile_entry.get(key) or "")
+        if re.match(r'^SPI\d+$', b):
+            return b
+    return None
+
+
+def is_dual_bus(tile_entry):
+    return bool(tile_entry.get("bus2"))
+
+
+def validate_tile_buses(config):
+    """Check tiles[].bus2 and tiles[].cs_id. Returns a list of error strings.
+
+    bus2 names a tile's second bus, of the other protocol from `bus` (I2C and
+    SPI), and must be configured by pads like `bus`. cs_id is the chip-select id
+    of a dual-bus tile on its SPI bus (see spi_cs_ids); a single-bus SPI tile's
+    id is its instance, so a cs_id there must equal the instance.
+    """
+    errors = []
+    key = "pads" if "pads" in config or "pins" not in config else "pins"
+    configured = _configured_buses(config.get(key))
+    proto = lambda b: re.sub(r'\d+$', '', b)
+    for t in config.get("tiles", []) or []:
+        name = f"Tile '{_tile_type(t)}' instance {t.get('instance', 0)}"
+        bus = str(t.get("bus") or "")
+        bus2 = t.get("bus2")
+        if bus2 not in (None, ""):
+            bus2 = str(bus2)
+            if not re.match(r'^(I2C|SPI)\d+$', bus2) or not re.match(r'^(I2C|SPI)\d+$', bus):
+                errors.append(f"{name}: bus '{bus}' + bus2 '{bus2}' is not an I2C bus and an SPI bus. "
+                              f"A dual-bus tile has one of each.")
+            elif proto(bus2) == proto(bus):
+                errors.append(f"{name}: bus2 '{bus2}' is the same protocol as bus '{bus}'. "
+                              f"bus2 must be the other one (I2C + SPI).")
+            elif bus2 not in configured:
+                have = ", ".join(sorted(configured)) or "(none)"
+                errors.append(f"{name}: bus2 '{bus2}' is not configured (no pads assign it). "
+                              f"Configured buses: {have}")
+        cs_id = t.get("cs_id")
+        if cs_id is None:
+            continue
+        if not isinstance(cs_id, int) or isinstance(cs_id, bool) or not 0 <= cs_id <= 255:
+            errors.append(f"{name}: cs_id {cs_id!r} must be an integer 0-255")
+        elif tile_spi_bus(t) is None:
+            errors.append(f"{name}: cs_id is set but the tile has no SPI bus")
+        elif not is_dual_bus(t) and cs_id != t.get("instance", 0):
+            errors.append(f"{name}: cs_id {cs_id} differs from its instance. A single-bus SPI "
+                          f"tile's chip-select id is its instance (its driver passes tile->id); "
+                          f"drop cs_id or make it equal.")
+    return errors
+
+
+def spi_cs_ids(tiles):
+    """Chip-select ids of the tiles on ONE SPI bus, as [(tile_entry, id)].
+
+    The id is the `cs` value the tile's driver passes to the tiles_pal_t SPI
+    calls, and the key of the bus's chip-select map:
+      - a single-bus SPI tile: its instance (drivers set tile->id = instance);
+      - a dual-bus tile (bus2): its cs_id, which the application passes to the
+        driver as its SPI chip-select (Sense.CAM.P: cfg.spi_cs). When cs_id is
+        omitted it is the smallest id no other tile on the bus holds, taken in
+        tiles[] order after every explicit id (so 0 for a tile alone).
+    Collisions are left to the caller.
+    """
+    fixed = []
+    for t in tiles:
+        if not is_dual_bus(t):
+            fixed.append(t.get("instance", 0))
+        elif t.get("cs_id") is not None:
+            fixed.append(t["cs_id"])
+    used = set(fixed)
+    out = []
+    for t in tiles:
+        if not is_dual_bus(t):
+            out.append((t, t.get("instance", 0)))
+        elif t.get("cs_id") is not None:
+            out.append((t, t["cs_id"]))
+        else:
+            k = 0
+            while k in used:
+                k += 1
+            used.add(k)
+            out.append((t, k))
+    return out
+
+
 def merge_tile_cs_pads(config):
     """Claim every SPI tile's tiles[].cs_pad in the project's pads as '<bus>.CS'.
 
-    A chip-select pad may appear only in tiles[].cs_pad (Studio also mirrors it
-    into pads). Merging it here means the pad is validated like any other pad
-    and configured by the pad init as a push-pull output, deasserted, before
-    the SPI peripheral is enabled. A cs_pad already assigned 'GPIO.OUT' becomes
-    the chip select. Mutates config in memory only (config.json is not
-    rewritten). Returns a list of error strings.
+    The bus is the tile's SPI bus: `bus`, or `bus2` for a dual-bus tile whose
+    `bus` is I2C. A chip-select pad may appear only in tiles[].cs_pad (Studio
+    also mirrors it into pads). Merging it here means the pad is validated like
+    any other pad and configured by the pad init as a push-pull output,
+    deasserted, before the SPI peripheral is enabled. A cs_pad already assigned
+    'GPIO.OUT' becomes the chip select. Mutates config in memory only
+    (config.json is not rewritten). Returns a list of error strings.
     """
     errors = []
     key = "pads" if "pads" in config or "pins" not in config else "pins"
     # Only buses some pad already creates: a cs_pad must not invent a bus (a
     # tile on an unconfigured bus fails later with its own clear error).
-    configured = {m.group(1) for f in (config.get(key) or {}).values()
-                  for m in [re.match(r'^(SPI\d+)\.(CLK|MOSI|MISO)$', str(f))] if m}
+    configured = _configured_buses(config.get(key))
     for t in config.get("tiles", []) or []:
-        bus = str(t.get("bus", ""))
+        bus = tile_spi_bus(t)
         cs_pad = t.get("cs_pad")
         if cs_pad in (None, "") or bus not in configured:
             continue
@@ -1396,13 +1497,15 @@ def resolve_spi_chip_selects(config, bus_name, bus_cs_pads, pad_lookup):
         on this bus drive it, whatever `cs` the driver passes. At most one
         tile may sit on the bus.
       - several CS pads: bus_cs_pad is None and cs_map lists one entry per
-        tile, {id, pad, port, pin, tile}. id is the tile's instance, which is
-        the `cs` value its driver passes to the tiles_pal_t SPI calls
-        (tile->id). Every tile on the bus must name its cs_pad, and the
-        instances and cs_pads must be unique on the bus.
+        tile, {id, pad, port, pin, tile}. id is the tile's chip-select id (see
+        spi_cs_ids): the `cs` value its driver passes to the tiles_pal_t SPI
+        calls, which is its instance for a single-bus SPI tile and its cs_id
+        for a dual-bus tile. Every tile on the bus must name its cs_pad, and
+        the ids and cs_pads must be unique on the bus.
+    The tiles on a bus include dual-bus tiles whose bus2 is this bus.
     Exits with an ERROR on a conflict.
     """
-    tiles = [t for t in (config.get("tiles", []) or []) if str(t.get("bus", "")) == bus_name]
+    tiles = [t for t in (config.get("tiles", []) or []) if tile_spi_bus(t) == bus_name]
     fail = []
 
     # Two tiles on one chip select would both answer every transfer.
@@ -1434,32 +1537,33 @@ def resolve_spi_chip_selects(config, bus_name, bus_cs_pads, pad_lookup):
 
     cs_map = []
     seen_id = {}
-    for t in tiles:
+    for t, cid in spi_cs_ids(tiles):
         inst = t.get("instance", 0)
+        what = f"Tile '{_tile_type(t)}' instance {inst}" + (f" (cs_id {cid})" if is_dual_bus(t) else "")
         cs = t.get("cs_pad")
         if cs in (None, ""):
-            fail.append(f"Tile '{_tile_type(t)}' instance {inst} on {bus_name} has no cs_pad, and "
-                        f"{bus_name} has several chip-select pads ({', '.join(pads)}). Name the "
-                        f"tile's cs_pad.")
+            fail.append(f"{what} on {bus_name} has no cs_pad, and {bus_name} has several "
+                        f"chip-select pads ({', '.join(pads)}). Name the tile's cs_pad.")
             continue
-        if inst in seen_id:
-            fail.append(f"Tiles '{_tile_type(seen_id[inst])}' and '{_tile_type(t)}' on {bus_name} "
-                        f"both have instance {inst}. On a bus with several chip selects the instance "
-                        f"is the tile's chip-select id (the `cs` its driver passes), so give each "
-                        f"tile on {bus_name} a different instance.")
-            continue
-        seen_id[inst] = t
-        if not isinstance(inst, int) or not 0 <= inst <= 255:
+        if not isinstance(cid, int) or isinstance(cid, bool) or not 0 <= cid <= 255:
             fail.append(f"Tile '{_tile_type(t)}' on {bus_name}: instance {inst!r} must be an "
                         f"integer 0-255 (it is the tile's chip-select id)")
             continue
+        if cid in seen_id:
+            o = seen_id[cid]
+            fail.append(f"Tiles '{_tile_type(o)}' and '{_tile_type(t)}' on {bus_name} both have "
+                        f"chip-select id {cid}. The id is the `cs` a driver passes: a single-bus "
+                        f"SPI tile's instance, or a dual-bus tile's cs_id. Give each tile on "
+                        f"{bus_name} a different one.")
+            continue
+        seen_id[cid] = t
         info = pad_lookup.get(str(cs), {})
         if info.get("port") is None or info.get("pin") is None:
-            fail.append(f"Tile '{_tile_type(t)}' instance {inst}: CS pad {cs} could not be "
-                        f"resolved to a GPIO port/pin")
+            fail.append(f"{what}: CS pad {cs} could not be resolved to a GPIO port/pin")
             continue
-        cs_map.append({"id": inst, "pad": str(cs), "port": info["port"],
-                       "pin": info["pin"], "tile": _tile_type(t)})
+        cs_map.append({"id": cid, "pad": str(cs), "port": info["port"],
+                       "pin": info["pin"], "tile": _tile_type(t),
+                       "key": (f"cs_id {cid} (dual-bus)" if is_dual_bus(t) else f"instance {cid}")})
     for m in fail:
         eprint(f"  ERROR: {m}")
     if fail:
@@ -1619,6 +1723,18 @@ TILE_DRIVER_MAP = {
 }
 
 
+def _pal2_expr(tile_entry):
+    """core_tiles_pal2(&core_i2cN, &core_spiM) for a dual-bus tile, else None."""
+    if not is_dual_bus(tile_entry):
+        return None
+    buses = [str(tile_entry.get("bus")), str(tile_entry.get("bus2"))]
+    i2c = next((b for b in buses if b.startswith("I2C")), None)
+    spi = next((b for b in buses if b.startswith("SPI")), None)
+    if not i2c or not spi:
+        return None
+    return f"core_tiles_pal2(&core_{i2c.lower()}, &core_{spi.lower()})"
+
+
 def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
     """Build tile peripheral config from 'tiles' list in project config.
 
@@ -1642,6 +1758,11 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
     all_bus_names = set(i2c_lookup) | set(spi_lookup)
 
     tiles_config = []
+    # Chip-select id per SPI tile (id(entry) -> id), for the init recipe.
+    cs_ids = {}
+    for bus in {tile_spi_bus(t) for t in tiles_list} - {None}:
+        for t, cid in spi_cs_ids([t for t in tiles_list if tile_spi_bus(t) == bus]):
+            cs_ids[id(t)] = cid
     seen_buses = {}          # bus_name -> hal handle dict
     seen_drivers = set()
 
@@ -1713,6 +1834,10 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
                            or seen_buses[bus_name].get("spi_handle")),
             "bus_is_spi": 1 if seen_buses[bus_name]["bus_type"] == "spi" else 0,
             "readdress_gpio": tile_entry.get("readdress_gpio", -1),
+            # Dual-bus tile (bus + bus2): the PAL carries both buses, and the
+            # driver's SPI chip select is its cs_id (e.g. Sense.CAM.P cfg.spi_cs).
+            "pal2": _pal2_expr(tile_entry),
+            "cs_id": cs_ids.get(id(tile_entry)),
         })
 
     tile_pal_buses = list(seen_buses.values())
@@ -2185,7 +2310,7 @@ def generate(tile_path, output_dir, config_path=None):
 
         # SPI tiles' chip-select pads join the pad map first, so they are
         # validated and initialized (deasserted) like any other pad.
-        cs_errors = merge_tile_cs_pads(project)
+        cs_errors = validate_tile_buses(project) + merge_tile_cs_pads(project)
 
         # Validate pin/interface/clock assignments
         warnings, errors = validate_project_config(project, tile, pad_map, mcu)

@@ -39,8 +39,10 @@ typedef struct {
 } hal_spi_config_t;
 
 /* One device's chip select in a hal_spi_set_cs_map() table. `id` is the value
- * that names the device in hal_spi_select_id(): for a tile, its instance (the
- * `cs` argument its driver passes to the tiles_pal_t SPI calls). */
+ * that names the device in hal_spi_select_id(): for a tile, the `cs` argument
+ * its driver passes to the tiles_pal_t SPI calls (its instance, or for a
+ * dual-bus tile such as Sense.CAM.P its cs_id, given to the driver as
+ * cfg.spi_cs). */
 typedef struct {
     GPIO_TypeDef *port;
     uint16_t      pin;
@@ -139,7 +141,7 @@ void hal_spi_deselect(hal_spi_t *h);
  * bus has one device, and this asserts the hal_spi_set_cs() pin (if any) for
  * any id.
  * @param h   SPI handle
- * @param id  Device id (a tile's instance)
+ * @param id  Device id (a tile's instance, or a dual-bus tile's cs_id)
  * @return 0, or -1 for an id not in the map
  */
 int hal_spi_select_id(hal_spi_t *h, uint8_t id);
@@ -147,7 +149,7 @@ int hal_spi_select_id(hal_spi_t *h, uint8_t id);
 /**
  * Deassert the chip select that hal_spi_select_id(h, id) asserted.
  * @param h   SPI handle
- * @param id  Device id (a tile's instance)
+ * @param id  Device id (a tile's instance, or a dual-bus tile's cs_id)
  */
 void hal_spi_deselect_id(hal_spi_t *h, uint8_t id);
 

@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@e30b19b",
+  "source": "tiles@003821d",
   "category": "spi",
   "label": "Core.SPI",
   "icon": "⇆",
@@ -577,7 +577,7 @@
         {
           "name": "id",
           "ctype": "uint8_t",
-          "description": "Device id (a tile's instance)"
+          "description": "Device id (a tile's instance, or a dual-bus tile's cs_id)"
         }
       ],
       "studio_exposed": false,
@@ -597,7 +597,7 @@
         {
           "name": "id",
           "ctype": "uint8_t",
-          "description": "Device id (a tile's instance)"
+          "description": "Device id (a tile's instance, or a dual-bus tile's cs_id)"
         }
       ],
       "studio_exposed": false,

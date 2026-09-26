@@ -371,6 +371,8 @@ spelling matters.
 | `bus`      | string | **yes**         | must match a configured `I2C*`/`SPI*` interface    |
 | `instance` | int    | no (default 0)  | I2C: address slot · SPI: the tile's chip-select id (see below) |
 | `cs_pad`   | string | **SPI only**    | pad number of this tile's chip-select (any free GPIO pad) |
+| `bus2`     | string | dual-bus tiles  | the tile's second bus, the other protocol from `bus` (I2C + SPI), configured by `pads` like `bus` |
+| `cs_id`    | int    | no (see below)  | a dual-bus tile's chip-select id on its SPI bus, 0-255 |
 
 Validation (each fails → exit): `tile` must be in `TILE_DRIVER_MAP`; `bus` must
 be a real configured interface; an SPI tile's `cs_pad` must resolve to a GPIO
@@ -405,10 +407,47 @@ How the chip select is assigned:
   entry returns -1 and selects nothing. `core_spi_select()` drives none of the
   map's pads; use `hal_spi_select_id(&core_spiN, instance)` by hand.
 - Errors: two tiles on one bus with the same `cs_pad`, or (with several CS
-  pads) the same `instance`; a tile with no `cs_pad` on a bus with several;
+  pads) the same chip-select id; a tile with no `cs_pad` on a bus with several;
   two tiles on a bus with only one CS pad. A CS pad no tile claims is a NOTE.
 - Store.O.128 accepts only instance 0 today, so on a shared bus give it
   instance 0 and the other tiles 1, 2, ….
+
+**Dual-bus tiles** (Sense.CAM.P: I2C for configuration, SPI for image data)
+use `bus` for one protocol and `bus2` for the other, and a PAL carrying both
+(`core_tiles_pal2(&core_i2cN, &core_spiM)`). Their `instance` is the I2C
+address slot, so it cannot name the chip select. The driver takes its SPI chip
+select from its config instead (`sense_cam_p_cfg_t.spi_cs`), and that value is
+the tile's **`cs_id`**:
+
+```json
+"pads":  { "2": "SPI3.CLK", "6": "SPI3.MOSI", "7": "SPI3.MISO",
+           "10": "I2C1.CLK", "11": "I2C1.DAT" },
+"tiles": [
+  { "tile": "Sense.I.6P6", "bus": "SPI3", "instance": 0, "cs_pad": "3" },
+  { "tile": "Sense.CAM.P", "bus": "I2C1", "bus2": "SPI3", "instance": 0,
+    "cs_pad": "4", "cs_id": 1 }
+]
+```
+
+```c
+sense_cam_p_cfg_t cfg = { .spi_cs = 1 /* its cs_id */, .resolution = SENSE_CAM_P_RES_160x120 };
+tile_sense_cam_p_init(core_tiles_pal2(&core_i2c1, &core_spi3), 0, &cam, &cfg);
+```
+
+- A dual-bus tile's `cs_pad` belongs to its SPI bus (`bus2` here), and it
+  joins that bus's chip-select map under its `cs_id`.
+- `cs_id` omitted: the smallest id no other tile on that SPI bus holds, where
+  single-bus SPI tiles' instances and explicit `cs_id`s are taken first, then
+  defaults go out in `tiles[]` order. Alone on its bus that is 0, which is the
+  driver's default (`cfg` NULL gives `spi_cs` 0), so a lone dual-bus tile works
+  as before. Emit `cs_id` explicitly whenever something else shares the bus:
+  the application must pass the same number as `spi_cs`.
+- A single-bus SPI tile's chip-select id is its `instance`; a `cs_id` on one
+  must equal it. Two tiles with the same id on one bus are an error.
+- `bus2` errors: not an I2C/SPI bus, the same protocol as `bus`, or not
+  configured by `pads`.
+- coregen's generated `core_init.h` recipe shows the `core_tiles_pal2(...)` call
+  and the `spi_cs` to pass.
 
 The set of valid `tile` names is the `TILE_DRIVER_MAP` dict in
 `tools/coregen/coregen.py` (~line 1148) — check there for the current list

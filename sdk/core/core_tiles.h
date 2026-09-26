@@ -72,7 +72,9 @@ static inline int _ct_i2c_read_raw(void *h, uint8_t addr,
 
 /* ---- Internal: SPI adapters ----
  * Every SPI call is one transaction under one chip-select assertion, chosen by
- * the driver's `cs` argument (tile->id, which for an SPI tile is its instance):
+ * the driver's `cs` argument: tile->id, which for an SPI tile is its instance,
+ * or for a dual-bus tile (core_tiles_pal2; Sense.CAM.P) its cfg.spi_cs, which
+ * is the tile's tiles[].cs_id in config.json:
  *   - a bus with a chip-select map (coregen, several tiles with their own
  *     tiles[].cs_pad) asserts the map entry whose id is `cs`. A `cs` that is
  *     not in the map returns -1 and drives nothing: it never selects some
