@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@60254ad",
+  "source": "tiles@3b946ad",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -1053,7 +1053,7 @@
       "symbol": "core_spi_xfer_byte_bus",
       "header": "core_spi.h",
       "category": "spi",
-      "description": "Single-byte full-duplex transfer over `bus`, with CS auto-managed around the call (asserted before, deasserted after). Returns the received byte (0..255) on success or -1 on any error (bus undeclared, cs_pad undefined). The signed return lets DSL programs branch on `< 0` without an out-pointer. Most chip protocols pair two of these (write a register address, then read or write the value). Multi-byte sequences that need CS held across them — display init streams, audio frame transfers — still need Tier 1 with manual select/deselect.",
+      "description": "Single-byte full-duplex transfer over `bus`, with CS auto-managed around the call (asserted before, deasserted after). Returns the received byte (0..255) on success or -1 on any error (bus undeclared, cs_pad undefined, transfer timed out). The signed return lets DSL programs branch on `< 0` without an out-pointer. Most chip protocols pair two of these (write a register address, then read or write the value). Multi-byte sequences that need CS held across them — display init streams, audio frame transfers — still need Tier 1 with manual select/deselect.",
       "params": [
         {
           "name": "bus",

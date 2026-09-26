@@ -54,7 +54,7 @@
     "i2c.target": "compile",
     "spi.master": {
       "status": "partial",
-      "note": "SPI v2 bring-up (APB7 clock, SSI before MASTER) done; LL half-duplex and SPI-over-GPDMA were validated against a NanEyeC camera (2026-06-19). The core_spi full-duplex path has not been bench-verified."
+      "note": "LL half-duplex and SPI-over-GPDMA validated against a NanEyeC camera (2026-06-19). The core_spi path (one TSIZE session per transfer, FIFO-pipelined, bounded, SSOM/SSOE fixed) was rewritten 2026-09-26 and builds; tests/hw-spi-loopback has not run on a W5 yet"
     },
     "spi.octo": "na",
     "timer.tick": "verified",
@@ -174,7 +174,7 @@
     },
     "spi.dma": {
       "status": "partial",
-      "note": "LL only: ll_spi_dma_* over GPDMA validated against a NanEyeC camera (2026-06-19). core_spi_xfer_dma returns HAL_ERROR on the WBA (TSIZE must be set while SPE=0)."
+      "note": "LL ll_spi_dma_* over GPDMA validated against a NanEyeC camera (2026-06-19). core_spi_exchange_dma / core_spi_xfer_dma (GPDMA1 CH6/CH7, SPI EOT interrupt for the callback) added 2026-09-26: builds, not yet benched"
     }
   }
 }

@@ -649,8 +649,14 @@ void core_pads_init(void)
 {% for bus in spi_buses %}
     {{ bus.clk_func }}({{ bus.clk_mask }});
     {
-        hal_spi_config_t _{{ bus.handle }}_cfg = { .prescaler = {{ bus.prescaler }}, .cpol = {{ bus.cpol }}, .cpha = {{ bus.cpha }} };
+        hal_spi_config_t _{{ bus.handle }}_cfg = { .prescaler = {{ bus.prescaler }}, .cpol = {{ bus.cpol }}, .cpha = {{ bus.cpha }}, .lsb_first = {{ 1 if bus.lsb_first else 0 }} };
         hal_spi_init(&{{ bus.handle }}, {{ bus.instance }}, &_{{ bus.handle }}_cfg);
+{% if bus.cs_port %}
+        /* Pad {{ bus.cs_pad }} is this bus's chip select: core_spi_select()/
+         * deselect() and the tile bridge (core_tiles_pal) drive it. */
+        {{ bus.handle }}.cs_active_low = {{ 1 if bus.cs_active_low else 0 }};
+        hal_spi_set_cs(&{{ bus.handle }}, GPIO{{ bus.cs_port }}, {{ bus.cs_pin }});
+{% endif %}
     }
 {% endfor %}
 {% endif %}

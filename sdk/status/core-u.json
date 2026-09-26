@@ -54,7 +54,10 @@
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
-    "spi.master": "compile",
+    "spi.master": {
+      "status": "verified",
+      "note": "tests/hw-spi-loopback on a Core.ST.L4.1, 2026-09-26 (7/7, max and medium clock): full duplex 1-4096 B, modes 0-3, LSB first, /256 to /2 (40 MHz SCK at max), CS-held command + data via core_tiles_pal. Every wait bounded: a forced stall returns HAL_TIMEOUT in ~2 ms and the SPI is reset. L4.2 builds, not benched"
+    },
     "spi.octo": "na",
     "timer.tick": {
       "status": "verified",
@@ -99,7 +102,10 @@
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
-    "coregen.spi": "compile",
+    "coregen.spi": {
+      "status": "verified",
+      "note": "SPIn.CLK/MOSI/MISO/CS pads + interfaces.SPIn {mode, prescaler, bit_order, cs_polarity}: the CS pad is attached to core_spiN and starts deasserted (fixed 2026-09-26; it used to come up low and stay unmanaged). tests/hw-spi-loopback, 2026-09-26"
+    },
     "coregen.uart": "compile",
     "coregen.timer": {
       "status": "compile",
@@ -194,8 +200,8 @@
       "note": "The STM32L422 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"
     },
     "spi.dma": {
-      "status": "compile",
-      "note": "hal_spi_xfer_dma: DMA1 CH2/CH3, full duplex, completion callback. Implemented April 2026; SPI on the L4 has not run on hardware yet"
+      "status": "verified",
+      "note": "DMA1 CH2/CH3: core_spi_exchange_dma (blocking) and core_spi_xfer_dma (callback) + core_spi_dma_wait, bounded. tests/hw-spi-loopback, 2026-09-26: 1-4096 B intact, 4.96 MB/s at 40 MHz SCK (polled: 1.77 MB/s)"
     }
   }
 }

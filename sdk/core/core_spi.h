@@ -1,20 +1,39 @@
 /**
  * core_spi.h — SPI master bus communication
  *
- * Master-mode SPI with software CS management, polling and DMA
- * transfers. Wraps hal_spi with pad-based convenience.
+ * Master-mode SPI, 8-bit frames, software CS on a tile pad: bounded polled
+ * transfers (full-duplex, write-only, read-only, CS-held command + data) and
+ * DMA transfers (blocking or with a completion callback). Wraps hal_spi.
  *
  * Quick start (polling):
  * @code
  *   hal_spi_t spi;
- *   hal_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };
+ *   hal_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };  // mode 0, MSB first
  *   core_spi_init(&spi, SPI1, &cfg);
- *   core_spi_set_cs(&spi, 11);         // Pad 11 as CS
+ *   core_spi_set_cs(&spi, 9);          // Pad 9 as CS
  *
- *   core_spi_select(&spi);
- *   uint8_t who = core_spi_transfer(&spi, 0xF5);  // Read reg 0x75
- *   core_spi_deselect(&spi);
+ *   uint8_t cmd[4] = { 0x03, 0x00, 0x10, 0x00 };   // SPI-NOR READ @ 0x001000
+ *   uint8_t page[256];
+ *   if (core_spi_write_read(&spi, cmd, 4, page, sizeof page) != HAL_OK) { ... }
  * @endcode
+ *
+ * Projects that declare the bus in config.json get a ready handle
+ * (core_spi1 / core_spi3) with its CS pad already attached.
+ *
+ * Conventions for every buffer call: a NULL tx buffer clocks out the handle's
+ * fill byte (0xFF, `spi.fill`), a NULL rx buffer discards what comes back,
+ * and tx may equal rx. Every call is bounded: if no frame completes for the
+ * stall budget (2 ms plus a few frame times at the configured SCK, see
+ * ll_spi_stall_cycles) it returns HAL_TIMEOUT and the peripheral is reset, so
+ * the next call starts clean.
+ *
+ * Fastest SCK is the kernel clock / 2 (the kernel clock is SYSCLK at every
+ * coregen clock level):
+ *   Core.ST.L4: 8 MHz (low/medium, 16 MHz), 24 MHz (high), 40 MHz (max).
+ *               Above 16 MHz needs VDD >= 2.7 V (STM32L422 DS Table 80).
+ *   Core.ST.W5: 8 MHz (low), 16 MHz (medium), 32 MHz (high), 50 MHz (max).
+ *               Above 33 MHz needs VDD >= 2.7 V (DS14127 Table 94): at 1.8 V
+ *               use /4 (25 MHz) at max.
  *
  * Available on: Core.ST.L4, Core.ST.W5, Core.ST.H5 (not Core.ST.L0 — no SPI peripheral).
  *
@@ -24,13 +43,14 @@
  *   id:    spi
  *   name:  SPI — bus communication
  *   page:  /docs/sdk/spi
- *   blurb: Master-mode SPI: polled byte / buffer transfer, software CS
- *          via tile pads, and DMA non-blocking transfers (Core.ST.L4
- *          only, not yet run on hardware; Core.ST.W5/H5 DMA is WIP). Tier 2 exposes a
- *          single-byte full-duplex transfer against a bus id + CS pad —
- *          coregen resolves the handle via core_spi_handle_for_bus().
- *          Tier 1 keeps the explicit-handle forms for buffer transfers,
- *          DMA, and persistent CS control.
+ *   blurb: Master-mode SPI, 8-bit frames, modes 0-3, MSB or LSB first:
+ *          bounded polled transfers (full-duplex, write, read, CS-held
+ *          command + data) and DMA transfers, blocking or with a callback
+ *          (Core.ST.L4 and Core.ST.W5). Bench-verified on Core.ST.L4 by
+ *          tests/hw-spi-loopback. Tier 2 exposes a single-byte full-duplex
+ *          transfer against a bus id + CS pad — coregen resolves the handle
+ *          via core_spi_handle_for_bus(). Tier 1 keeps the explicit-handle
+ *          forms for buffer transfers, DMA, and persistent CS control.
  */
 
 #ifndef CORE_SPI_H
@@ -47,12 +67,23 @@
 /** SPI handle type — same as hal_spi_t under the hood. */
 typedef hal_spi_t core_spi_t;
 
-/** SPI configuration — prescaler, clock polarity, clock phase. */
+/** SPI configuration — prescaler, clock polarity, clock phase, bit order. */
 typedef hal_spi_config_t core_spi_config_t;
 
 /* ---- Init ---- */
 
-/** Initialize SPI in master mode. Same signature as hal_spi_init. */
+/**
+ * @brief  Initialize SPI in master mode (8-bit frames).
+ *
+ * Enables and resets the peripheral, then applies `cfg`. SCK/MOSI/MISO pads
+ * must already be in their SPI alternate function (coregen does this for the
+ * pads config.json assigns).
+ *
+ * @param  h         Handle (zeroed by this call; attach CS afterwards)
+ * @param  instance  SPI1 (Core.ST.L4 / Core.ST.W5) or SPI3 (Core.ST.W5)
+ * @param  cfg       Prescaler (LL_SPI_PRESCALER_2..256), cpol, cpha, lsb_first
+ * @return HAL_OK, or HAL_ERROR on a NULL argument
+ */
 static inline hal_status_t core_spi_init(hal_spi_t *h,
                                           SPI_TypeDef *instance,
                                           const hal_spi_config_t *cfg)
@@ -60,12 +91,42 @@ static inline hal_status_t core_spi_init(hal_spi_t *h,
     return hal_spi_init(h, instance, cfg);
 }
 
+/**
+ * @brief  Change prescaler, SPI mode or bit order, keeping the CS pad.
+ *
+ * Use it to talk to devices with different modes on one bus, or to start
+ * slow and speed up after identification.
+ *
+ * @param  h    SPI handle
+ * @param  cfg  New configuration
+ * @return HAL_OK, HAL_BUSY while a DMA transfer runs, HAL_ERROR on NULL
+ */
+static inline hal_status_t core_spi_configure(hal_spi_t *h,
+                                               const hal_spi_config_t *cfg)
+{
+    return hal_spi_configure(h, cfg);
+}
+
+/**
+ * @brief  The SCK frequency the handle is set to, in Hz.
+ * @param  h  SPI handle
+ * @return SYSCLK / (2..256); 0 for an uninitialized handle
+ */
+static inline uint32_t core_spi_sck_hz(const hal_spi_t *h)
+{
+    return hal_spi_sck_hz(h);
+}
+
 /* ---- CS management ---- */
 
 /**
- * Assign a CS pin using a tile pad number.
- * Resolves pad to port/pin via hal_pad_lookup, then calls
- * hal_spi_set_cs to configure and deassert the pin.
+ * @brief  Assign a CS pin by tile pad number.
+ *
+ * Configures the pad as a push-pull output at its inactive level (high, or
+ * low when `h->cs_active_low` is 0).
+ *
+ * @param  h    SPI handle
+ * @param  pad  Tile pad driving chip select
  */
 static inline void core_spi_set_cs(hal_spi_t *h, uint8_t pad)
 {
@@ -74,13 +135,19 @@ static inline void core_spi_set_cs(hal_spi_t *h, uint8_t pad)
         hal_spi_set_cs(h, g.port, g.pin);
 }
 
-/** Assert CS (drive low). */
+/**
+ * @brief  Assert CS. Everything until core_spi_deselect() is one transaction.
+ * @param  h  SPI handle
+ */
 static inline void core_spi_select(hal_spi_t *h)
 {
     hal_spi_select(h);
 }
 
-/** Deassert CS (drive high). */
+/**
+ * @brief  Deassert CS, ending the transaction.
+ * @param  h  SPI handle
+ */
 static inline void core_spi_deselect(hal_spi_t *h)
 {
     hal_spi_deselect(h);
@@ -88,57 +155,140 @@ static inline void core_spi_deselect(hal_spi_t *h)
 
 /* ---- Polling transfer ---- */
 
-/** Full-duplex single byte transfer. Returns received byte. */
+/**
+ * @brief  Full-duplex single byte. CS untouched.
+ * @param  h   SPI handle
+ * @param  tx  Byte to send
+ * @return The byte received (0xFF if the transfer failed)
+ */
 static inline uint8_t core_spi_transfer(hal_spi_t *h, uint8_t tx)
 {
     return hal_spi_transfer(h, tx);
 }
 
-/** Write-only (discard received data). */
-static inline void core_spi_write(hal_spi_t *h, const uint8_t *data,
-                                   uint32_t len)
-{
-    hal_spi_write(h, data, len);
-}
-
-/** Read-only (send zeros). */
-static inline void core_spi_read(hal_spi_t *h, uint8_t *buf, uint32_t len)
-{
-    hal_spi_read(h, buf, len);
-}
-
 /**
- * Convenience: select + full-duplex transfer + deselect.
- * tx and rx can be the same buffer. Either can be NULL.
+ * @brief  Full-duplex transfer of `len` bytes. CS untouched.
+ *
+ * Polled and FIFO-pipelined, so SCK runs back to back. Build a CS-held
+ * transaction from several calls between core_spi_select() and
+ * core_spi_deselect().
+ *
+ * @param  h    SPI handle
+ * @param  tx   Bytes to send, or NULL to send the fill byte (0xFF)
+ * @param  rx   Receive buffer, or NULL to discard (may equal tx)
+ * @param  len  Number of bytes
+ * @return HAL_OK, HAL_TIMEOUT (stalled), HAL_ERROR (overrun / mode fault),
+ *         HAL_BUSY (a DMA transfer is running)
  */
-static inline void core_spi_xfer(hal_spi_t *h, const uint8_t *tx,
-                                  uint8_t *rx, uint32_t len)
+static inline hal_status_t core_spi_exchange(hal_spi_t *h, const uint8_t *tx,
+                                              uint8_t *rx, uint32_t len)
 {
-    hal_spi_xfer(h, tx, rx, len);
+    return hal_spi_exchange(h, tx, rx, len);
 }
 
-/* ---- DMA transfer (non-blocking) ---- */
+/**
+ * @brief  Write-only: send `len` bytes, discard what comes back. CS untouched.
+ * @param  h     SPI handle
+ * @param  data  Bytes to send
+ * @param  len   Number of bytes
+ * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ */
+static inline hal_status_t core_spi_write(hal_spi_t *h, const uint8_t *data,
+                                           uint32_t len)
+{
+    return hal_spi_write(h, data, len);
+}
 
 /**
- * Start a DMA-based SPI transfer (non-blocking).
+ * @brief  Read-only: clock out the fill byte (0xFF) and capture `len` bytes.
+ *         CS untouched.
+ * @param  h    SPI handle
+ * @param  buf  Receive buffer
+ * @param  len  Number of bytes
+ * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ */
+static inline hal_status_t core_spi_read(hal_spi_t *h, uint8_t *buf, uint32_t len)
+{
+    return hal_spi_read(h, buf, len);
+}
+
+/**
+ * @brief  One CS-framed full-duplex transaction: select, exchange, deselect.
+ * @param  h    SPI handle
+ * @param  tx   Bytes to send, or NULL to send the fill byte
+ * @param  rx   Receive buffer, or NULL to discard (may equal tx)
+ * @param  len  Number of bytes
+ * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ */
+static inline hal_status_t core_spi_xfer(hal_spi_t *h, const uint8_t *tx,
+                                          uint8_t *rx, uint32_t len)
+{
+    return hal_spi_xfer(h, tx, rx, len);
+}
+
+/**
+ * @brief  One CS-framed command + data transaction.
  *
- * Full-duplex: tx bytes are sent while rx bytes are received
- * simultaneously. Either tx or rx can be NULL for write-only or
- * read-only transfers. The callback fires from DMA ISR context
- * when the transfer completes.
+ * Select, send `tx_len` bytes (command, address, dummy bytes, or write data;
+ * what comes back is discarded), clock in `rx_len` bytes, deselect. CS stays
+ * asserted across both phases, as SPI-NOR flash (Store.O.128) and register
+ * reads need.
  *
- * Caller must manage CS: assert before calling, deassert in
- * the callback. The command/address byte should be sent via
- * polling (core_spi_transfer) before starting DMA.
+ * @param  h       SPI handle
+ * @param  tx      Command bytes
+ * @param  tx_len  Number of command bytes
+ * @param  rx      Receive buffer (may be NULL when rx_len is 0)
+ * @param  rx_len  Number of bytes to read after the command
+ * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ */
+static inline hal_status_t core_spi_write_read(hal_spi_t *h, const uint8_t *tx,
+                                                uint32_t tx_len, uint8_t *rx,
+                                                uint32_t rx_len)
+{
+    return hal_spi_write_read(h, tx, tx_len, rx, rx_len);
+}
+
+/* ---- DMA transfer ---- */
+
+/**
+ * @brief  Full-duplex DMA transfer, blocking until the last frame is off the
+ *         bus. CS untouched.
  *
- * @param h    SPI handle
- * @param tx   TX buffer (NULL = send zeros)
- * @param rx   RX buffer (NULL = discard received data)
- * @param len  Number of bytes to transfer
- * @param cb   Completion callback (called from DMA ISR)
- * @param ctx  User context for callback
- * @return HAL_OK on success, HAL_BUSY if a DMA transfer is active,
- *         HAL_ERROR if DMA is not available on this platform
+ * Same buffers and NULL conventions as core_spi_exchange(); worth it from a
+ * few dozen bytes up, where it keeps SCK saturated and the CPU free of
+ * per-byte work. Core.ST.L4: DMA1 CH2/CH3. Core.ST.W5: GPDMA1 CH6/CH7.
+ *
+ * @param  h    SPI handle
+ * @param  tx   Bytes to send, or NULL to send the fill byte
+ * @param  rx   Receive buffer, or NULL to discard (may equal tx)
+ * @param  len  Number of bytes (any length; long transfers are chunked)
+ * @return HAL_OK, HAL_TIMEOUT (stalled; channels aborted, SPI reset),
+ *         HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error,
+ *         or Core.ST.H5, which has no SPI DMA yet)
+ */
+static inline hal_status_t core_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx,
+                                                  uint8_t *rx, uint32_t len)
+{
+    return hal_spi_exchange_dma(h, tx, rx, len);
+}
+
+/**
+ * @brief  Start a full-duplex DMA transfer and return at once.
+ *
+ * The callback runs from interrupt context when the last frame is received
+ * (Core.ST.L4: DMA RX complete; Core.ST.W5: the SPI's end-of-transfer).
+ * Manage CS yourself: select before, deselect in the callback or after
+ * core_spi_dma_wait(). One DMA transfer at a time across all SPI handles.
+ *
+ * @param  h    SPI handle
+ * @param  tx   TX buffer (NULL = send the fill byte, 0xFF)
+ * @param  rx   RX buffer (NULL = discard received data)
+ * @param  len  Number of bytes: up to 65535 (Core.ST.L4, Core.ST.W5 SPI1),
+ *              1023 (Core.ST.W5 SPI3)
+ * @param  cb   Completion callback (interrupt context), or NULL
+ * @param  ctx  User context for the callback
+ * @return HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR for a bad
+ *         length or on Core.ST.H5
  */
 static inline hal_status_t core_spi_xfer_dma(hal_spi_t *h,
                                               const uint8_t *tx,
@@ -149,7 +299,22 @@ static inline hal_status_t core_spi_xfer_dma(hal_spi_t *h,
     return hal_spi_xfer_dma(h, tx, rx, len, cb, ctx);
 }
 
-/** Returns 1 if a DMA transfer is in progress. */
+/**
+ * @brief  Wait for a core_spi_xfer_dma() transfer to finish (bounded).
+ * @param  h  SPI handle
+ * @return The transfer's result (HAL_OK if none was running), or HAL_TIMEOUT
+ *         after aborting a stalled transfer
+ */
+static inline hal_status_t core_spi_dma_wait(hal_spi_t *h)
+{
+    return hal_spi_dma_wait(h);
+}
+
+/**
+ * @brief  Whether a DMA transfer is in progress on this handle.
+ * @param  h  SPI handle
+ * @return 1 while core_spi_xfer_dma() is running, else 0
+ */
 static inline int core_spi_busy(hal_spi_t *h)
 {
     return hal_spi_busy(h);
@@ -186,8 +351,8 @@ hal_spi_t *core_spi_handle_for_bus(uint8_t bus);
  * Single-byte full-duplex transfer over `bus`, with CS auto-managed
  * around the call (asserted before, deasserted after). Returns the
  * received byte (0..255) on success or -1 on any error (bus undeclared,
- * cs_pad undefined). The signed return lets DSL programs branch on
- * `< 0` without an out-pointer.
+ * cs_pad undefined, transfer timed out). The signed return lets DSL
+ * programs branch on `< 0` without an out-pointer.
  *
  * Most chip protocols pair two of these (write a register address,
  * then read or write the value). Multi-byte sequences that need CS
@@ -206,10 +371,10 @@ static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx
     if (!h) return -1;
     hal_pad_gpio_t cs = hal_pad_lookup(cs_pad);
     if (!cs.port) return -1;
-    hal_spi_set_cs(h, cs.port, cs.pin);
-    hal_spi_select(h);
-    uint8_t rx = hal_spi_transfer(h, tx);
-    hal_spi_deselect(h);
+    if (h->cs_port != cs.port || h->cs_pin != cs.pin)
+        hal_spi_set_cs(h, cs.port, cs.pin);
+    uint8_t rx = 0xFF;
+    if (hal_spi_xfer(h, &tx, &rx, 1) != HAL_OK) return -1;
     return (int)rx;
 }
 
@@ -219,24 +384,28 @@ static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx
 //   The Tier 2 surface is core_spi_xfer_byte_bus: one byte, CS auto-
 //   managed around the call. DSL programs that need to push a
 //   multi-byte payload with CS held (display init streams, SD-card
-//   sectors, audio frame transfers) drop back to Tier 1 with a
-//   hal_spi_t handle and manual select/deselect. Bulk variants need
+//   sectors, audio frame transfers) drop back to Tier 1 (core_spi_xfer,
+//   core_spi_write_read, core_spi_exchange_dma). Bulk variants need
 //   the array-IN / array-OUT host-call ABI prototyped on the tile-
 //   driver side — track with the DSL Capability Coverage close.
 //
-// @studio unsupported tier=1 value=H title="core_spi is not bench-verified on any Core; broken on Core.ST.H5"
-//   Core.ST.W5: the SPI v2 bring-up is done and the LL half-duplex + GPDMA
-//   path ran against a camera, but the core_spi full-duplex path hasn't been
-//   bench-verified. Core.ST.H5: SPI has no kernel clock (PLL1Q is never
-//   enabled) and the transfer loop has no timeout, so it hangs until the H5
-//   fix session. Core.ST.L4: builds, has not run on hardware yet. Tile
-//   drivers that need SPI should expect rough edges.
+// @studio unsupported tier=1 value=M title="Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI has no clock"
+//   Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3,
+//   1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE
+//   sessions, GPDMA) but has not run it on hardware yet; the camera tile's
+//   LL half-duplex path is the only W5 SPI use proven on silicon.
+//   Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled), so a
+//   transfer returns HAL_TIMEOUT instead of moving data.
 //
-// @studio unsupported tier=2 value=M title="DMA implemented only on Core.ST.L4"
-//   core_spi_xfer_dma is implemented for the L4 (classic DMA) but not yet
-//   run on hardware. On Core.ST.W5 / Core.ST.H5 it returns HAL_ERROR (SPI v2
-//   needs TSIZE set while SPE=0); the W5's LL-level ll_spi_dma_* path works.
-//   Long buffer transfers (display refresh, audio) are slower on W5 / H5.
+// @studio unsupported tier=1 value=L title="SPI DMA not on Core.ST.H5"
+//   core_spi_exchange_dma / core_spi_xfer_dma run on Core.ST.L4 (DMA1)
+//   and Core.ST.W5 (GPDMA1 CH6/CH7) and return HAL_ERROR on Core.ST.H5,
+//   where polled transfers are the only path.
+//
+// @studio unsupported tier=1 value=L title="8-bit Motorola frames only"
+//   Frames are 8 bits. No 16-bit frames, hardware CRC, TI frame format or
+//   hardware NSS at the core level; the LL layer has the Core.ST.W5
+//   half-duplex (1-line) mode.
 //
 // @studio unsupported tier=1 value=M title="Slave mode missing"
 //   Master-only. No path for a Core to act as a SPI peripheral on

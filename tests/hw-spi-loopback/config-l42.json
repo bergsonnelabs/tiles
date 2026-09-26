@@ -1,0 +1,18 @@
+{
+  "core": "Core.ST.L4.2",
+  "clock": "max",
+  "bootloader": "rom",
+  "iwdg": {
+    "enabled": true,
+    "timeout_ms": 5000
+  },
+  "pads": {
+    "2": "SPI1.MOSI",
+    "3": "SPI1.CLK",
+    "18": "SPI1.MISO",
+    "19": "SPI1.CS"
+  },
+  "interfaces": {
+    "SPI1": { "mode": 0, "prescaler": 8 }
+  }
+}
