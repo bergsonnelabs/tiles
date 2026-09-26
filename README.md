@@ -112,3 +112,10 @@ changed and skips its heavy jobs when none of its paths are touched, so a
 docs-only PR passes in seconds, while an SDK change builds every Core, the
 BLE projects, the manifests and the twins. PRs can auto-merge once the checks
 pass (`gh pr merge --auto --merge`); merged branches are deleted.
+
+## Third-party code
+
+The Core.ST.W5 Bluetooth LE support in `sdk/ble/` includes STMicroelectronics
+code (the BLE stack and link-layer libraries, application modules and two
+utilities) under ST's own license, for use with ST microcontrollers only. See
+[THIRD_PARTY.md](THIRD_PARTY.md) for the file list and license texts.
