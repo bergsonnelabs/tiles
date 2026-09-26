@@ -164,7 +164,34 @@ make flash-serial                              # Flash a running Core.ST.L4 / H5
 make clean                                     # Remove build artefacts
 make distclean                                 # Remove build + coregen output
 make doctor                                    # Check the toolchain, report what's missing
+make flash-coreprobe                           # Flash over SWD via the CoreProbe (probe-rs); powers the target per config.json "probe"
 ```
+
+### SWD (CoreProbe, probe-rs, OpenOCD)
+
+Bench facts from a Core.ST.H5 on the CoreProbe (2026-09-26, `tests/hw-swd-attach`):
+
+- **Hot attach works while the chip runs.** 120 of 120 cold attaches (power-up
+  handshake, reads, halt, PC, resume) from 100 kHz to 20 MHz, and one session
+  polled across system resets with no errors: the DP stays powered through a
+  system reset. The earlier "power-up handshake times out unless NRST is held
+  low" came from clip-lead wiring (soldered since) and the old reset-looping
+  images, not from the chip.
+- **The CoreProbe is HID-bound** (CMSIS-DAP v1, 64-byte reports): ~18 KB/s
+  reads from 1 MHz up, and an attach takes ~60-75 ms whatever the clock.
+- **H5 DBGMCU through AP1 is at 0x44024000.** AP0 is the debug APB (DBGMCU
+  answers at 0xE00E4000, and it decodes only the low bits); AP1 is the core's
+  AHB-AP, where 0xE00E4000 reads as zero and ignores writes. OpenOCD's `mmw`
+  and every host tool that talks through the core go via AP1. DBGMCU settings
+  survive a system reset. `DBG_IWDG_STOP` (bit 12 of 0x44024008) is
+  bench-verified: an 8 s halt under a 5 s IWDG resets the chip without it and
+  not with it.
+- **Flashing an H5:** `make flash-coreprobe` (probe-rs, ~4 s for 20 KB with
+  verify), or an OpenOCD with an H5 flash driver: ST's fork shipped with
+  STM32CubeIDE has `stm32h5x` (`openocd -c "set PROBE coreprobe" -f
+  sdk/debug/stm32h5.cfg -c "program x.elf verify reset" -c shutdown`, ~2 s).
+  Release OpenOCD 0.12.0 has none, so there `make flash` fails at the flash
+  probe; attach, halt, memory and GDB still work.
 
 ### Host Platforms
 
