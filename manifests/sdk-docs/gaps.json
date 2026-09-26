@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@60254ad",
   "subsystems": [
     {
       "id": "adc",
@@ -259,16 +259,16 @@
           "value": "L"
         },
         {
-          "title": "Flash emulation missing on Core.ST.L4 / W5 / H5",
-          "brief": "core_nvm_write returns -1 on Core.ST.L4 / Core.ST.W5 / Core.ST.H5. Tracked in the SDK roadmap and called out in the Studio A4cd PR notes — blocked on a flash-emu layer in core_nvm with wear-leveling. Until it lands, on-Core programs that need persistent state are limited to backup registers (32 × uint32_t).",
-          "tier": 1,
-          "value": "H"
-        },
-        {
-          "title": "No erase / wear-tracking API",
-          "brief": "Even the EEPROM path doesn't surface erase, page count, or remaining write cycles. Long-running data-logger applications can't budget their write rate against EEPROM endurance.",
+          "title": "No NVM on Core.ST.H5 yet",
+          "brief": "core_nvm_write returns -1 on Core.ST.H5 (CORE_NVM_SIZE is 0). The flash emulation behind Core.ST.L4 and Core.ST.W5 has not been ported to the H523's 8 KB sectors yet. Until it is, H5 programs that need persistent state are limited to backup registers.",
           "tier": 1,
           "value": "M"
+        },
+        {
+          "title": "No wear-tracking API",
+          "brief": "core_nvm_erase_all clears the region, but nothing reports the page erase count or the remaining write budget. Long-running data loggers budget their write rate from the figures in core_nvm.h.",
+          "tier": 1,
+          "value": "L"
         }
       ]
     },

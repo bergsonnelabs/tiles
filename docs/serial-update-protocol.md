@@ -60,7 +60,7 @@ waiting for one.
 | type | arg0 | arg1 | payload | |
 |------|------|------|---------|-|
 | `Q` query | – | – | – | → `SU READY` |
-| `B` begin | image size | CRC-32 of the image | u32 DEV_ID (0x464) | size ≤ flash; nothing is erased yet |
+| `B` begin | image size | CRC-32 of the image | u32 DEV_ID (0x464) | size ≤ flash − 4 KB (the core_nvm pages); nothing is erased yet |
 | `D` data  | offset | CRC-32 of payload | one page (the last may be short) | strictly in order from 0 |
 | `E` end   | – | – | – | verify, write page 0, reset |
 | `X` abort | – | – | – | reply, then reset |
@@ -86,7 +86,7 @@ SU DONE
 |------|------|---------|-----------|
 | 1 | length | DATA empty, > page, or short before the end | bug: stop |
 | 2 | device | DEV_ID isn't this chip | stop; wrong image |
-| 3 | size | image empty, past flash, or chunk past the image | stop |
+| 3 | size | image empty, reaching the core_nvm pages (the top 4 KB), or chunk past the image | stop |
 | 4 | vectors | image doesn't start with SP-in-SRAM + Thumb reset vector inside the image | stop; flash untouched |
 | 5 | flash | erase / program / read-back failed | stop |
 | 6 | order | not the next offset | stop |
@@ -115,6 +115,11 @@ app**, **the ROM bootloader**, or **the complete new image** — never a mix.
    host. With flash untouched it gives up after 10 s idle and resets into the
    old app.
 6. The IWDG is fed throughout (Studio arms 5 s on every L4; it can't be stopped).
+7. Only the pages the image covers are erased, and an image may not reach the
+   top 4 KB (`SU_NVM_RESERVED`): that is core_nvm's store (its last two pages,
+   `sdk/core/core_nvm.h`), so saved settings survive an update. The linker
+   scripts end every image below it; the flasher and `tools/serial_update.py`
+   both refuse one that doesn't (`SU ERR 3`).
 
 `tools/test_serial_update.py` checks this on a simulated flash: a power cut after
 every frame, and a failed program at every call.

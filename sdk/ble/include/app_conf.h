@@ -84,9 +84,10 @@ enum {
 
 #define UTIL_SEQ_CONF_PRIO_NBR    CFG_SEQ_PRIO_NBR
 
-/* Sequencer idle events — used by gap_cmd_resp_wait/release */
+/* Sequencer idle events — gap_cmd_resp_wait/release, ble_flash.c */
 enum {
     CFG_IDLEEVT_PROC_GAP_COMPLETE = 0,
+    CFG_IDLEEVT_FLASH_OP,           /* ble_flash.c: a flash manager operation finished */
     CFG_IDLEEVT_NBR
 };
 #define UTIL_SEQ_CONF_EVTNBR    CFG_IDLEEVT_NBR

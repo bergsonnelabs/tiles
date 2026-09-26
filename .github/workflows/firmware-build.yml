@@ -65,6 +65,7 @@ jobs:
             'tests/ble-*/**'
             'tests/val-ble*/**'
             'tests/val-guard-ble/**'
+            'tests/host-nvm-sim/**'
             'Makefile'
             '.github/workflows/firmware-build.yml'
           )
@@ -203,6 +204,12 @@ jobs:
         run: make -C sdk/serial_update build/flasher_l4.elf
       - name: Serial update blob header is current
         run: make -C sdk/serial_update check
+
+      # core_nvm's flash emulation (sdk/core/core_nvm.c) on a simulated flash,
+      # L4 and W5 geometry: random workloads, with a power cut at every erase
+      # and every program unit. Host cc only, a few seconds.
+      - name: core_nvm power-cut simulation
+        run: make -C tests/host-nvm-sim
 
       # These take BLE_ENABLED from their config.json "ble" block, so they also
       # exercise the config-driven path Studio and the build service rely on.

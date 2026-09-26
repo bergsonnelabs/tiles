@@ -74,6 +74,23 @@
   #define FLASH_KEYR        REG32(FLASH_BASE + 0x08UL)  /* NSKEYR */
   #define FLASH_SR          REG32(FLASH_BASE + 0x20UL)  /* NSSR */
   #define FLASH_CR          REG32(FLASH_BASE + 0x28UL)  /* NSCR1 */
+
+  /* NSSR (RM0493 §7.9.8): bits 8 and 9 (MISERR / FASTERR on the L4) are
+   * reserved here, and OPTWERR is bit 13. WDW (bit 17) is set while a
+   * quad-word is only partly written into the write buffer. */
+  #undef  FLASH_SR_MISERR
+  #undef  FLASH_SR_FASTERR
+  #undef  FLASH_SR_ERR_MASK
+  #define FLASH_SR_OPTWERR  (1UL << 13)
+  #define FLASH_SR_WDW      (1UL << 17)
+  #define FLASH_SR_ERR_MASK (FLASH_SR_OPERR | FLASH_SR_PROGERR | \
+                             FLASH_SR_WRPERR | FLASH_SR_PGAERR | \
+                             FLASH_SR_SIZERR | FLASH_SR_PGSERR | \
+                             FLASH_SR_OPTWERR)
+
+  /* NSCR1 PNB is 7 bits, [9:3] (RM0493 §7.9.10) */
+  #undef  FLASH_CR_PNB_MASK
+  #define FLASH_CR_PNB_MASK (0x7FUL << FLASH_CR_PNB_SHIFT)
 #elif defined(STM32H523xx)
   #define FLASH_PAGE_SIZE   8192     /* 8 KB sectors */
   #define FLASH_START       0x08000000UL
@@ -180,8 +197,16 @@ static inline int ll_flash_erase_page(uint32_t page)
     ll_flash_wait_bsy();
     ll_flash_clear_errors();
 
+#if defined(STM32WBA55xx)
+    /* RM0493 §7.3.6: PER + PNB first, then STRT. NSCR1 can't be written while
+     * BSY is set (a bus error), hence the wait above. */
+    MOD_BITS(FLASH_CR, FLASH_CR_PG | FLASH_CR_MER1 | FLASH_CR_PNB_MASK,
+             FLASH_CR_PER | ((page << FLASH_CR_PNB_SHIFT) & FLASH_CR_PNB_MASK));
+    SET_BITS(FLASH_CR, FLASH_CR_STRT);
+#else
     /* Set sector/page erase + number, then start */
     FLASH_CR = FLASH_CR_PER | (page << FLASH_CR_PNB_SHIFT) | FLASH_CR_STRT;
+#endif
 
     ll_flash_wait_bsy();
 
@@ -248,6 +273,12 @@ static inline int ll_flash_program_qword(uint32_t addr, const uint32_t w[4])
     *(volatile uint32_t *)(addr + 8)  = w[2];
     *(volatile uint32_t *)(addr + 12) = w[3];
 
+#if defined(STM32WBA55xx)
+    /* RM0493 §7.3.7 step 7: WDW clears first (the buffer is handed to the
+     * array and BSY rises), then BSY. Checking BSY alone can catch the gap. */
+    while (FLASH_SR & FLASH_SR_WDW)
+        ;
+#endif
     ll_flash_wait_bsy();
 
     /* Clear PG */

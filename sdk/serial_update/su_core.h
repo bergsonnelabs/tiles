@@ -21,6 +21,8 @@
 typedef struct {
     uint32_t flash_base;          /* where the image starts (0x08000000) */
     uint32_t flash_size;          /* bytes */
+    uint32_t image_limit;         /* largest image, bytes: flash_size less the
+                                     core_nvm pages at the top, never erased */
     uint32_t page_size;           /* bytes, <= SU_MAX_PAYLOAD */
     uint32_t dev_id;              /* DEV_ID[11:0] */
     uint32_t sram_start, sram_end;/* plausible initial SP range */

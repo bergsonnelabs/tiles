@@ -14,6 +14,18 @@
  * When the page fills up, it's erased and records are compacted.
  * For simplicity, the current implementation uses RAM as a write
  * buffer and flushes to flash on NVM_Add.
+ *
+ * Page 127 only: core_nvm's store is pages 125-126 just below
+ * (sdk/core/core_nvm.h), and the linker scripts end the application at
+ * 0x080FA000 to leave all three alone.
+ *
+ * Once BLE is up (ble_flash_ready()), the flush goes through ST's flash
+ * manager like core_nvm's writes, so the erase and the programming run in
+ * time windows between radio events. It is asynchronous: NVM_Add is called
+ * from inside the BLE stack, which must not block on the radio it runs. A
+ * flush requested while one is in flight runs again when it completes, so
+ * the page always ends up matching the RAM copy. (A power cut between the
+ * erase and the write still loses the bonds, as it always did.)
  */
 
 #include <stdint.h>
@@ -21,6 +33,9 @@
 #include "nvm.h"
 #include "ll_common.h"
 #include "ll_flash.h"
+#include "ble_flash.h"
+#include "flash_manager.h"
+#include "flash_driver.h"
 
 /* NVM flash page — last page of 1MB flash */
 #define NVM_PAGE         127
@@ -110,9 +125,70 @@ static void nvm_load_from_flash(void)
     }
 }
 
+/* ---- Asynchronous flush through the flash manager ---- */
+
+static volatile uint8_t  fm_flush_busy;     /* an erase + write is in flight */
+static volatile uint8_t  fm_flush_again;    /* RAM changed meanwhile: flush again */
+static uint16_t          fm_flush_len;      /* bytes the write in flight covers */
+
+static void fm_flush_kick(void);
+static void fm_erase_cb(FM_FlashOp_Status_t st);
+static void fm_write_cb(FM_FlashOp_Status_t st);
+static FM_CallbackNode_t fm_erase_node = { .Callback = fm_erase_cb };
+static FM_CallbackNode_t fm_write_node = { .Callback = fm_write_cb };
+
+static void fm_flush_done(void)
+{
+    (void)FD_TakeHwError();     /* a failed flush is retried by the next one */
+    fm_flush_busy = 0;
+    if (fm_flush_again) fm_flush_kick();
+}
+
+static void fm_start_write(void)
+{
+    FM_Cmd_Status_t st = FM_Write((uint32_t *)(void *)nvm_ram, (uint32_t *)NVM_FLASH_ADDR,
+                                  (int32_t)(fm_flush_len / 4u), &fm_write_node);
+    if (st == FM_ERROR) fm_flush_done();
+    /* FM_BUSY: fm_write_cb(AVAILABLE) asks again */
+}
+
+static void fm_start_erase(void)
+{
+    FM_Cmd_Status_t st = FM_Erase(NVM_PAGE, 1u, &fm_erase_node);
+    if (st == FM_ERROR) fm_flush_done();
+    else if (st == FM_OK) (void)FD_TakeHwError();   /* stale, from an earlier op */
+}
+
+static void fm_erase_cb(FM_FlashOp_Status_t st)
+{
+    if (st == FM_OPERATION_AVAILABLE) { fm_start_erase(); return; }
+    if (FD_TakeHwError() || fm_flush_len == 0u) { fm_flush_done(); return; }
+    fm_start_write();
+}
+
+static void fm_write_cb(FM_FlashOp_Status_t st)
+{
+    if (st == FM_OPERATION_AVAILABLE) { fm_start_write(); return; }
+    fm_flush_done();
+}
+
+static void fm_flush_kick(void)
+{
+    if (fm_flush_busy) { fm_flush_again = 1; return; }
+    fm_flush_busy = 1;
+    fm_flush_again = 0;
+    fm_flush_len = nvm_write_pos;   /* 16-byte multiple (NVM_ALIGN) */
+    fm_start_erase();
+}
+
 static void nvm_flush_to_flash(void)
 {
-    /* Always erase, so NVM_Discard (write_pos 0) clears the stored bonds too;
+    if (ble_flash_ready()) {
+        fm_flush_kick();
+        return;
+    }
+    /* Before BLE is up nothing else touches flash: write it directly.
+     * Always erase, so NVM_Discard (write_pos 0) clears the stored bonds too;
      * it used to return early and leave them in flash. */
     nvm_flash_erase();
     if (nvm_write_pos)

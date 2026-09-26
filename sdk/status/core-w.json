@@ -164,7 +164,10 @@
     },
     "ble.central": "none",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none",
+    "nvm.flash_emu": {
+      "status": "verified",
+      "note": "1 KB in pages 125-126 (0x080FA000; page 127 is the BLE bond store). With BLE, erases and writes go through ST's flash manager (radio time windows). Bench-verified on Core.ST.W5 (tests/hw-nvm-flash, 2026-09-26): read-back, 3 compactions, 24 power-loss resets (0 garbage), survives a reflash of a different image; with BLE, 1074 writes in 2.66 s while advertising with no dropped radio events, and the bond store's flash-manager path (T7)."
+    },
     "nvm.otp": {
       "status": "partial",
       "note": "Reads and slot geometry verified over SWD on a virgin v2 Ring (tests/val-otp, 2026-07-03). The program path is compile-only: burns are irreversible, so it has never run on silicon."

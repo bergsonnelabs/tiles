@@ -1,11 +1,24 @@
 /* Linker script for STM32WBA55HG */
 /* 1MB Flash, 128KB SRAM */
 
+/* The top 24 KB are reserved, and FLASH ends below them so no image can
+ * overlap them (they survive reflashing: flash-serial, Studio, probe-rs and
+ * CubeProgrammer erase only the pages an image covers):
+ *   0x080FA000-0x080FDFFF  pages 125-126  core_nvm flash emulation (core_nvm.h)
+ *   0x080FE000-0x080FFFFF  page 127       BLE bond store (sdk/ble/nvm_stub.c)
+ * Both scripts (BLE and not) reserve both, so switching a project's BLE
+ * setting never overwrites either. */
+
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1024K
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 1000K  /* 1024K - core_nvm - bonds */
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 128K
 }
+
+/* core_nvm checks this at run time: a custom linker script without the
+ * reservation fails with CORE_NVM_ERR_LAYOUT instead of erasing code. */
+__core_nvm_start = 0x080FA000;
+__core_nvm_end   = 0x080FE000;
 
 /* Entry point */
 ENTRY(Reset_Handler)

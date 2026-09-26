@@ -33,6 +33,7 @@ T_QUERY, T_BEGIN, T_DATA, T_END, T_ABORT = (ord(c) for c in "QBDEX")
 ERR_CRC = 7
 CORE_USB_VID = 0x1209
 DEV_ID_L41X_L42X = 0x464
+NVM_RESERVED = 4096                   # SU_NVM_RESERVED: core_nvm's two pages at the top
 
 ERR_WORDS = {
     1: "payload too long", 2: "image is for a different chip", 3: "image size",
@@ -137,8 +138,12 @@ def update(link: Link, image: bytes, dev_id: int = DEV_ID_L41X_L42X, log=print) 
         + (" (previous update did not finish)" if info["page0_erased"] else ""))
     if info["dev_id"] != dev_id:
         raise UpdateError(f"this Core is device 0x{info['dev_id']:03x}, the image is for 0x{dev_id:03x}")
-    if len(image) > info["flash"]:
-        raise UpdateError(f"image is {len(image)} B, flash is {info['flash']} B")
+    # The top pages are core_nvm's store: an image that reached them would
+    # erase the saved data (the SDK's linker scripts stop 4 KB short).
+    limit = info["flash"] - NVM_RESERVED
+    if len(image) > limit:
+        raise UpdateError(f"image is {len(image)} B; the most that fits below the "
+                          f"core_nvm pages is {limit} B")
 
     page = info["page"]
     link.write(frame(T_BEGIN, len(image), zlib.crc32(image), struct.pack("<I", dev_id)))

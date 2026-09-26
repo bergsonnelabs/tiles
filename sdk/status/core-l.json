@@ -174,7 +174,7 @@
     "ble.central": "na",
     "nvm.eeprom": {
       "status": "compile",
-      "note": "Writes step up from voltage range 3 (clock 'low') to range 2 for the program and back, since range 3 can't program the EEPROM (RM0377 §6.1.4). 2026-09-25"
+      "note": "Writes step up from voltage range 3 (clock 'low') to range 2 for the program and back, since range 3 can't program the EEPROM (RM0377 §6.1.4). 2026-09-25. Since 2026-09-26 each byte checks FLASH_SR and reads back (CORE_NVM_ERR_FLASH), and core_nvm_erase_all() clears it to 0."
     },
     "nvm.flash_emu": "na",
     "nvm.otp": {

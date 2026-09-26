@@ -185,7 +185,10 @@
     "ble.pairing": "na",
     "ble.central": "na",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none",
+    "nvm.flash_emu": {
+      "status": "verified",
+      "note": "1 KB in the last two 2 KB pages (0x0801F000). Bench-verified on Core.ST.L4.1 (tests/hw-nvm-flash, 2026-09-26): read-back, 3 compactions, boot counter across a reset, 24 window-watchdog resets inside appends and compactions (21 old, 3 new, 0 garbage), data intact across flash-serial and flash-dfu reflashes. A compaction stalls the CPU ~22 ms (page erase)."
+    },
     "nvm.otp": {
       "status": "none",
       "note": "The STM32L422 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"
