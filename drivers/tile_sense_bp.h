@@ -23,7 +23,7 @@
  *   #include "tile_sense_bp.h"
  *
  *   tile_t baro;
- *   sense_bp_cfg_t cfg = { .odr = SENSE_BP_ODR_25HZ };
+ *   sense_bp_cfg_t cfg = { .odr = SENSE_BP_ODR_25HZ, .lpf = 1, .bdu = 1 };
  *   tile_sense_bp_init(core_tiles_pal(&core_i2c3), 0, &baro, &cfg);
  *
  *   int32_t pressure_mhpa = tile_sense_bp_get_pressure_mhpa(&baro);
@@ -66,7 +66,7 @@
 /* ---- Driver version ---- */
 
 #define TILE_SENSE_BP_VERSION_MAJOR  1
-#define TILE_SENSE_BP_VERSION_MINOR  2
+#define TILE_SENSE_BP_VERSION_MINOR  3
 #define TILE_SENSE_BP_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -163,17 +163,22 @@ TILES_CHECK_VERSION(1, 0);
 /** Output data rate selection (CTRL_REG1 ODR[3:0], bits 6:3). */
 typedef enum {
     SENSE_BP_ODR_POWERDOWN = 0x00,  /**< Power-down / one-shot */
-    SENSE_BP_ODR_1HZ       = 0x01,  /**< 1 Hz */
-    SENSE_BP_ODR_4HZ       = 0x02,  /**< 4 Hz */
-    SENSE_BP_ODR_10HZ      = 0x03,  /**< 10 Hz */
-    SENSE_BP_ODR_25HZ      = 0x04,  /**< 25 Hz */
-    SENSE_BP_ODR_50HZ      = 0x05,  /**< 50 Hz */
-    SENSE_BP_ODR_75HZ      = 0x06,  /**< 75 Hz */
-    SENSE_BP_ODR_100HZ     = 0x07,  /**< 100 Hz */
-    SENSE_BP_ODR_200HZ     = 0x08,  /**< 200 Hz */
+    SENSE_BP_ODR_1HZ       = 0x01,  /**< 1 Hz @studio value=1 */
+    SENSE_BP_ODR_4HZ       = 0x02,  /**< 4 Hz @studio value=4 */
+    SENSE_BP_ODR_10HZ      = 0x03,  /**< 10 Hz @studio value=10 */
+    SENSE_BP_ODR_25HZ      = 0x04,  /**< 25 Hz @studio value=25 */
+    SENSE_BP_ODR_50HZ      = 0x05,  /**< 50 Hz @studio value=50 */
+    SENSE_BP_ODR_75HZ      = 0x06,  /**< 75 Hz @studio value=75 */
+    SENSE_BP_ODR_100HZ     = 0x07,  /**< 100 Hz @studio value=100 */
+    SENSE_BP_ODR_200HZ     = 0x08,  /**< 200 Hz @studio value=200 */
 } sense_bp_odr_t;
 
-/** Averaging selection (CTRL_REG1 AVG[2:0], bits 2:0). */
+/**
+ * Averaging selection (CTRL_REG1 AVG[2:0], bits 2:0). More averaging means
+ * less noise and more current, and it caps the data rate (datasheet
+ * Table 22): 512 samples up to 25 Hz, 128 up to 75 Hz, 64 up to 100 Hz.
+ * Code 0b110 is not defined.
+ */
 typedef enum {
     SENSE_BP_AVG_4   = 0x00,  /**< 4 samples */
     SENSE_BP_AVG_8   = 0x01,  /**< 8 samples */
@@ -192,8 +197,8 @@ typedef enum {
 
 /** Low-pass filter bandwidth (CTRL_REG2 LFPF_CFG, bit 5). */
 typedef enum {
-    SENSE_BP_LPF_ODR_4 = 0,  /**< Bandwidth = ODR/4 */
-    SENSE_BP_LPF_ODR_9 = 1,  /**< Bandwidth = ODR/9 */
+    SENSE_BP_LPF_ODR_4 = 0,  /**< Bandwidth = ODR/4 @studio value=4 */
+    SENSE_BP_LPF_ODR_9 = 1,  /**< Bandwidth = ODR/9 @studio value=9 */
 } sense_bp_lpf_bw_t;
 
 /** FIFO mode selection (FIFO_CTRL F_MODE[1:0] + TRIG_MODES). */
@@ -218,9 +223,11 @@ typedef struct {
     uint8_t odr;       /**< Output data rate (sense_bp_odr_t). Default: SENSE_BP_ODR_25HZ. */
     uint8_t avg;       /**< Averaging depth (sense_bp_avg_t). Default: SENSE_BP_AVG_4. */
     uint8_t fs;        /**< Full-scale mode (sense_bp_fs_t). Default: SENSE_BP_FS_1260HPA. */
-    uint8_t lpf;       /**< Low-pass filter: 1 = enabled (default), 0 = disabled. */
+    uint8_t lpf;       /**< Low-pass filter: 1 = enabled, 0 = disabled. cfg = NULL
+                            enables it; a zeroed struct turns it off. */
     uint8_t lpf_bw;    /**< LPF bandwidth (sense_bp_lpf_bw_t). Default: SENSE_BP_LPF_ODR_4. */
-    uint8_t bdu;       /**< Block data update: 1 = enabled (default), 0 = continuous. */
+    uint8_t bdu;       /**< Block data update: 1 = enabled, 0 = continuous. cfg = NULL
+                            enables it; a zeroed struct turns it off. */
 } sense_bp_cfg_t;
 
 /* ---- Lifecycle ---- */
@@ -250,14 +257,12 @@ void tile_sense_bp_init(tiles_pal_t *hal, uint8_t instance,
 /**
  * @brief  Enter power-down mode (ODR = 0).
  * @studio expose category=tile name=sleep section=lifecycle
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_bp_sleep(tile_t *tile);
 
 /**
  * @brief  Resume from power-down using cached ODR/AVG settings.
  * @studio expose category=tile name=wake section=lifecycle
- * @param  tile  Sleeping tile handle.
  */
 void tile_sense_bp_wake(tile_t *tile);
 
@@ -267,7 +272,6 @@ void tile_sense_bp_wake(tile_t *tile);
  * All registers return to defaults. Call init() again after reset.
  *
  * @studio expose category=tile name=reset section=lifecycle
- * @param  tile  Tile handle.
  */
 void tile_sense_bp_reset(tile_t *tile);
 
@@ -275,33 +279,57 @@ void tile_sense_bp_reset(tile_t *tile);
 
 /**
  * @brief  Set the output data rate.
+ *
+ * SENSE_BP_ODR_POWERDOWN stops conversions (use oneshot() to take a
+ * reading), so Studio offers only the running rates. init() default: 25 Hz.
+ *
  * @studio expose category=tile name=set_odr section=config
- * @param  tile  Initialised tile handle.
+ * @studio control odr label="Output data rate" tier=basic default=SENSE_BP_ODR_25HZ role=sample_rate allow=SENSE_BP_ODR_1HZ,SENSE_BP_ODR_4HZ,SENSE_BP_ODR_10HZ,SENSE_BP_ODR_25HZ,SENSE_BP_ODR_50HZ,SENSE_BP_ODR_75HZ,SENSE_BP_ODR_100HZ,SENSE_BP_ODR_200HZ
  * @param  odr   Desired output data rate.
  */
 void tile_sense_bp_set_odr(tile_t *tile, sense_bp_odr_t odr);
 
 /**
  * @brief  Set the averaging filter depth.
+ *
+ * Trades noise for current: at 25 Hz with the LPF at ODR/4 the pressure
+ * noise falls from 2.87 Pa RMS (4 samples) to 0.44 Pa (512), while the
+ * supply current rises from 23 µA to 784 µA (datasheet Tables 22, 24).
+ * init() default: 4 samples.
+ *
  * @studio expose category=tile name=set_avg section=config
- * @param  tile  Initialised tile handle.
+ * @studio control avg label="Averaging" tier=advanced default=SENSE_BP_AVG_4
+ * @studio require expr="value(set_odr.odr) <= 25" when="avg == SENSE_BP_AVG_512" message="Averaging 512 samples limits the data rate to 25 Hz. Lower the data rate or the averaging."
+ * @studio require expr="value(set_odr.odr) <= 75" when="avg == SENSE_BP_AVG_128" message="Averaging 128 samples limits the data rate to 75 Hz. Lower the data rate or the averaging."
+ * @studio require expr="value(set_odr.odr) <= 100" when="avg == SENSE_BP_AVG_64" message="Averaging 64 samples limits the data rate to 100 Hz. Lower the data rate or the averaging."
  * @param  avg   Desired averaging.
  */
 void tile_sense_bp_set_avg(tile_t *tile, sense_bp_avg_t avg);
 
 /**
  * @brief  Set the full-scale mode.
+ *
+ * Mode 1 (up to 1260 hPa) has twice the resolution and about half the
+ * noise of mode 2 (up to 4060 hPa). init() default: mode 1.
+ *
  * @studio expose category=tile name=set_fullscale section=config
- * @param  tile  Initialised tile handle.
+ * @studio control fs label="Pressure range" tier=advanced default=SENSE_BP_FS_1260HPA
  * @param  fs    Full-scale selection.
  */
 void tile_sense_bp_set_fullscale(tile_t *tile, sense_bp_fs_t fs);
 
 /**
  * @brief  Enable or disable the low-pass filter.
+ *
+ * The filter on the pressure output (CTRL_REG2 EN_LPFP / LFPF_CFG) cuts
+ * the noise further at no current cost: at 25 Hz with 4-sample
+ * averaging, 4.26 Pa RMS unfiltered, 2.87 at ODR/4, 2.20 at ODR/9
+ * (datasheet Table 24). init() default: on, at ODR/4.
+ *
  * @studio expose category=tile name=set_lpf section=config
- * @param  tile    Initialised tile handle.
- * @param  enable  1 = enable, 0 = disable.
+ * @studio control enable label="Low-pass filter" tier=advanced type=bool default=1
+ * @studio control bw label="Low-pass filter bandwidth" tier=advanced default=SENSE_BP_LPF_ODR_4 show="value(set_odr.odr) / value(bw)" unit=Hz when="enable == 1"
+ * @param  enable  [0..1] 1 = enable, 0 = disable.
  * @param  bw      Bandwidth selection (only used if enable = 1).
  */
 void tile_sense_bp_set_lpf(tile_t *tile, uint8_t enable, sense_bp_lpf_bw_t bw);
@@ -311,7 +339,6 @@ void tile_sense_bp_set_lpf(tile_t *tile, uint8_t enable, sense_bp_lpf_bw_t bw);
 /**
  * @brief  Read the raw 24-bit pressure output (two's complement).
  * @studio expose category=tile name=get_pressure_raw returns=int section=runtime
- * @param  tile  Initialised tile handle.
  * @return Raw 24-bit signed value, sign-extended to int32_t.
  */
 int32_t tile_sense_bp_get_pressure_raw(tile_t *tile);
@@ -323,7 +350,6 @@ int32_t tile_sense_bp_get_pressure_raw(tile_t *tile);
  * Returns pressure * 1000 in mhPa units. For example, 1013250 = 1013.250 hPa.
  * Accounts for the current full-scale mode setting.
  *
- * @param  tile  Initialised tile handle.
  * @return Pressure in milli-hPa (mhPa).
  */
 int32_t tile_sense_bp_get_pressure_mhpa(tile_t *tile);
@@ -333,7 +359,6 @@ int32_t tile_sense_bp_get_pressure_mhpa(tile_t *tile);
 /**
  * @brief  Read the raw 16-bit temperature output (two's complement).
  * @studio expose category=tile name=get_temp_raw returns=int section=runtime
- * @param  tile  Initialised tile handle.
  * @return Raw 16-bit signed value, sign-extended to int16_t.
  */
 int16_t tile_sense_bp_get_temp_raw(tile_t *tile);
@@ -345,7 +370,6 @@ int16_t tile_sense_bp_get_temp_raw(tile_t *tile);
  * Returns temperature * 100. For example, 2534 = 25.34 °C.
  * Sensor sensitivity is 100 LSB/°C, so this is (raw * 100) / 100 = raw.
  *
- * @param  tile  Initialised tile handle.
  * @return Temperature in centi-°C.
  */
 int32_t tile_sense_bp_get_temp_cdeg(tile_t *tile);
@@ -359,7 +383,6 @@ int32_t tile_sense_bp_get_temp_cdeg(tile_t *tile);
  * ODR must be POWERDOWN. Sets the ONESHOT bit in CTRL_REG2.
  * The bit self-clears when the measurement is complete.
  *
- * @param  tile  Tile handle in power-down mode.
  */
 void tile_sense_bp_oneshot(tile_t *tile);
 
@@ -368,7 +391,6 @@ void tile_sense_bp_oneshot(tile_t *tile);
 /**
  * @brief  Read the STATUS register.
  * @studio expose category=tile name=get_status returns=int section=runtime
- * @param  tile  Initialised tile handle.
  * @return Raw STATUS byte (use ILPS22QS_STATUS_* masks).
  */
 uint8_t tile_sense_bp_get_status(tile_t *tile);
@@ -376,7 +398,6 @@ uint8_t tile_sense_bp_get_status(tile_t *tile);
 /**
  * @brief  Check if new pressure data is available.
  * @studio expose category=tile name=pressure_ready returns=bool section=runtime
- * @param  tile  Initialised tile handle.
  * @return 1 if P_DA is set, 0 otherwise.
  */
 uint8_t tile_sense_bp_pressure_ready(tile_t *tile);
@@ -384,7 +405,6 @@ uint8_t tile_sense_bp_pressure_ready(tile_t *tile);
 /**
  * @brief  Check if new temperature data is available.
  * @studio expose category=tile name=temp_ready returns=bool section=runtime
- * @param  tile  Initialised tile handle.
  * @return 1 if T_DA is set, 0 otherwise.
  */
 uint8_t tile_sense_bp_temp_ready(tile_t *tile);
@@ -394,7 +414,6 @@ uint8_t tile_sense_bp_temp_ready(tile_t *tile);
 /**
  * @brief  Configure the FIFO mode.
  * @studio expose category=tile name=set_fifo_mode section=fifo
- * @param  tile  Initialised tile handle.
  * @param  mode  FIFO mode selection.
  */
 void tile_sense_bp_set_fifo_mode(tile_t *tile, sense_bp_fifo_mode_t mode);
@@ -402,15 +421,13 @@ void tile_sense_bp_set_fifo_mode(tile_t *tile, sense_bp_fifo_mode_t mode);
 /**
  * @brief  Set the FIFO watermark threshold (0–127).
  * @studio expose category=tile name=set_fifo_watermark section=fifo
- * @param  tile       Initialised tile handle.
- * @param  watermark  Threshold level (0–127).
+ * @param  watermark  [0..127] Threshold level.
  */
 void tile_sense_bp_set_fifo_watermark(tile_t *tile, uint8_t watermark);
 
 /**
  * @brief  Read the number of unread FIFO samples.
  * @studio expose category=tile name=get_fifo_level returns=int section=fifo
- * @param  tile  Initialised tile handle.
  * @return Number of unread samples (0–128).
  */
 uint8_t tile_sense_bp_get_fifo_level(tile_t *tile);
@@ -418,7 +435,6 @@ uint8_t tile_sense_bp_get_fifo_level(tile_t *tile);
 /**
  * @brief  Read FIFO status flags.
  * @studio expose category=tile name=get_fifo_status returns=int section=fifo
- * @param  tile  Initialised tile handle.
  * @return Raw FIFO_STATUS2 byte (use ILPS22QS_FIFO_* masks).
  */
 uint8_t tile_sense_bp_get_fifo_status(tile_t *tile);
@@ -426,7 +442,6 @@ uint8_t tile_sense_bp_get_fifo_status(tile_t *tile);
 /**
  * @brief  Read one raw 24-bit pressure sample from the FIFO.
  * @studio expose category=tile name=read_fifo_raw returns=int section=fifo
- * @param  tile  Initialised tile handle.
  * @return Raw 24-bit signed pressure value, sign-extended to int32_t.
  */
 int32_t tile_sense_bp_read_fifo_raw(tile_t *tile);
@@ -436,7 +451,6 @@ int32_t tile_sense_bp_read_fifo_raw(tile_t *tile);
  *
  * @studio expose category=tile name=read_fifo_batch returns=int section=fifo
  * @studio out_buffer buf type=int32_t cap_param=count
- * @param  tile   Initialised tile handle.
  * @param  buf    Caller-allocated buffer the driver fills with raw
  *                24-bit signed values (sign-extended to int32_t).
  * @param  count  Capacity of `buf` — the driver fills up to this
@@ -452,26 +466,25 @@ uint8_t tile_sense_bp_read_fifo_batch(tile_t *tile, int32_t *buf,
  * @brief  Set the pressure interrupt threshold in hPa.
  * @studio expose category=tile name=set_threshold_hpa section=config
  *
- * The threshold is applied to the differential pressure (P_DIFF_IN).
- * Enable PHE/PLE bits in INTERRUPT_CFG to generate interrupts.
+ * The threshold is applied to the differential pressure (P_DIFF_IN), so
+ * it needs AUTOREFP or AUTOZERO. Enable PHE/PLE bits in INTERRUPT_CFG to
+ * generate interrupts. THS_P is 15 bits (hPa × 16 in mode 1, × 8 in
+ * mode 2); values past 2047 hPa (mode 1) / 4095 hPa (mode 2) saturate.
  *
- * @param  tile    Initialised tile handle.
- * @param  ths_hpa Threshold in hPa (unsigned, applied symmetrically).
+ * @param  ths_hpa [0..2047] hPa Threshold (unsigned, applied symmetrically).
  */
 void tile_sense_bp_set_threshold_hpa(tile_t *tile, uint16_t ths_hpa);
 
 /**
  * @brief  Configure the interrupt source register.
  * @studio expose category=tile name=set_interrupt_cfg section=config
- * @param  tile  Initialised tile handle.
- * @param  cfg   Raw INTERRUPT_CFG byte (use ILPS22QS_INTCFG_* masks).
+ * @param  cfg   [0..255] Raw INTERRUPT_CFG byte (use ILPS22QS_INTCFG_* masks).
  */
 void tile_sense_bp_set_interrupt_cfg(tile_t *tile, uint8_t cfg);
 
 /**
  * @brief  Read the interrupt source register (clears latched flags).
  * @studio expose category=tile name=get_int_source returns=int section=config
- * @param  tile  Initialised tile handle.
  * @return Raw INT_SOURCE byte (use ILPS22QS_INT_SRC_* masks).
  */
 uint8_t tile_sense_bp_get_int_source(tile_t *tile);
@@ -495,7 +508,6 @@ uint8_t tile_sense_bp_get_int_source(tile_t *tile);
  *   // chip is now ready for re-configuration
  * @endcode
  *
- * @param  tile  Initialised tile handle.
  * @return 1 if boot complete (BOOT_ON cleared), 0 if still booting.
  */
 uint8_t tile_sense_bp_is_boot_complete(tile_t *tile);
@@ -509,14 +521,12 @@ uint8_t tile_sense_bp_is_boot_complete(tile_t *tile);
  * Captures current pressure as REF_P. Output registers then show
  * the difference from reference. Reset with reset_autozero().
  *
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_bp_set_autozero(tile_t *tile);
 
 /**
  * @brief  Reset autozero mode to normal operation.
  * @studio expose category=tile name=reset_autozero section=config
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_bp_reset_autozero(tile_t *tile);
 
@@ -527,14 +537,12 @@ void tile_sense_bp_reset_autozero(tile_t *tile);
  * Captures current pressure as REF_P for interrupt threshold comparison.
  * Output registers are not affected. Reset with reset_autorefp().
  *
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_bp_set_autorefp(tile_t *tile);
 
 /**
  * @brief  Reset autorefp mode to normal operation.
  * @studio expose category=tile name=reset_autorefp section=config
- * @param  tile  Initialised tile handle.
  */
 void tile_sense_bp_reset_autorefp(tile_t *tile);
 
@@ -545,15 +553,13 @@ void tile_sense_bp_reset_autorefp(tile_t *tile);
  * The offset is in raw LSB units (signed 16-bit) and is subtracted from
  * the measured pressure before output.
  *
- * @param  tile    Initialised tile handle.
- * @param  offset  Raw offset value (two's complement).
+ * @param  offset  [-32768..32767] Raw offset value (two's complement).
  */
 void tile_sense_bp_set_pressure_offset(tile_t *tile, int16_t offset);
 
 /**
  * @brief  Read the reference pressure registers (REF_P).
  * @studio expose category=tile name=get_ref_pressure returns=int section=config
- * @param  tile  Initialised tile handle.
  * @return 16-bit signed reference pressure value.
  */
 int16_t tile_sense_bp_get_ref_pressure(tile_t *tile);
@@ -585,8 +591,7 @@ int16_t tile_sense_bp_get_ref_pressure(tile_t *tile);
  * of callers that already have a recent QNH/QFE figure handy. Pass
  * `101325` for the ICAO standard sea level reference.
  *
- * @param  tile         Initialised tile handle.
- * @param  sea_level_pa Reference pressure in pascals (e.g. 101325).
+ * @param  sea_level_pa [26000..406000] Pa Reference pressure (e.g. 101325).
  * @return Altitude in millimetres above (positive) or below (negative)
  *         the reference. Negative when the measured pressure exceeds
  *         the reference (deeper than the reference altitude).
@@ -613,9 +618,8 @@ int32_t tile_sense_bp_read_altitude_mm(tile_t *tile, uint32_t sea_level_pa);
  * or pressure-step-driven UI events — without committing to the full
  * threshold-interrupt configuration in CTRL_REG3 / INTERRUPT_CFG.
  *
- * @param  tile           Initialised tile handle.
- * @param  threshold_hpa  Absolute deviation that triggers return (hPa).
- * @param  timeout_ms     Maximum wait in milliseconds.
+ * @param  threshold_hpa  [1..4060] hPa Absolute deviation that triggers return.
+ * @param  timeout_ms     [0..600000] ms Maximum wait.
  * @return 1 if the threshold was crossed, 0 if the call timed out.
  */
 uint8_t tile_sense_bp_wait_for_pressure_change(tile_t *tile,

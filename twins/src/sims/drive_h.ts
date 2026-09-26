@@ -2,7 +2,7 @@
 // driver for an external LRA/ERM on the OUT+/OUT- pads.
 //
 // One module, two halves, one vocabulary:
-//   - hostCalls answer the firmware (tile_drive_h.c v4.2) and write the
+//   - hostCalls answer the firmware (tile_drive_h.c v4.4) and write the
 //     register-shaped fields below (`mode_reg`, `go`, `rtp_amplitude`, …);
 //   - power / padOutputs read those SAME fields, so the drive current follows
 //     the program: a GO'd library effect, an RTP amplitude, standby.
@@ -90,7 +90,8 @@ interface State {
   otp_programmed: number; // CONTROL4[2]
 }
 
-// Config written by tile_drive_h_init(cfg = NULL) (tile_drive_h.c:124-190).
+// Config written by tile_drive_h_init(cfg = NULL): since 4.4 it also writes
+// CONTROL2 = 0xF5 (reset value) and both open-loop bits in lockstep.
 const INIT_CONFIG = {
   mode_reg: MODE_INTERNAL_TRIG,
   standby: 0,
@@ -102,6 +103,11 @@ const INIT_CONFIG = {
   fb_brake: 3, // 0xB6[6:4]
   loop_gain: 1, // 0xB6[3:2]
   drive_time: 16, // ~238 Hz coin LRA
+  // CONTROL2 = 0xF5: BIDIR_INPUT 1, SAMPLE_TIME 3, BLANKING 1, IDISS 1
+  sample_time: 3,
+  blanking_time: 1,
+  idiss_time: 1,
+  rtp_bidir: 1,
 } as const;
 
 const ready = (s: State) => s.standby === 0;
@@ -217,16 +223,12 @@ const sim: TileSim<State> = {
     vbat_reg: 0,
     lra_period_reg: 0,
 
-    // CONTROL2 reset 0xF5, CONTROL3 reset 0xA0 (signed RTP), timing offsets 0.
-    sample_time: 3,
-    blanking_time: 1,
-    idiss_time: 1,
+    // CONTROL3 reset 0xA0 (signed RTP), timing offsets 0. (CONTROL2 is in INIT_CONFIG.)
     ot_overdrive: 0,
     ot_sustain_pos: 0,
     ot_sustain_neg: 0,
     ot_brake: 0,
     rtp_unsigned: 0,
-    rtp_bidir: 1,
 
     // ATV_CTRL reset 0x05; ATV min/max input 0x19/0xFF, min/max drive 0x19/0xFF.
     atv_peak_time: 1,
@@ -379,6 +381,16 @@ const sim: TileSim<State> = {
       if (lg !== 0xff) u.loop_gain = lg & 0x03;
       return { nextState: u };
     },
+    // FEEDBACK_CTRL[6:4]; a code above 7 is ignored.
+    tile_drive_h_set_brake_factor: ({ state, args }) => {
+      const f = args[0] ?? 0;
+      return ready(state) && f >= 0 && f <= 7 ? { nextState: { fb_brake: f } } : {};
+    },
+    // FEEDBACK_CTRL[3:2]; a code above 3 is ignored.
+    tile_drive_h_set_loop_gain: ({ state, args }) => {
+      const g = args[0] ?? 0;
+      return ready(state) && g >= 0 && g <= 3 ? { nextState: { loop_gain: g } } : {};
+    },
     tile_drive_h_set_loop_mode: ({ state, args }) =>
       ready(state) ? { nextState: { closed_loop: args[0] ? 1 : 0 } } : {},
     // mV → RATED_VOLTAGE / OD_CLAMP, DRV2605 §7.5.2 Eq 2-5, integer math as the
@@ -479,6 +491,23 @@ const sim: TileSim<State> = {
       if (v(5) !== 0xff) u.atv_max_drive = v(5);
       return { nextState: u };
     },
+    // ATV_CTRL[3:2] / [1:0], no sentinel.
+    tile_drive_h_set_audio_envelope: ({ state, args }) =>
+      ready(state)
+        ? { nextState: { atv_peak_time: (args[0] ?? 0) & 0x03, atv_filter: (args[1] ?? 0) & 0x03 } }
+        : {},
+    // ATV 0x12-0x15 written as given, no sentinel.
+    tile_drive_h_set_audio_levels: ({ state, args }) =>
+      ready(state)
+        ? {
+            nextState: {
+              atv_min_input: (args[0] ?? 0) & 0xff,
+              atv_max_input: (args[1] ?? 0) & 0xff,
+              atv_min_drive: (args[2] ?? 0) & 0xff,
+              atv_max_drive: (args[3] ?? 0) & 0xff,
+            },
+          }
+        : {},
     tile_drive_h_audio_stop: () => ({ nextState: { mode_reg: MODE_INTERNAL_TRIG } }),
 
     // ── status / diagnostics ──
@@ -594,6 +623,8 @@ const sim: TileSim<State> = {
     tile_drive_h_get_otp_status: 'canonical', // CONTROL4[2]
     tile_drive_h_set_loop_mode: 'canonical', // CONTROL3[5]/[0]
     tile_drive_h_set_actuator_params: 'canonical',
+    tile_drive_h_set_brake_factor: 'canonical', // FEEDBACK_CTRL[6:4] (stored; waveform effect not modeled)
+    tile_drive_h_set_loop_gain: 'canonical', // FEEDBACK_CTRL[3:2] (stored; waveform effect not modeled)
     tile_drive_h_set_actuator_voltage: 'canonical', // §7.5.2 Eq 2-5, driver integer math
     tile_drive_h_set_resonance_hz: 'canonical', // CONTROL1 DRIVE_TIME
     tile_drive_h_set_resonance_params: 'canonical', // CONTROL2 fields (stored only)
@@ -603,6 +634,8 @@ const sim: TileSim<State> = {
     tile_drive_h_calibrate: 'inferred',
     // stored for observability; effect on the waveform not modeled
     tile_drive_h_set_audio_params: 'inferred',
+    tile_drive_h_set_audio_envelope: 'inferred',
+    tile_drive_h_set_audio_levels: 'inferred',
     tile_drive_h_set_waveform_timing: 'inferred',
     tile_drive_h_set_sequence_wait: 'inferred',
     // effect durations are nominal, not the ROM library's

@@ -368,12 +368,14 @@ uint8_t tile_sense_bp_read_fifo_batch(tile_t *tile, int32_t *buf,
 void tile_sense_bp_set_threshold_hpa(tile_t *tile, uint16_t ths_hpa)
 {
     bp_state_t *s = state_for(tile);
-    /* THS_P = threshold(hPa) * 16 for mode 1, * 8 for mode 2 */
-    uint16_t ths;
+    /* THS_P = threshold(hPa) * 16 for mode 1, * 8 for mode 2; a 15-bit
+     * field, so saturate rather than wrap. */
+    uint32_t ths;
     if (s->fs_mode == SENSE_BP_FS_4060HPA)
-        ths = ths_hpa * 8;
+        ths = (uint32_t)ths_hpa * 8u;
     else
-        ths = ths_hpa * 16;
+        ths = (uint32_t)ths_hpa * 16u;
+    if (ths > 0x7FFFu) ths = 0x7FFFu;
 
     bp_write_reg(tile, ILPS22QS_REG_THS_P_L, (uint8_t)(ths & 0xFF));
     bp_write_reg(tile, ILPS22QS_REG_THS_P_H, (uint8_t)((ths >> 8) & 0x7F));

@@ -1,13 +1,13 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@faf9db5",
+  "source": "tiles@f70bca2",
   "file": "tile_sense_bp.h",
   "brief": "ILPS22QS barometric pressure & temperature sensor.",
   "description": "Platform-agnostic driver for the ST ILPS22QS dual full-scale absolute\npressure sensor (260–1260 hPa or 260–4060 hPa) with embedded temperature\nsensor, 128-sample FIFO, low-pass filter, and Qvar electrostatic sensing.\n\nKey specifications:\n - 24-bit pressure output, 0.5 hPa absolute accuracy (mode 1)\n - 16-bit temperature output, 100 LSB/°C\n - Output data rates from 1 Hz to 200 Hz\n - Configurable averaging (4 to 512 samples)\n - 128-slot pressure FIFO with watermark interrupt\n - One-shot mode for ultra-low-power operation\n - Pressure threshold interrupts with autozero/autorefp\n - One-point calibration via hardware offset registers\n\n\nDatasheet: https://www.st.com/resource/en/datasheet/ilps22qs.pdf\n\n@studio tile label=Sense.BP icon=◇\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Analog Hub / Qvar charge-variation sensing\" section=config\n  Hardware-gated on Sense.BP rev a. The ILPS22QS reads charge variation\n  on dedicated input pins (chip pins 5 = AH2/QVAR2 and 7 = AH1/QVAR1)\n  that need an external electrode wired in. The current tile rev\n  leaves tile pads 6/7/8 unconnected (per Sense-BP-a.json) — those\n  chip pins are tied to GND on the PCB per the datasheet's \"if not\n  used\" recommendation. Even with AH_QVAR_EN=1, no signal can reach\n  the chip. Closing this gap requires a tile hardware revision that\n  routes one or both AH pins to a tile pad with electrode access.\n\n@studio unsupported severity=advanced category=\"Alternate bus modes (SPI / I3C)\"\n  Ecosystem-gated. ILPS22QS supports 3-wire and 4-wire SPI (CS = pad\n  3 strap) and I3C SDR. The driver framework currently uses tiles_pal\n  I²C calls exclusively; adding SPI requires plumbing hal->spi_*\n  through the driver, and I3C requires a new bus abstraction in\n  Studio that doesn't exist yet. Defer to a future multi-bus\n  driver framework pass.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
   "code_examples": [
     {
       "label": "Quick start",
-      "code": "  #include \"core.h\"\n  #include \"core_tiles.h\"\n  #include \"tile_sense_bp.h\"\n\n  tile_t baro;\n  sense_bp_cfg_t cfg = { .odr = SENSE_BP_ODR_25HZ };\n  tile_sense_bp_init(core_tiles_pal(&core_i2c3), 0, &baro, &cfg);\n\n  int32_t pressure_mhpa = tile_sense_bp_get_pressure_mhpa(&baro);\n  int32_t temp_cdeg     = tile_sense_bp_get_temp_cdeg(&baro);"
+      "code": "  #include \"core.h\"\n  #include \"core_tiles.h\"\n  #include \"tile_sense_bp.h\"\n\n  tile_t baro;\n  sense_bp_cfg_t cfg = { .odr = SENSE_BP_ODR_25HZ, .lpf = 1, .bdu = 1 };\n  tile_sense_bp_init(core_tiles_pal(&core_i2c3), 0, &baro, &cfg);\n\n  int32_t pressure_mhpa = tile_sense_bp_get_pressure_mhpa(&baro);\n  int32_t temp_cdeg     = tile_sense_bp_get_temp_cdeg(&baro);"
     }
   ],
   "studio_ready": true,
@@ -33,7 +33,7 @@
     },
     {
       "name": "TILE_SENSE_BP_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -64,61 +64,9 @@
   ],
   "enums": [
     {
-      "name": "sense_bp_odr_t",
-      "brief": "Output data rate selection (CTRL_REG1 ODR[3:0], bits 6:3).",
-      "description": "",
-      "members": [
-        {
-          "name": "SENSE_BP_ODR_POWERDOWN",
-          "value": "0x00",
-          "description": "Power-down / one-shot"
-        },
-        {
-          "name": "SENSE_BP_ODR_1HZ",
-          "value": "0x01",
-          "description": "1 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_4HZ",
-          "value": "0x02",
-          "description": "4 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_10HZ",
-          "value": "0x03",
-          "description": "10 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_25HZ",
-          "value": "0x04",
-          "description": "25 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_50HZ",
-          "value": "0x05",
-          "description": "50 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_75HZ",
-          "value": "0x06",
-          "description": "75 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_100HZ",
-          "value": "0x07",
-          "description": "100 Hz"
-        },
-        {
-          "name": "SENSE_BP_ODR_200HZ",
-          "value": "0x08",
-          "description": "200 Hz"
-        }
-      ]
-    },
-    {
       "name": "sense_bp_avg_t",
-      "brief": "Averaging selection (CTRL_REG1 AVG[2:0], bits 2:0).",
-      "description": "",
+      "brief": "",
+      "description": "Averaging selection (CTRL_REG1 AVG[2:0], bits 2:0). More averaging means\nless noise and more current, and it caps the data rate (datasheet\nTable 22): 512 samples up to 25 Hz, 128 up to 75 Hz, 64 up to 100 Hz.\nCode 0b110 is not defined.",
       "members": [
         {
           "name": "SENSE_BP_AVG_4",
@@ -158,6 +106,58 @@
       ]
     },
     {
+      "name": "sense_bp_odr_t",
+      "brief": "Output data rate selection (CTRL_REG1 ODR[3:0], bits 6:3).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_BP_ODR_POWERDOWN",
+          "value": "0x00",
+          "description": "Power-down / one-shot"
+        },
+        {
+          "name": "SENSE_BP_ODR_1HZ",
+          "value": "0x01",
+          "description": "1 Hz @studio value=1"
+        },
+        {
+          "name": "SENSE_BP_ODR_4HZ",
+          "value": "0x02",
+          "description": "4 Hz @studio value=4"
+        },
+        {
+          "name": "SENSE_BP_ODR_10HZ",
+          "value": "0x03",
+          "description": "10 Hz @studio value=10"
+        },
+        {
+          "name": "SENSE_BP_ODR_25HZ",
+          "value": "0x04",
+          "description": "25 Hz @studio value=25"
+        },
+        {
+          "name": "SENSE_BP_ODR_50HZ",
+          "value": "0x05",
+          "description": "50 Hz @studio value=50"
+        },
+        {
+          "name": "SENSE_BP_ODR_75HZ",
+          "value": "0x06",
+          "description": "75 Hz @studio value=75"
+        },
+        {
+          "name": "SENSE_BP_ODR_100HZ",
+          "value": "0x07",
+          "description": "100 Hz @studio value=100"
+        },
+        {
+          "name": "SENSE_BP_ODR_200HZ",
+          "value": "0x08",
+          "description": "200 Hz @studio value=200"
+        }
+      ]
+    },
+    {
       "name": "sense_bp_fs_t",
       "brief": "Full-scale mode selection (CTRL_REG2 FS_MODE, bit 6).",
       "description": "",
@@ -182,12 +182,12 @@
         {
           "name": "SENSE_BP_LPF_ODR_4",
           "value": "0",
-          "description": "Bandwidth = ODR/4"
+          "description": "Bandwidth = ODR/4 @studio value=4"
         },
         {
           "name": "SENSE_BP_LPF_ODR_9",
           "value": "1",
-          "description": "Bandwidth = ODR/9"
+          "description": "Bandwidth = ODR/9 @studio value=9"
         }
       ]
     },
@@ -253,7 +253,12 @@
         {
           "type": "uint8_t",
           "name": "lpf",
-          "description": "Low-pass filter: 1 = enabled (default), 0 = disabled."
+          "description": ""
+        },
+        {
+          "type": "NULL enables",
+          "name": "it",
+          "description": ""
         },
         {
           "type": "uint8_t",
@@ -263,7 +268,12 @@
         {
           "type": "uint8_t",
           "name": "bdu",
-          "description": "Block data update: 1 = enabled (default), 0 = continuous."
+          "description": ""
+        },
+        {
+          "type": "NULL enables",
+          "name": "it",
+          "description": ""
         }
       ]
     }
@@ -314,12 +324,7 @@
     },
     {
       "signature": "void tile_sense_bp_sleep(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -329,12 +334,7 @@
     },
     {
       "signature": "void tile_sense_bp_wake(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Sleeping tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -344,12 +344,7 @@
     },
     {
       "signature": "void tile_sense_bp_reset(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "lifecycle",
@@ -361,10 +356,6 @@
       "signature": "void tile_sense_bp_set_odr(tile_t *tile, sense_bp_odr_t odr)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "odr",
           "description": "Desired output data rate."
         }
@@ -373,16 +364,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the output data rate.",
-      "description": "",
+      "description": "SENSE_BP_ODR_POWERDOWN stops conversions (use oneshot() to take a\nreading), so Studio offers only the running rates. init() default: 25 Hz.",
       "name": "tile_sense_bp_set_odr"
     },
     {
       "signature": "void tile_sense_bp_set_avg(tile_t *tile, sense_bp_avg_t avg)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "avg",
           "description": "Desired averaging."
@@ -392,16 +379,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the averaging filter depth.",
-      "description": "",
+      "description": "Trades noise for current: at 25 Hz with the LPF at ODR/4 the pressure\nnoise falls from 2.87 Pa RMS (4 samples) to 0.44 Pa (512), while the\nsupply current rises from 23 µA to 784 µA (datasheet Tables 22, 24).\ninit() default: 4 samples.",
       "name": "tile_sense_bp_set_avg"
     },
     {
       "signature": "void tile_sense_bp_set_fullscale(tile_t *tile, sense_bp_fs_t fs)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "fs",
           "description": "Full-scale selection."
@@ -411,19 +394,15 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the full-scale mode.",
-      "description": "",
+      "description": "Mode 1 (up to 1260 hPa) has twice the resolution and about half the\nnoise of mode 2 (up to 4060 hPa). init() default: mode 1.",
       "name": "tile_sense_bp_set_fullscale"
     },
     {
       "signature": "void tile_sense_bp_set_lpf(tile_t *tile, uint8_t enable, sense_bp_lpf_bw_t bw)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "enable",
-          "description": "1 = enable, 0 = disable."
+          "description": "[0..1] 1 = enable, 0 = disable."
         },
         {
           "name": "bw",
@@ -434,17 +413,12 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Enable or disable the low-pass filter.",
-      "description": "",
+      "description": "The filter on the pressure output (CTRL_REG2 EN_LPFP / LFPF_CFG) cuts\nthe noise further at no current cost: at 25 Hz with 4-sample\naveraging, 4.26 Pa RMS unfiltered, 2.87 at ODR/4, 2.20 at ODR/9\n(datasheet Table 24). init() default: on, at ODR/4.",
       "name": "tile_sense_bp_set_lpf"
     },
     {
       "signature": "int32_t tile_sense_bp_get_pressure_raw(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -455,12 +429,7 @@
     },
     {
       "signature": "int32_t tile_sense_bp_get_pressure_mhpa(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -471,12 +440,7 @@
     },
     {
       "signature": "int16_t tile_sense_bp_get_temp_raw(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -487,12 +451,7 @@
     },
     {
       "signature": "int32_t tile_sense_bp_get_temp_cdeg(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -503,12 +462,7 @@
     },
     {
       "signature": "void tile_sense_bp_oneshot(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Tile handle in power-down mode."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -518,12 +472,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_get_status(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -534,12 +483,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_pressure_ready(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -550,12 +494,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_temp_ready(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -567,10 +506,6 @@
     {
       "signature": "void tile_sense_bp_set_fifo_mode(tile_t *tile, sense_bp_fifo_mode_t mode)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "mode",
           "description": "FIFO mode selection."
@@ -587,12 +522,8 @@
       "signature": "void tile_sense_bp_set_fifo_watermark(tile_t *tile, uint8_t watermark)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "watermark",
-          "description": "Threshold level (0–127)."
+          "description": "[0..127] Threshold level."
         }
       ],
       "notes": [],
@@ -604,12 +535,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_get_fifo_level(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "fifo",
@@ -620,12 +546,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_get_fifo_status(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "fifo",
@@ -636,12 +557,7 @@
     },
     {
       "signature": "int32_t tile_sense_bp_read_fifo_raw(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "fifo",
@@ -653,10 +569,6 @@
     {
       "signature": "uint8_t tile_sense_bp_read_fifo_batch(tile_t *tile, int32_t *buf, uint8_t count)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "buf",
           "description": "Caller-allocated buffer the driver fills with raw"
@@ -678,31 +590,23 @@
       "signature": "void tile_sense_bp_set_threshold_hpa(tile_t *tile, uint16_t ths_hpa)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "ths_hpa",
-          "description": "Threshold in hPa (unsigned, applied symmetrically)."
+          "description": "[0..2047] hPa Threshold (unsigned, applied symmetrically)."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the pressure interrupt threshold in hPa.",
-      "description": "The threshold is applied to the differential pressure (P_DIFF_IN).\nEnable PHE/PLE bits in INTERRUPT_CFG to generate interrupts.",
+      "description": "The threshold is applied to the differential pressure (P_DIFF_IN), so\nit needs AUTOREFP or AUTOZERO. Enable PHE/PLE bits in INTERRUPT_CFG to\ngenerate interrupts. THS_P is 15 bits (hPa × 16 in mode 1, × 8 in\nmode 2); values past 2047 hPa (mode 1) / 4095 hPa (mode 2) saturate.",
       "name": "tile_sense_bp_set_threshold_hpa"
     },
     {
       "signature": "void tile_sense_bp_set_interrupt_cfg(tile_t *tile, uint8_t cfg)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "cfg",
-          "description": "Raw INTERRUPT_CFG byte (use ILPS22QS_INTCFG_* masks)."
+          "description": "[0..255] Raw INTERRUPT_CFG byte (use ILPS22QS_INTCFG_* masks)."
         }
       ],
       "notes": [],
@@ -714,12 +618,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_get_int_source(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -730,12 +629,7 @@
     },
     {
       "signature": "uint8_t tile_sense_bp_is_boot_complete(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -746,12 +640,7 @@
     },
     {
       "signature": "void tile_sense_bp_set_autozero(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -761,12 +650,7 @@
     },
     {
       "signature": "void tile_sense_bp_reset_autozero(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -776,12 +660,7 @@
     },
     {
       "signature": "void tile_sense_bp_set_autorefp(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -791,12 +670,7 @@
     },
     {
       "signature": "void tile_sense_bp_reset_autorefp(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -808,12 +682,8 @@
       "signature": "void tile_sense_bp_set_pressure_offset(tile_t *tile, int16_t offset)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "offset",
-          "description": "Raw offset value (two's complement)."
+          "description": "[-32768..32767] Raw offset value (two's complement)."
         }
       ],
       "notes": [],
@@ -825,12 +695,7 @@
     },
     {
       "signature": "int16_t tile_sense_bp_get_ref_pressure(tile_t *tile)",
-      "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        }
-      ],
+      "params": [],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -843,12 +708,8 @@
       "signature": "int32_t tile_sense_bp_read_altitude_mm(tile_t *tile, uint32_t sea_level_pa)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "sea_level_pa",
-          "description": "Reference pressure in pascals (e.g. 101325)."
+          "description": "[26000..406000] Pa Reference pressure (e.g. 101325)."
         }
       ],
       "notes": [],
@@ -863,16 +724,12 @@
       "signature": "uint8_t tile_sense_bp_wait_for_pressure_change(tile_t *tile, uint16_t threshold_hpa, uint32_t timeout_ms)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "threshold_hpa",
-          "description": "Absolute deviation that triggers return (hPa)."
+          "description": "[1..4060] hPa Absolute deviation that triggers return."
         },
         {
           "name": "timeout_ms",
-          "description": "Maximum wait in milliseconds."
+          "description": "[0..600000] ms Maximum wait."
         }
       ],
       "notes": [],
@@ -885,8 +742,102 @@
     }
   ],
   "source_file": "tile_sense_bp.h",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "tile_family": "Sense",
   "tile_name": "BP",
-  "display_name": "Sense.BP"
+  "display_name": "Sense.BP",
+  "vibe_settings": [
+    {
+      "label": "Output data rate",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_odr",
+      "param": "odr",
+      "kind": "choice",
+      "choices": [
+        "1 Hz",
+        "4 Hz",
+        "10 Hz",
+        "25 Hz",
+        "50 Hz",
+        "75 Hz",
+        "100 Hz",
+        "200 Hz"
+      ],
+      "default": "25 Hz",
+      "role": "sample_rate"
+    },
+    {
+      "label": "Averaging",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_avg",
+      "param": "avg",
+      "kind": "choice",
+      "choices": [
+        "4 samples",
+        "8 samples",
+        "16 samples",
+        "32 samples",
+        "64 samples",
+        "128 samples",
+        "512 samples"
+      ],
+      "default": "4 samples"
+    },
+    {
+      "label": "Pressure range",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_fullscale",
+      "param": "fs",
+      "kind": "choice",
+      "choices": [
+        "Mode 1: 260–1260 hPa, 4096 LSB/hPa",
+        "Mode 2: 260–4060 hPa, 2048 LSB/hPa"
+      ],
+      "default": "Mode 1: 260–1260 hPa, 4096 LSB/hPa"
+    },
+    {
+      "label": "Low-pass filter",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_lpf",
+      "param": "enable",
+      "kind": "bool",
+      "range": [
+        0,
+        1
+      ],
+      "default": 1
+    },
+    {
+      "label": "Low-pass filter bandwidth",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_lpf",
+      "param": "bw",
+      "kind": "choice",
+      "choices": [
+        "Bandwidth = ODR/4",
+        "Bandwidth = ODR/9"
+      ],
+      "default": "Bandwidth = ODR/4",
+      "computed_unit": "Hz"
+    }
+  ],
+  "vibe_rules": [
+    {
+      "function": "set_avg",
+      "message": "Averaging 512 samples limits the data rate to 25 Hz. Lower the data rate or the averaging."
+    },
+    {
+      "function": "set_avg",
+      "message": "Averaging 128 samples limits the data rate to 75 Hz. Lower the data rate or the averaging."
+    },
+    {
+      "function": "set_avg",
+      "message": "Averaging 64 samples limits the data rate to 100 Hz. Lower the data rate or the averaging."
+    }
+  ]
 }

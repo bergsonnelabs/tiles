@@ -1626,7 +1626,7 @@ def main():
             "definition": ROOT / "definitions/Drive-H-a.json",
             "prefix": "tile_drive_h",
             "init": "tile_drive_h_init",
-            "version": "4.3.0",
+            "version": "4.4.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_mic.h",
@@ -1703,7 +1703,7 @@ def main():
             "definition": ROOT / "definitions/Sense-BP-a.json",
             "prefix": "tile_sense_bp",
             "init": "tile_sense_bp_init",
-            "version": "1.2.0",
+            "version": "1.3.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_tof.h",
