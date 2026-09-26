@@ -1,0 +1,1331 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@044f8f3",
+  "categories": {
+    "adc": {
+      "label": "Core.ADC",
+      "icon": "◐"
+    },
+    "audio": {
+      "label": "Core.Audio",
+      "icon": "🎤"
+    },
+    "backup": {
+      "label": "Core.Backup",
+      "icon": "◫"
+    },
+    "ble": {
+      "label": "Core.BLE",
+      "icon": "ᛒ"
+    },
+    "dac": {
+      "label": "Core.DAC",
+      "icon": "◓"
+    },
+    "debug": {
+      "label": "Core.Debug",
+      "icon": "⌁"
+    },
+    "fault": {
+      "label": "Core.Fault",
+      "icon": "⚠"
+    },
+    "i2c": {
+      "label": "Core.I2C",
+      "icon": "⇄"
+    },
+    "led": {
+      "label": "Core.LED",
+      "icon": "☀"
+    },
+    "nvm": {
+      "label": "Core.NVM",
+      "icon": "▤"
+    },
+    "otp": {
+      "label": "Core.OTP",
+      "icon": "▦"
+    },
+    "pad": {
+      "label": "Core.Pad",
+      "icon": "◼"
+    },
+    "power": {
+      "label": "Core.Power",
+      "icon": "☾"
+    },
+    "pwm": {
+      "label": "Core.PWM",
+      "icon": "◲"
+    },
+    "recovery": {
+      "label": "Core.Recovery",
+      "icon": "⟲"
+    },
+    "rng": {
+      "label": "Core.RNG",
+      "icon": "🎲"
+    },
+    "rtc": {
+      "label": "Core.RTC",
+      "icon": "◴"
+    },
+    "scope": {
+      "label": "Core.Scope",
+      "icon": "📈"
+    },
+    "serial": {
+      "label": "Core.Serial",
+      "icon": "⌨"
+    },
+    "spi": {
+      "label": "Core.SPI",
+      "icon": "⇆"
+    },
+    "stepper": {
+      "label": "Core.Stepper",
+      "icon": "⟳"
+    },
+    "timer": {
+      "label": "Core.Timer",
+      "icon": "◷"
+    },
+    "timing": {
+      "label": "Core.Timing",
+      "icon": "⏱"
+    },
+    "uid": {
+      "label": "Core.UID",
+      "icon": "🔖"
+    },
+    "usb": {
+      "label": "Core.USB",
+      "icon": "❝"
+    },
+    "watchdog": {
+      "label": "Core.Watchdog",
+      "icon": "🐕"
+    }
+  },
+  "hosts": [
+    {
+      "qname": [
+        "adc",
+        "read"
+      ],
+      "symbol": "core_adc_read_pad",
+      "header": "core_adc.h",
+      "category": "adc",
+      "description": "Read a pad as raw ADC counts (0–4095 at 12-bit resolution).",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number configured as an ADC input in config.json."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "adc",
+        "read_mv"
+      ],
+      "symbol": "core_adc_read_mv_pad",
+      "header": "core_adc.h",
+      "category": "adc",
+      "description": "Read a pad as calibrated millivolts (uses VREFINT for per-chip accuracy).",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number configured as an ADC input in config.json."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "adc",
+        "temp_decidegc"
+      ],
+      "symbol": "core_adc_temp_decidegc",
+      "header": "core_adc.h",
+      "category": "adc",
+      "description": "Die temperature in tenths of deg C (e.g. 253 = 25.3 C). Dispatches to the default ADC instance.",
+      "params": [],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "adc",
+        "vdd_mv"
+      ],
+      "symbol": "core_adc_vdd_mv",
+      "header": "core_adc.h",
+      "category": "adc",
+      "description": "VDD supply voltage in millivolts (via VREFINT). Dispatches to the default ADC instance.",
+      "params": [],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "backup",
+        "read"
+      ],
+      "symbol": "core_backup_read",
+      "header": "core_backup.h",
+      "category": "backup",
+      "description": "Read a backup register.",
+      "params": [
+        {
+          "name": "index",
+          "type": "int",
+          "range": [
+            0,
+            31
+          ],
+          "description": "Register index (Core.ST.L0 caps at 4; others at 31)."
+        }
+      ],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "backup",
+        "write"
+      ],
+      "symbol": "core_backup_write",
+      "header": "core_backup.h",
+      "category": "backup",
+      "description": "Write a backup register. Backup domain write access is enabled automatically.",
+      "params": [
+        {
+          "name": "index",
+          "type": "int",
+          "range": [
+            0,
+            31
+          ],
+          "description": "Register index (Core.ST.L0 caps at 4; others at 31)."
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "32-bit value to store."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "dac",
+        "init"
+      ],
+      "symbol": "core_dac_init",
+      "header": "core_dac.h",
+      "category": "dac",
+      "description": "Initialize the DAC (clock, GPIO, peripheral). Call once from `on start` before any writes.",
+      "params": [],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "dac",
+        "write"
+      ],
+      "symbol": "core_dac_write",
+      "header": "core_dac.h",
+      "category": "dac",
+      "description": "Write a raw 12-bit value. Output = val / 4095 × VREF+.",
+      "params": [
+        {
+          "name": "val",
+          "type": "int",
+          "range": [
+            0,
+            4095
+          ],
+          "description": "Raw DAC value."
+        }
+      ],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "dac",
+        "write_mv"
+      ],
+      "symbol": "core_dac_write_mv",
+      "header": "core_dac.h",
+      "category": "dac",
+      "description": "Write a voltage in millivolts.",
+      "params": [
+        {
+          "name": "mv",
+          "type": "int",
+          "range": [
+            0,
+            3300
+          ],
+          "description": "Output voltage in millivolts."
+        }
+      ],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "dac",
+        "read"
+      ],
+      "symbol": "core_dac_read",
+      "header": "core_dac.h",
+      "category": "dac",
+      "description": "Read back the current DAC output register value (12-bit).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "availability": {
+        "cores": [
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "i2c",
+        "write_byte"
+      ],
+      "symbol": "core_i2c_write_byte_bus",
+      "header": "core_i2c.h",
+      "category": "i2c",
+      "description": "Write a single byte to a register on a device on `bus`. Returns I2C_OK on success, I2C_NACK / I2C_ERROR on bus failure, or I2C_ERROR if `bus` isn't declared in config.json.",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
+        },
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "7-bit device address."
+        },
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "Byte to write."
+        }
+      ],
+      "returns": "hal_status_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "i2c",
+        "read_byte"
+      ],
+      "symbol": "core_i2c_read_byte_bus",
+      "header": "core_i2c.h",
+      "category": "i2c",
+      "description": "Read a single byte from a register on a device on `bus`. Returns the byte value (0..255) on success, or -1 on any error (bus undeclared, NACK, timeout). The signed return lets DSL programs branch on `< 0` without an out-pointer.",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
+        },
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "7-bit device address."
+        },
+        {
+          "name": "reg",
+          "type": "int",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "i2c",
+        "probe"
+      ],
+      "symbol": "core_i2c_probe_bus",
+      "header": "core_i2c.h",
+      "category": "i2c",
+      "description": "Check if a device responds at `addr` on `bus`. Returns 1 if the device ACKs, 0 on NACK / timeout / undeclared bus.",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
+        },
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "7-bit device address to probe."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "bool"
+    },
+    {
+      "qname": [
+        "led",
+        "on"
+      ],
+      "symbol": "core_led_on",
+      "header": "core_led.h",
+      "category": "led",
+      "description": "Turn the onboard LED on. Simplest possible light control — useful alongside blink/heartbeat when the user wants explicit on/off state rather than a timed pattern.",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "led",
+        "off"
+      ],
+      "symbol": "core_led_off",
+      "header": "core_led.h",
+      "category": "led",
+      "description": "Turn the onboard LED off.",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "led",
+        "toggle"
+      ],
+      "symbol": "core_led_toggle",
+      "header": "core_led.h",
+      "category": "led",
+      "description": "Flip the onboard LED's current state. Non-blocking — no delay. Good for driving the LED from an event handler that fires at a rate you've already chosen (e.g., a pad-edge ISR on a button).",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "led",
+        "blink"
+      ],
+      "symbol": "core_led_blink",
+      "header": "core_led.h",
+      "category": "led",
+      "description": "Blink the LED n times. Each cycle turns the LED on for on_ms milliseconds and off for off_ms milliseconds. Blocking — returns after the last off period. A short on_ms (under 50 ms) is the on-time at 3.3 V: at lower supply voltages it is lengthened so the blink looks as bright (the off-time shrinks to keep the rhythm). See core_led_heartbeat().",
+      "params": [
+        {
+          "name": "n",
+          "type": "int",
+          "range": [
+            1,
+            100
+          ],
+          "description": "Number of times to blink."
+        },
+        {
+          "name": "on_ms",
+          "type": "int",
+          "range": [
+            1,
+            5000
+          ],
+          "unit": "ms",
+          "description": "LED-on duration per blink."
+        },
+        {
+          "name": "off_ms",
+          "type": "int",
+          "range": [
+            1,
+            5000
+          ],
+          "unit": "ms",
+          "description": "LED-off duration per blink."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "led",
+        "heartbeat"
+      ],
+      "symbol": "core_led_heartbeat",
+      "header": "core_led.h",
+      "category": "led",
+      "description": "Start a free-running, asymmetric heartbeat on the onboard LED. Set it up once (e.g. at startup) and it runs on its own — the LED turns on for on_ms, off for the rest of period_ms, repeating forever. Serviced from the 1 ms SysTick interrupt, so it does NOT block your main loop the way a toggle-and-delay would: the loop stays free for tile reads and logic. Call again at any time to change the rhythm; pass period_ms = 0 to stop the heartbeat (the LED is left off). on_ms is clamped to period_ms. Brightness holds across the supply: a short on_ms (under 50 ms, e.g. a 2 ms blip) is the on-time at 3.3 V, and is lengthened as VDD drops (about 32 ms at 1.8 V), because the LED carries far less current there and the eye adds up the light of a short flash. VDD is read through VREFINT when the heartbeat is set (at most once a minute) on the L0, L4 and W5; the H5 uses the on-time as given. Examples: heartbeat(1000, 2)    — a 1 Hz 2 ms blip, the same brightness at any VDD. heartbeat(1000, 100)  — a 1 Hz \"blip\": 100 ms on, 900 ms off. heartbeat(500, 250)   — a steady 1 Hz, 50%-duty pulse. Defined in core_led.c (not header-only) because it owns persistent state shared with the SysTick handler.",
+      "params": [
+        {
+          "name": "period_ms",
+          "type": "int",
+          "range": [
+            0,
+            60000
+          ],
+          "unit": "ms",
+          "description": "Full cycle length. 0 stops the heartbeat."
+        },
+        {
+          "name": "on_ms",
+          "type": "int",
+          "range": [
+            0,
+            60000
+          ],
+          "unit": "ms",
+          "description": "LED-on portion of each cycle (clamped to period_ms)."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "nvm",
+        "size"
+      ],
+      "symbol": "core_nvm_size",
+      "header": "core_nvm.h",
+      "category": "nvm",
+      "description": "Returns the total NVM size in bytes for this Core.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "nvm",
+        "read_byte"
+      ],
+      "symbol": "core_nvm_read_byte",
+      "header": "core_nvm.h",
+      "category": "nvm",
+      "description": "Read a single byte from NVM at `offset`. Returns the byte (0..255) on success or -1 on any error (offset out of range, NVM disabled). A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 / H5 and 0 on Core.ST.L0. The signed return lets DSL programs branch on `< 0` without an out-pointer.",
+      "params": [
+        {
+          "name": "offset",
+          "type": "int",
+          "range": [
+            0,
+            1023
+          ],
+          "description": "Byte offset into the NVM region (Core.ST.L0: 0..511)."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "nvm",
+        "write_byte"
+      ],
+      "symbol": "core_nvm_write_byte",
+      "header": "core_nvm.h",
+      "category": "nvm",
+      "description": "Write a single byte to NVM at `offset`. Returns 1 on success or -1 on any error (offset out of range, flash error, no NVM on this Core). Each call is one flash record on Core.ST.L4 / W5 / H5: fine for a setting or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).",
+      "params": [
+        {
+          "name": "offset",
+          "type": "int",
+          "range": [
+            0,
+            1023
+          ],
+          "description": "Byte offset into the NVM region (Core.ST.L0: 0..511)."
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Byte to store."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "otp",
+        "size"
+      ],
+      "symbol": "core_otp_size",
+      "header": "core_otp.h",
+      "category": "otp",
+      "description": "Total OTP size in bytes for this Core (0 where unavailable).",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "otp",
+        "slot_count"
+      ],
+      "symbol": "core_otp_slot_count",
+      "header": "core_otp.h",
+      "category": "otp",
+      "description": "Number of write-once quad-word slots (CORE_OTP_SIZE / 16).",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "otp",
+        "slot_is_blank"
+      ],
+      "symbol": "core_otp_slot_is_blank",
+      "header": "core_otp.h",
+      "category": "otp",
+      "description": "Return 1 if `slot` is entirely erased (all 0xFF), 0 if any bit is programmed, or -1 if the slot index is out of range / OTP unavailable. A blank slot is programmable; a non-blank slot is not (write-once).",
+      "params": [
+        {
+          "name": "slot",
+          "type": "int",
+          "description": "Slot index, 0 to core_otp_slot_count() - 1."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "pad",
+        "write"
+      ],
+      "symbol": "core_pad_write",
+      "header": "core_pad.h",
+      "category": "pad",
+      "description": "Set a pad high (ON) or low (OFF).",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number."
+        },
+        {
+          "name": "state",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "0 for low, 1 for high."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "pad",
+        "read"
+      ],
+      "symbol": "core_pad_read",
+      "header": "core_pad.h",
+      "category": "pad",
+      "description": "Read a pad. Returns 0 or 1.",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "bool"
+    },
+    {
+      "qname": [
+        "pad",
+        "toggle"
+      ],
+      "symbol": "core_pad_toggle",
+      "header": "core_pad.h",
+      "category": "pad",
+      "description": "Toggle a pad output.",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "power",
+        "sleep"
+      ],
+      "symbol": "core_sleep",
+      "header": "core_power.h",
+      "category": "power",
+      "description": "Sleep until any interrupt (CPU stopped, peripherals running).",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "power",
+        "stop_for"
+      ],
+      "symbol": "core_stop_for",
+      "header": "core_power.h",
+      "category": "power",
+      "description": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored; core_millis() advances by the time slept, as the RTC measured it. If the watchdog is running, sleeps in chunks of half its timeout and feeds it in between. Core.ST.L4 with a USB host awake on the bus: waits in Sleep mode so the host can still reach it (see the USB note at the top).",
+      "params": [
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            1,
+            86400
+          ],
+          "description": "Seconds to spend in Stop mode."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "power",
+        "woke_from_standby"
+      ],
+      "symbol": "core_woke_from_standby",
+      "header": "core_power.h",
+      "category": "power",
+      "description": "Returns 1 if the MCU woke from Standby. The flag survives later resets until core_clear_standby_flag() — call that once you've handled the wake.",
+      "params": [],
+      "returns": "int",
+      "dsl_returns": "bool"
+    },
+    {
+      "qname": [
+        "pwm",
+        "duty"
+      ],
+      "symbol": "core_pwm_duty",
+      "header": "core_pwm.h",
+      "category": "pwm",
+      "description": "Set PWM duty cycle on a pad. Timer handle resolved from config.json.",
+      "params": [
+        {
+          "name": "pad",
+          "type": "int",
+          "range": [
+            1,
+            64
+          ],
+          "description": "Tile pad number configured as a TIMx.<ch> in config.json."
+        },
+        {
+          "name": "duty_permil",
+          "type": "int",
+          "range": [
+            0,
+            1000
+          ],
+          "description": "0 = off, 500 = 50%, 1000 = fully on."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rng",
+        "read32"
+      ],
+      "symbol": "core_rng_read",
+      "header": "core_rng.h",
+      "category": "rng",
+      "description": "Read a single 32-bit random value (blocking). Returns 0 on timeout — check core_rng_error() if this happens.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "rtc",
+        "init"
+      ],
+      "symbol": "core_rtc_init",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Initialize the RTC using LSI (internal RC, ~32 kHz; ~37 kHz on Core.ST.L0, scaled so a second is still ~1 s). Call once from `on start` before setting time, date, or alarms. For LSE, call ll_rtc_init(1) directly in hand-written C (Core.ST.L0 has no LSE and stays on LSI).",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "set_time"
+      ],
+      "symbol": "core_rtc_set_time",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Set the time (24h format).",
+      "params": [
+        {
+          "name": "h",
+          "type": "int",
+          "range": [
+            0,
+            23
+          ],
+          "description": "Hours."
+        },
+        {
+          "name": "m",
+          "type": "int",
+          "range": [
+            0,
+            59
+          ],
+          "description": "Minutes."
+        },
+        {
+          "name": "s",
+          "type": "int",
+          "range": [
+            0,
+            59
+          ],
+          "description": "Seconds."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "set_date"
+      ],
+      "symbol": "core_rtc_set_date",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Set the date.",
+      "params": [
+        {
+          "name": "y",
+          "type": "int",
+          "range": [
+            0,
+            99
+          ],
+          "description": "2-digit year (2025 = 25)."
+        },
+        {
+          "name": "mo",
+          "type": "int",
+          "range": [
+            1,
+            12
+          ],
+          "description": "Month."
+        },
+        {
+          "name": "d",
+          "type": "int",
+          "range": [
+            1,
+            31
+          ],
+          "description": "Day of month."
+        },
+        {
+          "name": "wd",
+          "type": "int",
+          "range": [
+            1,
+            7
+          ],
+          "description": "Weekday (1 = Mon, 7 = Sun)."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "wakeup"
+      ],
+      "symbol": "core_rtc_wakeup",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Configure a periodic wakeup timer.",
+      "params": [
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            1,
+            65535
+          ],
+          "description": "Wakeup interval in seconds."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "wakeup_stop"
+      ],
+      "symbol": "core_rtc_wakeup_stop",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Disable the periodic wakeup timer.",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "set_alarm"
+      ],
+      "symbol": "core_rtc_set_alarm",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Set Alarm A to trigger at a specific time. Pass 0xFF for hours, minutes, or seconds to ignore that field. The alarm fires when all non-masked fields match the RTC time.",
+      "params": [
+        {
+          "name": "hours",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "0-23, or 255 (0xFF) to match any hour."
+        },
+        {
+          "name": "minutes",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "0-59, or 255 (0xFF) to match any minute."
+        },
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "0-59, or 255 (0xFF) to match any second."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "clear_alarm"
+      ],
+      "symbol": "core_rtc_clear_alarm",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Clear the alarm (disable Alarm A).",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "rtc",
+        "alarm_fired"
+      ],
+      "symbol": "core_rtc_alarm_fired",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "description": "Check if the alarm has fired (poll mode). Clears the flag on read.",
+      "params": [],
+      "returns": "int",
+      "dsl_returns": "bool"
+    },
+    {
+      "qname": [
+        "serial",
+        "print"
+      ],
+      "symbol": "core_serial_print_bus",
+      "header": "core_serial.h",
+      "category": "serial",
+      "description": "Write a null-terminated string to `bus` (blocking). Returns 0 on success or -1 on undeclared bus. The most-common DSL pattern — \"drop a debug line on UART2\" — is one line: serial.print(2, \"ready\\\\n\");",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
+        },
+        {
+          "name": "str",
+          "type": "string",
+          "description": "NUL-terminated string to send."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "serial",
+        "putc"
+      ],
+      "symbol": "core_serial_putc_bus",
+      "header": "core_serial.h",
+      "category": "serial",
+      "description": "Write a single byte to `bus` (blocking). Returns 0 on success or -1 on undeclared bus.",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
+        },
+        {
+          "name": "byte",
+          "type": "int",
+          "description": "Byte to send."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "spi",
+        "xfer_byte"
+      ],
+      "symbol": "core_spi_xfer_byte_bus",
+      "header": "core_spi.h",
+      "category": "spi",
+      "description": "Single-byte full-duplex transfer over `bus`, with CS auto-managed around the call (asserted before, deasserted after). Returns the received byte (0..255) on success or -1 on any error (bus undeclared, cs_pad undefined, transfer timed out). The signed return lets DSL programs branch on `< 0` without an out-pointer. Most chip protocols pair two of these (write a register address, then read or write the value). Multi-byte sequences that need CS held across them — display init streams, audio frame transfers — still need Tier 1 with manual select/deselect.",
+      "params": [
+        {
+          "name": "bus",
+          "type": "int",
+          "description": "SPI bus id as declared in config.json (1 = SPI1, ...)."
+        },
+        {
+          "name": "cs_pad",
+          "type": "int",
+          "description": "Tile pad driving chip select (asserted around the transfer)."
+        },
+        {
+          "name": "tx",
+          "type": "int",
+          "description": "Byte to send."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "timing",
+        "delay_ms"
+      ],
+      "symbol": "core_delay_ms",
+      "header": "core_timing.h",
+      "category": "timing",
+      "description": "Blocking delay in milliseconds.",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            1,
+            60000
+          ],
+          "description": "Delay duration in milliseconds."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "timing",
+        "delay_us"
+      ],
+      "symbol": "core_delay_us",
+      "header": "core_timing.h",
+      "category": "timing",
+      "description": "Blocking delay in microseconds. For delays > 1 ms prefer `delay_ms` — it won't starve the rest of the system as long.",
+      "params": [
+        {
+          "name": "us",
+          "type": "int",
+          "range": [
+            1,
+            10000
+          ],
+          "description": "Delay duration in microseconds."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "timing",
+        "millis"
+      ],
+      "symbol": "core_millis",
+      "header": "core_timing.h",
+      "category": "timing",
+      "description": "Milliseconds since boot (wraps at ~49 days).",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int"
+    },
+    {
+      "qname": [
+        "timing",
+        "timeout"
+      ],
+      "symbol": "core_timeout",
+      "header": "core_timing.h",
+      "category": "timing",
+      "description": "Check if a timeout has elapsed. start: value returned by core_millis() at the beginning ms:    timeout duration in milliseconds Returns 1 if expired, 0 otherwise.",
+      "params": [
+        {
+          "name": "start",
+          "type": "int",
+          "description": "Value previously returned from `millis()`."
+        },
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            1,
+            3600000
+          ],
+          "description": "Timeout duration in milliseconds."
+        }
+      ],
+      "returns": "int",
+      "dsl_returns": "bool"
+    },
+    {
+      "qname": [
+        "usb",
+        "print"
+      ],
+      "symbol": "core_usb_print",
+      "header": "core_usb.h",
+      "category": "usb",
+      "description": "Print a string followed by a newline. Thin wrapper for DSL-style callers.",
+      "params": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "The message to print."
+        }
+      ],
+      "returns": "void",
+      "icon": "❝",
+      "availability": {
+        "cores": [
+          "Core.ST.L4",
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "usb",
+        "print_int"
+      ],
+      "symbol": "core_usb_print_int",
+      "header": "core_usb.h",
+      "category": "usb",
+      "description": "Print a signed integer followed by a newline.",
+      "params": [
+        {
+          "name": "value",
+          "type": "int",
+          "description": "The integer to print (decimal)."
+        }
+      ],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.L4",
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "usb",
+        "print_float"
+      ],
+      "symbol": "core_usb_print_float",
+      "header": "core_usb.h",
+      "category": "usb",
+      "description": "Print a double with a newline. %g trims trailing zeros for readability.",
+      "params": [
+        {
+          "name": "value",
+          "type": "float",
+          "description": "The float to print."
+        }
+      ],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.L4",
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "usb",
+        "print_bool"
+      ],
+      "symbol": "core_usb_print_bool",
+      "header": "core_usb.h",
+      "category": "usb",
+      "description": "Print \"true\" / \"false\" followed by a newline.",
+      "params": [
+        {
+          "name": "value",
+          "type": "bool",
+          "description": "The boolean to print."
+        }
+      ],
+      "returns": "void",
+      "availability": {
+        "cores": [
+          "Core.ST.L4",
+          "Core.ST.H5"
+        ]
+      }
+    },
+    {
+      "qname": [
+        "watchdog",
+        "start"
+      ],
+      "symbol": "core_watchdog_start",
+      "header": "core_watchdog.h",
+      "category": "watchdog",
+      "description": "Start the independent watchdog with a timeout in milliseconds. Selects the best prescaler/reload combination automatically. Common values: 1000, 2000, 5000, 10000 (max ~28000). WARNING: Once started, the IWDG cannot be stopped, and it keeps running in Stop and Standby. core_stop_for() wakes to feed it; core_standby_for() refuses sleeps longer than half the timeout.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "range": [
+            100,
+            28000
+          ],
+          "description": "Timeout in milliseconds before reset."
+        }
+      ],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "watchdog",
+        "feed"
+      ],
+      "symbol": "core_watchdog_feed",
+      "header": "core_watchdog.h",
+      "category": "watchdog",
+      "description": "Feed the watchdog. Must be called before the timeout expires. On ROM-DFU builds this also retires the brick-recovery strike counter, once, after the app has run for max(10 s, 2 x the timeout) — no call needed.",
+      "params": [],
+      "returns": "void"
+    }
+  ],
+  "events": [
+    {
+      "name": "rising",
+      "payload": [
+        {
+          "name": "pad",
+          "type": "int"
+        }
+      ],
+      "category": "pad"
+    },
+    {
+      "name": "falling",
+      "payload": [
+        {
+          "name": "pad",
+          "type": "int"
+        }
+      ],
+      "category": "pad"
+    },
+    {
+      "name": "tick",
+      "payload": [],
+      "category": "timer"
+    },
+    {
+      "name": "receive",
+      "payload": [
+        {
+          "name": "byte",
+          "type": "int"
+        }
+      ],
+      "category": "usb"
+    }
+  ]
+}
