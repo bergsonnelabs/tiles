@@ -17,9 +17,12 @@
  *
  * VID:1209 PID:0001, Interface 2 = HID (vendor-defined, usage page 0xFF00).
  *
+ * @studio category usb label=Core.USB icon=❝
+ *
  * @studio coverage
  *   id:    usb_hid
  *   name:  USB HID — vendor reports
+ *   page:  /docs/sdk/usb
  *   blurb: Tier 1 only. Bidirectional 64-byte vendor HID reports over the
  *          composite CDC+HID device on Core.ST.L4 / Core.ST.H5 — send via
  *          core_usb_hid_send(), receive via a callback. Useful for

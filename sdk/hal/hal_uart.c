@@ -314,7 +314,7 @@ uint16_t hal_uart_available(hal_uart_t *h)
 }
 
 /* ============================================================
- * DMA TX (stub — enabled when DMA channel defines exist)
+ * DMA TX (stub: returns HAL_ERROR on every Core until implemented)
  * ============================================================ */
 
 hal_status_t hal_uart_tx_dma(hal_uart_t *h, const uint8_t *data, uint32_t len,

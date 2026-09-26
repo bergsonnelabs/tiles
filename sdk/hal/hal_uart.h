@@ -113,17 +113,18 @@ uint16_t hal_uart_read(hal_uart_t *h, uint8_t *buf, uint16_t max_len);
 /** Number of bytes available in the RX ring buffer */
 uint16_t hal_uart_available(hal_uart_t *h);
 
-/* ---- DMA TX (non-blocking) ---- */
+/* ---- DMA TX (not implemented yet) ---- */
 
 /**
- * Transmit a buffer via DMA (non-blocking).
- * The data buffer must remain valid until the callback fires.
- * Returns HAL_BUSY if a DMA TX is already in progress.
+ * Transmit a buffer via DMA (non-blocking). Not implemented yet: returns
+ * HAL_ERROR on every Core and never calls the callback. It needs a DMA channel
+ * assignment from coregen and per-family DMA setup. Use hal_uart_tx()
+ * (polled) until then.
  */
 hal_status_t hal_uart_tx_dma(hal_uart_t *h, const uint8_t *data, uint32_t len,
                               hal_callback_t cb, void *ctx);
 
-/** Check if a DMA TX is in progress */
+/** Check if a DMA TX is in progress (always 0 while DMA TX is unimplemented). */
 int hal_uart_tx_busy(hal_uart_t *h);
 
 #endif /* HAL_UART_H */

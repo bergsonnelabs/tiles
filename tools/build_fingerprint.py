@@ -32,7 +32,10 @@ INPUTS = re.compile(
     r'^(Makefile|tiles[^/]*\.h|sdk/|hal/|drivers/|definitions/Core-|third_party/|'
     r'tools/coregen/|tools/gen_studio_natives\.py|manifests/sdk-docs/)'
 )
-SKIP = re.compile(r'\.(md|txt|pdf|png|jpe?g|svg|gif|rst|html)$|/(docs?|examples?|tests?)/', re.I)
+# manifests/sdk-docs/gaps.json is the SDK's known-gap notes for the website;
+# nothing the build reads.
+SKIP = re.compile(r'\.(md|txt|pdf|png|jpe?g|svg|gif|rst|html)$|/(docs?|examples?|tests?)/'
+                  r'|^manifests/sdk-docs/gaps\.json$', re.I)
 PROSE = {
     'description', 'brief', 'label', 'doc', 'details', 'notes', 'note', 'source',
     'headline', 'summary', 'title', 'features', 'twin', 'long_description',

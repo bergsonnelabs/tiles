@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6897677",
+  "source": "tiles@f70bca2",
   "category": "timer",
   "label": "Core.Timer",
   "icon": "◷",
@@ -136,6 +136,31 @@
         {
           "name": "duty_permil",
           "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_timer_pwm_set_pad",
+      "signature": "core_timer_pwm_set_pad(core_timer_t * h, uint8_t pad, uint16_t duty_permil)",
+      "returns": "void",
+      "brief": "Set PWM duty cycle by pad number (requires coregen: only defined when the project's config.json binds a timer to a pad). Resolves the channel from the pad's timer assignment; pads without a timer are ignored.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_timer_t *",
+          "description": "Timer handle the pad belongs to."
+        },
+        {
+          "name": "pad",
+          "ctype": "uint8_t",
+          "description": "Tile pad number."
+        },
+        {
+          "name": "duty_permil",
+          "ctype": "uint16_t",
+          "description": "Duty cycle, 0 to 1000 (0 = off, 500 = 50%, 1000 = always on)."
         }
       ],
       "studio_exposed": false,

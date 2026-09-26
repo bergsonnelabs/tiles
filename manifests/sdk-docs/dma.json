@@ -1,0 +1,365 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@f70bca2",
+  "category": "dma",
+  "label": "DMA",
+  "icon": "⇶",
+  "header": null,
+  "headers": {
+    "ll": "ll_dma.h"
+  },
+  "functions": [
+    {
+      "name": "ll_dma_set_request",
+      "signature": "ll_dma_set_request(DMA_Channel_TypeDef * ch, uint32_t request)",
+      "returns": "void",
+      "brief": "Set the DMA request source for a channel. ch:      DMA channel instance request: request number (0-7, see reference manual Table 41) Common request mappings for STM32L422: ADC1:       request 0 on any channel SPI1_RX:    request 1  |  SPI1_TX:    request 1 USART1_RX:  request 2  |  USART1_TX:  request 2 USART2_RX:  request 2  |  USART2_TX:  request 2 I2C1_RX:    request 3  |  I2C1_TX:    request 3 TIM2:       request 4",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        },
+        {
+          "name": "request",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_config",
+      "signature": "ll_dma_config(DMA_Channel_TypeDef * ch, volatile void * periph, void * mem, uint32_t count, uint32_t ccr_flags)",
+      "returns": "void",
+      "brief": "Configure a DMA channel for peripheral↔memory transfer. ch:        DMA channel instance (DMA1_CH1..DMA1_CH7) periph:    peripheral register address (e.g. &USART1->RDR) mem:       memory buffer address count:     number of data items to transfer ccr_flags: ORed CCR flags (direction, sizes, increment, circular, etc.) Channel must be disabled before calling. Use ll_dma_disable() first.",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        },
+        {
+          "name": "periph",
+          "ctype": "volatile void *"
+        },
+        {
+          "name": "mem",
+          "ctype": "void *"
+        },
+        {
+          "name": "count",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "ccr_flags",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_enable",
+      "signature": "ll_dma_enable(DMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Enable a DMA channel (start transfer)",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_disable",
+      "signature": "ll_dma_disable(DMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Disable a DMA channel",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_remaining",
+      "signature": "ll_dma_remaining(DMA_Channel_TypeDef * ch)",
+      "returns": "uint32_t",
+      "brief": "Get remaining transfer count",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_transfer_complete",
+      "signature": "ll_dma_transfer_complete(DMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if transfer complete flag is set",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_half_transfer",
+      "signature": "ll_dma_half_transfer(DMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if half-transfer flag is set",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_transfer_error",
+      "signature": "ll_dma_transfer_error(DMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if transfer error flag is set",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_dma_clear_flags",
+      "signature": "ll_dma_clear_flags(DMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Clear all flags for a channel",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "DMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_config",
+      "signature": "ll_gpdma_config(GPDMA_Channel_TypeDef * ch, volatile void * src, void * dst, uint32_t count, uint32_t ctr1, uint32_t ctr2)",
+      "returns": "void",
+      "brief": "Configure a GPDMA channel for a simple peripheral↔memory transfer. ch:      GPDMA channel instance src:     source address (peripheral or memory) dst:     destination address (peripheral or memory) count:   number of bytes to transfer request: hardware request number (see RM for mapping table) ctr1:    transfer config (data widths, increment flags) ctr2:    request config (DREQ direction, request selection)",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        },
+        {
+          "name": "src",
+          "ctype": "volatile void *"
+        },
+        {
+          "name": "dst",
+          "ctype": "void *"
+        },
+        {
+          "name": "count",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "ctr1",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "ctr2",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_enable",
+      "signature": "ll_gpdma_enable(GPDMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Enable a GPDMA channel",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_disable",
+      "signature": "ll_gpdma_disable(GPDMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Disable a GPDMA channel",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_transfer_complete",
+      "signature": "ll_gpdma_transfer_complete(GPDMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if transfer complete",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_half_transfer",
+      "signature": "ll_gpdma_half_transfer(GPDMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if half transfer",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_transfer_error",
+      "signature": "ll_gpdma_transfer_error(GPDMA_Channel_TypeDef * ch)",
+      "returns": "int",
+      "brief": "Check if transfer error",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_clear_flags",
+      "signature": "ll_gpdma_clear_flags(GPDMA_Channel_TypeDef * ch)",
+      "returns": "void",
+      "brief": "Clear all flags",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_node_init",
+      "signature": "ll_gpdma_node_init(ll_gpdma_node_t * node, volatile void * src, void * dst, uint32_t count, uint32_t ctr1, uint32_t ctr2)",
+      "returns": "void",
+      "brief": "Fill an LLI node for a peripheral↔memory or memory↔memory transfer. Leaves the node unlinked (terminator) — call ll_gpdma_node_link() or ll_gpdma_node_terminate() afterwards. src/dst: source/destination addresses count:   byte count (BNDT, max 65535) ctr1:    data widths + increment flags (LL_GPDMA_CTR1_*) ctr2:    request/direction + TCEM (LL_GPDMA_CTR2_*)",
+      "params": [
+        {
+          "name": "node",
+          "ctype": "ll_gpdma_node_t *"
+        },
+        {
+          "name": "src",
+          "ctype": "volatile void *"
+        },
+        {
+          "name": "dst",
+          "ctype": "void *"
+        },
+        {
+          "name": "count",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "ctr1",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "ctr2",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_node_link",
+      "signature": "ll_gpdma_node_link(ll_gpdma_node_t * a, const ll_gpdma_node_t * next)",
+      "returns": "void",
+      "brief": "Link node `a` so the engine runs `next` after it (full static update).",
+      "params": [
+        {
+          "name": "a",
+          "ctype": "ll_gpdma_node_t *"
+        },
+        {
+          "name": "next",
+          "ctype": "const ll_gpdma_node_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_node_terminate",
+      "signature": "ll_gpdma_node_terminate(ll_gpdma_node_t * a)",
+      "returns": "void",
+      "brief": "Make node `a` the end of a run-to-completion list (channel stops after it).",
+      "params": [
+        {
+          "name": "a",
+          "ctype": "ll_gpdma_node_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_gpdma_list_start",
+      "signature": "ll_gpdma_list_start(GPDMA_Channel_TypeDef * ch, const ll_gpdma_node_t * first, uint32_t ccr_flags)",
+      "returns": "void",
+      "brief": "Arm a channel on a linked list and enable it. Uses the \"null initial LLI\" entry (RM0493 §17.4.6 Note): the channel's own register file describes a zero-length transfer whose CLLR points at `first` with all update bits set, so the engine immediately loads and runs `first`. A zero-length initial transfer raises no spurious TC/HT event. Run-to-completion mode (LSM=0). For a one-shot list, terminate the last node with ll_gpdma_node_terminate(); for a circular list, link the last node back to the loop-start node with ll_gpdma_node_link(). ccr_flags: interrupt-enable + priority bits (LL_GPDMA_CCR_*), EN excluded. Caller must enable the GPDMA clock (ll_rcc_dma1_clk_enable) and, for an interrupt-driven list, configure the channel's NVIC line beforehand.",
+      "params": [
+        {
+          "name": "ch",
+          "ctype": "GPDMA_Channel_TypeDef *"
+        },
+        {
+          "name": "first",
+          "ctype": "const ll_gpdma_node_t *"
+        },
+        {
+          "name": "ccr_flags",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    }
+  ]
+}

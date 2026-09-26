@@ -260,8 +260,16 @@ follows SYSCLK. So on those, a too-low `clock` level can make a fast `speed`
 illegal.
 
 **On-tile pull-ups (`pullups`, top level).** Some Cores have pull-up resistors
-on I2C pads that a GPIO switches on (Core.ST.L4.1: pad 4 via PA9, pad 5 via
-PC15; the tile JSON's `config.pullups` lists them). Name the ones you want:
+on I2C pads that a GPIO switches on. The source of truth is the Core's tile
+definition, `config.pullups` in `definitions/<Core>.json`: coregen reads the
+names and control pins from there. Today that is:
+
+| Core             | `pad4`   | `pad5`   |
+|------------------|----------|----------|
+| Core.ST.L4.1 (b) | via PC15 | via PA9  |
+| Core.ST.W5 (b)   | via PC15 | via PC14 |
+
+Other Cores have no switchable pull-ups. Name the ones you want:
 
 ```json
 "pullups": ["pad4", "pad5"]

@@ -14,6 +14,16 @@
     "system.delay": "verified",
     "system.tick": "verified",
     "system.fault": "verified",
+    "system.uid": {
+      "status": "verified",
+      "note": "Drives the Ring's per-unit BLE name and Device Information serial; read over SWD on a v2 Ring (tests/val-otp, 2026-07-03)"
+    },
+    "system.recovery": {
+      "status": "na",
+      "note": "No USB, so no ROM DFU path to park in"
+    },
+    "system.swo": "compile",
+    "system.wamr": "compile",
     "clocks.hsi": {
       "status": "verified",
       "note": "'low' (HSI16): range 2, flash 1 WS (RM0493 Table 41), SRAM 1 WS, hclk5 8 MHz, PLL off, also after Stop 1. Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-clock-levels: registers per RM, SYSCLK 15.91 MHz vs HSE, -5400 ppm, inside the HSI16 +-1.2 % band)."
@@ -44,13 +54,16 @@
     "i2c.target": "compile",
     "spi.master": {
       "status": "partial",
-      "note": "APB7 clock + MODF bugs fixed; SPI v2 transfer sequence (CSTART/TSIZE) needs RM study — loopback times out on RXP"
+      "note": "SPI v2 bring-up (APB7 clock, SSI before MASTER) done; LL half-duplex and SPI-over-GPDMA were validated against a NanEyeC camera (2026-06-19). The core_spi full-duplex path has not been bench-verified."
     },
     "spi.octo": "na",
     "timer.tick": "verified",
     "timer.pwm": "compile",
     "timer.stepdir": "compile",
-    "timer.wdog": "compile",
+    "timer.wdog": {
+      "status": "verified",
+      "note": "A 6 s SWD halt reset the chip unless DBG_IWDG_STOP was set (2026-08-24), and two 10 s core_stop_for with a 5 s IWDG ran with 0 resets (tests/hw-sleep-cycle, 2026-09-25)"
+    },
     "adc.raw": "verified",
     "adc.mv": "verified",
     "adc.temp": {
@@ -68,6 +81,10 @@
     "adc.trigger": {
       "status": "partial",
       "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
+    },
+    "audio.pdm": {
+      "status": "compile",
+      "note": "SAI1 PDM master-RX + GPDMA (RM0493 Tables 407/408) and a real-time CIC fast path; captured audio on silicon during bring-up (June 2026) but no recorded bench test"
     },
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
@@ -101,15 +118,29 @@
       "note": "TAMP_BKP0R-31R at 0x46007C00 + 0x100 (RM0493 §37.6.18); the RTC/TAMP bus clock (RCC_APB7ENR.RTCAPBEN, §12.8.27) is enabled on access, so they work without BLE. Write and read-back (T1). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
     },
     "security.rng": "verified",
-    "security.aes": "verified",
+    "security.aes": {
+      "status": "partial",
+      "note": "The WBA55's AES engines are used internally by the BLE stack; there is no user AES API (no core_aes) yet"
+    },
     "security.pka": "none",
-    "security.hash": "na",
+    "security.hash": {
+      "status": "none",
+      "note": "The WBA55 has a HASH accelerator; no driver yet"
+    },
     "conn.usb_cdc": "na",
     "conn.scope_usb": "na",
     "conn.scope_ble": "compile",
     "conn.usb_hid": "na",
     "conn.usb_msc": "na",
     "conn.dfu": "na",
+    "conn.serial_update": {
+      "status": "na",
+      "note": "No USB"
+    },
+    "conn.swd": {
+      "status": "verified",
+      "note": "Studio flashes over SWD through a CoreProbe (flash-wba), halting at the reset vector so a running watchdog can't reset the chip mid-write (fixed 2026-08-25). A first BLE image is slow: no RAM-resident flash algorithm."
+    },
     "conn.ble": {
       "status": "verified",
       "note": "Bench-verified 2026-09-25 on Core.ST.W5: tests/ble-beacon advertising seen on a phone and running 17 min (a 15 min SWD soak showed no stuck ISR). Fixed then: BLE idle now wraps WFI in the link-layer WFIEnter/Exit/WaitHclkRdy hooks (a bare WFI let the radio sleep timer read stale after wake; the LL asserted and hung about 7 min after boot, main included). ble_app_init no longer zeroes RCC_CFGR4 or reconfigures the RTC. Radio IRQs steady at high/max over SWD."
@@ -132,6 +163,14 @@
     },
     "ble.central": "none",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none"
+    "nvm.flash_emu": "none",
+    "nvm.otp": {
+      "status": "partial",
+      "note": "Reads and slot geometry verified over SWD on a virgin v2 Ring (tests/val-otp, 2026-07-03). The program path is compile-only: burns are irreversible, so it has never run on silicon."
+    },
+    "spi.dma": {
+      "status": "partial",
+      "note": "LL only: ll_spi_dma_* over GPDMA validated against a NanEyeC camera (2026-06-19). core_spi_xfer_dma returns HAL_ERROR on the WBA (TSIZE must be set while SPE=0)."
+    }
   }
 }

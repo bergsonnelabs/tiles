@@ -124,8 +124,13 @@ static inline void core_pwm_set_pad(core_timer_t *h, uint8_t pad,
  * won't fault, it just won't produce output.
  */
 
-/** Prototype emitted by coregen into core_init.c when any TIM<n> pad is
- * configured. Returns NULL for pads not bound to a timer in config.json. */
+/**
+ * The timer driving a pad. Emitted per project by coregen into core_init.c
+ * when any TIM<n> pad is configured.
+ *
+ * @param pad Tile pad number.
+ * @return The timer handle, or NULL for pads not bound to a timer in config.json.
+ */
 hal_timer_t *core_pwm_timer_for_pad(uint8_t pad);
 
 /**

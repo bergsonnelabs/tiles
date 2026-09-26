@@ -1,5 +1,10 @@
 # Cores SDK Feature Gap Matrix
 
+> **Superseded (kept for history).** This April 2026 report is mostly stale and partly wrong
+> (it claims SAI on the L4 and H5, and AES on the H5). The current findings are the portal page
+> "Core.ST SDK audit and priority list, September 2026" (SDK project), and the live per-Core
+> status is `core-*.json` in this folder.
+
 > Generated 2026-04-06 from RM0377 (L0), RM0394 (L4), RM0481 (H5), RM0493 (WBA)
 > Cross-referenced against `sdk/status/core-{l,u,h,w}.json`
 

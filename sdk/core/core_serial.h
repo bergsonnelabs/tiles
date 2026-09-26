@@ -97,13 +97,20 @@ static inline uint16_t core_serial_read(hal_uart_t *h, uint8_t *buf,
 
 /* ---- Tier 2 — default-instance bus helpers ---------------------------- */
 
-/* Forward-decl of the coregen-emitted dispatcher (definition lives in
- * core_init.c when the project declares any USART). Forward-declared
- * here rather than `#include "core_init.h"` so this header compiles in
- * SDK contexts that don't have a project (val tests, examples without
- * config.json). The natives-side caller in studio_natives_project.c is
- * gated on CORE_HAS_SERIAL_BUSES, so the linker never asks for the
- * symbol unless the dispatcher actually exists. */
+/**
+ * The UART handle for a bus id declared in config.json, or NULL if the
+ * project doesn't declare that bus. Emitted per project by coregen into
+ * core_init.c (when the project declares any USART); the *_bus helpers below
+ * resolve their handle through it.
+ *
+ * Forward-declared here rather than `#include "core_init.h"` so this header
+ * compiles without a project (val tests, examples without config.json). The
+ * natives-side caller is gated on CORE_HAS_SERIAL_BUSES, so the linker never asks for
+ * the symbol unless the dispatcher exists.
+ *
+ * @param bus Bus id (1 = the first instance, ...).
+ * @return The coregen-initialized handle, or NULL.
+ */
 hal_uart_t *core_serial_handle_for_bus(uint8_t bus);
 
 /**
@@ -114,6 +121,8 @@ hal_uart_t *core_serial_handle_for_bus(uint8_t bus);
  *
  * @studio expose category=serial name=print returns=int
  * @studio twin full
+ * @param bus UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...).
+ * @param str NUL-terminated string to send.
  */
 static inline int core_serial_print_bus(uint8_t bus, const char *str)
 {
@@ -129,6 +138,8 @@ static inline int core_serial_print_bus(uint8_t bus, const char *str)
  *
  * @studio expose category=serial name=putc returns=int
  * @studio twin full
+ * @param bus UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...).
+ * @param byte Byte to send.
  */
 static inline int core_serial_putc_bus(uint8_t bus, uint8_t byte)
 {

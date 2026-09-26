@@ -1,13 +1,14 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@452b1b1",
+  "source": "tiles@f70bca2",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
   "header": "core_usb.h",
   "headers": {
-    "core": "core_usb.h",
-    "hal": "hal_usb_cdc.h"
+    "core": "core_usb.h, core_usb_hid.h",
+    "hal": "hal_usb_cdc.h",
+    "ll": "ll_usb.h, ll_usb_drd.h"
   },
   "functions": [
     {
@@ -195,6 +196,42 @@
       "layer": "core"
     },
     {
+      "name": "core_usb_hid_send",
+      "signature": "core_usb_hid_send(const uint8_t * buf, uint16_t len)",
+      "returns": "int",
+      "brief": "Send a HID report (up to 64 bytes, zero-padded automatically). Blocking — waits for the previous report to be read by the host. Returns bytes of user data sent, or -1 if USB not configured.",
+      "params": [
+        {
+          "name": "buf",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_usb_hid_set_rx_callback",
+      "signature": "core_usb_hid_set_rx_callback(hal_usb_hid_rx_cb_t cb, void * ctx)",
+      "returns": "void",
+      "brief": "Register a callback for inbound HID reports (host -> device). Fires from the USB ISR with one report per call (up to 64 bytes), delivered via the EP3 OUT interrupt endpoint or HID SET_REPORT. Pass NULL to disable; unhandled reports are dropped.",
+      "params": [
+        {
+          "name": "cb",
+          "ctype": "hal_usb_hid_rx_cb_t"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "hal_usb_cdc_init",
       "signature": "hal_usb_cdc_init(void)",
       "returns": "void",
@@ -232,7 +269,7 @@
     },
     {
       "name": "hal_usb_cdc_printf",
-      "signature": "hal_usb_cdc_printf(const char * fmt)",
+      "signature": "hal_usb_cdc_printf(const char * fmt, ...)",
       "returns": "int",
       "brief": "Printf over USB CDC (blocking). Returns number of characters written (from vsnprintf).",
       "params": [
@@ -365,6 +402,220 @@
       ],
       "studio_exposed": false,
       "layer": "hal"
+    },
+    {
+      "name": "ll_usb_power_on",
+      "signature": "ll_usb_power_on(void)",
+      "returns": "void",
+      "brief": "Power-on and reset the USB peripheral. Call after enabling the USB clock (ll_rcc_apb1_clk_enable(LL_APB1_USB)).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_connect",
+      "signature": "ll_usb_connect(void)",
+      "returns": "void",
+      "brief": "Enable the DP pull-up resistor (signals device connection to host).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_disconnect",
+      "signature": "ll_usb_disconnect(void)",
+      "returns": "void",
+      "brief": "Disable the DP pull-up (disconnect from host).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_set_address",
+      "signature": "ll_usb_set_address(uint8_t addr)",
+      "returns": "void",
+      "brief": "Set the USB device address and enable function.",
+      "params": [
+        {
+          "name": "addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_ep_config",
+      "signature": "ll_usb_ep_config(uint8_t ep, uint16_t type, uint8_t addr)",
+      "returns": "void",
+      "brief": "Configure an endpoint: type and address. Clears data toggles and sets STAT to NAK for both directions.",
+      "params": [
+        {
+          "name": "ep",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "type",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_pma_write",
+      "signature": "ll_usb_pma_write(uint16_t pma_offset, const uint8_t * buf, uint16_t len)",
+      "returns": "void",
+      "brief": "Copy data from user buffer to PMA. pma_offset: byte offset in PMA (must be even) buf:        source data len:        number of bytes to copy",
+      "params": [
+        {
+          "name": "pma_offset",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_pma_read",
+      "signature": "ll_usb_pma_read(uint16_t pma_offset, uint8_t * buf, uint16_t len)",
+      "returns": "void",
+      "brief": "Copy data from PMA to user buffer.",
+      "params": [
+        {
+          "name": "pma_offset",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_power_on",
+      "signature": "ll_usb_drd_power_on(void)",
+      "returns": "void",
+      "brief": "Power-on and reset the USB peripheral. Call after enabling the USB clock.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_connect",
+      "signature": "ll_usb_drd_connect(void)",
+      "returns": "void",
+      "brief": "Enable the DP pull-up resistor (signals device connection to host).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_disconnect",
+      "signature": "ll_usb_drd_disconnect(void)",
+      "returns": "void",
+      "brief": "Disable the DP pull-up (disconnect from host).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_set_address",
+      "signature": "ll_usb_drd_set_address(uint8_t addr)",
+      "returns": "void",
+      "brief": "Set the USB device address and enable function.",
+      "params": [
+        {
+          "name": "addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_chep_config",
+      "signature": "ll_usb_drd_chep_config(uint8_t ep, uint32_t type, uint8_t addr)",
+      "returns": "void",
+      "brief": "Configure an endpoint: type and address. Clears data toggles and sets STAT to NAK for both directions.",
+      "params": [
+        {
+          "name": "ep",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "type",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_pma_write",
+      "signature": "ll_usb_drd_pma_write(uint32_t pma_offset, const uint8_t * buf, uint16_t len)",
+      "returns": "void",
+      "brief": "Copy data from user buffer to PMA. pma_offset: byte offset in PMA (should be 4-byte aligned) buf:        source data len:        number of bytes to copy",
+      "params": [
+        {
+          "name": "pma_offset",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_usb_drd_pma_read",
+      "signature": "ll_usb_drd_pma_read(uint32_t pma_offset, uint8_t * buf, uint16_t len)",
+      "returns": "void",
+      "brief": "Copy data from PMA to user buffer.",
+      "params": [
+        {
+          "name": "pma_offset",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
     }
   ]
 }

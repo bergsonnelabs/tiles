@@ -15,7 +15,7 @@
  *
  * @studio coverage
  *   id:    dac
- *   name:  DAC — analog-to-digital output
+ *   name:  DAC — digital-to-analog output
  *   blurb: Core.ST.H5-only API for the on-chip 12-bit DAC. Tier 2 helpers
  *          init the default instance (resolved by coregen from
  *          config.json) and write a raw count, write millivolts, or

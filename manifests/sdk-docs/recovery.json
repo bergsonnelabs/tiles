@@ -1,0 +1,125 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@f70bca2",
+  "category": "recovery",
+  "label": "Core.Recovery",
+  "icon": "⟲",
+  "header": "core_recovery.h",
+  "headers": {
+    "core": "core_recovery.h",
+    "hal": "hal_dfu.h"
+  },
+  "functions": [
+    {
+      "name": "core_recovery_note_boot",
+      "signature": "core_recovery_note_boot(void)",
+      "returns": "uint32_t",
+      "brief": "Account for this boot and return the running strike count. Call once, very early in core_init(), before clocks/user code.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_recovery_over_limit",
+      "signature": "core_recovery_over_limit(uint32_t strikes)",
+      "returns": "int",
+      "brief": "True once we've had enough consecutive watchdog resets to give up on the app.",
+      "params": [
+        {
+          "name": "strikes",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_recovery_clear",
+      "signature": "core_recovery_clear(void)",
+      "returns": "void",
+      "brief": "Clear the strike counter now. core_watchdog_feed() already does this once the app has run healthy for max(10 s, 2x the timeout); call this only to declare health earlier than that.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "hal_dfu_jump_to_rom",
+      "signature": "hal_dfu_jump_to_rom(void)",
+      "returns": "void",
+      "brief": "Jump to the STM32 ROM (system memory) bootloader. Does not return. Called from core_init() when ROM_DFU is enabled and the DFU magic was found. Runs before ANY peripheral or clock init, so the MCU is in near-reset state. The ROM bootloader configures its own clocks (HSI48 + CRS for USB) and enumerates as 0483:DF11 with DfuSe. L4 (Cortex-M4): Remaps system memory to 0x00000000 via SYSCFG_MEMRMP, then jumps. The remap ensures the ROM bootloader reads its own vectors from address 0 and doesn't bounce back to flash. H5 (Cortex-M33): No MEMRMP equivalent in SBS. Instead, sets VTOR directly to the ROM bootloader base — the M33 always respects VTOR for vector fetches, so no memory remap is needed.",
+      "params": [],
+      "studio_exposed": false,
+      "attributes": [
+        "noreturn"
+      ],
+      "layer": "hal"
+    },
+    {
+      "name": "hal_dfu_reboot",
+      "signature": "hal_dfu_reboot(void)",
+      "returns": "void",
+      "brief": "Reboot into DFU mode. Does not return. Writes the DFU magic to a reserved SRAM address, then triggers a system reset. SRAM survives system reset, so the bootloader (custom or ROM) will see the magic on the next boot.",
+      "params": [],
+      "studio_exposed": false,
+      "attributes": [
+        "noreturn"
+      ],
+      "layer": "hal"
+    },
+    {
+      "name": "hal_recovery_strikes",
+      "signature": "hal_recovery_strikes(void)",
+      "returns": "uint32_t",
+      "brief": "Consecutive watchdog-reset strikes carried across warm reset (0 if cold).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_recovery_valid",
+      "signature": "hal_recovery_valid(void)",
+      "returns": "int",
+      "brief": "True if the recovery words survived a warm reset (tag valid).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_recovery_set_strikes",
+      "signature": "hal_recovery_set_strikes(uint32_t n)",
+      "returns": "void",
+      "brief": "Set the strike count and stamp the validity tag.",
+      "params": [
+        {
+          "name": "n",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_recovery_stash_cause",
+      "signature": "hal_recovery_stash_cause(int was_watchdog)",
+      "returns": "void",
+      "brief": "Stash whether this boot was a watchdog reset (so the app's core_watchdog_caused_reset() still works after we clear the HW flag).",
+      "params": [
+        {
+          "name": "was_watchdog",
+          "ctype": "int"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_recovery_stashed_cause",
+      "signature": "hal_recovery_stashed_cause(void)",
+      "returns": "uint32_t",
+      "brief": "Read back the stashed reset cause (1 = watchdog).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "hal"
+    }
+  ]
+}

@@ -3,7 +3,9 @@
  *
  * Two DFU modes are supported:
  *
- * 1. Custom bootloader (BOOTLOADER=1):
+ * 1. Custom bootloader (BOOTLOADER=1). PARKED: gated behind
+ *    CUSTOM_BOOTLOADER_ACK=1; flashing it onto a ROM-DFU board corrupts the
+ *    resident app. Use the ROM bootloader.
  *    App at 0x08002000, custom DFU 1.1 bootloader at 0x08000000.
  *    hal_dfu_reboot() writes magic → reset → bootloader enters DFU.
  *

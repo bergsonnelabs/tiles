@@ -113,6 +113,7 @@ static inline int core_otp_read(uint32_t offset, void *buf, uint32_t len)
  * A blank slot is programmable; a non-blank slot is not (write-once).
  *
  * @studio expose category=otp name=slot_is_blank returns=int
+ * @param slot Slot index, 0 to core_otp_slot_count() - 1.
  */
 static inline int core_otp_slot_is_blank(uint32_t slot)
 {

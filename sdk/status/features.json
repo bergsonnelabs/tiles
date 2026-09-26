@@ -30,6 +30,30 @@
           "id": "system.fault",
           "name": "fault handlers",
           "desc": "HardFault / BusFault / UsageFault handlers with register-dump diagnostics."
+        },
+        {
+          "id": "system.uid",
+          "layer": "Core",
+          "name": "unique device ID",
+          "desc": "The factory 96-bit unique ID (core_uid_read / _hash / _hex): per-unit serials, BLE names, key seeds."
+        },
+        {
+          "id": "system.recovery",
+          "layer": "Core",
+          "name": "brick recovery",
+          "desc": "Counts consecutive watchdog resets; after three, core_init() parks the Core in the ST ROM bootloader so it can always be reflashed (core_recovery). USB Cores with ROM DFU only."
+        },
+        {
+          "id": "system.swo",
+          "layer": "HAL",
+          "name": "SWO / ITM debug output",
+          "desc": "printf-style trace output over the SWD trace pin (core_debug / hal_debug). Cortex-M0+ has no ITM."
+        },
+        {
+          "id": "system.wamr",
+          "layer": "Studio",
+          "name": "WAMR (Wasm) runtime",
+          "desc": "Runs a Studio program as WebAssembly on the Core (WAMR_ENABLED=1), with per-project natives for the Tier 2 API."
         }
       ]
     },
@@ -320,6 +344,18 @@
       ]
     },
     {
+      "id": "audio",
+      "name": "Audio",
+      "features": [
+        {
+          "id": "audio.pdm",
+          "layer": "Core",
+          "name": "PDM microphone capture",
+          "desc": "SAI1 PDM master-RX + GPDMA circular capture, decimated in software by core_pdm's CIC filter (core_audio)."
+        }
+      ]
+    },
+    {
       "id": "nvm",
       "name": "NVM",
       "features": [
@@ -334,6 +370,12 @@
           "layer": "Core",
           "name": "flash emulation",
           "desc": "Emulated byte-level NVM on Cores without real EEPROM, including the wear levelling that needs. Not implemented: core_nvm_write returns -1 on those parts."
+        },
+        {
+          "id": "nvm.otp",
+          "layer": "Core",
+          "name": "OTP identity slots",
+          "desc": "Write-once one-time-programmable bytes that survive a chip erase (core_otp): per-unit identity burned at production."
         }
       ]
     },
@@ -492,6 +534,18 @@
           "id": "conn.dfu",
           "name": "ROM DFU bootloader",
           "desc": "Uses the STM32 factory ROM bootloader to flash firmware over USB without a hardware debugger."
+        },
+        {
+          "id": "conn.serial_update",
+          "layer": "HAL",
+          "name": "serial update (USB CDC)",
+          "desc": "make flash-serial: reflash a running Core over its USB serial port, no bootloader and no replug (docs/serial-update-protocol.md)."
+        },
+        {
+          "id": "conn.swd",
+          "layer": "Studio",
+          "name": "SWD flash from Studio",
+          "desc": "Studio programs the Core over SWD through a CoreProbe, halting at the reset vector (connect under reset)."
         },
         {
           "id": "conn.ble",

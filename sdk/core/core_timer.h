@@ -157,14 +157,18 @@ static inline void core_timer_pwm_set(core_timer_t *h, uint8_t channel,
     hal_timer_pwm_set_duty(h, channel, duty_permil);
 }
 
-/**
- * Set PWM duty cycle by pad number (requires coregen).
- * Resolves the channel from the pad's timer assignment.
- *   duty_permil:  0–1000 (0 = off, 500 = 50%, 1000 = always on)
- */
 #if __has_include("core_pads.h")
 #include "core_pads.h"
 #ifdef CORE_HAS_TIMER_PADS
+/**
+ * Set PWM duty cycle by pad number (requires coregen: only defined when the
+ * project's config.json binds a timer to a pad). Resolves the channel from
+ * the pad's timer assignment; pads without a timer are ignored.
+ *
+ * @param h           Timer handle the pad belongs to.
+ * @param pad         Tile pad number.
+ * @param duty_permil Duty cycle, 0 to 1000 (0 = off, 500 = 50%, 1000 = always on).
+ */
 static inline void core_timer_pwm_set_pad(core_timer_t *h, uint8_t pad,
                                            uint16_t duty_permil)
 {

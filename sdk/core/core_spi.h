@@ -26,7 +26,7 @@
  *   page:  /docs/sdk/spi
  *   blurb: Master-mode SPI: polled byte / buffer transfer, software CS
  *          via tile pads, and DMA non-blocking transfers (Core.ST.L4
- *          verified; Core.ST.W5/H5 DMA is HAL-side WIP). Tier 2 exposes a
+ *          only, not yet run on hardware; Core.ST.W5/H5 DMA is WIP). Tier 2 exposes a
  *          single-byte full-duplex transfer against a bus id + CS pad —
  *          coregen resolves the handle via core_spi_handle_for_bus().
  *          Tier 1 keeps the explicit-handle forms for buffer transfers,
@@ -166,13 +166,20 @@ static inline int core_spi_busy(hal_spi_t *h)
  * when buffer transfers, DMA, or persistent CS control are needed.
  */
 
-/* Forward-decl of the coregen-emitted dispatcher (definition lives in
- * core_init.c when the project declares any SPI bus). Forward-declared
- * here rather than `#include "core_init.h"` so this header compiles in
- * SDK contexts that don't have a project (val tests, examples without
- * config.json). The natives-side caller in studio_natives_project.c is
- * gated on CORE_HAS_SPI_BUSES, so the linker never asks for the symbol
- * unless the dispatcher actually exists. */
+/**
+ * The SPI handle for a bus id declared in config.json, or NULL if the
+ * project doesn't declare that bus. Emitted per project by coregen into
+ * core_init.c (when the project declares any SPI bus); the *_bus helpers below
+ * resolve their handle through it.
+ *
+ * Forward-declared here rather than `#include "core_init.h"` so this header
+ * compiles without a project (val tests, examples without config.json). The
+ * natives-side caller is gated on CORE_HAS_SPI_BUSES, so the linker never asks for
+ * the symbol unless the dispatcher exists.
+ *
+ * @param bus Bus id (1 = the first instance, ...).
+ * @return The coregen-initialized handle, or NULL.
+ */
 hal_spi_t *core_spi_handle_for_bus(uint8_t bus);
 
 /**
@@ -189,6 +196,9 @@ hal_spi_t *core_spi_handle_for_bus(uint8_t bus);
  *
  * @studio expose category=spi name=xfer_byte returns=int
  * @studio twin full
+ * @param bus SPI bus id as declared in config.json (1 = SPI1, ...).
+ * @param cs_pad Tile pad driving chip select (asserted around the transfer).
+ * @param tx Byte to send.
  */
 static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx)
 {
@@ -214,17 +224,19 @@ static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx
 //   the array-IN / array-OUT host-call ABI prototyped on the tile-
 //   driver side — track with the DSL Capability Coverage close.
 //
-// @studio unsupported tier=1 value=H title="SPI master broken on Core.ST.W5; compile-only on Core.ST.H5"
-//   SDK roadmap Tier 1 item: Core.ST.W5 has an SPI v2 CSTART bug; Core.ST.H5
-//   builds but isn't hardware-verified. Only Core.ST.L4 is end-to-end
-//   verified for polled + FIFO + tile-driver use. Tile drivers that
-//   need SPI on W/H should expect rough edges.
+// @studio unsupported tier=1 value=H title="core_spi is not bench-verified on any Core; broken on Core.ST.H5"
+//   Core.ST.W5: the SPI v2 bring-up is done and the LL half-duplex + GPDMA
+//   path ran against a camera, but the core_spi full-duplex path hasn't been
+//   bench-verified. Core.ST.H5: SPI has no kernel clock (PLL1Q is never
+//   enabled) and the transfer loop has no timeout, so it hangs until the H5
+//   fix session. Core.ST.L4: builds, has not run on hardware yet. Tile
+//   drivers that need SPI should expect rough edges.
 //
-// @studio unsupported tier=2 value=M title="DMA verified only on Core.ST.L4"
-//   SDK roadmap Tier 2: Core.ST.W5 / Core.ST.H5 GPDMA is deferred (SPI v2
-//   TSIZE constraints). Calls fall back to polled or hit
-//   HAL_ERROR. Long buffer transfers (display refresh, audio) are
-//   significantly slower on W/H than on U.
+// @studio unsupported tier=2 value=M title="DMA implemented only on Core.ST.L4"
+//   core_spi_xfer_dma is implemented for the L4 (classic DMA) but not yet
+//   run on hardware. On Core.ST.W5 / Core.ST.H5 it returns HAL_ERROR (SPI v2
+//   needs TSIZE set while SPE=0); the W5's LL-level ll_spi_dma_* path works.
+//   Long buffer transfers (display refresh, audio) are slower on W5 / H5.
 //
 // @studio unsupported tier=1 value=M title="Slave mode missing"
 //   Master-only. No path for a Core to act as a SPI peripheral on

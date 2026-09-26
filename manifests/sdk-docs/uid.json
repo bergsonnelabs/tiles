@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@b90fe22",
+  "source": "tiles@f70bca2",
   "category": "uid",
   "label": "Core.UID",
   "icon": "🔖",
@@ -11,10 +11,16 @@
   "functions": [
     {
       "name": "core_uid_read",
-      "signature": "core_uid_read(void)",
+      "signature": "core_uid_read(uint32_t out[3])",
       "returns": "void",
       "brief": "Read the 96-bit unique device ID as three 32-bit words.",
-      "params": [],
+      "params": [
+        {
+          "name": "out",
+          "ctype": "uint32_t[3]",
+          "description": "Destination for the three words: out[0] is the first UID word,"
+        }
+      ],
       "studio_exposed": false,
       "layer": "core"
     },

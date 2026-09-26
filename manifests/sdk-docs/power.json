@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6f27e78",
+  "source": "tiles@f70bca2",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
@@ -10,6 +10,15 @@
     "ll": "ll_pwr.h"
   },
   "functions": [
+    {
+      "name": "core_clock_init",
+      "signature": "core_clock_init(void)",
+      "returns": "void",
+      "brief": "Bring up the clock tree for the project's `clock` level (oscillator, PLL, flash wait states, bus prescalers) and start SysTick. Generated per project by coregen into core_init.c and called by core_init(); call it again only to restore the clocks by hand (core_stop_for already does after a wake).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
     {
       "name": "core_sleep",
       "signature": "core_sleep(void)",

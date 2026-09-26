@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@f70bca2",
   "category": "pwm",
   "label": "Core.PWM",
   "icon": "◲",
@@ -164,6 +164,21 @@
         {
           "name": "duty_permil",
           "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_pwm_timer_for_pad",
+      "signature": "core_pwm_timer_for_pad(uint8_t pad)",
+      "returns": "hal_timer_t *",
+      "brief": "The timer driving a pad. Emitted per project by coregen into core_init.c when any TIM<n> pad is configured.",
+      "params": [
+        {
+          "name": "pad",
+          "ctype": "uint8_t",
+          "description": "Tile pad number."
         }
       ],
       "studio_exposed": false,

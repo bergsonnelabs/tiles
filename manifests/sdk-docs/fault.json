@@ -1,0 +1,44 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@f70bca2",
+  "category": "fault",
+  "label": "Core.Fault",
+  "icon": "⚠",
+  "header": "core_fault.h",
+  "headers": {
+    "core": "core_fault.h",
+    "hal": "hal_fault.h"
+  },
+  "functions": [
+    {
+      "name": "core_fault_set_callback",
+      "signature": "core_fault_set_callback(hal_fault_callback_t cb)",
+      "returns": "void",
+      "brief": "Register a fault callback, run in fault context before the SOS blink (and before the L4's USB register dump). Keep it minimal: no heap, no interrupts.",
+      "params": [
+        {
+          "name": "cb",
+          "ctype": "hal_fault_callback_t",
+          "description": "Callback receiving the fault type and stacked frame; NULL removes it."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "hal_fault_set_callback",
+      "signature": "hal_fault_set_callback(hal_fault_callback_t cb)",
+      "returns": "void",
+      "brief": "Register a fault callback (optional). Called on every Core before the SOS blink (and before the L4's USB dump).",
+      "params": [
+        {
+          "name": "cb",
+          "ctype": "hal_fault_callback_t",
+          "description": "Callback run in fault context; NULL removes it."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    }
+  ]
+}

@@ -25,11 +25,14 @@ from pathlib import Path
 # script or via unittest discovery.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from gen_studio_manifest import (  # noqa: E402
+    build_doc_entry,
     build_host_entry,
+    extract_signature,
     first_brief,
     load_bus_addresses,
     parse_enum_body,
     parse_layer_docs,
+    parse_sdk_gaps,
     parse_studio_tags,
 )
 
@@ -715,6 +718,86 @@ class FirstBriefTests(unittest.TestCase):
     def test_brief_ends_at_the_next_command(self):
         lines = ["@brief  Read it.", "@studio expose category=tile", "@param x  X."]
         self.assertEqual(first_brief(lines), "Read it.")
+
+
+class ExtractSignatureShapes(unittest.TestCase):
+    """Declaration shapes the SDK reference used to drop or mangle."""
+
+    def sig(self, decl):
+        return extract_signature(decl, 0)
+
+    def test_pointer_glued_to_name(self):
+        s = self.sig("hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);")
+        self.assertEqual(s["name"], "core_i2c_handle_for_bus")
+        self.assertEqual(s["returns"], "hal_i2c_t *")
+
+    def test_spaced_pointer_unchanged(self):
+        s = self.sig("static inline uint8_t * f(void) { return 0; }")
+        self.assertEqual((s["name"], s["returns"]), ("f", "uint8_t *"))
+
+    def test_function_pointer_typedef_is_not_a_function(self):
+        self.assertIsNone(self.sig("typedef void (*cb_t)(void *ctx, int x);"))
+
+    def test_variadic_kept_in_doc_signature_only(self):
+        src = "int hal_x_printf(const char *fmt, ...)\n    __attribute__((format(printf, 1, 2)));"
+        s = self.sig(src)
+        self.assertTrue(s["variadic"])
+        self.assertEqual([p["name"] for p in s["params"]], ["fmt"])
+        doc = build_doc_entry(["Printf."], s, False, src, 0)
+        self.assertEqual(doc["signature"], "hal_x_printf(const char * fmt, ...)")
+
+
+class ArrayParamsInDocs(unittest.TestCase):
+    def test_array_param_in_doc_signature_not_in_host_params(self):
+        src = "static inline void core_uid_read(uint32_t out[3]) { }"
+        s = extract_signature(src, 0)
+        self.assertEqual(s["params"], [])
+        doc = build_doc_entry(["Read the ID."], s, False, src, 0)
+        self.assertEqual(doc["signature"], "core_uid_read(uint32_t out[3])")
+        self.assertEqual(doc["params"][0]["ctype"], "uint32_t[3]")
+
+
+class ParseSdkGaps(unittest.TestCase):
+    HEADER = """/**
+ * core_demo.h
+ *
+ * @studio category demo label=Core.Demo icon=x
+ *
+ * @studio coverage
+ *   id:    demo
+ *   name:  Demo — a subsystem
+ *   page:  /docs/sdk/demo
+ *   blurb: Not published.
+ */
+void core_demo(void);
+
+// @studio unsupported tier=1 value=H title="First gap"
+//   Two lines of
+//   explanation.
+//
+// @studio unsupported tier=2 value=L title="Second gap"
+//   One line.
+#endif
+"""
+
+    def test_blocks_and_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "core_demo.h"
+            p.write_text(self.HEADER)
+            g = parse_sdk_gaps(p)
+        self.assertEqual(
+            (g["id"], g["name"], g["page"], g["category"], g["header"]),
+            ("demo", "Demo — a subsystem", "/docs/sdk/demo", "demo", "core_demo.h"))
+        self.assertEqual(g["gaps"], [
+            {"title": "First gap", "brief": "Two lines of explanation.", "tier": 1, "value": "H"},
+            {"title": "Second gap", "brief": "One line.", "tier": 2, "value": "L"},
+        ])
+
+    def test_header_without_gaps(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "core_none.h"
+            p.write_text("/** core_none.h */\nvoid f(void);\n")
+            self.assertIsNone(parse_sdk_gaps(p))
 
 
 if __name__ == "__main__":

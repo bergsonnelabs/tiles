@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@daabfda",
+  "source": "tiles@f70bca2",
   "category": "otp",
   "label": "Core.OTP",
   "icon": "▦",
@@ -71,7 +71,8 @@
       "params": [
         {
           "name": "slot",
-          "ctype": "uint32_t"
+          "ctype": "uint32_t",
+          "description": "Slot index, 0 to core_otp_slot_count() - 1."
         }
       ],
       "studio_exposed": true,

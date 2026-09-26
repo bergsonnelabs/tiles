@@ -21,9 +21,14 @@
  * The SAI kernel clock (PLLSAI1) must be configured/routed beforehand (clock
  * tree is coregen/core_init's job) — pass its frequency in.
  *
+ * Core.ST.W5 only: it is the only Core with an SAI.
+ *
+ * @studio category audio label=Core.Audio icon=🎤
+ *
  * @studio coverage
  *   id:    audio
  *   name:  Audio — PDM microphone capture
+ *   page:  /docs/sdk/audio
  *   blurb: Tier 1. SAI PDM-mode DMA capture + integer decimation to PCM for a
  *          digital MEMS mic. No DSL surface — audio is escape-to-C; the MIC
  *          tile wraps level/RMS helpers on top.

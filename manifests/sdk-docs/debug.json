@@ -1,0 +1,94 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@f70bca2",
+  "category": "debug",
+  "label": "Core.Debug",
+  "icon": "⌁",
+  "header": "core_debug.h",
+  "headers": {
+    "core": "core_debug.h",
+    "hal": "hal_debug.h"
+  },
+  "functions": [
+    {
+      "name": "core_debug_init",
+      "signature": "core_debug_init(void)",
+      "returns": "void",
+      "brief": "Initialize SWO debug output using the project's SYSCLK_HZ (no-op on Core.ST.L0).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_debug_print",
+      "signature": "core_debug_print(const char * str)",
+      "returns": "void",
+      "brief": "Print a string via SWO (no formatting).",
+      "params": [
+        {
+          "name": "str",
+          "ctype": "const char *",
+          "description": "NUL-terminated string to send on ITM stimulus port 0."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "hal_debug_init",
+      "signature": "hal_debug_init(uint32_t sysclk_hz)",
+      "returns": "void",
+      "brief": "Initialize SWO debug output. sysclk_hz: system clock frequency",
+      "params": [
+        {
+          "name": "sysclk_hz",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_debug_printf",
+      "signature": "hal_debug_printf(const char * fmt, ...)",
+      "returns": "int",
+      "brief": "Printf via SWO/ITM. Same format as standard printf. On Cortex-M0+ (Core.ST.L0), this is a no-op.",
+      "params": [
+        {
+          "name": "fmt",
+          "ctype": "const char *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_debug_puts",
+      "signature": "hal_debug_puts(const char * str)",
+      "returns": "void",
+      "brief": "Print a string via SWO (no formatting).",
+      "params": [
+        {
+          "name": "str",
+          "ctype": "const char *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_debug_putc",
+      "signature": "hal_debug_putc(char c)",
+      "returns": "void",
+      "brief": "Print a single character via SWO.",
+      "params": [
+        {
+          "name": "c",
+          "ctype": "char"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    }
+  ]
+}
