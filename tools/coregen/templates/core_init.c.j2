@@ -659,12 +659,13 @@ void core_pads_init(void)
         hal_spi_init(&{{ bus.handle }}, {{ bus.instance }}, &_{{ bus.handle }}_cfg);
 {% if bus.cs_map %}
         /* One chip select per tile (config.json tiles[].cs_pad). The tile
-         * bridge (core_tiles_pal) asserts the entry whose id is the `cs` the
-         * driver passes (the tile's instance); an unknown id selects nothing.
+         * bridge (core_tiles_pal/pal2) asserts the entry whose id is the `cs`
+         * the driver passes (a tile's instance; a dual-bus tile's cs_id, its
+         * cfg.spi_cs); an unknown id selects nothing.
          * core_spi_select()/deselect() drive none of these pads. */
         static const hal_spi_cs_t _{{ bus.handle }}_cs_map[] = {
 {% for e in bus.cs_map %}
-            { GPIO{{ e.port }}, {{ e.pin }}, {{ e.id }} },   /* pad {{ e.pad }}: {{ e.tile }} instance {{ e.id }} */
+            { GPIO{{ e.port }}, {{ e.pin }}, {{ e.id }} },   /* pad {{ e.pad }}: {{ e.tile }} {{ e.key }} */
 {% endfor %}
         };
         {{ bus.handle }}.cs_active_low = {{ 1 if bus.cs_active_low else 0 }};

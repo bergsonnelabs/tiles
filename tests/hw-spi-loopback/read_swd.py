@@ -6,6 +6,7 @@
                                         # probe-rs download + reset; quiet wait; read
     python3 read_swd.py --rerun         # write 'R' to g_spi_lb_cmd, wait, read
     python3 read_swd.py --flash TWO_TILES=1         # extra make args: T7 build
+    python3 read_swd.py --flash DUAL=1              # T7 + T8 (dual-bus tile)
     python3 read_swd.py --flash CFG=my-config.json  # another config in this dir
 
 Power the W5 first (see README.md). Needs probe-rs and arm-none-eabi-nm.
@@ -18,8 +19,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ELF = os.path.join(HERE, "build", "hw-spi-loopback.elf")
 FIELDS = ["magic", "verdict", "pass", "fail", "expected", "runs", "sck_fast_hz", "sck_slow_hz",
           "poll_Bps", "dma_Bps", "t5_poll_us", "t5_dma_us", "t5_async_us", "t5_gated_us",
-          "t5_bound_us", "cs_edges", "first_err", "t7_edges_a", "t7_edges_b", "t7_wrong"]
-LOG_LEN = 1600
+          "t5_bound_us", "cs_edges", "first_err", "t7_edges_a", "t7_edges_b", "t7_wrong",
+          "t8_edges_a", "t8_edges_b", "t8_wrong"]
+LOG_LEN = 2048
 
 
 def run(cmd, **kw):

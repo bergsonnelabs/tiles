@@ -14,6 +14,7 @@ up for any project.
 | Core.ST.W5 | `config-w5.json` | pad 6 (PB8, SPI3 MOSI) → pad 7 (PB9, SPI3 MISO) | pad 2 / pad 3 | high, 64 MHz |
 | Core.ST.L4.1, two tiles | `config-2tiles.json` (`make TWO_TILES=1`) | pad 2 → pad 8 | pad 3 / pads 9 and 4 | max, 80 MHz |
 | Core.ST.W5, two tiles | `config-w5-2tiles.json` (`make TILE=Core.ST.W5 TWO_TILES=1`) | pad 6 → pad 7 | pad 2 / pads 3 (PA5) and 4 (PA6) | high, 64 MHz |
+| Core.ST.W5, dual-bus tile | `config-w5-dual.json` (`make TILE=Core.ST.W5 DUAL=1`) | pad 6 → pad 7 | pad 2 / pads 3 and 4; I2C1 on pads 10/11 (no device needed) | high, 64 MHz |
 
 Never use the L4's USB pads (6/7 on the L4.1, 16/17 on the L4.2). The fastest
 SCK the test uses is the fastest the bench supply allows (`LB_SCK_MAX_HZ`): 40 MHz
@@ -33,6 +34,7 @@ level, copy the config into this folder with a different `"clock"` and pass
 | T5 timeout | a transfer that cannot complete returns `HAL_TIMEOUT` within its stall budget, polled, blocking DMA, and async DMA + `core_spi_dma_wait()`; on the L4 also with the SPI clock gated. The next transfer works with no help from the test |
 | T6 pal     | `core_tiles_pal()` `spi_transfer`: a Store.O.128-style READ (0x03 + 3-byte address + 64 data bytes) returns 0 under **one** CS assertion (EXTI on the CS pad counts 2 edges); the same command captured full duplex comes back as sent; the register read/write adapters take one CS assertion each |
 | T7 2 tiles | `TWO_TILES=1` only. Two SPI1 tiles, instance 0 with `cs_pad` 9 (PA4) and instance 1 with `cs_pad` 4 (PB6), so coregen builds a chip-select map. Both pads are outputs reading high right after `core_init()`. Five rounds of `spi_transfer`, `spi_read`, `spi_write` and a full-duplex exchange under `hal_spi_select_id()`, with `cs` 0 then 1: each call gives exactly one falling edge on its own pad (EXTI4 / EXTI6) and none on the other, and the data is right. `cs` 7, 2 and 255 return -1 and move neither pad |
+| T8 dual    | `DUAL=1` (W5) only. A single-bus SPI3 tile (instance 0, pad 3) and a dual-bus tile (I2C1 + SPI3, like Sense.CAM.P; `cs_pad` 4, `cs_id` 1 by coregen's default). The plain tile is driven through `core_tiles_pal(&core_spi3)` with cs 0, the dual-bus one through `core_tiles_pal2(&core_i2c1, &core_spi3)` with cs 1 (its `cfg.spi_cs`), with the same per-pad edge counts, data and unknown-cs checks as T7. T7 runs in this build too |
 
 **How T5 forces the stall:** the SPI is switched to an unselected slave
 (`MSTR` / `MASTER` cleared, software SS still high), so nothing drives SCK and
@@ -52,6 +54,7 @@ make && make flash-serial               # Core.ST.L4.1 (exit 2 = old firmware: m
 make distclean && make TILE=Core.ST.L4.2
 make distclean && make TILE=Core.ST.W5  # result over SWD, see below
 python3 read_swd.py --flash TWO_TILES=1 # W5: build, flash over SWD, wait, read (adds T7)
+python3 read_swd.py --flash DUAL=1      # W5: adds T7 and T8 (dual-bus tile)
 make distclean && make TWO_TILES=1 && make TWO_TILES=1 flash-serial   # adds T7
 ```
 

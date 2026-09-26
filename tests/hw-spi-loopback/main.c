@@ -23,6 +23,10 @@
  *               their own cs_pad: every bridge call asserts only its tile's
  *               pad (EXTI counts falling edges on both), an unknown cs selects
  *               nothing and returns -1, and both pads are high after init
+ *   T8 dual     (config-w5-dual.json, `make TILE=Core.ST.W5 DUAL=1`) a plain
+ *               SPI3 tile through core_tiles_pal() and a dual-bus tile (I2C1 +
+ *               SPI3, its cs_id as the cs) through core_tiles_pal2(): each
+ *               asserts only its own pad; T7 runs on the same two pads too
  *
  * The result goes to USB CDC every 3 s on the L4 (send 'R' to run again) and
  * to g_spi_lb / g_spi_lb_log in RAM on every Core (read them over SWD, or
@@ -56,7 +60,17 @@
 #define LB_SCK   3      /* Core.ST.L4.1: PA1  SPI1.CLK */
 #endif
 /* LB_CS2 (Makefile, TWO_TILES=1): the second tile's chip select, pad 4 (PB6).
- * Tile 0 (instance 0) then selects on LB_CS, tile 1 (instance 1) on LB_CS2. */
+ * Tile 0 (instance 0) then selects on LB_CS, tile 1 (instance 1) on LB_CS2.
+ * LB_DUAL (DUAL=1, W5): the tile on LB_CS2 is a dual-bus tile (I2C1 + SPI3)
+ * whose chip-select id is its cs_id, LB_DUAL_CS; T7 and T8 both run. */
+#define LB_STR_(x) #x
+#define LB_STR(x)  LB_STR_(x)
+#ifdef LB_DUAL
+#ifndef LB_DUAL_CS
+#define LB_DUAL_CS 1    /* coregen's default: the smallest id the plain tile (0) leaves */
+#endif
+#define LB_I2C_H  (&core_i2c1)
+#endif
 
 #if defined(STM32WBA55xx)
 #define SPI_H     (&core_spi3)
@@ -74,7 +88,11 @@
 #define T_TIMEOUT (1u << 5)
 #define T_PAL     (1u << 6)
 #define T_TWO     (1u << 7)
-#ifdef LB_CS2
+#define T_DUAL    (1u << 8)
+#if defined(LB_DUAL)
+#define EXPECTED  0x1FFu
+#define N_TESTS   9
+#elif defined(LB_CS2)
 #define EXPECTED  0xFFu
 #define N_TESTS   8
 #else
@@ -99,10 +117,12 @@ typedef struct {
     uint32_t first_err;                   /* test << 24 | case << 12 | size */
     uint32_t t7_edges_a, t7_edges_b;      /* T7: falling edges on LB_CS / LB_CS2 */
     uint32_t t7_wrong;                    /* T7: operations that moved the wrong pad */
+    uint32_t t8_edges_a, t8_edges_b;      /* T8: the same, plain tile / dual-bus tile */
+    uint32_t t8_wrong;
 } spi_lb_result_t;
 
 __attribute__((used)) volatile spi_lb_result_t g_spi_lb;
-__attribute__((used)) char g_spi_lb_log[1600];
+__attribute__((used)) char g_spi_lb_log[2048];
 __attribute__((used)) volatile uint32_t g_spi_lb_cmd;   /* write 0x52 ('R') over SWD to run again */
 static uint32_t s_log_len;
 
@@ -510,88 +530,146 @@ static volatile uint32_t s_fall_a, s_fall_b;
 static void on_fall_a(void *ctx) { (void)ctx; s_fall_a++; }
 static void on_fall_b(void *ctx) { (void)ctx; s_fall_b++; }
 
-#define T7_ROUNDS 5u
-#define T7_OPS    4u    /* spi_transfer, spi_read, spi_write, full duplex under select_id */
+#define PAIR_ROUNDS 5u
+#define PAIR_OPS    4u  /* spi_transfer, spi_read, spi_write, full duplex under select_id */
 
-static void t7_two_tiles(void)
+typedef struct {
+    uint32_t a, b;          /* falling edges on LB_CS / LB_CS2 */
+    uint32_t wrong;         /* operations that moved the wrong pad (or both) */
+    uint32_t unk_edges;     /* edges during the unknown-cs calls */
+    int      u[3];          /* rc of the unknown-cs calls (want -1) */
+    int      data_ok;
+} pair_res_t;
+
+/* Two tiles on one bus. Tile A (pad LB_CS) is driven through pal_a with
+ * cs_a, tile B (pad LB_CS2) through pal_b with cs_b, PAIR_ROUNDS times each
+ * op: every call must give exactly one falling edge on its own pad and none
+ * on the other, with the data right. Then cs values in no map entry must
+ * return -1 and move neither pad. Returns 1 on success. Test number tn tags
+ * err_once(). */
+static int pair_run(uint32_t tn, tiles_pal_t *pal_a, uint8_t cs_a,
+                    tiles_pal_t *pal_b, uint8_t cs_b, pair_res_t *res)
 {
-    int ok = 1, data_ok = 1;
-    tiles_pal_t *pal = core_tiles_pal(SPI_H);
-    if (!pal || !pal->spi_transfer || SPI_H->cs_map_len != 2) {
-        mark(T_TWO, 0); err_once(7, 0, SPI_H->cs_map_len);
-        lb_log("  T7 2 tiles FAIL  no 2-entry CS map on the bus (have %u)\r\n", SPI_H->cs_map_len);
-        return;
-    }
+    int ok = 1;
+    memset(res, 0, sizeof *res);
+    res->data_ok = 1;
     /* Falling edge = one assertion. hal_exti_enable keeps the pads outputs. */
     if (hal_exti_enable(LB_CS, HAL_EXTI_FALLING, on_fall_a, NULL) != HAL_OK ||
-        hal_exti_enable(LB_CS2, HAL_EXTI_FALLING, on_fall_b, NULL) != HAL_OK) { ok = 0; err_once(7, 9, 0); }
+        hal_exti_enable(LB_CS2, HAL_EXTI_FALLING, on_fall_b, NULL) != HAL_OK) { ok = 0; err_once(tn, 9, 0); }
 
     static const uint8_t cmd[4] = { 0x03, 0x12, 0x34, 0x56 };
     uint8_t data[16], tx[32], rx[32];
-    uint32_t tot_a = 0, tot_b = 0, wrong = 0;
-    for (uint32_t r = 0; r < T7_ROUNDS; r++) {
-        for (uint8_t cs = 0; cs < 2; cs++) {
-            for (uint32_t op = 0; op < T7_OPS; op++) {
+    for (uint32_t r = 0; r < PAIR_ROUNDS; r++) {
+        for (uint32_t side = 0; side < 2; side++) {
+            tiles_pal_t *pal = side ? pal_b : pal_a;
+            uint8_t cs = side ? cs_b : cs_a;
+            for (uint32_t op = 0; op < PAIR_OPS; op++) {
                 uint32_t a0 = s_fall_a, b0 = s_fall_b;
                 int rc;
                 memset(data, 0, sizeof data);
                 if (op == 0) {          /* command + address, then read (loopback: the 0xFF fill) */
                     rc = pal->spi_transfer(pal->handle, cs, cmd, 4, data, sizeof data);
-                    for (uint32_t i = 0; i < sizeof data; i++) if (data[i] != 0xFF) { data_ok = 0; err_once(7, 0x11, i); break; }
+                    for (uint32_t i = 0; i < sizeof data; i++) if (data[i] != 0xFF) { res->data_ok = 0; err_once(tn, 0x11, i); break; }
                 } else if (op == 1) {   /* register read */
                     rc = pal->spi_read(pal->handle, cs, 0x0F, data, 6);
-                    for (uint32_t i = 0; i < 6; i++) if (data[i] != 0xFF) { data_ok = 0; err_once(7, 0x12, i); break; }
+                    for (uint32_t i = 0; i < 6; i++) if (data[i] != 0xFF) { res->data_ok = 0; err_once(tn, 0x12, i); break; }
                 } else if (op == 2) {   /* register write */
                     rc = pal->spi_write(pal->handle, cs, 0x20, cmd, 4);
                 } else {                /* full duplex under this tile's CS: rx == tx */
-                    fill_pattern(tx, sizeof tx, r * 16u + cs * 4u + op);
+                    fill_pattern(tx, sizeof tx, tn * 256u + r * 16u + side * 4u + op);
                     memset(rx, 0, sizeof rx);
                     rc = hal_spi_select_id(SPI_H, cs);
                     if (rc == 0) {
                         rc = core_spi_exchange(SPI_H, tx, rx, sizeof tx) == HAL_OK ? 0 : -1;
                         hal_spi_deselect_id(SPI_H, cs);
                     }
-                    if (memcmp(tx, rx, sizeof tx)) { data_ok = 0; err_once(7, 0x13, r); }
+                    if (memcmp(tx, rx, sizeof tx)) { res->data_ok = 0; err_once(tn, 0x13, r); }
                 }
                 core_delay_us(10);
                 uint32_t da = s_fall_a - a0, db = s_fall_b - b0;
-                tot_a += da; tot_b += db;
-                if (rc != 0) { ok = 0; err_once(7, 0x20 + op, r); }
-                if (da != (cs == 0 ? 1u : 0u) || db != (cs == 1 ? 1u : 0u)) {
-                    ok = 0; wrong++; err_once(7, 0x30 + op * 2u + cs, (da << 4) | db);
+                res->a += da; res->b += db;
+                if (rc != 0) { ok = 0; err_once(tn, 0x20 + op, r); }
+                if (da != (side == 0 ? 1u : 0u) || db != (side == 1 ? 1u : 0u)) {
+                    ok = 0; res->wrong++; err_once(tn, 0x30 + op * 2u + side, (da << 4) | db);
                 }
-                if (!pad_high(LB_CS) || !pad_high(LB_CS2)) { ok = 0; err_once(7, 0x40 + op, cs); }
+                if (!pad_high(LB_CS) || !pad_high(LB_CS2)) { ok = 0; err_once(tn, 0x40 + op, side); }
             }
         }
     }
 
     /* A cs that is in no map entry: -1, and neither pad moves. */
     uint32_t a0 = s_fall_a, b0 = s_fall_b;
-    int u1 = pal->spi_transfer(pal->handle, 7, cmd, 4, data, 4);
-    int u2 = pal->spi_read(pal->handle, 2, 0x0F, data, 1);
-    int u3 = pal->spi_write(pal->handle, 0xFF, 0x20, cmd, 1);
+    res->u[0] = pal_a->spi_transfer(pal_a->handle, 7, cmd, 4, data, 4);
+    res->u[1] = pal_b->spi_read(pal_b->handle, 2, 0x0F, data, 1);
+    res->u[2] = pal_b->spi_write(pal_b->handle, 0xFF, 0x20, cmd, 1);
     core_delay_us(10);
-    uint32_t unk_edges = (s_fall_a - a0) + (s_fall_b - b0);
-    if (u1 != -1 || u2 != -1 || u3 != -1 || unk_edges) { ok = 0; err_once(7, 0x50, unk_edges); }
+    res->unk_edges = (s_fall_a - a0) + (s_fall_b - b0);
+    if (res->u[0] != -1 || res->u[1] != -1 || res->u[2] != -1 || res->unk_edges) {
+        ok = 0; err_once(tn, 0x50, res->unk_edges);
+    }
 
     hal_exti_disable(LB_CS);
     hal_exti_disable(LB_CS2);
-    if (s_cs_high_at_init != 1) { ok = 0; err_once(7, 0x60, 0); }
+    if (s_cs_high_at_init != 1) { ok = 0; err_once(tn, 0x60, 0); }
+    const uint32_t want = PAIR_ROUNDS * PAIR_OPS;
+    if (res->a != want || res->b != want) ok = 0;
+    return ok && res->data_ok;
+}
 
-    const uint32_t want = T7_ROUNDS * T7_OPS;
-    if (tot_a != want || tot_b != want) ok = 0;
-    ok = ok && data_ok;
-    g_spi_lb.t7_edges_a = tot_a;
-    g_spi_lb.t7_edges_b = tot_b;
-    g_spi_lb.t7_wrong = wrong;
-    mark(T_TWO, ok);
-    lb_log("  T7 2 tiles %s  pad %d (cs 0): %lu falling edges, pad %d (cs 1): %lu (want %lu each); "
+static void pair_log(const char *name, int ok, const char *a_how, const char *b_how, const pair_res_t *r)
+{
+    lb_log("  %s %s  pad %d (%s): %lu falling edges, pad %d (%s): %lu (want %lu each); "
            "ops that moved the wrong pad: %lu; unknown cs 7/2/255 -> rc %d/%d/%d, %lu edges; "
            "both CS high (outputs) after init: %s; loopback data %s\r\n",
-           ok ? "PASS" : "FAIL", LB_CS, (unsigned long)tot_a, LB_CS2, (unsigned long)tot_b,
-           (unsigned long)want, (unsigned long)wrong, u1, u2, u3, (unsigned long)unk_edges,
-           s_cs_high_at_init == 1 ? "yes" : "NO", data_ok ? "OK" : "BAD");
+           name, ok ? "PASS" : "FAIL", LB_CS, a_how, (unsigned long)r->a, LB_CS2, b_how,
+           (unsigned long)r->b, (unsigned long)(PAIR_ROUNDS * PAIR_OPS), (unsigned long)r->wrong,
+           r->u[0], r->u[1], r->u[2], (unsigned long)r->unk_edges,
+           s_cs_high_at_init == 1 ? "yes" : "NO", r->data_ok ? "OK" : "BAD");
 }
+
+/* T7: two single-bus tiles, instance 0 on LB_CS and instance 1 on LB_CS2,
+ * both through core_tiles_pal(). */
+static void t7_two_tiles(void)
+{
+    tiles_pal_t *pal = core_tiles_pal(SPI_H);
+    if (!pal || !pal->spi_transfer || SPI_H->cs_map_len != 2) {
+        mark(T_TWO, 0); err_once(7, 0, SPI_H->cs_map_len);
+        lb_log("  T7 2 tiles FAIL  no 2-entry CS map on the bus (have %u)\r\n", SPI_H->cs_map_len);
+        return;
+    }
+    pair_res_t r;
+    int ok = pair_run(7, pal, 0, pal, 1, &r);
+    g_spi_lb.t7_edges_a = r.a;
+    g_spi_lb.t7_edges_b = r.b;
+    g_spi_lb.t7_wrong = r.wrong;
+    mark(T_TWO, ok);
+    pair_log("T7 2 tiles", ok, "cs 0", "cs 1", &r);
+}
+
+#ifdef LB_DUAL
+/* T8: a single-bus SPI tile (instance 0, pad LB_CS) through core_tiles_pal()
+ * and a dual-bus tile (I2C + this SPI bus, cs_id LB_DUAL_CS, pad LB_CS2)
+ * through core_tiles_pal2(), as a Sense.CAM.P driver would with
+ * cfg.spi_cs = its cs_id. The I2C side is only carried, never used. */
+static void t8_dual_bus(void)
+{
+    tiles_pal_t *plain = core_tiles_pal(SPI_H);
+    tiles_pal_t *dual = core_tiles_pal2(LB_I2C_H, SPI_H);
+    if (!plain || !dual || !dual->spi_transfer || !(dual->buses & TILES_BUS_I2C) ||
+        SPI_H->cs_map_len != 2 || dual == plain) {
+        mark(T_DUAL, 0); err_once(8, 0, SPI_H->cs_map_len);
+        lb_log("  T8 dual    FAIL  no dual PAL or no 2-entry CS map (have %u)\r\n", SPI_H->cs_map_len);
+        return;
+    }
+    pair_res_t r;
+    int ok = pair_run(8, plain, 0, dual, LB_DUAL_CS, &r);
+    g_spi_lb.t8_edges_a = r.a;
+    g_spi_lb.t8_edges_b = r.b;
+    g_spi_lb.t8_wrong = r.wrong;
+    mark(T_DUAL, ok);
+    pair_log("T8 dual   ", ok, "pal cs 0", "pal2 cs_id " LB_STR(LB_DUAL_CS), &r);
+}
+#endif
 #endif /* LB_CS2 */
 
 static uint32_t run_all(void)
@@ -620,6 +698,9 @@ static uint32_t run_all(void)
         t6_pal();
 #ifdef LB_CS2
         t7_two_tiles();
+#endif
+#ifdef LB_DUAL
+        t8_dual_bus();
 #endif
         uint32_t missing = (EXPECTED & ~s_pass) | s_fail;
         uint32_t first = 0;

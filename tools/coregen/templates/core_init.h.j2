@@ -137,7 +137,13 @@ void studio_dispatch_core_usb(void);
  *
  *   // Find and initialize each tile
 {% for tile in tiles_config %}
+{% if tile.pal2 %}
+ *   // {{ tile.type }} uses two buses; its SPI chip select is cs_id {{ tile.cs_id }}:
+ *   //   pass it in the driver's cfg (Sense.CAM.P: cfg.spi_cs = {{ tile.cs_id }})
+ *   {{ tile.prefix }}_init({{ tile.pal2 }}, {{ tile.instance }}, &{{ tile.handle }}, &cfg);
+{% else %}
  *   {{ tile.prefix }}_init({{ tile.pal_handle }}, {{ tile.instance }}, &{{ tile.handle }}, NULL);
+{% endif %}
 {% endfor %}
  */
 {% endif %}
