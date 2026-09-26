@@ -1,0 +1,887 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@6f27e78",
+  "tile": "Sense.T.C",
+  "palette": {
+    "label": "Sense.T.C",
+    "icon": "◕"
+  },
+  "driver": {
+    "prefix": "tile_sense_t_c",
+    "header": "tile_sense_t_c.h",
+    "version": "1.4.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_t_c_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_sense_t_c_process",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read pending touch/proximity events and update internal state.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_event"
+      ],
+      "symbol": "tile_sense_t_c_on_event",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Register or change the event callback for touch/proximity events.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?sense_t_c_event_cb_t",
+          "description": "Callback function (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "type": "?void *",
+          "description": "User context passed to callback"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_sense_t_c_sleep",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Enter low-power sleep mode (Halt, about 2 µA).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_sense_t_c_wake",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Wake from sleep mode.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_status"
+      ],
+      "symbol": "tile_sense_t_c_get_status",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the cached System Status word from the last process() call.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_gestures"
+      ],
+      "symbol": "tile_sense_t_c_get_gestures",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the Gesture Status word (a live read, not cached).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_touched"
+      ],
+      "symbol": "tile_sense_t_c_is_touched",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Check if the given channel is currently touched.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "0 = pad 8 electrode, 1 = tile surface, 2 = not routed"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_prox"
+      ],
+      "symbol": "tile_sense_t_c_is_prox",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Check if the given channel currently reports proximity.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "0 = pad 8 electrode, 1 = tile surface, 2 = not routed"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_counts"
+      ],
+      "symbol": "tile_sense_t_c_get_counts",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the filtered counts value for a channel (0x13/0x15/0x17).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "Channel"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_lta"
+      ],
+      "symbol": "tile_sense_t_c_get_lta",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the long-term average (LTA) for a channel.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "Channel"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_delta"
+      ],
+      "symbol": "tile_sense_t_c_get_delta",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the delta (counts - LTA) for a channel.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "Channel"
+        }
+      ],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_slider"
+      ],
+      "symbol": "tile_sense_t_c_get_slider",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the slider position (if a slider is configured).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_thresholds"
+      ],
+      "symbol": "tile_sense_t_c_set_thresholds",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set proximity and touch thresholds for a channel.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            2
+          ],
+          "description": "Channel"
+        },
+        {
+          "name": "prox_thresh",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Prox threshold, delta counts (0 = unchanged)"
+        },
+        {
+          "name": "touch_thresh",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Touch threshold, x/256 of LTA (0 = unchanged)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_touch_threshold"
+      ],
+      "symbol": "tile_sense_t_c_set_touch_threshold",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the touch threshold on every enabled channel.",
+      "params": [
+        {
+          "name": "threshold",
+          "type": "int",
+          "range": [
+            1,
+            255
+          ],
+          "description": "x/256 of the LTA (default 40, about 16 %)"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Touch threshold",
+          "tier": "basic",
+          "scope": "config",
+          "default": 40
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_prox_threshold"
+      ],
+      "symbol": "tile_sense_t_c_set_prox_threshold",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the proximity threshold on every enabled channel.",
+      "params": [
+        {
+          "name": "threshold",
+          "type": "int",
+          "range": [
+            1,
+            255
+          ],
+          "description": "delta counts (default 20)"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Proximity threshold",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 20
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_power_mode"
+      ],
+      "symbol": "tile_sense_t_c_set_power_mode",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the device power mode.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Power mode (System Control bits 6-4); init selects AUTO",
+          "choices": [
+            {
+              "name": "SENSE_T_C_POWER_NORMAL",
+              "value": 0,
+              "label": "Normal power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_LOW",
+              "value": 1,
+              "label": "Low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_ULTRA_LOW",
+              "value": 2,
+              "label": "Ultra-low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_HALT",
+              "value": 3,
+              "label": "Halt (lowest power)"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO",
+              "value": 4,
+              "label": "Auto power mode switching"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO_NO_ULP",
+              "value": 5,
+              "label": "Auto mode, skip ultra-low power"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Power mode",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 4
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "enable_events"
+      ],
+      "symbol": "tile_sense_t_c_enable_events",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the events-enable mask (which events drive RDY pulses).",
+      "params": [
+        {
+          "name": "mask",
+          "type": "int",
+          "description": "Event bits (IQS323_STATUS_*_EVENT); init enables touch + prox"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "ati"
+      ],
+      "symbol": "tile_sense_t_c_ati",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Trigger an ATI (auto-tuning) cycle and wait for completion.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_ati_setup"
+      ],
+      "symbol": "tile_sense_t_c_set_ati_setup",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the per-channel ATI setup register (0x36 + ch*0x10).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0–2"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "Raw 16-bit ATI Setup register value"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_counts_filter"
+      ],
+      "symbol": "tile_sense_t_c_set_counts_filter",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the global counts-filter beta register (0xB0).",
+      "params": [
+        {
+          "name": "beta",
+          "type": "int",
+          "description": "Raw 16-bit Counts Filter Betas register value"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_conversion_freq"
+      ],
+      "symbol": "tile_sense_t_c_set_conversion_freq",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set per-channel conversion frequency (0x31 + ch*0x10).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0–2"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "Raw 16-bit Conversion Frequency register value"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_channel_mode"
+      ],
+      "symbol": "tile_sense_t_c_set_channel_mode",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Configure a channel's role in the Reference UI.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0–2"
+        },
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Channel role",
+          "choices": [
+            {
+              "name": "SENSE_T_C_CHANNEL_INDEPENDENT",
+              "value": 0,
+              "label": "Stand-alone sensing channel"
+            },
+            {
+              "name": "SENSE_T_C_CHANNEL_FOLLOWER",
+              "value": 1,
+              "label": "Subtracts a reference channel's LTA"
+            },
+            {
+              "name": "SENSE_T_C_CHANNEL_REFERENCE",
+              "value": 2,
+              "label": "Acts as ambient reference for followers"
+            }
+          ]
+        },
+        {
+          "name": "reference_id",
+          "type": "int",
+          "description": "Which channel to follow (only used for FOLLOWER)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_comm_mode"
+      ],
+      "symbol": "tile_sense_t_c_set_comm_mode",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Switch between event-mode and streaming-mode I²C.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Event or streaming",
+          "choices": [
+            {
+              "name": "SENSE_T_C_COMM_STREAM",
+              "value": 0,
+              "label": "Continuous reporting at the configured power-mode rate (the chip's reset default)"
+            },
+            {
+              "name": "SENSE_T_C_COMM_EVENT",
+              "value": 1,
+              "label": "RDY pulses only on enabled events (what init() selects)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "I2C reporting",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 1
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_touched_any"
+      ],
+      "symbol": "tile_sense_t_c_is_touched_any",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Check whether *any* channel is currently touched.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_touch"
+      ],
+      "symbol": "tile_sense_t_c_wait_for_touch",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Block until any channel is touched (or timeout elapses).",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "description": "Maximum time to wait, in milliseconds"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_gesture"
+      ],
+      "symbol": "tile_sense_t_c_wait_for_gesture",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Block until any gesture fires (or timeout elapses).",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "description": "Maximum time to wait, in milliseconds"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_slider_pct"
+      ],
+      "symbol": "tile_sense_t_c_read_slider_pct",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read the slider position scaled to 0–100 percent.",
+      "params": [
+        {
+          "name": "out_pct",
+          "type": "int",
+          "out_scalar": true,
+          "description": "Pointer to receive the percentage (0–100)"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "c_out_scalars": [
+        {
+          "name": "out_pct",
+          "type": "uint8_t"
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_reg"
+      ],
+      "symbol": "tile_sense_t_c_read_reg",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read a raw 16-bit IQS323 register.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Register address (datasheet §9 memory map)"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_reg"
+      ],
+      "symbol": "tile_sense_t_c_write_reg",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Write a raw 16-bit IQS323 register.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Register address (datasheet §9 memory map)"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "16-bit value"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reseed"
+      ],
+      "symbol": "tile_sense_t_c_reseed",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Force the long-term-average baseline to re-snap to current counts.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_report_rate"
+      ],
+      "symbol": "tile_sense_t_c_set_report_rate",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the report rate (conversion interval) for a power mode.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Which power mode's rate to set (NORMAL/LOW/ULTRA_LOW/HALT).",
+          "choices": [
+            {
+              "name": "SENSE_T_C_POWER_NORMAL",
+              "value": 0,
+              "label": "Normal power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_LOW",
+              "value": 1,
+              "label": "Low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_ULTRA_LOW",
+              "value": 2,
+              "label": "Ultra-low power mode"
+            },
+            {
+              "name": "SENSE_T_C_POWER_HALT",
+              "value": 3,
+              "label": "Halt (lowest power)"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO",
+              "value": 4,
+              "label": "Auto power mode switching"
+            },
+            {
+              "name": "SENSE_T_C_POWER_AUTO_NO_ULP",
+              "value": 5,
+              "label": "Auto mode, skip ultra-low power"
+            }
+          ]
+        },
+        {
+          "name": "ms",
+          "type": "int",
+          "description": "Report interval in milliseconds (0-3000)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_power_timeout"
+      ],
+      "symbol": "tile_sense_t_c_set_power_timeout",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Set the auto power-mode step-down timeout.",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            0,
+            65000
+          ],
+          "description": "Inactivity timeout in milliseconds (0 = off)."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Idle time before low power",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 2000
+        }
+      ],
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_compensation"
+      ],
+      "symbol": "tile_sense_t_c_get_compensation",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Read a channel's compensation (CAPDAC-equivalent offset).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-2."
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_compensation"
+      ],
+      "symbol": "tile_sense_t_c_set_compensation",
+      "header": "tile_sense_t_c.h",
+      "category": "tile",
+      "description": "Override a channel's compensation value + divider.",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "description": "0-2."
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "Compensation value (0-1023)."
+        },
+        {
+          "name": "divider",
+          "type": "int",
+          "description": "Compensation divider (0-31)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x44",
+        "is_default": true
+      }
+    ]
+  }
+}
