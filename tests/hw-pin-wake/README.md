@@ -5,19 +5,33 @@ Bench test for pin-change wake from Stop (`core_stop_until_on_change`,
 
 | Test | What passes |
 |------|-------------|
-| T1 pad loopback     | drive PA9 high/low, pad 4 (PB6) reads back high/low, in run mode |
+| T1 pad loopback     | pad 4 (PB6) reads high after `core_init()` (coregen drives PC15 for `"pullups": ["pad4"]`), then follows PC15 high/low, in run mode |
 | T2 no-GPIO fast-fail | `core_stop_until_on_change(1, EDGE_FALLING)` (pad 1 = GND, no GPIO) returns in under 100 ms instead of sleeping |
 | T3 wake from Stop   | a human shorts pad 4 to pad 1 (GND); the Core actually wakes from Stop, having slept more than one watchdog chunk (2.5 s), with no watchdog reset. Unattended, the 60 s timeout ends it and T3 reports FAIL ("no touch") |
-| T4 already at level | PA9 low holds pad 4 low; a falling-edge wait returns 1 in under 100 ms without entering Stop, with `core_stop_until_on_change_timeout()` and then the untimed `core_stop_until_on_change()`. Skipped (FAIL) when T1 failed, since without the loopback the pad isn't low |
+| T4 already at level | PC15 low holds pad 4 low; a falling-edge wait returns 1 in under 100 ms without entering Stop, with `core_stop_until_on_change_timeout()` and then the untimed `core_stop_until_on_change()`. Skipped (FAIL) when T1 failed, since without the loopback the pad isn't low |
 | T5 timed wait       | pad 4 held high; `core_stop_until_on_change_timeout(4, EDGE_FALLING, 3000)` returns 0 after 2.5-4 s of Stop, no watchdog reset |
+
+## Unattended run
+
+`make EXTRA_CFLAGS=-DPIN_WAKE_NO_T3 && make EXTRA_CFLAGS=-DPIN_WAKE_NO_T3 flash-serial`
+runs only the automated tests (T1, T2, T4, T5) and reports T3 as skipped.
+Every wait is bounded: T4's untimed call runs only after the timed one
+returned at once, and T5 is a 3 s timed wait.
 
 ## Hardware
 
-- Pad 4 (PB6) is wired through a 2.2 kOhm on-tile resistor to chip pin PA9.
-  Driving PA9 high/low pulls pad 4 high/low.
+- **Needs a production Core.ST.L4.1 (rev b) with the pull-ups fitted.** Early
+  prototype L4 boards have no 2.2 kOhm pull-ups on pads 4/5; there T1 fails
+  (the pads follow only the internal pulls), T4 is skipped, and that is the
+  board, not the SDK (seen 2026-09-25).
+- Pad 4 (PB6) has a 2.2 kOhm on-tile pull-up switched by chip pin **PC15**
+  (`definitions/Core-ST-L4-1-b.json`, `config.pullups`: pad 4 via PC15, pad 5
+  via PA9). Driving PC15 high/low pulls pad 4 high/low. `config.json` turns
+  it on through coregen (`"pullups": ["pad4"]`). Until 2026-09-25 the test
+  drove PA9, which is pad 5's.
 - Pad 1 is GND, pad 10 is V+. The onboard LED is PA8, active-high.
-- Nothing that runs in Stop can drive PA9, so a real wake-from-Stop edge needs
-  a human: briefly touch pad 4 to pad 1 (GND) with tweezers while PA9 holds
+- Nothing that runs in Stop can drive PC15, so a real wake-from-Stop edge needs
+  a human: briefly touch pad 4 to pad 1 (GND) with tweezers while PC15 holds
   the pull-up (~1.5 mA through the 2.2k — safe).
 
 ## About T2 and T4 — the "already at the wake level" case
@@ -40,7 +54,7 @@ Stop, checked against a 100 ms bound.
 
 ## T3 — the real wake-from-Stop proof
 
-The "within 30 s" prompt is a *get-ready* cue: the Core drives PA9 high
+The "within 30 s" prompt is a *get-ready* cue: the Core drives PC15 high
 (pull-up on), prints the prompt, blinks the LED fast for ~30 s while feeding
 the watchdog, then calls `core_stop_until_on_change_timeout(4, EDGE_FALLING,
 60000)`. It waits up to 60 s for the edge; with nobody at the bench it times
@@ -60,8 +74,8 @@ first chunk is scored "too fast" and retried, up to 5 attempts, so a human
 who is consistently faster than 2.5 s (or who never touches the pad at all)
 can't spin the test forever — it gives up and reports FAIL after the 5th.
 
-USB CDC doesn't reliably survive Stop on the L4 (known issue — see
-`hw-sleep-cycle`), so, like that test, progress is kept in backup registers
+Like `hw-sleep-cycle` (whose USB-across-Stop workaround predates the
+2026-09-26 USB fixes), progress is kept in backup registers
 and the Core does its own software reset after every Stop attempt to get a
 clean re-enumeration before printing again. `core_watchdog_caused_reset()` is
 checked on every boot; a real watchdog reset (as opposed to the deliberate
@@ -115,9 +129,13 @@ TAMP_BKPxR address on this Core).
 
 ## What a failure points at
 
-- T1: the PA9<->pad 4 loopback wiring, or the pad-4 GPIO input config. T4
-  depends on it and is skipped when it fails. (Bench, 2026-09-25: this
-  board read pad 4 low with PA9 high and low.)
+- T1: the PC15 -> 2.2k -> pad 4 pull-up, or the pad-4 GPIO input config. T4
+  depends on it and is skipped when it fails. Bench, 2026-09-25 (board with
+  USB serial 005D002A343050102039324B): T1 FAIL. PC15 and PA9 both toggle
+  (IDR read back), but pads 4 and 5 follow only the MCU's internal ~40k pull,
+  up or down, whatever PC15/PA9 drive: no 2.2k reaches PB6/PB7 on that board
+  (resistors not fitted, or the board doesn't match the definition). The
+  earlier "pad 4 low with PA9 high and low" was the same symptom.
 - T4: the level check after arming in `core_stop_until_on_change_timeout`.
 - T5: the timeout path (RTC-measured, chunked with the watchdog).
 - T2: `core_pad_on_change`/`hal_pad_lookup` no longer failing fast for a

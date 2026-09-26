@@ -36,6 +36,7 @@
 #endif
 
 #include "hal_usb_cdc.h"
+#include "ll_iwdg.h"
 #include <stdio.h>    /* snprintf, printf — commonly used with USB serial output */
 
 /** Initialize USB CDC. Device appears as /dev/tty.usbmodem* on the host. */
@@ -50,7 +51,28 @@ static inline int core_usb_connected(void)
     return hal_usb_cdc_connected();
 }
 
-/** Transmit data (blocking). Returns bytes sent, or -1 if not configured. */
+/**
+ * Wait up to `timeout_ms` for a host terminal to open the port (DTR set).
+ * Feeds the watchdog while it waits. Not needed just to see early output:
+ * on Core.ST.L4 text printed before the port opens is kept (up to
+ * HAL_USB_CDC_TX_QUEUE_SIZE bytes) and sent when it does.
+ *
+ * @param timeout_ms Longest wait in milliseconds; 0 only checks.
+ * @return 1 if a terminal is connected, 0 on timeout.
+ */
+static inline int core_usb_wait_host(uint32_t timeout_ms)
+{
+    uint32_t t0 = hal_tick();
+    while (!hal_usb_cdc_connected()) {
+        if ((uint32_t)(hal_tick() - t0) >= timeout_ms) return 0;
+        ll_iwdg_refresh();                /* harmless if the watchdog isn't running */
+    }
+    return 1;
+}
+
+/** Transmit data. Core.ST.L4: queued, never waits long (see hal_usb_cdc_write);
+ * returns bytes queued, -1 before init. Core.ST.H5: blocking; bytes sent, or
+ * -1 with no terminal. */
 static inline int core_usb_write(const uint8_t *buf, uint16_t len)
 {
     return hal_usb_cdc_write(buf, len);

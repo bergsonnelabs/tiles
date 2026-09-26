@@ -76,11 +76,12 @@
 #define SU_HANDOFF_ADDR         0x20007000UL
 #define SU_STACK_TOP            0x20009FE0UL
 
-#define SU_HANDOFF_MAGIC        0x31485553UL   /* "SUH1" */
+#define SU_HANDOFF_MAGIC        0x32485553UL   /* "SUH2": serial[] added */
 
 /* Everything the flasher needs to keep answering the host as the same USB
  * device. Pointers reference the app's const data in flash, which the flasher
- * copies into its own RAM before it erases anything. */
+ * copies into its own RAM before it erases anything, or (the serial number,
+ * built from the chip UID at run time) a string inside this block. */
 typedef struct {
     uint32_t       magic;
     const uint8_t *dev_desc;
@@ -93,6 +94,7 @@ typedef struct {
     uint16_t       hid_report_desc_len;
     uint8_t        line_coding[7];    /* current CDC line coding (the trigger) */
     uint8_t        configured;        /* SET_CONFIGURATION already done */
+    char           serial[26];        /* NUL-terminated serial; strings[2] may point here */
 } su_handoff_t;
 
 #endif /* SU_PROTOCOL_H */

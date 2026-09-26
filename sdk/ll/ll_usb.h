@@ -18,8 +18,9 @@
  *      (PMA_ACCESS=1, 2x16 scheme — no stride doubling).
  *      Use ll_usb_pma_write/read() — do not access PMA directly.
  *
- *   3. EP register writes must preserve "invariant" bits and clear
- *      "rc_w0" (write-0-to-clear) bits. Use ll_usb_ep_reg_write().
+ *   3. EP register writes must preserve the rw bits, write 1 to the rc_w0
+ *      CTR flags they don't mean to clear, and set toggle bits by XOR.
+ *      Use the ll_usb_ep_* helpers below.
  */
 
 #ifndef LL_USB_H
@@ -146,14 +147,25 @@
 #define USB_EP_STAT_TX_MASK (3U << 4)
 #define USB_EP_EA_MASK      0x0FU
 
-/* Bits that are "invariant" — must be preserved on write.
- * Toggle and rc_w0 bits must be written as 0 to leave unchanged. */
+/* Bits that are "invariant" — must be preserved on write. */
 #define USB_EP_RW_MASK      (USB_EP_TYPE_MASK | USB_EP_KIND | USB_EP_EA_MASK)
 
+/* CTR_RX / CTR_TX are rc_w0: writing 0 clears, writing 1 leaves them as they
+ * are. Every write below sets both to 1 except the one it means to clear. */
+#define USB_EP_CTR_BOTH     (USB_EP_CTR_RX | USB_EP_CTR_TX)
+
 /* ============================================================
- * Endpoint register helpers
+ * Endpoint register helpers (RM0394 §46.6.2, USB_EPnR)
  *
- * These handle the tricky toggle/rc_w0 semantics correctly.
+ * Write rules, one register write each:
+ *   rw    (EP_TYPE, EP_KIND, EA)          write back what was read
+ *   rc_w0 (CTR_RX, CTR_TX)                write 1, except to clear
+ *   t     (DTOG_RX/TX, STAT_RX/TX)        write 1 to toggle: XOR the wanted
+ *                                         value with the current one
+ *
+ * The CTR flags are never written back from the value read: a transfer that
+ * completes between the read and the write would have its flag cleared and its
+ * interrupt lost (the serial-update flasher stalled on exactly that, 2026-09).
  * ALL functions use uint16_t throughout for 16-bit register access.
  * ============================================================ */
 
@@ -166,78 +178,49 @@ static inline uint16_t ll_usb_ep_read(uint8_t ep)
 }
 
 /**
- * Write an endpoint register, preserving invariant bits and
- * not accidentally toggling or clearing flag bits.
+ * Change rw bits and/or clear CTR flags, leaving every toggle bit alone.
  *
- * 'mask' = bits you want to change
- * 'val'  = desired values for those bits
- *
- * Toggle bits (DTOG_TX/RX, STAT_TX/RX) and rc_w0 bits (CTR_TX/RX)
- * are written as 0 (no change) unless explicitly included in mask.
+ * 'mask' = bits you want to change (rw bits, or CTR_RX / CTR_TX to clear)
+ * 'val'  = desired values for those bits (a CTR flag in mask is cleared when
+ *          its val bit is 0; it can't be set)
  */
 static inline void ll_usb_ep_write(uint8_t ep, uint16_t mask, uint16_t val)
 {
     uint16_t reg = USB_EPnR(ep);
-
-    /* Start with the current rw bits (type, kind, EA) */
     uint16_t w = reg & USB_EP_RW_MASK;
 
-    /* Override any rw bits that are in mask */
-    w = (w & ~(mask & USB_EP_RW_MASK)) | (val & mask & USB_EP_RW_MASK);
-
-    /* rc_w0 bits (CTR_TX, CTR_RX): write 1 to preserve, 0 to clear.
-     * If they're in mask, use the val; otherwise write 1 (preserve). */
-    if (mask & USB_EP_CTR_RX)
-        w |= (val & USB_EP_CTR_RX);
-    else
-        w |= (reg & USB_EP_CTR_RX);
-
-    if (mask & USB_EP_CTR_TX)
-        w |= (val & USB_EP_CTR_TX);
-    else
-        w |= (reg & USB_EP_CTR_TX);
-
-    /* Toggle bits (DTOG_TX, DTOG_RX, STAT_TX, STAT_RX): write 0 = no change.
-     * If they're in mask, we handle them separately via set_stat/set_dtog.
-     * Here we write 0 to leave them alone. */
+    w = (uint16_t)((w & ~(mask & USB_EP_RW_MASK)) | (val & mask & USB_EP_RW_MASK));
+    w = (uint16_t)(w | (USB_EP_CTR_BOTH & ~(mask & ~val)));
 
     USB_EPnR(ep) = w;
 }
 
 /**
- * Clear CTR_RX flag (write 0 to clear, write 1 to keep CTR_TX).
+ * Clear CTR_RX (CTR_TX is written 1: unchanged).
  */
 static inline void ll_usb_ep_clr_ctr_rx(uint8_t ep)
 {
-    ll_usb_ep_write(ep, USB_EP_CTR_RX, 0);
+    uint16_t reg = USB_EPnR(ep);
+    USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_TX);
 }
 
 /**
- * Clear CTR_TX flag.
+ * Clear CTR_TX (CTR_RX is written 1: unchanged).
  */
 static inline void ll_usb_ep_clr_ctr_tx(uint8_t ep)
 {
-    ll_usb_ep_write(ep, USB_EP_CTR_TX, 0);
+    uint16_t reg = USB_EPnR(ep);
+    USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_RX);
 }
 
 /**
- * Set STAT_TX to a specific value.
- * Uses XOR with current value since these are toggle bits.
+ * Set STAT_TX to a specific value (toggle bits: XOR with the current value).
  */
 static inline void ll_usb_ep_set_stat_tx(uint8_t ep, uint16_t stat)
 {
     uint16_t reg = USB_EPnR(ep);
-    uint16_t current = (reg & USB_EP_STAT_TX_MASK) >> 4;
-    uint16_t toggle = (current ^ stat) << 4;
-
-    /* Build write value: preserve rw bits, write 1 to CTR flags (keep),
-     * write toggle bits for STAT_TX, write 0 for all other toggle bits */
-    uint16_t w = (reg & USB_EP_RW_MASK)
-               | (reg & USB_EP_CTR_RX)
-               | (reg & USB_EP_CTR_TX)
-               | toggle;
-
-    USB_EPnR(ep) = w;
+    USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_BOTH
+                              | ((reg ^ (uint16_t)(stat << 4)) & USB_EP_STAT_TX_MASK));
 }
 
 /**
@@ -246,15 +229,8 @@ static inline void ll_usb_ep_set_stat_tx(uint8_t ep, uint16_t stat)
 static inline void ll_usb_ep_set_stat_rx(uint8_t ep, uint16_t stat)
 {
     uint16_t reg = USB_EPnR(ep);
-    uint16_t current = (reg & USB_EP_STAT_RX_MASK) >> 12;
-    uint16_t toggle = (current ^ stat) << 12;
-
-    uint16_t w = (reg & USB_EP_RW_MASK)
-               | (reg & USB_EP_CTR_RX)
-               | (reg & USB_EP_CTR_TX)
-               | toggle;
-
-    USB_EPnR(ep) = w;
+    USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_BOTH
+                              | ((reg ^ (uint16_t)(stat << 12)) & USB_EP_STAT_RX_MASK));
 }
 
 /**
@@ -263,19 +239,21 @@ static inline void ll_usb_ep_set_stat_rx(uint8_t ep, uint16_t stat)
 static inline void ll_usb_ep_set_stat(uint8_t ep, uint16_t stat_tx, uint16_t stat_rx)
 {
     uint16_t reg = USB_EPnR(ep);
+    USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_BOTH
+                              | ((reg ^ (uint16_t)(stat_tx << 4)) & USB_EP_STAT_TX_MASK)
+                              | ((reg ^ (uint16_t)(stat_rx << 12)) & USB_EP_STAT_RX_MASK));
+}
 
-    uint16_t cur_tx = (reg & USB_EP_STAT_TX_MASK) >> 4;
-    uint16_t cur_rx = (reg & USB_EP_STAT_RX_MASK) >> 12;
-    uint16_t toggle_tx = (cur_tx ^ stat_tx) << 4;
-    uint16_t toggle_rx = (cur_rx ^ stat_rx) << 12;
+/** Current STAT_TX / STAT_RX (USB_EP_STAT_*). The hardware moves VALID to NAK
+ *  when a transfer completes, so these say whether a packet is still pending. */
+static inline uint16_t ll_usb_ep_stat_tx(uint8_t ep)
+{
+    return (uint16_t)((USB_EPnR(ep) & USB_EP_STAT_TX_MASK) >> 4);
+}
 
-    uint16_t w = (reg & USB_EP_RW_MASK)
-               | (reg & USB_EP_CTR_RX)
-               | (reg & USB_EP_CTR_TX)
-               | toggle_tx
-               | toggle_rx;
-
-    USB_EPnR(ep) = w;
+static inline uint16_t ll_usb_ep_stat_rx(uint8_t ep)
+{
+    return (uint16_t)((USB_EPnR(ep) & USB_EP_STAT_RX_MASK) >> 12);
 }
 
 /**
@@ -284,14 +262,8 @@ static inline void ll_usb_ep_set_stat(uint8_t ep, uint16_t stat_tx, uint16_t sta
 static inline void ll_usb_ep_clr_dtog_tx(uint8_t ep)
 {
     uint16_t reg = USB_EPnR(ep);
-    if (reg & USB_EP_DTOG_TX) {
-        /* DTOG is set — write 1 to toggle it off */
-        uint16_t w = (reg & USB_EP_RW_MASK)
-                   | (reg & USB_EP_CTR_RX)
-                   | (reg & USB_EP_CTR_TX)
-                   | USB_EP_DTOG_TX;
-        USB_EPnR(ep) = w;
-    }
+    if (reg & USB_EP_DTOG_TX)
+        USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_BOTH | USB_EP_DTOG_TX);
 }
 
 /**
@@ -300,13 +272,8 @@ static inline void ll_usb_ep_clr_dtog_tx(uint8_t ep)
 static inline void ll_usb_ep_clr_dtog_rx(uint8_t ep)
 {
     uint16_t reg = USB_EPnR(ep);
-    if (reg & USB_EP_DTOG_RX) {
-        uint16_t w = (reg & USB_EP_RW_MASK)
-                   | (reg & USB_EP_CTR_RX)
-                   | (reg & USB_EP_CTR_TX)
-                   | USB_EP_DTOG_RX;
-        USB_EPnR(ep) = w;
-    }
+    if (reg & USB_EP_DTOG_RX)
+        USB_EPnR(ep) = (uint16_t)((reg & USB_EP_RW_MASK) | USB_EP_CTR_BOTH | USB_EP_DTOG_RX);
 }
 
 /* ============================================================
@@ -487,16 +454,19 @@ static inline void ll_usb_set_address(uint8_t addr)
 }
 
 /**
- * Configure an endpoint: type and address.
- * Clears data toggles and sets STAT to NAK for both directions.
+ * Configure an endpoint: type and address, EP_KIND clear, both data toggles
+ * DATA0 and both directions NAK, in one write. A USB reset already zeroes the
+ * toggles; SET_CONFIGURATION without one does not, and RM0394 §46.6.2 makes
+ * initializing DTOG mandatory for non-control endpoints. Stale CTR flags are
+ * cleared (written 0).
  */
 static inline void ll_usb_ep_config(uint8_t ep, uint16_t type, uint8_t addr)
 {
-    /* Write type + address, clear all toggle/flag bits */
-    USB_EPnR(ep) = (uint16_t)(type | (addr & USB_EP_EA_MASK));
-
-    /* Set both directions to NAK initially */
-    ll_usb_ep_set_stat(ep, USB_EP_STAT_NAK, USB_EP_STAT_NAK);
+    uint16_t reg = USB_EPnR(ep);
+    USB_EPnR(ep) = (uint16_t)(type | (addr & USB_EP_EA_MASK)
+                              | (reg & (USB_EP_DTOG_RX | USB_EP_DTOG_TX))
+                              | ((reg ^ (uint16_t)(USB_EP_STAT_NAK << 12)) & USB_EP_STAT_RX_MASK)
+                              | ((reg ^ (uint16_t)(USB_EP_STAT_NAK << 4)) & USB_EP_STAT_TX_MASK));
 }
 
 #endif /* STM32L422xx */

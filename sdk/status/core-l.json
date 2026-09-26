@@ -148,6 +148,7 @@
     "conn.scope_usb": "na",
     "conn.scope_ble": "na",
     "conn.usb_hid": "na",
+    "conn.usb_wake": "na",
     "conn.usb_msc": "na",
     "conn.dfu": "na",
     "conn.serial_update": {

@@ -119,7 +119,7 @@ static void stop_test(int n)
     mark(n ? T_STOP2 : T_STOP1, dt >= 9u && dt <= 12u);
 }
 
-/* Returns 1 once it has been through Stop (USB is gone on the L4 after that). */
+/* Returns 1 once it has been through Stop. */
 static int run_from_start(void)
 {
     s_pass = s_fail = s_timing = 0;
@@ -263,7 +263,8 @@ int main(void)
     core_backup_write(BKP_VERDICT, verdict);
 
 #if defined(STM32L422xx)
-    /* USB doesn't survive Stop: report from a fresh boot. */
+    /* Report from a fresh boot: Standby resets anyway, and it keeps the test
+     * independent of USB behaviour across Stop (fixed 2026-09-26). */
     if (phase != PH_REPORT && slept_this_boot) {
         save(PH_REPORT);
         SCB_AIRCR = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
