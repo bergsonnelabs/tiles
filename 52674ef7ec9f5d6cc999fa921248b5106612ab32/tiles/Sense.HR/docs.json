@@ -1,0 +1,1112 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@0adc73d",
+  "file": "tile_sense_hr.h",
+  "brief": "MAX86174A optical heart-rate and SpO₂ front end (PPG).",
+  "description": "Platform-agnostic driver for the Analog Devices MAX86174A dual-channel\nphotoplethysmography (PPG) analog front end, paired on Sense.HR with\ntwo Vishay VEMD1060X01 silicon PIN photodiodes and four emitters\n(green ×2, red 645 nm, infrared 940 nm) for reflective optical sensing.\n\nKey specifications:\n - 20-bit PPG ADC, 4 / 8 / 16 / 32 µA full-scale photocurrent ranges\n - Two independent readout channels (PPG1, PPG2), two photodiode inputs\n - Six measurement slots per frame, each driving one LED at 0–100 mA\n   (the chip goes to 127.5 mA; the driver caps at the emitters' 100 mA pulse rating)\n - Frame rates 1 to 2048 fps from an internal 32.768 kHz oscillator\n - 256-sample FIFO, tagged per measurement slot and channel\n - Analog ambient-light cancellation plus a 0–28 µA offset DAC\n - Automatic proximity mode drops to 8 fps until skin is detected\n - Configurable INTB output (frame ready, FIFO almost full, thresholds)\n\n\n\nElectrical notes (from Sense-HR-a bring-up, August 2026):\n - V+ (pad 10) is a 1.8 V rail with a 2.2 V absolute maximum. VLED\n   (pad 9, 2.7–5.5 V) feeds the emitter anodes and must not come up\n   before V+ (datasheet: \"Power up VDD before VLED\"). Prefer 5 V for\n   VLED: green needs ~3.3 V forward plus driver headroom.\n - Pads 2 (address) and 3 (I²C/SPI select) are held high by pull-ups (R1, R2) to 1.8 V on\n   the tile. Strap them at power-up; never drive pad 2 above 2.1 V.\n - INTB (pad 8) is left open-drain, active-low, so the host's own\n   pull-up sets its level (the pin tolerates 6 V). Its push-pull modes\n   drive only to 1.8 V, below many 3.3 V MCUs' input-high threshold.\n - Emitter-to-detector crosstalk across the tile puts a large DC\n   pedestal on every channel. tile_sense_hr_auto_gain() cancels it with\n   the offset DAC; without that step most settings overflow the ADC.\n\nDatasheet: MAX86174A/B, Analog Devices, Rev 2 (7/23)\n\n@studio tile label=Sense.HR icon=♥\n@studio event name=frame_ready mask=MAX86174A_STATUS1_FRAME_RDY\n@studio event name=fifo_almost_full mask=MAX86174A_STATUS1_A_FULL\n@studio event name=exposure_overflow mask=MAX86174A_STATUS1_EXP_OVF\n@studio event name=proximity mask=MAX86174A_STATUS1_THRESH1_HILO\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"SPI bus mode\"\n  Hardware-gated on Sense-HR-a. The MAX86174A supports 4-wire SPI to\n  24 MHz (pad 3 to GND selects it), but its SDO/MISO output (pad 2) is\n  push-pull to the 1.8 V VDD (V_OH >= VDD - 0.4 V at 4 mA), below a\n  3.3 V Core's input-high threshold, and the pad's 2.1 V absolute\n  maximum (VDD + 0.3 V) forbids a\n  pull-up to 3.3 V. SPI needs a level translator on MISO that the\n  tile does not carry. I²C is open-drain and unaffected.\n\n@studio unsupported severity=niche category=\"External frame sync (TRIG input)\"\n  Hardware-gated. SYNC_MODE 1/2 take an external frame trigger or\n  frame clock on the LED4_DRV/TRIG pin. On Sense-HR-a that pin drives\n  the second green LED, so the driver pins TRIGLED4_SEL = 1 and runs\n  the internal 32.768 kHz frame oscillator only.\n\n@studio unsupported severity=advanced category=\"Dual-LED exposures (driver B)\"\n  Driver-deferred. Each measurement slot can pulse two LEDs at once\n  (MEASx_DRVA + MEASx_DRVB) to sum red and IR into one sample. This\n  driver uses driver A only — one LED per slot — because the SpO₂\n  ratio needs the wavelengths separated, not summed. Driver B is\n  reachable through tile_sense_hr_write_reg() on MEASx_DRVB_PA.\n\n@studio unsupported severity=advanced category=\"Raw exposure/ambient capture (COLLECT_RAW_DATA)\"\n  Driver-deferred. Setting COLLECT_RAW_DATA pushes the LED-on and\n  dark samples to the FIFO separately (DARK tag 0xC) so the host can\n  run its own ambient rejection. The driver's FIFO decoder assumes\n  the chip's computed samples; raw mode changes the frame layout and\n  would need a second decoder.\n\n@studio unsupported severity=advanced category=\"Digital low-pass / IIR filter (DLPF_EN)\"\n  Driver-deferred. The chip can average 2–32 adjacent samples (DEC_AVE)\n  or run an IIR low-pass (IIR_CFG selects the cut-off; the IIR supports\n  100 and 200 fps) before the FIFO. Left disabled: the host-side band-pass a heart-rate algorithm\n  already needs does the same job with fewer constraints.\n\n@studio unsupported severity=niche category=\"Threshold instance 2 and hysteresis\"\n  Driver-deferred. tile_sense_hr_set_threshold() programs THRESHOLD1\n  only, with no time or level hysteresis. THRESHOLD2 (used for a\n  \"left proximity mode\" interrupt) and TIME_HYST / LEVEL_HYST are\n  reachable through tile_sense_hr_write_reg() on 0x50–0x55.\n\n@studio unsupported severity=niche category=\"FIFO marker, I²C broadcast address, SINC3 / 2nd-order decimation\"\n  Driver-deferred. FIFO_MARK pushes a 0xFFFFFE tag to separate data\n  across a configuration change; I2C_BCAST_ADDR lets several parts\n  share one write address; PPG_FILT2_SEL / MEASx_SINC3_SEL swap the\n  ADC decimation filter. None affect a normal measurement; all are\n  reachable through tile_sense_hr_write_reg().\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
+  "code_examples": [
+    {
+      "label": "Quick start (single-wavelength heart rate, polled)",
+      "code": "  #include \"core.h\"\n  #include \"core_tiles.h\"\n  #include \"tile_sense_hr.h\"\n\n  tile_t hr;\n  tile_sense_hr_init(core_tiles_pal(&core_i2c1), 0, &hr, NULL);\n  tile_sense_hr_auto_gain(&hr, 0, 0);  // find LED current + offset for slot 0 (0 = 10 mA cap)\n  tile_sense_hr_start(&hr);\n  while (1) {\n      if (tile_sense_hr_frame_ready(&hr)) {\n          int32_t ppg = tile_sense_hr_read_ppg(&hr, 0);   // green, PPG1\n          // pulsatile AC rides on a large DC — band-pass on the host\n      }\n  }"
+    },
+    {
+      "label": "Multi-wavelength (green + red + IR interleaved in one frame)",
+      "code": "  sense_hr_cfg_t cfg = { .fps = 128 };\n  tile_sense_hr_init(core_tiles_pal(&core_i2c1), 0, &hr, &cfg);\n  tile_sense_hr_set_slot(&hr, 0, SENSE_HR_LED_GREEN, 5000);\n  tile_sense_hr_set_slot(&hr, 1, SENSE_HR_LED_RED,   5000);\n  tile_sense_hr_set_slot(&hr, 2, SENSE_HR_LED_IR,    5000);\n  for (uint8_t s = 0; s < 3; s++) tile_sense_hr_auto_gain(&hr, s, 0);\n  tile_sense_hr_start(&hr);\n  int32_t frame[SENSE_HR_FRAME_LEN];\n  if (tile_sense_hr_read_frame(&hr, frame)) {\n      int32_t green = frame[0], red = frame[2], ir = frame[4];  // PPG1\n  }"
+    }
+  ],
+  "studio_ready": true,
+  "studio_events": [
+    {
+      "name": "frame_ready"
+    },
+    {
+      "name": "fifo_almost_full"
+    },
+    {
+      "name": "exposure_overflow"
+    },
+    {
+      "name": "proximity"
+    }
+  ],
+  "studio_unsupported": [
+    {
+      "severity": "advanced",
+      "category": "SPI bus mode",
+      "brief": "Hardware-gated on Sense-HR-a. The MAX86174A supports 4-wire SPI to 24 MHz (pad 3 to GND selects it), but its SDO/MISO output (pad 2) is push-pull to the 1.8 V VDD (V_OH >= VDD - 0.4 V at 4 mA), below a 3.3 V Core's input-high threshold, and the pad's 2.1 V absolute maximum (VDD + 0.3 V) forbids a pull-up to 3.3 V. SPI needs a level translator on MISO that the tile does not carry. I²C is open-drain and unaffected."
+    },
+    {
+      "severity": "niche",
+      "category": "External frame sync (TRIG input)",
+      "brief": "Hardware-gated. SYNC_MODE 1/2 take an external frame trigger or frame clock on the LED4_DRV/TRIG pin. On Sense-HR-a that pin drives the second green LED, so the driver pins TRIGLED4_SEL = 1 and runs the internal 32.768 kHz frame oscillator only."
+    },
+    {
+      "severity": "advanced",
+      "category": "Dual-LED exposures (driver B)",
+      "brief": "Driver-deferred. Each measurement slot can pulse two LEDs at once (MEASx_DRVA + MEASx_DRVB) to sum red and IR into one sample. This driver uses driver A only — one LED per slot — because the SpO₂ ratio needs the wavelengths separated, not summed. Driver B is reachable through tile_sense_hr_write_reg() on MEASx_DRVB_PA."
+    },
+    {
+      "severity": "advanced",
+      "category": "Raw exposure/ambient capture (COLLECT_RAW_DATA)",
+      "brief": "Driver-deferred. Setting COLLECT_RAW_DATA pushes the LED-on and dark samples to the FIFO separately (DARK tag 0xC) so the host can run its own ambient rejection. The driver's FIFO decoder assumes the chip's computed samples; raw mode changes the frame layout and would need a second decoder."
+    },
+    {
+      "severity": "advanced",
+      "category": "Digital low-pass / IIR filter (DLPF_EN)",
+      "brief": "Driver-deferred. The chip can average 2–32 adjacent samples (DEC_AVE) or run an IIR low-pass (IIR_CFG selects the cut-off; the IIR supports 100 and 200 fps) before the FIFO. Left disabled: the host-side band-pass a heart-rate algorithm already needs does the same job with fewer constraints."
+    },
+    {
+      "severity": "niche",
+      "category": "Threshold instance 2 and hysteresis",
+      "brief": "Driver-deferred. tile_sense_hr_set_threshold() programs THRESHOLD1 only, with no time or level hysteresis. THRESHOLD2 (used for a \"left proximity mode\" interrupt) and TIME_HYST / LEVEL_HYST are reachable through tile_sense_hr_write_reg() on 0x50–0x55."
+    },
+    {
+      "severity": "niche",
+      "category": "FIFO marker, I²C broadcast address, SINC3 / 2nd-order decimation",
+      "brief": "Driver-deferred. FIFO_MARK pushes a 0xFFFFFE tag to separate data across a configuration change; I2C_BCAST_ADDR lets several parts share one write address; PPG_FILT2_SEL / MEASx_SINC3_SEL swap the ADC decimation filter. None affect a normal measurement; all are reachable through tile_sense_hr_write_reg()."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_SENSE_HR_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_HR_VERSION_MINOR",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_SENSE_HR_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_I2C_ADDR_DEFAULT",
+      "value": "0x6B",
+      "description": "ADDR high (pad 2 open, default)",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_I2C_ADDR_ALT",
+      "value": "0x6A",
+      "description": "ADDR low (pad 2 to GND)",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_SEL",
+      "value": "0",
+      "description": "[6] AMB, [3:2] DRVB, [1:0] DRVA",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_CFG1",
+      "value": "1",
+      "description": "[7:6] PDSEL, [4:3] TINT, [2:0] AVER",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_CFG2",
+      "value": "2",
+      "description": "[5:4] LED_RGE, [3:2] PPG2_ADC_RGE, [1:0] PPG1_ADC_RGE",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_CFG3",
+      "value": "3",
+      "description": "[7:5] PD_SETLNG, [4:3] LED_SETLNG",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_CFG4",
+      "value": "4",
+      "description": "[6:4] PPG2_DACOFF, [2:0] PPG1_DACOFF",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_DRVA_PA",
+      "value": "5",
+      "description": "LED driver A current code",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_MEAS_DRVB_PA",
+      "value": "6",
+      "description": "LED driver B current code",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_PART_ID_VALUE",
+      "value": "0x40",
+      "description": "MAX86174A (dual channel); 0x41 = MAX86174B",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_TAG_SHIFT",
+      "value": "20",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_DATA_MASK",
+      "value": "0x000FFFFF",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_TAG_DARK",
+      "value": "0xC",
+      "description": "Dark sample (COLLECT_RAW_DATA only)",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_TAG_ALC_OVF",
+      "value": "0xD",
+      "description": "ALC overflow replaced this sample",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_TAG_EXP_OVF",
+      "value": "0xE",
+      "description": "Exposure overflow replaced this sample",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_MARKER",
+      "value": "0xFFFFE",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "MAX86174A_FIFO_INVALID",
+      "value": "0xFFFFF",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_SLOTS",
+      "value": "6",
+      "description": "Measurement slots per frame (MEAS1..6)",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_CHANNELS",
+      "value": "2",
+      "description": "Readout channels (PPG1, PPG2)",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_FIFO_DEPTH",
+      "value": "256",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_ADC_FULL_SCALE",
+      "value": "524287",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_FR_CLK_HZ",
+      "value": "32768",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_FR_DIV_MIN",
+      "value": "16",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_FR_DIV_MAX",
+      "value": "32766",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_LED_CHIP_MAX_UA",
+      "value": "127500",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_LED_MAX_UA",
+      "value": "100000",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "SENSE_HR_DACOFF_MAX_UA",
+      "value": "28",
+      "description": "",
+      "section": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "sense_hr_led_t",
+      "brief": "",
+      "description": "Emitter selection — which LEDn_DRV pin a slot pulses (MEASx_DRVA[1:0]).\nMapping measured on Sense-HR-a hardware (2026-08-10) by driving each pin\nin turn. It does NOT match the BOM, which lists LED2 as red and LED3 as\ngreen; on the board those two are swapped.",
+      "members": [
+        {
+          "name": "SENSE_HR_LED_IR",
+          "value": "0x0",
+          "description": "LED1_DRV — 940 nm infrared"
+        },
+        {
+          "name": "SENSE_HR_LED_GREEN",
+          "value": "0x1",
+          "description": "LED2_DRV — 525 nm green (primary)"
+        },
+        {
+          "name": "SENSE_HR_LED_RED",
+          "value": "0x2",
+          "description": "LED3_DRV — 645 nm red (IN-S42ATR, λP)"
+        },
+        {
+          "name": "SENSE_HR_LED_GREEN2",
+          "value": "0x3",
+          "description": "LED4_DRV — 525 nm green (second)"
+        }
+      ]
+    },
+    {
+      "name": "sense_hr_tint_t",
+      "brief": "ADC integration time per pulse (MEASx_TINT[1:0], 3rd-order decimation).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_HR_TINT_14US",
+          "value": "0x0",
+          "description": "14.6 µs"
+        },
+        {
+          "name": "SENSE_HR_TINT_29US",
+          "value": "0x1",
+          "description": "29.2 µs"
+        },
+        {
+          "name": "SENSE_HR_TINT_58US",
+          "value": "0x2",
+          "description": "58.6 µs"
+        },
+        {
+          "name": "SENSE_HR_TINT_117US",
+          "value": "0x3",
+          "description": "117.1 µs (default, most signal per exposure)"
+        }
+      ]
+    },
+    {
+      "name": "sense_hr_aver_t",
+      "brief": "LED pulses averaged per sample (MEASx_AVER[2:0]).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_HR_AVER_1",
+          "value": "0x0",
+          "description": "1 pulse"
+        },
+        {
+          "name": "SENSE_HR_AVER_2",
+          "value": "0x1",
+          "description": "2 pulses"
+        },
+        {
+          "name": "SENSE_HR_AVER_4",
+          "value": "0x2",
+          "description": "4 pulses (default)"
+        },
+        {
+          "name": "SENSE_HR_AVER_8",
+          "value": "0x3",
+          "description": "8 pulses"
+        },
+        {
+          "name": "SENSE_HR_AVER_16",
+          "value": "0x4",
+          "description": "16 pulses"
+        },
+        {
+          "name": "SENSE_HR_AVER_32",
+          "value": "0x5",
+          "description": "32 pulses"
+        },
+        {
+          "name": "SENSE_HR_AVER_64",
+          "value": "0x6",
+          "description": "64 pulses"
+        },
+        {
+          "name": "SENSE_HR_AVER_128",
+          "value": "0x7",
+          "description": "128 pulses"
+        }
+      ]
+    },
+    {
+      "name": "sense_hr_adc_range_t",
+      "brief": "PPG ADC full-scale photocurrent (MEASx_PPGy_ADC_RGE[1:0]).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_HR_ADC_4UA",
+          "value": "0x0",
+          "description": "4 µA full scale, 7.6 pA/LSB"
+        },
+        {
+          "name": "SENSE_HR_ADC_8UA",
+          "value": "0x1",
+          "description": "8 µA full scale, 15.3 pA/LSB"
+        },
+        {
+          "name": "SENSE_HR_ADC_16UA",
+          "value": "0x2",
+          "description": "16 µA full scale, 30.5 pA/LSB"
+        },
+        {
+          "name": "SENSE_HR_ADC_32UA",
+          "value": "0x3",
+          "description": "32 µA full scale, 61 pA/LSB (default)"
+        }
+      ]
+    },
+    {
+      "name": "sense_hr_pdsel_t",
+      "brief": "Photodiode routing to the two readout channels (MEASx_PDSEL[1:0]).",
+      "description": "",
+      "members": [
+        {
+          "name": "SENSE_HR_PD_BOTH_PPG1",
+          "value": "0x0",
+          "description": "PD1 + PD2 summed onto PPG1 (default, best SNR)"
+        },
+        {
+          "name": "SENSE_HR_PD_2_1",
+          "value": "0x1",
+          "description": "PD2 → PPG1, PD1 → PPG2"
+        },
+        {
+          "name": "SENSE_HR_PD_1_2",
+          "value": "0x2",
+          "description": "PD1 → PPG1, PD2 → PPG2 (per-diode readout)"
+        },
+        {
+          "name": "SENSE_HR_PD_BOTH_PPG2",
+          "value": "0x3",
+          "description": "PD1 + PD2 summed onto PPG2"
+        }
+      ]
+    }
+  ],
+  "structs": [
+    {
+      "name": "sense_hr_cfg_t",
+      "brief": "Optional init-time configuration for Sense.HR.",
+      "description": "Pass NULL to tile_sense_hr_init() for defaults: 128 fps, slot 0 = green\nat 1 mA, 117 µs integration, 4 pulses averaged, 32 µA ADC range, both\nphotodiodes onto PPG1, PPG2 powered down, polled (no INTB wiring).\nZero fields fall back to those defaults, so the zero-valued choices\n(LED1 emitter, 14.6 µs, 1 pulse, the 4 µA range) are set after init\nwith set_slot(), set_integration(), set_averaging(), set_adc_range().",
+      "fields": [
+        {
+          "type": "uint16_t",
+          "name": "fps",
+          "description": "Frame rate, 1–2048 fps. Default 128."
+        },
+        {
+          "type": "uint8_t",
+          "name": "led",
+          "description": "Slot-0 emitter (sense_hr_led_t). Default green."
+        },
+        {
+          "type": "uint32_t",
+          "name": "led_ua",
+          "description": "Slot-0 LED current in µA. Default 1000."
+        },
+        {
+          "type": "uint8_t",
+          "name": "tint",
+          "description": "Integration time (sense_hr_tint_t). 0 = default 117 µs."
+        },
+        {
+          "type": "uint8_t",
+          "name": "aver",
+          "description": "Pulses averaged (sense_hr_aver_t). 0 = default 4."
+        },
+        {
+          "type": "uint8_t",
+          "name": "adc_range",
+          "description": "ADC range (sense_hr_adc_range_t). 0 = default 32 µA."
+        },
+        {
+          "type": "uint8_t",
+          "name": "pdsel",
+          "description": "Photodiode routing (sense_hr_pdsel_t). Default both → PPG1."
+        },
+        {
+          "type": "uint8_t",
+          "name": "ppg2_enable",
+          "description": "1 = keep readout channel 2 powered. Default 0 (off)."
+        },
+        {
+          "type": "uint8_t",
+          "name": "int_pin",
+          "description": "Core pad wired to INTB (pad 8). 0 = polled."
+        },
+        {
+          "type": "sense_hr_event_cb_t",
+          "name": "on_event",
+          "description": "Callback fired by process(). NULL = none."
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_sense_hr_find(tiles_pal_t *hal, uint8_t instance)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "0 = default address (0x6B), 1 = alternate (0x6A)."
+        }
+      ],
+      "notes": [],
+      "return": "1 if the device ACKs and PART_ID reads 0x40, 0 otherwise.",
+      "brief": "Check if a Sense.HR is present on the bus.",
+      "description": "",
+      "name": "tile_sense_hr_find"
+    },
+    {
+      "signature": "void tile_sense_hr_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile, const sense_hr_cfg_t *cfg)",
+      "params": [
+        {
+          "name": "hal",
+          "description": "Platform HAL handle."
+        },
+        {
+          "name": "instance",
+          "description": "0 = default (0x6B), 1 = alternate (0x6A)."
+        },
+        {
+          "name": "tile",
+          "description": "Tile handle to initialise."
+        },
+        {
+          "name": "cfg",
+          "description": "Configuration (NULL for defaults)."
+        }
+      ],
+      "notes": [],
+      "brief": "Initialise a Sense.HR tile.",
+      "description": "Probes the device, verifies PART_ID, soft-resets, pins the LED4/TRIG\npin to LED duty, configures the frame rate and slot 0, leaves INTB\nopen-drain, and sets the tile state to READY. Measurements are NOT\nrunning until tile_sense_hr_start().",
+      "name": "tile_sense_hr_init"
+    },
+    {
+      "signature": "void tile_sense_hr_sleep(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Enter shutdown (SHDN = 1): oscillator off, LEDs off, ~1 µA (3 µA max on VDD, 0.5 µA max on VLED).",
+      "description": "Registers are retained; tile_sense_hr_wake() resumes without\nreconfiguration.",
+      "name": "tile_sense_hr_sleep"
+    },
+    {
+      "signature": "void tile_sense_hr_wake(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Leave shutdown and resume the configured measurements.",
+      "description": "",
+      "name": "tile_sense_hr_wake"
+    },
+    {
+      "signature": "void tile_sense_hr_reset(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Software-reset the device to power-on defaults.",
+      "description": "All registers return to defaults and the tile state drops to NONE.\nCall tile_sense_hr_init() again afterwards.",
+      "name": "tile_sense_hr_reset"
+    },
+    {
+      "signature": "void tile_sense_hr_start(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Start the frame engine on every enabled slot.",
+      "description": "Flushes the FIFO first so the first frame read is fresh.",
+      "name": "tile_sense_hr_start"
+    },
+    {
+      "signature": "void tile_sense_hr_stop(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Stop all measurements (LEDs off, FIFO stops filling).",
+      "description": "",
+      "name": "tile_sense_hr_stop"
+    },
+    {
+      "signature": "void tile_sense_hr_process(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "events",
+      "brief": "Process pending interrupt events. Call from your main loop.",
+      "description": "In interrupt mode (int_pin set): returns immediately unless INTB has\nfired since the last call, then reads STATUS1 and fires the callback.\nIn polled mode: reads STATUS1 every call. Reading STATUS1 clears its\nlatched bits and releases INTB.",
+      "name": "tile_sense_hr_process"
+    },
+    {
+      "signature": "void tile_sense_hr_on_event(tile_t *tile, sense_hr_event_cb_t cb, void *ctx)",
+      "params": [
+        {
+          "name": "cb",
+          "description": "Callback to fire on STATUS1 activity. NULL to clear."
+        },
+        {
+          "name": "ctx",
+          "description": "Opaque user pointer passed to the callback."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "events",
+      "brief": "Register or change the event callback.",
+      "description": "",
+      "name": "tile_sense_hr_on_event"
+    },
+    {
+      "signature": "void tile_sense_hr_set_interrupts(tile_t *tile, uint8_t mask)",
+      "params": [
+        {
+          "name": "mask",
+          "description": "STATUS1 bits that should assert INTB."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "events",
+      "brief": "Choose which STATUS1 sources drive INTB (Interrupt Enable 1).",
+      "description": "Pass a mask of MAX86174A_STATUS1_* bits, e.g. FRAME_RDY | A_FULL.\nPWR_RDY is non-maskable. INTB stays open-drain, active-low.",
+      "name": "tile_sense_hr_set_interrupts"
+    },
+    {
+      "signature": "uint16_t tile_sense_hr_set_frame_rate(tile_t *tile, uint16_t fps)",
+      "params": [
+        {
+          "name": "fps",
+          "description": "Requested frames per second."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "Actual frame rate after divider rounding.",
+      "brief": "Set the frame rate.",
+      "description": "Programs FR_CLK_DIV = 32768 / fps, clamped to the chip's 16–32766\ndivider range (1–2048 fps). If the enabled slots' exposures do not fit\nin one frame period the chip flags INVALID_CFG in STATUS2.",
+      "name": "tile_sense_hr_set_frame_rate"
+    },
+    {
+      "signature": "uint16_t tile_sense_hr_get_frame_rate(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "Frames per second after divider rounding.",
+      "brief": "Read the configured frame rate.",
+      "description": "",
+      "name": "tile_sense_hr_get_frame_rate"
+    },
+    {
+      "signature": "void tile_sense_hr_set_slot(tile_t *tile, uint8_t slot, sense_hr_led_t led, uint32_t led_ua)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5 (MEAS1..MEAS6)."
+        },
+        {
+          "name": "led",
+          "description": "Emitter to pulse (sense_hr_led_t)."
+        },
+        {
+          "name": "led_ua",
+          "description": "LED current in µA, 0–100000 (0 disables the LED; above 100 mA is capped)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Configure and enable a measurement slot with one emitter.",
+      "description": "Writes the slot's emitter select and LED current, inherits the\ntile-wide integration / averaging / ADC range / photodiode routing,\nand enables the slot in SYS_CFG2. Takes effect on the next start()\n(or immediately if already running). Slot 0 is the one init() set up.",
+      "name": "tile_sense_hr_set_slot"
+    },
+    {
+      "signature": "void tile_sense_hr_set_ambient_slot(tile_t *tile, uint8_t slot)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Configure a slot as a direct ambient-light measurement (no LED).",
+      "description": "The chip requires an ambient slot to be the LAST enabled slot in the\nframe. Its sample carries the same tag position as an LED slot.",
+      "name": "tile_sense_hr_set_ambient_slot"
+    },
+    {
+      "signature": "void tile_sense_hr_enable_slot(tile_t *tile, uint8_t slot, uint8_t enable)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "enable",
+          "description": "1 = included in each frame, 0 = skipped."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable or disable a slot without changing its settings.",
+      "description": "",
+      "name": "tile_sense_hr_enable_slot"
+    },
+    {
+      "signature": "void tile_sense_hr_set_led_current(tile_t *tile, uint8_t slot, uint32_t led_ua)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "led_ua",
+          "description": "LED current in µA, 0–100000 (above 100 mA is capped)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a slot's LED drive current.",
+      "description": "Picks the smallest LED range (32 / 64 / 96 / 128 mA full scale) that\ncovers the request, then the nearest 8-bit code: 125 / 250 / 375 /\n500 µA per step. 0 disables the LED for that slot.",
+      "name": "tile_sense_hr_set_led_current"
+    },
+    {
+      "signature": "uint32_t tile_sense_hr_get_led_current(tile_t *tile, uint8_t slot)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "return": "LED current in µA as programmed (0 = LED off).",
+      "brief": "Read back a slot's LED drive current after quantisation.",
+      "description": "",
+      "name": "tile_sense_hr_get_led_current"
+    },
+    {
+      "signature": "void tile_sense_hr_set_integration(tile_t *tile, uint8_t slot, sense_hr_tint_t tint)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "tint",
+          "description": "Integration time (sense_hr_tint_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a slot's ADC integration time.",
+      "description": "Longer integration collects more photocurrent per pulse (more signal,\nbut easier to overflow on crosstalk or ambient light).",
+      "name": "tile_sense_hr_set_integration"
+    },
+    {
+      "signature": "void tile_sense_hr_set_averaging(tile_t *tile, uint8_t slot, sense_hr_aver_t aver)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "aver",
+          "description": "Pulses per sample (sense_hr_aver_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set how many LED pulses a slot averages into one sample.",
+      "description": "Averaging improves SNR and ambient rejection at the cost of frame\ntime: each pulse costs one integration period plus settling.",
+      "name": "tile_sense_hr_set_averaging"
+    },
+    {
+      "signature": "void tile_sense_hr_set_adc_range(tile_t *tile, uint8_t slot, sense_hr_adc_range_t range)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "range",
+          "description": "Full-scale range (sense_hr_adc_range_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a slot's ADC full-scale photocurrent range (both channels).",
+      "description": "",
+      "name": "tile_sense_hr_set_adc_range"
+    },
+    {
+      "signature": "void tile_sense_hr_set_dac_offset(tile_t *tile, uint8_t slot, uint8_t offset_ua)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "offset_ua",
+          "description": "Cancellation current in µA, 0–28."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set a slot's offset-DAC cancellation current (both channels).",
+      "description": "The DAC sources part of the photodiode DC away from the converter so\nthe ADC digitises only what is left. The reported sample is\n(photocurrent − offset); tile_sense_hr_read_photocurrent_na() adds the\noffset back. Quantised to 0, 4, 8 … 28 µA.",
+      "name": "tile_sense_hr_set_dac_offset"
+    },
+    {
+      "signature": "void tile_sense_hr_set_photodiodes(tile_t *tile, uint8_t slot, sense_hr_pdsel_t pdsel)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        },
+        {
+          "name": "pdsel",
+          "description": "Routing (sense_hr_pdsel_t)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Route the two photodiodes to the readout channels for a slot.",
+      "description": "Summing both onto PPG1 (default) gives the best single-wavelength\nSNR. Splitting them (SENSE_HR_PD_1_2) reads each diode on its own\nchannel; PPG2 must then be powered (cfg.ppg2_enable) to see PD2.",
+      "name": "tile_sense_hr_set_photodiodes"
+    },
+    {
+      "signature": "void tile_sense_hr_set_ppg2_enabled(tile_t *tile, uint8_t enable)",
+      "params": [
+        {
+          "name": "enable",
+          "description": "1 = channel 2 powered, 0 = powered down."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Power readout channel 2 up or down.",
+      "description": "With both photodiodes summed onto PPG1, channel 2 still emits a\nnear-zero sample per slot per frame; powering it down halves FIFO\ntraffic. Enable it for per-diode readout.",
+      "name": "tile_sense_hr_set_ppg2_enabled"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_auto_gain(tile_t *tile, uint8_t slot, uint32_t max_ua)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5 (must already have an emitter)."
+        },
+        {
+          "name": "max_ua",
+          "description": "Upper bound for LED current in µA (0 = 10000, a safe default for the 0402 emitters). The search runs in the 32 mA range, so anything above 31875 is capped there."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a valid operating point was found, 0 if the slot never produced samples.",
+      "brief": "Find LED current, offset and ADC range for a slot automatically.",
+      "description": "Blocking, roughly two to three seconds. Runs the slot alone, then:\n 1. raises LED current toward `max_ua` while the offset DAC can still\n    keep the DC pedestal (crosstalk + tissue return) inside the ADC,\n    backing off current when it cannot;\n 2. measures the total photocurrent and picks the largest offset that\n    leaves ~0.5 µA of headroom, then the tightest ADC range holding\n    the residual under ~70 % of full scale;\n 3. verifies, and unwinds one step at a time if that overflowed.\n\nOther slots' enables are restored on return; measurements are left\nstopped. Call tile_sense_hr_start() afterwards. Re-run whenever the\noptical situation changes (finger placed or removed).",
+      "name": "tile_sense_hr_auto_gain"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_get_status(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Raw STATUS1 byte (use MAX86174A_STATUS1_* masks).",
+      "brief": "Read STATUS1 (clears its latched bits and releases INTB).",
+      "description": "",
+      "name": "tile_sense_hr_get_status"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_get_status2(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Raw STATUS2 byte (use MAX86174A_STATUS2_* masks).",
+      "brief": "Read STATUS2: invalid-configuration and LED compliance flags.",
+      "description": "LEDn_COMPB set means VLED is too low for the programmed current on\nthat pin — raise VLED or lower the current.",
+      "name": "tile_sense_hr_get_status2"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_frame_ready(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a frame can be read, 0 otherwise.",
+      "brief": "Check whether at least one full frame is waiting in the FIFO.",
+      "description": "Non-clearing: compares the FIFO count against the frame length, so it\nis safe to poll without disturbing STATUS1 or INTB.",
+      "name": "tile_sense_hr_frame_ready"
+    },
+    {
+      "signature": "uint16_t tile_sense_hr_get_fifo_count(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "return": "Samples waiting.",
+      "brief": "Number of unread samples in the FIFO (0–256).",
+      "description": "",
+      "name": "tile_sense_hr_get_fifo_count"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_get_fifo_overflow(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "return": "OVF_COUNTER value; saturates at 127.",
+      "brief": "Samples lost to FIFO overflow since the last FIFO read (0–127).",
+      "description": "",
+      "name": "tile_sense_hr_get_fifo_overflow"
+    },
+    {
+      "signature": "void tile_sense_hr_flush_fifo(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Discard everything in the FIFO and reset its pointers.",
+      "description": "",
+      "name": "tile_sense_hr_flush_fifo"
+    },
+    {
+      "signature": "void tile_sense_hr_set_fifo_watermark(tile_t *tile, uint16_t samples)",
+      "params": [
+        {
+          "name": "samples",
+          "description": "Number of queued samples that asserts A_FULL, 1–256."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "brief": "Set the almost-full watermark used by the A_FULL flag / event.",
+      "description": "",
+      "name": "tile_sense_hr_set_fifo_watermark"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_read_frame(tile_t *tile, int32_t *frame)",
+      "params": [
+        {
+          "name": "frame",
+          "description": "Caller buffer of SENSE_HR_FRAME_LEN (12) entries."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if a complete frame was decoded, 0 if the FIFO held less than one frame (buffer then holds the previous frame).",
+      "brief": "Drain the FIFO and decode the most recent complete frame.",
+      "description": "Reads every waiting sample, sign-extends the 20-bit two's-complement\ndata, and places it by tag: `frame[2·slot + channel]` (channel 0 =\nPPG1, 1 = PPG2). Entries for disabled slots, powered-down channels,\nand samples replaced by an overflow tag read SENSE_HR_NO_SAMPLE.\nOverflow-tagged samples are counted (see get_overflow_count()).\nEach entry holds the newest sample for its tag, so if the FIFO ends\npart-way through a frame the result can mix two adjacent frames.\n\nThe decoded frame is also cached for tile_sense_hr_read_ppg().",
+      "name": "tile_sense_hr_read_frame"
+    },
+    {
+      "signature": "int32_t tile_sense_hr_read_ppg(tile_t *tile, uint8_t slot)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Signed 20-bit sample, or SENSE_HR_NO_SAMPLE if none yet.",
+      "brief": "Latest PPG1 sample for a slot, in ADC counts.",
+      "description": "Drains the FIFO if a full frame is waiting (same as read_frame()),\nthen returns the cached channel-1 value for the slot. Negative values\nare real: the offset DAC can pull the residual below zero.",
+      "name": "tile_sense_hr_read_ppg"
+    },
+    {
+      "signature": "int32_t tile_sense_hr_read_ppg2(tile_t *tile, uint8_t slot)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Signed 20-bit sample, or SENSE_HR_NO_SAMPLE if none yet.",
+      "brief": "Latest PPG2 sample for a slot, in ADC counts.",
+      "description": "Only meaningful when channel 2 is powered and a photodiode is routed\nto it (SENSE_HR_PD_1_2 or SENSE_HR_PD_2_1).",
+      "name": "tile_sense_hr_read_ppg2"
+    },
+    {
+      "signature": "int32_t tile_sense_hr_read_photocurrent_na(tile_t *tile, uint8_t slot)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Photocurrent in nA, or SENSE_HR_NO_SAMPLE if no sample yet.",
+      "brief": "Latest PPG1 photocurrent for a slot, in nanoamps.",
+      "description": "Converts the cached sample with the slot's ADC range (full scale /\n524287 counts) and adds the offset-DAC current back, so the result is\nthe photodiode current itself and is comparable across slots that\nended up with different gain settings. Integer maths, no float.",
+      "name": "tile_sense_hr_read_photocurrent_na"
+    },
+    {
+      "signature": "uint16_t tile_sense_hr_get_overflow_count(tile_t *tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Number of overflow-tagged samples in the last read.",
+      "brief": "Overflow-tagged samples seen in the last FIFO drain.",
+      "description": "An overflowing channel produces no data — the chip replaces the\nsample with an ALC- or exposure-overflow tag. A non-zero count means\nlower the LED current, raise the offset DAC, or widen the ADC range.",
+      "name": "tile_sense_hr_get_overflow_count"
+    },
+    {
+      "signature": "uint16_t tile_sense_hr_read_fifo_raw(tile_t *tile, uint32_t *buf, uint16_t count)",
+      "params": [
+        {
+          "name": "buf",
+          "description": "Caller buffer for raw words."
+        },
+        {
+          "name": "count",
+          "description": "Capacity of `buf`; at most this many samples are read."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "fifo",
+      "return": "Number of words actually read.",
+      "brief": "Read raw 24-bit FIFO words (tag in bits 23:20, data in 19:0).",
+      "description": "For hosts that want to decode the stream themselves. Data is NOT\nsign-extended here; bit 19 is the sign.",
+      "name": "tile_sense_hr_read_fifo_raw"
+    },
+    {
+      "signature": "void tile_sense_hr_set_threshold(tile_t *tile, uint8_t slot, uint8_t lower, uint8_t upper)",
+      "params": [
+        {
+          "name": "slot",
+          "description": "Measurement slot 0–5 to watch."
+        },
+        {
+          "name": "lower",
+          "description": "Lower limit ÷ 2048."
+        },
+        {
+          "name": "upper",
+          "description": "Upper limit ÷ 2048."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Program threshold instance 1 on a slot's PPG1 data.",
+      "description": "THRESH1_HILO is set (and INTB asserted if enabled) when the sample\nexceeds `upper` or drops below `lower`. Both limits are in units of\n2048 ADC counts (0–255). Upper = 255 disables the upper check; lower\n= 0 disables the lower check. Negative samples clip to 0 first.\n(The datasheet's register table says upper 0x00 disables it, its\nfunctional description 0xFF; the driver follows the description.)",
+      "name": "tile_sense_hr_set_threshold"
+    },
+    {
+      "signature": "void tile_sense_hr_set_proximity_mode(tile_t *tile, uint8_t enable, uint8_t lower)",
+      "params": [
+        {
+          "name": "enable",
+          "description": "1 = automatic proximity mode, 0 = normal."
+        },
+        {
+          "name": "lower",
+          "description": "Skin-detect threshold ÷ 2048 ADC counts."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Enable automatic proximity mode.",
+      "description": "Reserves slot 5 (MEAS6) as a low-power skin detector: while its PPG1\nreading stays below `lower` × 2048 counts the chip runs slot 5 alone\nat 8 fps; once skin is detected it returns to the programmed frame\nrate with every enabled slot. Configure slot 5's emitter and a small\nLED current first (tile_sense_hr_set_slot()). THRESH1_HILO fires on\nentering proximity mode.",
+      "name": "tile_sense_hr_set_proximity_mode"
+    },
+    {
+      "signature": "uint8_t tile_sense_hr_read_reg(tile_t *tile, uint8_t reg)",
+      "params": [
+        {
+          "name": "reg",
+          "description": "Register address 0x00–0xFF."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "Register value.",
+      "brief": "Read any register directly.",
+      "description": "",
+      "name": "tile_sense_hr_read_reg"
+    },
+    {
+      "signature": "void tile_sense_hr_write_reg(tile_t *tile, uint8_t reg, uint8_t val)",
+      "params": [
+        {
+          "name": "reg",
+          "description": "Register address 0x00–0xFF."
+        },
+        {
+          "name": "val",
+          "description": "Value to write."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "brief": "Write any register directly.",
+      "description": "Bypasses the driver's cached configuration; prefer the typed setters.",
+      "name": "tile_sense_hr_write_reg"
+    }
+  ],
+  "source_file": "tile_sense_hr.h",
+  "version": "1.0.0",
+  "tile_family": "Sense",
+  "tile_name": "HR",
+  "display_name": "Sense.HR"
+}
