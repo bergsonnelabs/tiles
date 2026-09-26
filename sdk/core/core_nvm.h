@@ -8,8 +8,13 @@
  *     flash pages (0x0801F000-0x0801FFFF).
  *   - Core.ST.W5 (STM32WBA55): 1024 B, emulated in flash pages 125-126
  *     (0x080FA000-0x080FDFFF). Page 127 above it is the BLE bond store.
- *   - Core.ST.H5 (STM32H523): not implemented yet. CORE_NVM_SIZE is 0, so every
- *     read and write returns CORE_NVM_ERR_RANGE.
+ *   - Core.ST.H5 (STM32H523): 1024 B, emulated in the flash's high-cycle
+ *     data area (EDATA, 100k cycles, RM0481 §7.3.10): bank 2 sectors 30-31,
+ *     the top 16 KB of flash (0x0807C000), read as two 6 KB data sectors at
+ *     0x09015000-0x09017FFF. The area is an option-byte setting: the first
+ *     time a Core.ST.H5 boots an SDK image, core_init() switches it on (one
+ *     option-byte change, FLASH_EDATA2R, then one reset); every later boot
+ *     just reads it. See _core_nvm_h5_boot() below.
  *
  * Usage:
  *   core_nvm_write(0, &data, sizeof(data));  // write at offset 0
@@ -19,13 +24,15 @@
  * flash-serial`, `make flash-dfu`, Studio, probe-rs or CubeProgrammer: every
  * linker script ends the application below the NVM pages, and those tools
  * erase only the pages an image covers. A full-chip (mass) erase clears it,
- * as does any tool told to erase the whole chip.
+ * as does any tool told to erase the whole chip (on the H5 a mass or bank
+ * erase also erases the data sectors, RM0481 §7.3.6; the EDATA option byte
+ * stays set).
  *
  * Never-written bytes read as CORE_NVM_ERASED: 0xFF on the flash-emulated
  * Cores (like erased flash), 0x00 on the L0 (its EEPROM's erased state).
  *
- * Flash emulation (L4, W5): each core_nvm_write() appends one record (offset,
- * length, data, CRC-32) to a log in the active page. When the page is full,
+ * Flash emulation (L4, W5, H5): each core_nvm_write() appends one record
+ * (offset, length, data, CRC-32) to a log in the active page. When the page is full,
  * the current contents are copied to the other page, which then becomes
  * active ("compaction": one page erase). A write is atomic: after a reset or
  * power loss at any instant, the bytes it covered read either all old or all
@@ -45,8 +52,19 @@
  *     the BLE tasks meanwhile; call it from the main loop or a BLE callback,
  *     never from an interrupt handler.
  *
+ * H5 (tests/hw-nvm-flash, 2026-09-26): the data sectors are programmed 16
+ * bits at a time (DS14540 Table 49: 31 us typ, 100 us max each), so a 4-byte
+ * write takes ~0.3 ms and a 600-byte one ~12.6 ms; a compaction erases one
+ * sector (2 ms typ, 10 ms max) and copies the contents, ~34 ms at 64 MHz.
+ * Code keeps running meanwhile (it is in the other bank, RM0481 §7.3.7). Each
+ * read of the area is a 16-bit flash access plus an ECC check, so reads and
+ * writes slow down as the log fills: with ~300 records over the same bytes, a
+ * small write took 3 ms at 64 MHz. The ICACHE is off during every core_nvm
+ * call (the area must not be cached), which slows other code while it runs.
+ *
  * Wear: each page takes 10,000 erases (L4 DS12470 §6.3.10, W5 DS14127
- * table 70), and the two pages take turns. A write costs ceil((8 + len) /
+ * table 70), or 100,000 on the H5's data sectors (RM0481 §7.3.10), and the
+ * two pages take turns. A write costs ceil((8 + len) /
  * unit) * unit bytes of log (unit = 8 B on the L4, 16 B on the W5); one erase
  * buys a page's worth of log minus the compacted contents (136-144 B per 128 B
  * of the store in use). With a small store: one-byte writes cost ~8.7 erases
@@ -63,10 +81,11 @@
  *   id:    nvm
  *   name:  NVM — non-volatile memory
  *   blurb: Byte-level read / write with one API on every Core. Core.ST.L0 hits
- *          true EEPROM (512 B, no erase needed); Core.ST.L4 and Core.ST.W5
- *          emulate 1 KB in two flash pages (power-loss safe, wear-levelled,
- *          survives reflashing; on the W5 it shares the radio through ST's
- *          flash manager). Core.ST.H5 is not implemented yet. Tier 2 exposes
+ *          true EEPROM (512 B, no erase needed); Core.ST.L4, Core.ST.W5 and
+ *          Core.ST.H5 emulate 1 KB in two flash pages (power-loss safe,
+ *          wear-levelled, survives reflashing; on the W5 it shares the radio
+ *          through ST's flash manager; on the H5 it lives in the 100k-cycle
+ *          data area, switched on at first boot). Tier 2 exposes
  *          `nvm.size` and the byte-level read / write.
  */
 
@@ -125,12 +144,25 @@
   #define CORE_NVM_PROG_UNIT   16u     /* RM0493 §7.3.7: 128-bit quad-words */
 
 #elif defined(STM32H523xx)
-  /* Flash emulation — not yet implemented */
-  #define CORE_NVM_BASE        0
-  #define CORE_NVM_SIZE        0
+  /* Flash emulation in the high-cycle data area (EDATA, RM0481 §7.3.10):
+   * bank 2 sectors 30 and 31, 6 KB each as data, at 0x09015000 (bank 2's
+   * sector 24 is data address 0x0900C000, RM0481 Figure 27). The linker
+   * script ends every image at 0x0807C000, the same sectors' code address.
+   * The array is written 16 bits at a time; records still align to 8 B. */
+  #define CORE_NVM_SIZE        1024
   #define CORE_NVM_EEPROM      0
-  #define CORE_NVM_FLASH_EMU   0
+  #define CORE_NVM_FLASH_EMU   1
+  #define CORE_NVM_EDATA       1
   #define CORE_NVM_ERASED      0xFFu
+  #define CORE_NVM_FLASH_ADDR  0x09015000UL
+  #define CORE_NVM_PAGE_SIZE   6144u
+  #define CORE_NVM_FIRST_PAGE  62u     /* flat 8 KB sector: bank 2, sector 30 */
+  #define CORE_NVM_PROG_UNIT   8u      /* record alignment (the hardware writes 16 bits) */
+  #define CORE_NVM_CODE_ADDR   0x0807C000UL   /* the two sectors' code address */
+#endif
+
+#ifndef CORE_NVM_EDATA
+  #define CORE_NVM_EDATA       0
 #endif
 
 #if CORE_NVM_FLASH_EMU
@@ -143,8 +175,7 @@
 
 /**
  * Read bytes from NVM. Bytes never written read as CORE_NVM_ERASED (0xFF on
- * Core.ST.L4 / W5, 0 on Core.ST.L0). Core.ST.H5 has no NVM yet: this always
- * returns CORE_NVM_ERR_RANGE there.
+ * Core.ST.L4 / W5 / H5, 0 on Core.ST.L0).
  *
  * @param offset Byte offset within the NVM region (0 to CORE_NVM_SIZE-1).
  * @param buf    Destination buffer.
@@ -155,13 +186,13 @@
 int core_nvm_read(uint32_t offset, void *buf, uint32_t len);
 
 /**
- * Write bytes to NVM. On Core.ST.L4 / W5 (1 KB, flash-emulated) a write is
- * atomic: after a reset or power loss the range reads all old or all new, and
- * the data survives reflashing. Most writes take well under a millisecond;
- * about one small write in a hundred (L4; one in 500 on the W5) compacts the
- * store, which erases a flash page and stalls the Core.ST.L4 for ~22 ms.
- * Core.ST.L0 writes its EEPROM byte by byte (~3.2 ms each). Core.ST.H5 has no
- * NVM yet.
+ * Write bytes to NVM. On Core.ST.L4 / W5 / H5 (1 KB, flash-emulated) a write
+ * is atomic: after a reset or power loss the range reads all old or all new,
+ * and the data survives reflashing. Most writes take well under a millisecond;
+ * about one small write in a hundred (L4; one in 500 on the W5, one in 350 on
+ * the H5) compacts the store, which erases a flash page and stalls the
+ * Core.ST.L4 for ~22 ms. Core.ST.L0 writes its EEPROM byte by byte (~3.2 ms
+ * each).
  *
  * @param offset Byte offset within the NVM region (0 to CORE_NVM_SIZE-1).
  * @param data   Source buffer.
@@ -174,7 +205,7 @@ int core_nvm_write(uint32_t offset, const void *data, uint32_t len);
 
 /**
  * Erase the whole NVM region: every byte reads CORE_NVM_ERASED afterwards.
- * Core.ST.L4 / W5: one page erase, or nothing if the region is already
+ * Core.ST.L4 / W5 / H5: one page erase, or nothing if the region is already
  * empty. Core.ST.L0: clears the EEPROM word by word (up to ~0.4 s; words
  * already clear are skipped).
  *
@@ -205,7 +236,7 @@ static inline uint32_t core_nvm_size(void)
 /**
  * Read a single byte from NVM at `offset`. Returns the byte (0..255)
  * on success or -1 on any error (offset out of range, NVM disabled).
- * A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 and 0 on
+ * A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 / H5 and 0 on
  * Core.ST.L0. The signed return lets DSL programs branch on `< 0`
  * without an out-pointer.
  *
@@ -223,7 +254,7 @@ static inline int core_nvm_read_byte(uint32_t offset)
 /**
  * Write a single byte to NVM at `offset`. Returns 1 on success or -1
  * on any error (offset out of range, flash error, no NVM on this Core).
- * Each call is one flash record on Core.ST.L4 / W5: fine for a setting
+ * Each call is one flash record on Core.ST.L4 / W5 / H5: fine for a setting
  * or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).
  *
  * @studio expose category=nvm name=write_byte returns=int
@@ -236,6 +267,62 @@ static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
     if (core_nvm_write(offset, &value, 1) != 0) return -1;
     return 1;
 }
+
+#if defined(STM32H523xx)
+/* ---- Core.ST.H5: switching the data area on (not API) ----
+ *
+ * _core_nvm_h5_boot() runs from core_init() on every boot, after the clocks
+ * and before the watchdog. If FLASH_EDATA2R_CUR already has the area on
+ * (EDATA2_EN, and EDATA2_STRT >= 1: at least the two last sectors) it only
+ * notes that. Otherwise it makes one option-byte change, RM0481 §7.4.3:
+ *   - only FLASH_EDATA2R_PRG is written, read-modify-write of EDATA2_EN and
+ *     EDATA2_STRT (= 1); nothing else. OPTSTRT programs every _PRG register,
+ *     so it first checks that each other readable _PRG equals its _CUR (they
+ *     are loaded equal at option-byte load; the epoch counters and the
+ *     secure-only registers are the exceptions, see core_nvm.c) and refuses
+ *     otherwise; it records every _CUR before and after;
+ *   - not when SWAP_BANK is set, nor when the ROM bootloader started the
+ *     image (BOOT0 high: the reset below would land back in the ROM);
+ *   - then it resets the chip (§7.4.3 step 9, "always recommended").
+ * A reset or power loss during the change keeps the old option value
+ * (§7.4.3 note), so the next boot simply tries again. At most one change is
+ * made per power-on, so nothing can loop. The record below lives in SRAM that
+ * startup leaves alone (.noinit), so the boot after the change can report it;
+ * a power cycle clears it. On a Core whose option bytes erase SRAM1 on reset
+ * (FLASH_OPTSR2.SRAM13_RST = 0) the record would not survive, so there the
+ * change is made without the reset. */
+#define CORE_NVM_H5_OB_N  15u
+typedef struct {
+    uint32_t magic;          /* valid record */
+    int32_t  state;          /* CORE_NVM_H5_*: what this boot found or did */
+    uint32_t writes;         /* option-byte changes made since the record began */
+    uint32_t boots;          /* boots since the record began */
+    uint32_t edata2_before;  /* FLASH_EDATA2R_CUR before the change */
+    uint32_t edata2_after;   /* FLASH_EDATA2R_CUR after it */
+    uint32_t edata1;         /* FLASH_EDATA1R_CUR (never written) */
+    uint32_t optsr;          /* FLASH_OPTSR_CUR (never written) */
+    uint32_t nssr;           /* FLASH_NSSR at the end of the change */
+    uint32_t opsr;           /* FLASH_OPSR at boot: an operation a reset cut short */
+    uint32_t mismatch;       /* _PRG offset that differed from its _CUR (refused) */
+    uint32_t ob_before[CORE_NVM_H5_OB_N];   /* every option _CUR register before */
+    uint32_t ob_after[CORE_NVM_H5_OB_N];    /* ... and after the change (core_nvm.c) */
+} core_nvm_h5_prov_t;
+
+#define CORE_NVM_H5_ENABLED   1    /* on already: nothing written this boot */
+#define CORE_NVM_H5_CHANGED   2    /* switched on this boot (the reset follows) */
+#define CORE_NVM_H5_ROM      (-1)  /* started by the ROM bootloader: not tried */
+#define CORE_NVM_H5_SWAP     (-2)  /* SWAP_BANK set: not tried */
+#define CORE_NVM_H5_PRG      (-3)  /* another _PRG register differed from _CUR: refused */
+#define CORE_NVM_H5_FAILED   (-4)  /* the change reported an error or did not take */
+#define CORE_NVM_H5_RETRY    (-5)  /* changed once since power-on, still off: not again */
+
+void _core_nvm_h5_boot(void);
+/* The record, or NULL after a power cycle before this boot's call. */
+const core_nvm_h5_prov_t *_core_nvm_h5_prov(void);
+/* Data-area words core_nvm has read with an uncorrectable ECC error since
+ * boot (a torn write leaves some; each one ends the log there). */
+uint32_t _core_nvm_h5_ecc_errors(void);
+#endif
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -253,12 +340,6 @@ static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
 //   crash flags) can't be exercised end-to-end in the IDE. Same issue
 //   the Backup register gap calls out; closing both needs persistent
 //   per-slot state across worker resets.
-//
-// @studio unsupported tier=1 value=M title="No NVM on Core.ST.H5 yet"
-//   core_nvm_write returns -1 on Core.ST.H5 (CORE_NVM_SIZE is 0). The
-//   flash emulation behind Core.ST.L4 and Core.ST.W5 has not been ported
-//   to the H523's 8 KB sectors yet. Until it is, H5 programs that need
-//   persistent state are limited to backup registers.
 //
 // @studio unsupported tier=1 value=L title="No wear-tracking API"
 //   core_nvm_erase_all clears the region, but nothing reports the page

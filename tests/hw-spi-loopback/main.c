@@ -1,6 +1,7 @@
 /**
  * hw-spi-loopback — bench test for core_spi (portal task #285) on
- * Core.ST.L4 / L4.2 and Core.ST.W5, with one jumper from MOSI to MISO.
+ * Core.ST.L4 / L4.2, Core.ST.W5 and Core.ST.H5, with one jumper from MOSI to
+ * MISO.
  * See README.md for the wiring, flashing and reading the result.
  *
  * Tests, one bit each in the pass/fail masks:
@@ -28,9 +29,9 @@
  *               SPI3, its cs_id as the cs) through core_tiles_pal2(): each
  *               asserts only its own pad; T7 runs on the same two pads too
  *
- * The result goes to USB CDC every 3 s on the L4 (send 'R' to run again) and
- * to g_spi_lb / g_spi_lb_log in RAM on every Core (read them over SWD, or
- * run read_swd.py; write 'R' to g_spi_lb_cmd to run again).
+ * The result goes to USB CDC every 3 s on the L4 and H5 (send 'R' to run
+ * again) and to g_spi_lb / g_spi_lb_log in RAM on every Core (read them over
+ * SWD, or run read_swd.py; write 'R' to g_spi_lb_cmd to run again).
  */
 
 #include "core.h"
@@ -39,8 +40,13 @@
 #include "hal_exti.h"
 #include "core_tiles.h"
 #include "core_watchdog.h"
-#if defined(STM32L422xx)
+#if defined(STM32L422xx) || defined(STM32H523xx)
 #include "core_usb.h"
+#define LB_CDC 1        /* report over USB CDC */
+#endif
+#if defined(STM32H523xx)
+#include "ll_usb_drd.h"
+#include "hal_dfu.h"    /* SCB_AIRCR */
 #endif
 #include <stdarg.h>
 #include <stdio.h>
@@ -77,7 +83,7 @@
 #define SPI_AF    6u    /* PB8/PB9/PA0 → SPI3 (Core-ST-W5-b.json) */
 #else
 #define SPI_H     (&core_spi1)
-#define SPI_AF    5u    /* PA7/PB4/PA1 → SPI1 */
+#define SPI_AF    5u    /* PA7/PB4/PA1 → SPI1 (L4); PA7/PB4/PA5 → SPI1 (H5, Core-ST-H5-a.json) */
 #endif
 
 #define T_JUMPER  (1u << 0)
@@ -163,21 +169,31 @@ static uint32_t cycles_to_us(uint32_t c) { return (uint32_t)(((uint64_t)c * 1000
 
 /* Fastest SCK the bench supply allows (datasheet master-receiver limits):
  * the L4 runs at 3.3 V from USB, 40 MHz (STM32L422 DS Table 80); the W5 runs
- * at 1.8 V from a CoreProbe, 33 MHz below 2.7 V (DS14127 Table 94). coregen's
- * SPI_MAX_SCK_MHZ holds the same figures. The SPI kernel clock is SYSCLK. */
+ * at 1.8 V from a CoreProbe, 33 MHz below 2.7 V (DS14127 Table 94); the H5
+ * runs from USB at 3.3 V, 45 MHz at 2.7-3.6 V (DS14540 Table 109, "135/3").
+ * coregen's SPI_MAX_SCK_MHZ holds the L4 and W5 figures. The SPI kernel clock
+ * is SYSCLK, except on the H5: per_ck = HSI, 64 MHz (ll_spi.h). */
 #if defined(STM32WBA55xx)
 #define LB_SCK_MAX_HZ  33000000u
+#elif defined(STM32H523xx)
+#define LB_SCK_MAX_HZ  45000000u
 #else
 #define LB_SCK_MAX_HZ  40000000u
 #endif
 
-/* Smallest prescaler (LL_SPI_PRESCALER_2 + k, SCK = SYSCLK / 2^(k+1)) whose
- * SCK is within LB_SCK_MAX_HZ: /2 at L4 80 MHz and W5 up to 64 MHz, /4 at W5
- * 100 MHz. */
+#if defined(STM32H523xx)
+#define SPI_KERNEL_HZ  (_ll_spi_kernel_per_ms() * 1000u)
+#else
+#define SPI_KERNEL_HZ  SYSCLK_HZ
+#endif
+
+/* Smallest prescaler (LL_SPI_PRESCALER_2 + k, SCK = kernel / 2^(k+1)) whose
+ * SCK is within LB_SCK_MAX_HZ: /2 at L4 80 MHz, W5 up to 64 MHz and the H5
+ * (64 MHz per_ck), /4 at W5 100 MHz. */
 static uint32_t fast_presc(void)
 {
     uint32_t k = 0;
-    while (k < 7u && (SYSCLK_HZ >> (k + 1u)) > LB_SCK_MAX_HZ) k++;
+    while (k < 7u && (SPI_KERNEL_HZ >> (k + 1u)) > LB_SCK_MAX_HZ) k++;
     return LL_SPI_PRESCALER_2 + k;
 }
 
@@ -716,7 +732,7 @@ static uint32_t run_all(void)
     return verdict;
 }
 
-#if defined(STM32L422xx)
+#if defined(LB_CDC)
 static void print_report(uint32_t verdict)
 {
     const char *v = verdict == VERDICT_PASS ? "PASS" : verdict == VERDICT_SKIP ? "SKIP" : "FAIL";
@@ -752,14 +768,23 @@ int main(void)
 #endif
     core_led_init();
     core_cycle_init();
-#if defined(STM32L422xx)
+#if defined(LB_CDC)
     wait_ms(1500);                /* let the host open the CDC port */
 #endif
     uint32_t verdict = run_all();
 
     uint32_t last_print = 0;
     while (1) {
-#if defined(STM32L422xx)
+#if defined(STM32H523xx)
+        /* Bench safety net (as in hw-h5-bringup): no USB address 15 s after
+         * boot means USB never came up, and with BOOT0 low nothing else gets
+         * the board back. Reset (with BOOT0 high: into the ROM bootloader). */
+        if ((USB_DADDR & USB_DADDR_ADD_MASK) == 0 && core_millis() > 15000u) {
+            SCB_AIRCR = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
+            for (;;) { }
+        }
+#endif
+#if defined(LB_CDC)
         if ((uint32_t)(core_millis() - last_print) >= 3000u) {
             last_print = core_millis();
             print_report(verdict);

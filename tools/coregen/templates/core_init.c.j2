@@ -46,6 +46,9 @@
 {% if iwdg_enabled %}
 #include "core_watchdog.h"
 {% endif %}
+{% if mcu.define == "STM32H523xx" %}
+#include "core_nvm.h"       /* _core_nvm_h5_boot: the data area core_nvm needs */
+{% endif %}
 {% if ble_contract or ble_radio %}
 #include "ble_contract.h"
 {% endif %}
@@ -802,6 +805,13 @@ void core_init(void)
 {% endif %}
 {% endif %}
     core_clock_init();
+{% if mcu.define == "STM32H523xx" %}
+    /* Core.ST.H5: switch the flash high-cycle data area on for core_nvm the
+     * first time this Core boots an SDK image (one option-byte change, then a
+     * reset); later boots only read the option. After the clocks (the flash
+     * programming delay follows them), before the watchdog. core_nvm.h. */
+    _core_nvm_h5_boot();
+{% endif %}
     core_pads_init();
 {% if usb_capable %}
 

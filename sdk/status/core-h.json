@@ -76,8 +76,12 @@
     "i2c.10bit": "",
     "i2c.smbus": "",
     "spi.master": {
-      "status": "partial",
-      "note": "Kernel clock now per_ck (HSI) and the SPI2/SPI3 enables fixed. SPI1 and SPI3 still time out, also after a clean BOOT0-low power-on (tests/hw-h5-bringup, 2026-09-26): by hand, a 4-frame session counts CTSIZE down to 1 and sets TXTF, but no frame reaches the RxFIFO and EOT never comes. Same with per_ck, CSI or pll1_q_ck. Cause open"
+      "status": "verified",
+      "note": "Bench-verified 2026-09-26 on Core.ST.H5 (tests/hw-spi-loopback config-h5.json, SPI1 on pads 9/8/3, pad 8 -> pad 3 strap, 4 runs PASS): all four modes, 1-4096 B, bounded timeouts, CS framing; 250 kHz to 32 MHz SCK (per_ck 64 MHz / 2), 3.99 MB/s polled. The old stall: the SPI v2 master clocks its serial side from the SCK pin (RM0481 §52.4.1), and SCK was left in analog mode (reset state, §13.3.1), whose input reads 0 (§13.3.12); coregen sets the pin to AF5. SPI3 has no SCK pad on this Core; with PB3 (AF6) it transfers too (tests/hw-h5-bringup)."
+    },
+    "spi.dma": {
+      "status": "verified",
+      "note": "Bench-verified 2026-09-26 on Core.ST.H5 (tests/hw-spi-loopback config-h5.json): GPDMA1 CH6/CH7 (REQSEL spi1 6/7, spi3 10/11, RM0481 Table 136), blocking and async with callback, 3.99 MB/s at 32 MHz SCK; SPI3 DMA with SCK on PB3 in tests/hw-h5-bringup."
     },
     "timer.tick": {
       "status": "verified",
@@ -105,8 +109,8 @@
     "adc.res": "verified",
     "adc.oversamp": "verified",
     "adc.dma": {
-      "status": "partial",
-      "note": "GPDMA1 vector fixed; half and full transfer callbacks arrive with good data (tests/hw-h5-bringup, 2026-09-26), but the GPDMA channel is not re-armed (no linked list), so it runs once instead of circular"
+      "status": "verified",
+      "note": "Circular: the GPDMA has no circular bit, so the ring is one linked-list item that links to itself (RM0481 §16.4.7). Bench 2026-09-26 (tests/hw-h5-bringup, VREFINT, 32-sample ring): 5931 half/full callbacks in 1 s, evenly spread, none after hal_adc_stop_dma; samples 1515-1521 (VREFINT_CAL 1515)."
     },
     "adc.dma_mv": "compile",
     "adc.cont": "compile",
@@ -122,7 +126,10 @@
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
-    "coregen.spi": "compile",
+    "coregen.spi": {
+      "status": "verified",
+      "note": "config-h5.json in tests/hw-spi-loopback: pads 9/8/3 to AF5, pad 2 as a GPIO chip select, bench PASS 2026-09-26"
+    },
     "coregen.uart": "compile",
     "coregen.timer": "verified",
     "power.sleep": "verified",
@@ -193,7 +200,10 @@
     "ble.pairing": "na",
     "ble.central": "na",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none",
+    "nvm.flash_emu": {
+      "status": "verified",
+      "note": "1 KB in the flash high-cycle data area (EDATA, 100k cycles): bank 2 sectors 30-31, read at 0x09015000, written 16 bits at a time. core_init() switches the area on at a Core's first boot (FLASH_EDATA2R only, then one reset); bench 2026-09-26: EDATA2R_CUR 0x00000000 -> 0x00008001, every other option register unchanged, later boots write nothing. tests/hw-nvm-flash (config-h5.json) PASS twice: read-back, compactions, reset, 24 power-loss resets (0 garbage), survives flash-serial and flash-dfu of another image. tests/host-nvm-sim runs the H5 geometry with a cut at each 16-bit program (76,137 runs)."
+    },
     "nvm.otp": {
       "status": "none",
       "note": "The STM32H523 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"

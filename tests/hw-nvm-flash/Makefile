@@ -1,8 +1,9 @@
-# Bench test for core_nvm's flash emulation on Core.ST.L4 / L4.2 and
-# Core.ST.W5. See README.md.
+# Bench test for core_nvm's flash emulation on Core.ST.L4 / L4.2, Core.ST.W5
+# and Core.ST.H5. See README.md.
 #
 #   make                            # Core.ST.L4 (report over USB CDC)
 #   make TILE=Core.ST.L4.2
+#   make TILE=Core.ST.H5            # config-h5.json (report over USB CDC)
 #   make TILE=Core.ST.W5            # result in g_nvm_result over SWD
 #   make TILE=Core.ST.W5 BLE=1      # adds T5 (writes while advertising)
 #
@@ -22,6 +23,8 @@ V             ?= 0
 
 ifeq ($(BLE),1)
   CONFIG := CONFIG_JSON=$(PROJECT_DIR)/config-ble.json BLE_ENABLED=1
+else ifeq ($(TILE),Core.ST.H5)
+  CONFIG := CONFIG_JSON=$(PROJECT_DIR)/config-h5.json BLE_ENABLED=0
 else
   CONFIG := BLE_ENABLED=0
 endif

@@ -6,9 +6,12 @@
 
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 512K - 8K
+    FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 512K - 8K - 16K   /* top 16 KB: core_nvm */
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 272K - 16
 }
+
+/* As in stm32h523he.ld: core_nvm's sectors above the image. */
+__core_nvm_start = 0x0807C000;
 
 ENTRY(Reset_Handler)
 
@@ -74,6 +77,8 @@ SECTIONS
         _ebss = .;
         __bss_end__ = _ebss;
     } >SRAM
+
+    .noinit (NOLOAD) : { . = ALIGN(4); *(.noinit) *(.noinit*) . = ALIGN(4); } >SRAM
 
     ._user_heap_stack :
     {

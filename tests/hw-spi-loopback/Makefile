@@ -1,9 +1,10 @@
-# Bench test for core_spi on Core.ST.L4 / L4.2 and Core.ST.W5, with one
-# jumper from MOSI to MISO. See README.md.
+# Bench test for core_spi on Core.ST.L4 / L4.2, Core.ST.W5 and Core.ST.H5,
+# with one jumper from MOSI to MISO. See README.md.
 #
 #   make                            # Core.ST.L4 (report over USB CDC)
 #   make TILE=Core.ST.L4.2          # config-l42.json: MISO on pad 18, CS on pad 19
 #   make TILE=Core.ST.W5            # config-w5.json: SPI3; result in g_spi_lb over SWD
+#   make TILE=Core.ST.H5            # config-h5.json: SPI1, pad 8 -> pad 3 (report over USB CDC)
 #   make TWO_TILES=1                # config-2tiles.json: two SPI1 tiles, CS pads 9 and 4 (T7)
 #   make TILE=Core.ST.W5 TWO_TILES=1 # config-w5-2tiles.json: two SPI3 tiles, CS pads 3 and 4 (T7)
 #   make TILE=Core.ST.W5 DUAL=1      # config-w5-dual.json: SPI3 tile on pad 3 + dual-bus
@@ -33,6 +34,12 @@ ifeq ($(TILE),Core.ST.L4.2)
 else ifeq ($(TILE),Core.ST.W5)
   CFG := config-w5$(if $(DUAL_),-dual,$(if $(TWO),-2tiles)).json
   LB  := -DLB_MOSI=6 -DLB_MISO=7 -DLB_CS=3 -DLB_SCK=2 $(if $(DUAL_)$(TWO),-DLB_CS2=4) $(if $(DUAL_),-DLB_DUAL=1)
+else ifeq ($(TILE),Core.ST.H5)
+  ifneq ($(TWO),)
+    $(error TWO_TILES=1 is not set up for Core.ST.H5 (one spare pad for a CS))
+  endif
+  CFG := config-h5.json
+  LB  := -DLB_MOSI=8 -DLB_MISO=3 -DLB_CS=2 -DLB_SCK=9
 else
   CFG := config$(if $(TWO),-2tiles).json
   LB  := $(if $(TWO),-DLB_CS2=4)

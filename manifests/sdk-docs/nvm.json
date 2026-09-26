@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@60254ad",
+  "source": "tiles@044f8f3",
   "category": "nvm",
   "label": "Core.NVM",
   "icon": "▤",
@@ -14,7 +14,7 @@
       "name": "core_nvm_read",
       "signature": "core_nvm_read(uint32_t offset, void * buf, uint32_t len)",
       "returns": "int",
-      "brief": "Read bytes from NVM. Bytes never written read as CORE_NVM_ERASED (0xFF on Core.ST.L4 / W5, 0 on Core.ST.L0). Core.ST.H5 has no NVM yet: this always returns CORE_NVM_ERR_RANGE there.",
+      "brief": "Read bytes from NVM. Bytes never written read as CORE_NVM_ERASED (0xFF on Core.ST.L4 / W5 / H5, 0 on Core.ST.L0).",
       "params": [
         {
           "name": "offset",
@@ -39,7 +39,7 @@
       "name": "core_nvm_write",
       "signature": "core_nvm_write(uint32_t offset, const void * data, uint32_t len)",
       "returns": "int",
-      "brief": "Write bytes to NVM. On Core.ST.L4 / W5 (1 KB, flash-emulated) a write is atomic: after a reset or power loss the range reads all old or all new, and the data survives reflashing. Most writes take well under a millisecond; about one small write in a hundred (L4; one in 500 on the W5) compacts the store, which erases a flash page and stalls the Core.ST.L4 for ~22 ms. Core.ST.L0 writes its EEPROM byte by byte (~3.2 ms each). Core.ST.H5 has no NVM yet.",
+      "brief": "Write bytes to NVM. On Core.ST.L4 / W5 / H5 (1 KB, flash-emulated) a write is atomic: after a reset or power loss the range reads all old or all new, and the data survives reflashing. Most writes take well under a millisecond; about one small write in a hundred (L4; one in 500 on the W5, one in 350 on the H5) compacts the store, which erases a flash page and stalls the Core.ST.L4 for ~22 ms. Core.ST.L0 writes its EEPROM byte by byte (~3.2 ms each).",
       "params": [
         {
           "name": "offset",
@@ -64,7 +64,7 @@
       "name": "core_nvm_erase_all",
       "signature": "core_nvm_erase_all(void)",
       "returns": "int",
-      "brief": "Erase the whole NVM region: every byte reads CORE_NVM_ERASED afterwards. Core.ST.L4 / W5: one page erase, or nothing if the region is already empty. Core.ST.L0: clears the EEPROM word by word (up to ~0.4 s; words already clear are skipped).",
+      "brief": "Erase the whole NVM region: every byte reads CORE_NVM_ERASED afterwards. Core.ST.L4 / W5 / H5: one page erase, or nothing if the region is already empty. Core.ST.L0: clears the EEPROM word by word (up to ~0.4 s; words already clear are skipped).",
       "params": [],
       "studio_exposed": false,
       "layer": "core"
@@ -82,7 +82,7 @@
       "name": "core_nvm_read_byte",
       "signature": "core_nvm_read_byte(uint32_t offset)",
       "returns": "int",
-      "brief": "Read a single byte from NVM at `offset`. Returns the byte (0..255) on success or -1 on any error (offset out of range, NVM disabled). A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 and 0 on Core.ST.L0. The signed return lets DSL programs branch on `< 0` without an out-pointer.",
+      "brief": "Read a single byte from NVM at `offset`. Returns the byte (0..255) on success or -1 on any error (offset out of range, NVM disabled). A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 / H5 and 0 on Core.ST.L0. The signed return lets DSL programs branch on `< 0` without an out-pointer.",
       "params": [
         {
           "name": "offset",
@@ -101,7 +101,7 @@
       "name": "core_nvm_write_byte",
       "signature": "core_nvm_write_byte(uint32_t offset, uint8_t value)",
       "returns": "int",
-      "brief": "Write a single byte to NVM at `offset`. Returns 1 on success or -1 on any error (offset out of range, flash error, no NVM on this Core). Each call is one flash record on Core.ST.L4 / W5: fine for a setting or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).",
+      "brief": "Write a single byte to NVM at `offset`. Returns 1 on success or -1 on any error (offset out of range, flash error, no NVM on this Core). Each call is one flash record on Core.ST.L4 / W5 / H5: fine for a setting or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).",
       "params": [
         {
           "name": "offset",

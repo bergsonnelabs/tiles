@@ -6,9 +6,14 @@
  *   L4:  DMA1 CH2 = SPI1_RX, CH3 = SPI1_TX (request 1, RM0394 Table 45)
  *   WBA: GPDMA1 CH6 = RX, CH7 = TX (REQSEL spi1_rx 1 / spi1_tx 2 /
  *        spi3_rx 3 / spi3_tx 4, RM0493 Table 125)
- *   H5:  no DMA yet (HAL_ERROR); kernel clock per_ck = hsi_ker_ck
- * The ADC uses DMA1 CH1 (L4) / GPDMA1 CH0 (WBA); nothing else in the SDK
+ *   H5:  the same GPDMA1 CH6 / CH7 code (REQSEL spi1_rx 6 / spi1_tx 7 /
+ *        spi2_rx 8 / spi2_tx 9 / spi3_rx 10 / spi3_tx 11, RM0481 Table 136);
+ *        kernel clock per_ck = hsi_ker_ck
+ * The ADC uses DMA1 CH1 (L4) / GPDMA1 CH0 (WBA, H5); nothing else in the SDK
  * claims these channels.
+ *
+ * SPI v2 (WBA, H5): the SCK pin must be in its alternate function, or a
+ * master transfer never clocks (see ll_spi.h). coregen sets it up.
  */
 
 #include "hal_spi.h"
@@ -16,7 +21,7 @@
 #include "ll_dma.h"
 #include <string.h>
 
-#if defined(STM32L422xx) || defined(STM32WBA55xx)
+#if defined(STM32L422xx) || defined(STM32WBA55xx) || defined(STM32H523xx)
 #define _SPI_HAS_DMA 1
 #endif
 
@@ -451,11 +456,24 @@ static void _dma_irq_enable(hal_spi_t *h)
 
 static uint32_t _dma_async_max(hal_spi_t *h) { (void)h; return _SPI_DMA_MAX_FRAMES; }
 
-#elif defined(STM32WBA55xx)
-/* ---------------- WBA: GPDMA1 + SPI v2 ---------------- */
+#elif defined(STM32WBA55xx) || defined(STM32H523xx)
+/* ---------------- WBA / H5: GPDMA1 + SPI v2 ----------------
+ * The same GPDMA and SPI v2 IPs on both (RM0493 §17 / §41, RM0481 §16 / §52);
+ * only the request numbers differ. */
 
 #define _SPI_RX_CH   GPDMA1_CH6
 #define _SPI_TX_CH   GPDMA1_CH7
+
+#if defined(STM32WBA55xx)
+/* RM0493 Table 125: spi1_rx 1, spi1_tx 2, spi3_rx 3, spi3_tx 4 */
+#define _SPI_RQ_RX(s)  (((s) == SPI1) ? 1UL : 3UL)
+#define _SPI_RQ_TX(s)  (((s) == SPI1) ? 2UL : 4UL)
+#else
+/* RM0481 Table 136: spi1_rx 6, spi1_tx 7, spi2_rx 8, spi2_tx 9, spi3_rx 10,
+ * spi3_tx 11 */
+#define _SPI_RQ_RX(s)  (((s) == SPI1) ? 6UL : ((s) == SPI2) ? 8UL : 10UL)
+#define _SPI_RQ_TX(s)  (_SPI_RQ_RX(s) + 1UL)
+#endif
 
 static uint8_t _spi_dma_sink;               /* RX destination when rx == NULL */
 
@@ -472,14 +490,14 @@ static void _gpdma_abort(GPDMA_Channel_TypeDef *ch)
     ch->CFCR = LL_GPDMA_CFCR_ALL;
 }
 
-/* Arm and start (RM0493 §41.4.14: RXDMAEN, channels, TXDMAEN, then SPE and
- * CSTART). TSIZE = n closes the session with EOT. */
-static void _wba_dma_arm(hal_spi_t *h, const uint8_t *tx, uint8_t *rx,
-                         uint32_t n, int irq)
+/* Arm and start (RM0493 §41.4.14, RM0481 §52.4.14: RXDMAEN, channels,
+ * TXDMAEN, then SPE and CSTART). TSIZE = n closes the session with EOT. */
+static void _v2_dma_arm(hal_spi_t *h, const uint8_t *tx, uint8_t *rx,
+                        uint32_t n, int irq)
 {
     SPI_TypeDef *s = h->instance;
-    uint32_t rq_rx = (s == SPI1) ? 1UL : 3UL;
-    uint32_t rq_tx = (s == SPI1) ? 2UL : 4UL;
+    uint32_t rq_rx = _SPI_RQ_RX(s);
+    uint32_t rq_tx = _SPI_RQ_TX(s);
 
     ll_rcc_dma1_clk_enable();
     _gpdma_abort(_SPI_RX_CH);
@@ -516,10 +534,10 @@ static void _wba_dma_arm(hal_spi_t *h, const uint8_t *tx, uint8_t *rx,
     SET_BITS(s->CR1, LL_SPI_CR1_CSTART);
 }
 
-/* Close (RM0493 §41.4.14): channels off, SPI disable procedure (after EOT
+/* Close (RM0493 §41.4.14, RM0481 §52.4.14): channels off, SPI disable procedure (after EOT
  * that is just SPE=0), DMA enables off. Leaves SPE=0, as every v2 transfer
  * does. After a failure the caller resets the peripheral. */
-static int _wba_dma_close(hal_spi_t *h, int rc)
+static int _v2_dma_close(hal_spi_t *h, int rc)
 {
     SPI_TypeDef *s = h->instance;
     _gpdma_abort(_SPI_RX_CH);
@@ -538,7 +556,7 @@ static inline uint32_t _dma_rx_left(void) { return _SPI_RX_CH->CBR1 & 0xFFFFUL; 
 
 /* Done = EOT (last frame on the bus) and the RX channel's TC (last frame in
  * memory: after EOT the final packet is still drained by DMA, §41.4.14). */
-static int _wba_dma_wait(hal_spi_t *h)
+static int _v2_dma_wait(hal_spi_t *h)
 {
     SPI_TypeDef *s = h->instance;
     ll_spi_deadline_t dl;
@@ -556,13 +574,13 @@ static int _wba_dma_wait(hal_spi_t *h)
     }
 }
 
-#define _dma_arm    _wba_dma_arm
-#define _dma_wait   _wba_dma_wait
-#define _dma_close  _wba_dma_close
+#define _dma_arm    _v2_dma_arm
+#define _dma_wait   _v2_dma_wait
+#define _dma_close  _v2_dma_close
 
 /* Async completion: the SPI's own EOT interrupt (bus-accurate, unlike the TX
  * channel's TC, which fires when the last byte enters the FIFO). */
-static void _wba_spi_irq(SPI_TypeDef *s)
+static void _v2_spi_irq(SPI_TypeDef *s)
 {
     hal_spi_t *h = _spi_dma_owner;
     uint32_t sr = s->SR;
@@ -578,16 +596,24 @@ static void _wba_spi_irq(SPI_TypeDef *s)
         while (!(_SPI_RX_CH->CSR & (LL_GPDMA_CSR_TCF | _GPDMA_ERRS)) && --guard) { }
         if (!guard || (_SPI_RX_CH->CSR & _GPDMA_ERRS)) rc = LL_SPI_ERR;
     }
-    rc = _wba_dma_close(h, rc);
+    rc = _v2_dma_close(h, rc);
     _spi_dma_done(h, rc);
 }
 
-void SPI1_IRQHandler(void) { _wba_spi_irq(SPI1); }
-void SPI3_IRQHandler(void) { _wba_spi_irq(SPI3); }
+void SPI1_IRQHandler(void) { _v2_spi_irq(SPI1); }
+void SPI3_IRQHandler(void) { _v2_spi_irq(SPI3); }
+#if defined(STM32H523xx)
+void SPI2_IRQHandler(void) { _v2_spi_irq(SPI2); }
+#endif
 
 static void _dma_irq_enable(hal_spi_t *h)
 {
+#if defined(STM32H523xx)
+    uint32_t irqn = (h->instance == SPI1) ? HAL_IRQ_SPI1
+                  : (h->instance == SPI2) ? HAL_IRQ_SPI2 : HAL_IRQ_SPI3;
+#else
     uint32_t irqn = (h->instance == SPI1) ? HAL_IRQ_SPI1 : HAL_IRQ_SPI3;
+#endif
     hal_nvic_set_priority(irqn, 6);
     hal_nvic_enable_irq(irqn);
 }
