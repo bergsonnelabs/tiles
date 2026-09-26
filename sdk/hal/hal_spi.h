@@ -5,8 +5,10 @@
  * transfers. Supports the old SPI IP (L0/L4) and SPI v2 (WBA/H5).
  *
  * CS is managed via GPIO (not hardware NSS), so a transaction can span
- * several calls: select, any number of transfers, deselect. Assign a CS pin
- * with hal_spi_set_cs() or manage CS externally via the tile driver CS array.
+ * several calls: select, any number of transfers, deselect. Assign one CS pin
+ * with hal_spi_set_cs(), or, for several devices on one bus, a chip-select map
+ * with hal_spi_set_cs_map() and address each device by its id
+ * (hal_spi_select_id()); the tile bridge (core_tiles.h) does the latter.
  *
  * Every call is bounded. A transfer that stops making progress (no frame
  * completes for the stall budget, see ll_spi_stall_cycles: about 2 ms plus a
@@ -36,6 +38,15 @@ typedef struct {
     uint8_t  lsb_first;     /* 0 = MSB first (default), 1 = LSB first */
 } hal_spi_config_t;
 
+/* One device's chip select in a hal_spi_set_cs_map() table. `id` is the value
+ * that names the device in hal_spi_select_id(): for a tile, its instance (the
+ * `cs` argument its driver passes to the tiles_pal_t SPI calls). */
+typedef struct {
+    GPIO_TypeDef *port;
+    uint16_t      pin;
+    uint8_t       id;
+} hal_spi_cs_t;
+
 typedef struct hal_spi {
     SPI_TypeDef  *instance;
 
@@ -43,6 +54,10 @@ typedef struct hal_spi {
     GPIO_TypeDef *cs_port;
     uint32_t      cs_pin;
     uint8_t       cs_active_low;  /* 1 = CS active low (default) */
+
+    /* Per-device chip selects (several devices on one bus), or NULL */
+    const hal_spi_cs_t *cs_map;
+    uint8_t             cs_map_len;
 
     uint8_t       fill;           /* byte clocked out when tx is NULL (0xFF) */
     hal_spi_config_t cfg;         /* kept for hal_spi_configure() and recovery */
@@ -96,6 +111,19 @@ void hal_spi_deinit(hal_spi_t *h);
  */
 void hal_spi_set_cs(hal_spi_t *h, GPIO_TypeDef *port, uint32_t pin);
 
+/**
+ * Attach a chip-select map for several devices on one bus, one pin per device.
+ * Every pin is deasserted, then configured as a push-pull output. The table is
+ * kept by pointer, so it must outlive the handle (static const). Set
+ * cs_active_low first if the devices use active-high selects.
+ * hal_spi_select()/deselect() keep driving only the pin from hal_spi_set_cs()
+ * (none, when coregen built a map); use hal_spi_select_id() per device.
+ * @param h    SPI handle
+ * @param map  Table of {port, pin, id}, ids unique
+ * @param n    Number of entries (0 detaches the map)
+ */
+void hal_spi_set_cs_map(hal_spi_t *h, const hal_spi_cs_t *map, uint8_t n);
+
 /* ---- CS control ---- */
 
 /** Assert CS (drive active — low by default). */
@@ -103,6 +131,25 @@ void hal_spi_select(hal_spi_t *h);
 
 /** Deassert CS (drive inactive — high by default). */
 void hal_spi_deselect(hal_spi_t *h);
+
+/**
+ * Assert the chip select of device `id`. With a chip-select map, only the
+ * entry whose id matches is driven; an id that is not in the map drives
+ * nothing and returns -1 (never some other device's pin). Without a map the
+ * bus has one device, and this asserts the hal_spi_set_cs() pin (if any) for
+ * any id.
+ * @param h   SPI handle
+ * @param id  Device id (a tile's instance)
+ * @return 0, or -1 for an id not in the map
+ */
+int hal_spi_select_id(hal_spi_t *h, uint8_t id);
+
+/**
+ * Deassert the chip select that hal_spi_select_id(h, id) asserted.
+ * @param h   SPI handle
+ * @param id  Device id (a tile's instance)
+ */
+void hal_spi_deselect_id(hal_spi_t *h, uint8_t id);
 
 /**
  * The SCK frequency the handle's prescaler gives, in Hz: the SPI kernel

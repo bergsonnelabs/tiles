@@ -153,6 +153,22 @@ void hal_spi_set_cs(hal_spi_t *h, GPIO_TypeDef *port, uint32_t pin)
     ll_gpio_config_output(port, pin);
 }
 
+void hal_spi_set_cs_map(hal_spi_t *h, const hal_spi_cs_t *map, uint8_t n)
+{
+    if (!h) return;
+    h->cs_map = n ? map : NULL;
+    h->cs_map_len = map ? n : 0;
+    for (uint8_t i = 0; i < h->cs_map_len; i++) {
+        GPIO_TypeDef *port = map[i].port;
+        uint32_t pin = map[i].pin;
+        /* Level first, then mode: the pin never drives the active level. */
+        ll_rcc_gpio_clk_enable(port);
+        if (h->cs_active_low) ll_gpio_set(port, 1UL << pin);
+        else                  ll_gpio_clear(port, 1UL << pin);
+        ll_gpio_config_output(port, pin);
+    }
+}
+
 uint32_t hal_spi_sck_hz(const hal_spi_t *h)
 {
     if (!h || !h->instance) return 0;
@@ -181,6 +197,45 @@ void hal_spi_deselect(hal_spi_t *h)
         else
             ll_gpio_clear(h->cs_port, 1UL << h->cs_pin);
     }
+}
+
+/* Drive one pin active (1) or inactive (0) for the handle's polarity. */
+static void _spi_cs_drive(const hal_spi_t *h, GPIO_TypeDef *port, uint32_t pin, int active)
+{
+    if (active == (h->cs_active_low != 0)) ll_gpio_clear(port, 1UL << pin);
+    else                                   ll_gpio_set(port, 1UL << pin);
+}
+
+static const hal_spi_cs_t *_spi_cs_find(const hal_spi_t *h, uint8_t id)
+{
+    for (uint8_t i = 0; i < h->cs_map_len; i++)
+        if (h->cs_map[i].id == id)
+            return &h->cs_map[i];
+    return NULL;
+}
+
+int hal_spi_select_id(hal_spi_t *h, uint8_t id)
+{
+    if (!h) return -1;
+    if (!h->cs_map_len) {           /* one device on the bus: its own CS */
+        hal_spi_select(h);
+        return 0;
+    }
+    const hal_spi_cs_t *cs = _spi_cs_find(h, id);
+    if (!cs) return -1;             /* unknown device: select nothing */
+    _spi_cs_drive(h, cs->port, cs->pin, 1);
+    return 0;
+}
+
+void hal_spi_deselect_id(hal_spi_t *h, uint8_t id)
+{
+    if (!h) return;
+    if (!h->cs_map_len) {
+        hal_spi_deselect(h);
+        return;
+    }
+    const hal_spi_cs_t *cs = _spi_cs_find(h, id);
+    if (cs) _spi_cs_drive(h, cs->port, cs->pin, 0);
 }
 
 /* ============================================================

@@ -8,16 +8,21 @@
  *               levels, against the opposite pull). If not, the report says
  *               "loopback jumper missing" and T1-T6 are skipped (not failed).
  *   T1 bytes    single bytes 0x00 0xFF 0xA5 0x5A and 0..255, plus a 256-byte
- *               buffer, at /256 and /2 (polled and DMA)
+ *               buffer, at /256 and the fastest legal SCK (polled and DMA)
  *   T2 buffers  1 2 3 63 64 65 255 256 1024 4096 bytes, polled and DMA,
  *               rx == tx; in place, NULL rx and NULL tx (fill 0xFF) too
  *   T3 modes    modes 0-3 and LSB-first: data comes back and SCK idles at CPOL
- *   T4 speed    4096-byte throughput at the fastest SCK, polled and DMA
+ *   T4 speed    4096-byte throughput at the fastest legal SCK (LB_SCK_MAX_HZ),
+ *               polled and DMA
  *   T5 timeout  a transfer that cannot complete returns HAL_TIMEOUT within its
  *               stall budget (polled, blocking DMA, async DMA + wait; on the
  *               L4 also with the SPI clock gated), and the next one works
  *   T6 pal      core_tiles_pal() spi_transfer: command + 3-byte address + data
  *               read under ONE chip-select assertion (EXTI counts 2 CS edges)
+ *   T7 2 tiles  (config-2tiles.json, `make TWO_TILES=1`) two SPI1 tiles with
+ *               their own cs_pad: every bridge call asserts only its tile's
+ *               pad (EXTI counts falling edges on both), an unknown cs selects
+ *               nothing and returns -1, and both pads are high after init
  *
  * The result goes to USB CDC every 3 s on the L4 (send 'R' to run again) and
  * to g_spi_lb / g_spi_lb_log in RAM on every Core (read them over SWD, or
@@ -50,6 +55,8 @@
 #ifndef LB_SCK
 #define LB_SCK   3      /* Core.ST.L4.1: PA1  SPI1.CLK */
 #endif
+/* LB_CS2 (Makefile, TWO_TILES=1): the second tile's chip select, pad 4 (PB6).
+ * Tile 0 (instance 0) then selects on LB_CS, tile 1 (instance 1) on LB_CS2. */
 
 #if defined(STM32WBA55xx)
 #define SPI_H     (&core_spi3)
@@ -66,11 +73,18 @@
 #define T_SPEED   (1u << 4)
 #define T_TIMEOUT (1u << 5)
 #define T_PAL     (1u << 6)
+#define T_TWO     (1u << 7)
+#ifdef LB_CS2
+#define EXPECTED  0xFFu
+#define N_TESTS   8
+#else
 #define EXPECTED  0x7Fu
+#define N_TESTS   7
+#endif
 
 #define VERDICT_PASS  0x600D600Du
 #define VERDICT_SKIP  0x5C1B0000u   /* jumper missing: nothing else was run */
-#define VERDICT_FAIL  0xBAD00000u   /* | index (0-6) of the first failing test */
+#define VERDICT_FAIL  0xBAD00000u   /* | index (0-7) of the first failing test */
 
 /* SWD-readable result:  arm-none-eabi-nm build/hw-spi-loopback.elf | grep g_spi_lb */
 typedef struct {
@@ -83,6 +97,8 @@ typedef struct {
     uint32_t t5_poll_us, t5_dma_us, t5_async_us, t5_gated_us, t5_bound_us;
     uint32_t cs_edges;                    /* T6: CS edges in one PAL transaction */
     uint32_t first_err;                   /* test << 24 | case << 12 | size */
+    uint32_t t7_edges_a, t7_edges_b;      /* T7: falling edges on LB_CS / LB_CS2 */
+    uint32_t t7_wrong;                    /* T7: operations that moved the wrong pad */
 } spi_lb_result_t;
 
 __attribute__((used)) volatile spi_lb_result_t g_spi_lb;
@@ -124,6 +140,26 @@ static void fill_pattern(uint8_t *b, uint32_t n, uint32_t seed)
 }
 
 static uint32_t cycles_to_us(uint32_t c) { return (uint32_t)(((uint64_t)c * 1000000u) / SYSCLK_HZ); }
+
+/* Fastest SCK the bench supply allows (datasheet master-receiver limits):
+ * the L4 runs at 3.3 V from USB, 40 MHz (STM32L422 DS Table 80); the W5 runs
+ * at 1.8 V from a CoreProbe, 33 MHz below 2.7 V (DS14127 Table 94). coregen's
+ * SPI_MAX_SCK_MHZ holds the same figures. The SPI kernel clock is SYSCLK. */
+#if defined(STM32WBA55xx)
+#define LB_SCK_MAX_HZ  33000000u
+#else
+#define LB_SCK_MAX_HZ  40000000u
+#endif
+
+/* Smallest prescaler (LL_SPI_PRESCALER_2 + k, SCK = SYSCLK / 2^(k+1)) whose
+ * SCK is within LB_SCK_MAX_HZ: /2 at L4 80 MHz and W5 up to 64 MHz, /4 at W5
+ * 100 MHz. */
+static uint32_t fast_presc(void)
+{
+    uint32_t k = 0;
+    while (k < 7u && (SYSCLK_HZ >> (k + 1u)) > LB_SCK_MAX_HZ) k++;
+    return LL_SPI_PRESCALER_2 + k;
+}
 
 static hal_spi_config_t cfg_of(uint32_t presc, uint32_t mode, uint32_t lsb)
 {
@@ -174,7 +210,7 @@ static int buf_ok(uint32_t n, int dma, uint32_t seed)
 /* ---- T1 ---- */
 static void t1_bytes(void)
 {
-    static const uint32_t presc[2] = { LL_SPI_PRESCALER_256, LL_SPI_PRESCALER_2 };
+    const uint32_t presc[2] = { LL_SPI_PRESCALER_256, fast_presc() };
     static const uint8_t pats[4] = { 0x00, 0xFF, 0xA5, 0x5A };
     int ok = 1;
     for (uint32_t p = 0; p < 2; p++) {
@@ -280,7 +316,7 @@ static uint32_t measure_Bps(int dma, int *ok)
 
 static void t4_speed(void)
 {
-    hal_spi_config_t c = cfg_of(LL_SPI_PRESCALER_2, 0, 0);
+    hal_spi_config_t c = cfg_of(fast_presc(), 0, 0);
     core_spi_configure(SPI_H, &c);
     int ok = 1;
     uint32_t sck = core_spi_sck_hz(SPI_H);
@@ -387,12 +423,26 @@ static void t5_timeout(void)
 static volatile uint32_t s_cs_edges;
 static void on_cs(void *ctx) { (void)ctx; s_cs_edges++; }
 
+/* Select tile 0's chip select by hand. With one CS pad that is the bus's own
+ * (core_spi_select); with a per-tile map (TWO_TILES) core_spi_select() drives
+ * no pad, so select map entry 0 (pad LB_CS). */
+static void lb_select(int on)
+{
+#ifdef LB_CS2
+    if (on) (void)hal_spi_select_id(SPI_H, 0);
+    else    hal_spi_deselect_id(SPI_H, 0);
+#else
+    if (on) core_spi_select(SPI_H);
+    else    core_spi_deselect(SPI_H);
+#endif
+}
+
 static void t6_pal(void)
 {
     int ok = 1;
     tiles_pal_t *pal = core_tiles_pal(SPI_H);
     hal_pad_gpio_t cs = hal_pad_lookup(LB_CS);
-    if (!pal || !pal->spi_transfer || !cs.port || !SPI_H->cs_port) { mark(T_PAL, 0); err_once(6, 0, 0); lb_log("  T6 pal     FAIL  no PAL / CS pad\r\n"); return; }
+    if (!pal || !pal->spi_transfer || !cs.port || (!SPI_H->cs_port && !SPI_H->cs_map_len)) { mark(T_PAL, 0); err_once(6, 0, 0); lb_log("  T6 pal     FAIL  no PAL / CS pad\r\n"); return; }
     /* hal_exti_enable, not core_pad_on_change: the core wrapper turns the pad
      * into an input, and this one must stay the driven chip select. The EXTI
      * sees an output pin's own edges through its input stage. */
@@ -416,10 +466,10 @@ static void t6_pal(void)
      *    every byte on MOSI (command, address, fill) comes back as sent. */
     uint8_t echo[4 + 16];
     s_cs_edges = 0;
-    core_spi_select(SPI_H);
+    lb_select(1);
     hal_status_t s = core_spi_exchange(SPI_H, cmd, echo, 4);
     if (s == HAL_OK) s = core_spi_exchange(SPI_H, NULL, echo + 4, 16);
-    core_spi_deselect(SPI_H);
+    lb_select(0);
     core_delay_us(20);
     if (s != HAL_OK || memcmp(echo, cmd, 4) || s_cs_edges != 2) { ok = 0; err_once(6, 3, s_cs_edges); }
     for (uint32_t i = 4; i < sizeof echo; i++) if (echo[i] != 0xFF) { ok = 0; err_once(6, 4, i); break; }
@@ -438,6 +488,112 @@ static void t6_pal(void)
          ok ? "PASS" : "FAIL", rc, (unsigned long)e1, s == HAL_OK);
 }
 
+/* ---- T7: two tiles on one bus, one chip select each ---- */
+#ifdef LB_CS2
+static int pad_high(uint8_t pad)
+{
+    hal_pad_gpio_t g = hal_pad_lookup(pad);
+    return g.port && ll_gpio_read(g.port, 1UL << g.pin) != 0;
+}
+
+/* Right after core_init(), before any transfer: both CS pads driven high
+ * (outputs, level high). -1 = not measured. */
+static int s_cs_high_at_init = -1;
+
+static int pad_is_output(uint8_t pad)
+{
+    hal_pad_gpio_t g = hal_pad_lookup(pad);
+    return g.port && ((g.port->MODER >> (g.pin * 2u)) & 3u) == 1u;
+}
+
+static volatile uint32_t s_fall_a, s_fall_b;
+static void on_fall_a(void *ctx) { (void)ctx; s_fall_a++; }
+static void on_fall_b(void *ctx) { (void)ctx; s_fall_b++; }
+
+#define T7_ROUNDS 5u
+#define T7_OPS    4u    /* spi_transfer, spi_read, spi_write, full duplex under select_id */
+
+static void t7_two_tiles(void)
+{
+    int ok = 1, data_ok = 1;
+    tiles_pal_t *pal = core_tiles_pal(SPI_H);
+    if (!pal || !pal->spi_transfer || SPI_H->cs_map_len != 2) {
+        mark(T_TWO, 0); err_once(7, 0, SPI_H->cs_map_len);
+        lb_log("  T7 2 tiles FAIL  no 2-entry CS map on the bus (have %u)\r\n", SPI_H->cs_map_len);
+        return;
+    }
+    /* Falling edge = one assertion. hal_exti_enable keeps the pads outputs. */
+    if (hal_exti_enable(LB_CS, HAL_EXTI_FALLING, on_fall_a, NULL) != HAL_OK ||
+        hal_exti_enable(LB_CS2, HAL_EXTI_FALLING, on_fall_b, NULL) != HAL_OK) { ok = 0; err_once(7, 9, 0); }
+
+    static const uint8_t cmd[4] = { 0x03, 0x12, 0x34, 0x56 };
+    uint8_t data[16], tx[32], rx[32];
+    uint32_t tot_a = 0, tot_b = 0, wrong = 0;
+    for (uint32_t r = 0; r < T7_ROUNDS; r++) {
+        for (uint8_t cs = 0; cs < 2; cs++) {
+            for (uint32_t op = 0; op < T7_OPS; op++) {
+                uint32_t a0 = s_fall_a, b0 = s_fall_b;
+                int rc;
+                memset(data, 0, sizeof data);
+                if (op == 0) {          /* command + address, then read (loopback: the 0xFF fill) */
+                    rc = pal->spi_transfer(pal->handle, cs, cmd, 4, data, sizeof data);
+                    for (uint32_t i = 0; i < sizeof data; i++) if (data[i] != 0xFF) { data_ok = 0; err_once(7, 0x11, i); break; }
+                } else if (op == 1) {   /* register read */
+                    rc = pal->spi_read(pal->handle, cs, 0x0F, data, 6);
+                    for (uint32_t i = 0; i < 6; i++) if (data[i] != 0xFF) { data_ok = 0; err_once(7, 0x12, i); break; }
+                } else if (op == 2) {   /* register write */
+                    rc = pal->spi_write(pal->handle, cs, 0x20, cmd, 4);
+                } else {                /* full duplex under this tile's CS: rx == tx */
+                    fill_pattern(tx, sizeof tx, r * 16u + cs * 4u + op);
+                    memset(rx, 0, sizeof rx);
+                    rc = hal_spi_select_id(SPI_H, cs);
+                    if (rc == 0) {
+                        rc = core_spi_exchange(SPI_H, tx, rx, sizeof tx) == HAL_OK ? 0 : -1;
+                        hal_spi_deselect_id(SPI_H, cs);
+                    }
+                    if (memcmp(tx, rx, sizeof tx)) { data_ok = 0; err_once(7, 0x13, r); }
+                }
+                core_delay_us(10);
+                uint32_t da = s_fall_a - a0, db = s_fall_b - b0;
+                tot_a += da; tot_b += db;
+                if (rc != 0) { ok = 0; err_once(7, 0x20 + op, r); }
+                if (da != (cs == 0 ? 1u : 0u) || db != (cs == 1 ? 1u : 0u)) {
+                    ok = 0; wrong++; err_once(7, 0x30 + op * 2u + cs, (da << 4) | db);
+                }
+                if (!pad_high(LB_CS) || !pad_high(LB_CS2)) { ok = 0; err_once(7, 0x40 + op, cs); }
+            }
+        }
+    }
+
+    /* A cs that is in no map entry: -1, and neither pad moves. */
+    uint32_t a0 = s_fall_a, b0 = s_fall_b;
+    int u1 = pal->spi_transfer(pal->handle, 7, cmd, 4, data, 4);
+    int u2 = pal->spi_read(pal->handle, 2, 0x0F, data, 1);
+    int u3 = pal->spi_write(pal->handle, 0xFF, 0x20, cmd, 1);
+    core_delay_us(10);
+    uint32_t unk_edges = (s_fall_a - a0) + (s_fall_b - b0);
+    if (u1 != -1 || u2 != -1 || u3 != -1 || unk_edges) { ok = 0; err_once(7, 0x50, unk_edges); }
+
+    hal_exti_disable(LB_CS);
+    hal_exti_disable(LB_CS2);
+    if (s_cs_high_at_init != 1) { ok = 0; err_once(7, 0x60, 0); }
+
+    const uint32_t want = T7_ROUNDS * T7_OPS;
+    if (tot_a != want || tot_b != want) ok = 0;
+    ok = ok && data_ok;
+    g_spi_lb.t7_edges_a = tot_a;
+    g_spi_lb.t7_edges_b = tot_b;
+    g_spi_lb.t7_wrong = wrong;
+    mark(T_TWO, ok);
+    lb_log("  T7 2 tiles %s  pad %d (cs 0): %lu falling edges, pad %d (cs 1): %lu (want %lu each); "
+           "ops that moved the wrong pad: %lu; unknown cs 7/2/255 -> rc %d/%d/%d, %lu edges; "
+           "both CS high (outputs) after init: %s; loopback data %s\r\n",
+           ok ? "PASS" : "FAIL", LB_CS, (unsigned long)tot_a, LB_CS2, (unsigned long)tot_b,
+           (unsigned long)want, (unsigned long)wrong, u1, u2, u3, (unsigned long)unk_edges,
+           s_cs_high_at_init == 1 ? "yes" : "NO", data_ok ? "OK" : "BAD");
+}
+#endif /* LB_CS2 */
+
 static uint32_t run_all(void)
 {
     s_pass = s_fail = 0;
@@ -451,8 +607,8 @@ static uint32_t run_all(void)
     mark(T_JUMPER, jumper);
     uint32_t verdict;
     if (!jumper) {
-        lb_log("[hw-spi-loopback] SKIP: loopback jumper missing (pad %d MOSI -> pad %d MISO); T1-T6 not run\r\n",
-             LB_MOSI, LB_MISO);
+        lb_log("[hw-spi-loopback] SKIP: loopback jumper missing (pad %d MOSI -> pad %d MISO); T1-T%d not run\r\n",
+             LB_MOSI, LB_MISO, N_TESTS - 1);
         verdict = VERDICT_SKIP;
     } else {
         lb_log("  T0 jumper  PASS  MISO (pad %d) follows MOSI (pad %d)\r\n", LB_MISO, LB_MOSI);
@@ -462,9 +618,12 @@ static uint32_t run_all(void)
         t4_speed();
         t5_timeout();
         t6_pal();
+#ifdef LB_CS2
+        t7_two_tiles();
+#endif
         uint32_t missing = (EXPECTED & ~s_pass) | s_fail;
         uint32_t first = 0;
-        while (first < 7 && !(missing & (1u << first))) first++;
+        while (first < N_TESTS && !(missing & (1u << first))) first++;
         verdict = missing ? (VERDICT_FAIL | first) : VERDICT_PASS;
     }
 
@@ -505,6 +664,11 @@ static void wait_ms(uint32_t ms)
 int main(void)
 {
     core_init();                  /* SPI bus + CS pad from config.json; 5 s watchdog */
+#ifdef LB_CS2
+    /* Before any transfer: both tiles' chip selects are driven high. */
+    s_cs_high_at_init = pad_is_output(LB_CS) && pad_is_output(LB_CS2) &&
+                        pad_high(LB_CS) && pad_high(LB_CS2);
+#endif
     core_led_init();
     core_cycle_init();
 #if defined(STM32L422xx)

@@ -5,6 +5,8 @@
     python3 read_swd.py --flash         # make distclean; make TILE=Core.ST.W5;
                                         # probe-rs download + reset; quiet wait; read
     python3 read_swd.py --rerun         # write 'R' to g_spi_lb_cmd, wait, read
+    python3 read_swd.py --flash TWO_TILES=1         # extra make args: T7 build
+    python3 read_swd.py --flash CFG=my-config.json  # another config in this dir
 
 Power the W5 first (see README.md). Needs probe-rs and arm-none-eabi-nm.
 SWD stays quiet while the Core boots: an attach that lands on a W5 boot can
@@ -16,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ELF = os.path.join(HERE, "build", "hw-spi-loopback.elf")
 FIELDS = ["magic", "verdict", "pass", "fail", "expected", "runs", "sck_fast_hz", "sck_slow_hz",
           "poll_Bps", "dma_Bps", "t5_poll_us", "t5_dma_us", "t5_async_us", "t5_gated_us",
-          "t5_bound_us", "cs_edges", "first_err"]
+          "t5_bound_us", "cs_edges", "first_err", "t7_edges_a", "t7_edges_b", "t7_wrong"]
 LOG_LEN = 1600
 
 
@@ -49,10 +51,11 @@ def main():
     ap.add_argument("--flash", action="store_true", help="build for Core.ST.W5, flash, reset")
     ap.add_argument("--rerun", action="store_true", help="write 'R' to g_spi_lb_cmd first")
     ap.add_argument("--quiet", type=float, default=6.0, help="seconds without SWD after reset")
+    ap.add_argument("make_args", nargs="*", help="extra make arguments for --flash (TWO_TILES=1, CFG=...)")
     a = ap.parse_args()
     if a.flash:
-        run(["make", "distclean"], cwd=HERE)
-        run(["make", "TILE=Core.ST.W5"], cwd=HERE)
+        run(["make", "TILE=Core.ST.W5", *a.make_args, "distclean"], cwd=HERE)
+        run(["make", "TILE=Core.ST.W5", *a.make_args], cwd=HERE)
         run(["probe-rs", "download", "--chip", a.chip, "--binary-format", "elf", ELF])
         run(["probe-rs", "reset", "--chip", a.chip])
         print(f"flashed; no SWD for {a.quiet:.0f} s while it boots and runs", flush=True)

@@ -70,43 +70,59 @@ static inline int _ct_i2c_read_raw(void *h, uint8_t addr,
     return core_i2c_read((core_i2c_t *)h, addr, data, len);
 }
 
-/* ---- Internal: SPI adapters ---- */
+/* ---- Internal: SPI adapters ----
+ * Every SPI call is one transaction under one chip-select assertion, chosen by
+ * the driver's `cs` argument (tile->id, which for an SPI tile is its instance):
+ *   - a bus with a chip-select map (coregen, several tiles with their own
+ *     tiles[].cs_pad) asserts the map entry whose id is `cs`. A `cs` that is
+ *     not in the map returns -1 and drives nothing: it never selects some
+ *     other device.
+ *   - a bus without one (one tile) asserts the bus's own CS pad, whatever
+ *     `cs` is.
+ * Bounded: each phase is a bounded core_spi_exchange(), so a stalled bus
+ * returns -1, and the chip select is released on every path. */
 #ifdef _CORE_TILES_HAS_SPI
+
+/* Select `cs`, clock out a then b (received bytes discarded), then clock in
+ * rn bytes (sending the fill byte), release. */
+static inline int _ct_spi_txn(core_spi_t *spi, uint8_t cs,
+                              const uint8_t *a, uint16_t an,
+                              const uint8_t *b, uint16_t bn,
+                              uint8_t *rx, uint16_t rn)
+{
+    if (hal_spi_select_id(spi, cs) != 0)
+        return -1;
+    hal_status_t s = core_spi_exchange(spi, a, NULL, an);
+    if (s == HAL_OK) s = core_spi_exchange(spi, b, NULL, bn);
+    if (s == HAL_OK) s = core_spi_exchange(spi, NULL, rx, rn);
+    hal_spi_deselect_id(spi, cs);
+    return s == HAL_OK ? 0 : -1;
+}
 
 static inline int _ct_spi_read(void *h, uint8_t cs, uint8_t reg,
                                uint8_t *data, uint16_t len)
 {
     uint8_t cmd = reg | 0x80;
-    (void)cs;
-    return core_spi_write_read((core_spi_t *)h, &cmd, 1, data, len) == HAL_OK ? 0 : -1;
+    return _ct_spi_txn((core_spi_t *)h, cs, &cmd, 1, NULL, 0, data, len);
 }
 
 static inline int _ct_spi_write(void *h, uint8_t cs, uint8_t reg,
                                 const uint8_t *data, uint16_t len)
 {
-    core_spi_t *spi = (core_spi_t *)h;
     uint8_t cmd = reg & 0x7F;
-    (void)cs;
-    core_spi_select(spi);
-    hal_status_t s = core_spi_write(spi, &cmd, 1);
-    if (s == HAL_OK) s = core_spi_write(spi, data, len);
-    core_spi_deselect(spi);
-    return s == HAL_OK ? 0 : -1;
+    return _ct_spi_txn((core_spi_t *)h, cs, &cmd, 1, data, len, NULL, 0);
 }
 
 /* Raw transaction (tiles_pal.h spi_transfer): one CS assertion, send tx_len
  * bytes, then clock in rx_len bytes (0xFF on MOSI), release CS. For command +
- * address + data protocols such as SPI-NOR (Store.O.128). As with the register
- * adapters, `cs` is ignored: the chip select is the bus's own (the SPIn.CS pad
- * coregen attaches to core_spiN). Bounded: a stalled bus returns -1. */
+ * address + data protocols such as SPI-NOR (Store.O.128). */
 static inline int _ct_spi_transfer(void *h, uint8_t cs,
                                    const uint8_t *tx, uint16_t tx_len,
                                    uint8_t *rx, uint16_t rx_len)
 {
-    (void)cs;
     if ((tx_len && !tx) || (rx_len && !rx))
         return -1;
-    return core_spi_write_read((core_spi_t *)h, tx, tx_len, rx, rx_len) == HAL_OK ? 0 : -1;
+    return _ct_spi_txn((core_spi_t *)h, cs, tx, tx_len, NULL, 0, rx, rx_len);
 }
 
 #endif /* _CORE_TILES_HAS_SPI */
@@ -192,8 +208,8 @@ static inline tiles_pal_t *_core_tiles_pal_spi(core_spi_t *bus)
  * tiles_pal_t has ONE handle that both bus families receive, so a tile that
  * configures over I2C and streams over SPI (Sense.CAM.P) needs a handle that
  * holds both buses. These adapters unpack it and forward to the single-bus
- * adapters above. The SPI chip select is the SPI bus's own (coregen), so the
- * PAL's `cs` argument is ignored here as it is for the single-bus SPI PAL. */
+ * adapters above. The SPI chip select follows the single-bus rules above: the
+ * SPI bus's own CS pad, or the map entry named by `cs`. */
 typedef struct {
     core_i2c_t *i2c;
     core_spi_t *spi;

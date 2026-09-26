@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@3b946ad",
+  "source": "tiles@e30b19b",
   "category": "spi",
   "label": "Core.SPI",
   "icon": "⇆",
@@ -511,6 +511,31 @@
       "layer": "hal"
     },
     {
+      "name": "hal_spi_set_cs_map",
+      "signature": "hal_spi_set_cs_map(hal_spi_t * h, const hal_spi_cs_t * map, uint8_t n)",
+      "returns": "void",
+      "brief": "Attach a chip-select map for several devices on one bus, one pin per device. Every pin is deasserted, then configured as a push-pull output. The table is kept by pointer, so it must outlive the handle (static const). Set cs_active_low first if the devices use active-high selects. hal_spi_select()/deselect() keep driving only the pin from hal_spi_set_cs() (none, when coregen built a map); use hal_spi_select_id() per device.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_spi_t *",
+          "description": "SPI handle"
+        },
+        {
+          "name": "map",
+          "ctype": "const hal_spi_cs_t *",
+          "description": "Table of {port, pin, id}, ids unique"
+        },
+        {
+          "name": "n",
+          "ctype": "uint8_t",
+          "description": "Number of entries (0 detaches the map)"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
       "name": "hal_spi_select",
       "signature": "hal_spi_select(hal_spi_t * h)",
       "returns": "void",
@@ -533,6 +558,46 @@
         {
           "name": "h",
           "ctype": "hal_spi_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_spi_select_id",
+      "signature": "hal_spi_select_id(hal_spi_t * h, uint8_t id)",
+      "returns": "int",
+      "brief": "Assert the chip select of device `id`. With a chip-select map, only the entry whose id matches is driven; an id that is not in the map drives nothing and returns -1 (never some other device's pin). Without a map the bus has one device, and this asserts the hal_spi_set_cs() pin (if any) for any id.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_spi_t *",
+          "description": "SPI handle"
+        },
+        {
+          "name": "id",
+          "ctype": "uint8_t",
+          "description": "Device id (a tile's instance)"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_spi_deselect_id",
+      "signature": "hal_spi_deselect_id(hal_spi_t * h, uint8_t id)",
+      "returns": "void",
+      "brief": "Deassert the chip select that hal_spi_select_id(h, id) asserted.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_spi_t *",
+          "description": "SPI handle"
+        },
+        {
+          "name": "id",
+          "ctype": "uint8_t",
+          "description": "Device id (a tile's instance)"
         }
       ],
       "studio_exposed": false,

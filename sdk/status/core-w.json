@@ -53,8 +53,8 @@
     "i2c.fmp": "na",
     "i2c.target": "compile",
     "spi.master": {
-      "status": "partial",
-      "note": "LL half-duplex and SPI-over-GPDMA validated against a NanEyeC camera (2026-06-19). The core_spi path (one TSIZE session per transfer, FIFO-pipelined, bounded, SSOM/SSOE fixed) was rewritten 2026-09-26 and builds; tests/hw-spi-loopback has not run on a W5 yet"
+      "status": "verified",
+      "note": "Bench-verified 2026-09-26 on Core.ST.W5 (tests/hw-spi-loopback, SPI3 on pads 2/3/6/7 with a MOSI-MISO loopback) at medium, high and max clock: multi-byte TSIZE transfers, all four modes, bounded timeouts (~2 ms stall budget), CS framing and two tiles sharing the bus with per-tile CS (T7). Up to 32 MHz SCK (33 MHz cap below 2.7 V). SPI1 (pads 8-11) not benched yet."
     },
     "spi.octo": "na",
     "timer.tick": "verified",
@@ -173,8 +173,8 @@
       "note": "Reads and slot geometry verified over SWD on a virgin v2 Ring (tests/val-otp, 2026-07-03). The program path is compile-only: burns are irreversible, so it has never run on silicon."
     },
     "spi.dma": {
-      "status": "partial",
-      "note": "LL ll_spi_dma_* over GPDMA validated against a NanEyeC camera (2026-06-19). core_spi_exchange_dma / core_spi_xfer_dma (GPDMA1 CH6/CH7, SPI EOT interrupt for the callback) added 2026-09-26: builds, not yet benched"
+      "status": "verified",
+      "note": "Bench-verified 2026-09-26 on Core.ST.W5 (tests/hw-spi-loopback, SPI3 on pads 2/3/6/7 with a MOSI-MISO loopback) at medium, high and max clock: GPDMA1 CH6/CH7, blocking and async-with-callback, up to 3.88 MB/s at 32 MHz SCK. SPI1 not benched yet."
     }
   }
 }

@@ -53,6 +53,7 @@ jobs:
             'templates/**'
             'tools/coregen/**'
             'tools/test_ble_contract.py'
+            'tools/test_coregen_spi_cs.py'
             'tests/val-watchdog/**'
             'tests/val-scope/**'
             'tools/test_core_scope*'
@@ -186,6 +187,11 @@ jobs:
       # this is the job that already has it.
       - name: BLE contract binding tests
         run: python3 tools/test_ble_contract.py
+
+      # SPI chip selects: several tiles on one bus, each with its own cs_pad,
+      # and every config coregen must refuse (shared pad, shared instance).
+      - name: SPI chip-select tests
+        run: python3 tools/test_coregen_spi_cs.py
 
       # core_scope compiled with the host cc against a scripted link, checked
       # by the reference decoder: framing, every type, drops, BLE batching, and

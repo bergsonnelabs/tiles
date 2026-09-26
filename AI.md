@@ -224,7 +224,8 @@ Minimal shape:
     "5": { "pull": "up", "exti": "falling" }
   },
   "tiles": [
-    { "tile": "Sense.I.9", "bus": "I2C1", "instance": 0 }   // SPI tiles also need "cs_pad"
+    { "tile": "Sense.I.9", "bus": "I2C1", "instance": 0 }   // SPI tiles also need "cs_pad"; several on
+                                                             // one bus: own cs_pad + instance each
   ],
   "bootloader": "custom",       // "custom" | "rom" | "none" (default)
   "usb": { "enabled": false, "vid": "0x1209", "pid": "0xDA01", "product": "…" }
@@ -233,8 +234,9 @@ Minimal shape:
 
 **Key things that bite (see config-json.md for the rest):**
 - Buses/PWM/ADC are **derived from `pads`**, not declared. `interfaces.X` only tunes a bus some pad already created; a freq for a timer goes under `interfaces.TIM<n>.freq`.
-- Most mistakes (bad pad/function, unknown clock level, illegal I2C speed, bad SPI mode/prescaler, unknown tile, missing SPI `cs_pad`, bad bootloader) make coregen **exit** — it's fail-fast.
+- Most mistakes (bad pad/function, unknown clock level, illegal I2C speed, bad SPI mode/prescaler, unknown tile, SPI tiles sharing a bus without their own `cs_pad`/`instance`, bad bootloader) make coregen **exit** — it's fail-fast.
 - coregen reads a **fixed allowlist** of keys; unknown/typo'd keys are silently ignored. In particular `ble`, `debug`, `isp`, `programming`, and any `timers`/`pwm`/`capture`/`iwdg` sections are **NOT read by coregen** and do nothing. (For the WBA radio, get HSE by picking an HSE-sourced `clock` level — there is no `ble` switch.)
+- Several SPI tiles can share a bus: each tile's `cs_pad` becomes an entry in a chip-select map keyed by its `instance` (the `cs` its driver passes as `tile->id`), and the tile bridge asserts only that pad. One CS pad on a bus stays the bus's own CS. See config-json.md §9.
 - I3C interfaces are accepted but unimplemented — coregen emits a `/* I3C1: TODO */` comment, no build error. See `sdk/hal/hal_i3c.h`.
 
 ---
