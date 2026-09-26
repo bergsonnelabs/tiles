@@ -144,10 +144,20 @@
     "security.aes": "none",
     "security.pka": "na",
     "security.hash": "na",
-    "conn.usb_cdc": "verified",
+    "conn.usb_cdc": {
+      "status": "verified",
+      "note": "Bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-usb-robust, 7/7): text printed before the port opens arrives after it does; serial number = chip UID; 64/128-byte writes arrive without a ZLP wait; a 4 KB host burst to a slow reader arrives intact (EP1 NAKs while the ring is full); DTR drop/raise; host not reading for 30 s: slowest write 49.8 ms (50 ms bound), then drops. EPnR writes race-free, CLEAR_FEATURE(HALT) resets the data toggle, bMaxPower 100 mA"
+    },
     "conn.scope_usb": "compile",
     "conn.scope_ble": "na",
-    "conn.usb_hid": "compile",
+    "conn.usb_hid": {
+      "status": "compile",
+      "note": "2026-09-25: send_report waits at most 50 ms (never in an ISR or while suspended), then drops. Not re-benched"
+    },
+    "conn.usb_wake": {
+      "status": "partial",
+      "note": "Reachable while asleep, bench-verified 2026-09-25 on Core.ST.L4.1 (tests/hw-usb-robust sleep): during core_stop_for(60) a line got PONG in 53 ms and make flash-serial succeeded in 3.0 s. A host awake on the bus keeps the wait in Sleep mode (Stop would stop HSI48). Stop + wake on a real host resume (EXTI 17) not benched: macOS never suspends the bus; the wake chain itself is (forced suspend, W: 5/5 Stops ended by the USB wakeup, CDC fine after)"
+    },
     "conn.usb_msc": "",
     "conn.dfu": "verified",
     "conn.serial_update": {

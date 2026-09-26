@@ -32,7 +32,7 @@
       "name": "core_stop_for",
       "signature": "core_stop_for(uint32_t seconds)",
       "returns": "void",
-      "brief": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored; core_millis() advances by the time slept, as the RTC measured it. If the watchdog is running, sleeps in chunks of half its timeout and feeds it in between.",
+      "brief": "Enter Stop mode for a number of seconds, then wake and restore clocks. Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick restored; core_millis() advances by the time slept, as the RTC measured it. If the watchdog is running, sleeps in chunks of half its timeout and feeds it in between. Core.ST.L4 with a USB host awake on the bus: waits in Sleep mode so the host can still reach it (see the USB note at the top).",
       "params": [
         {
           "name": "seconds",
@@ -51,7 +51,7 @@
       "name": "core_stop_until_on_change_timeout",
       "signature": "core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge, uint32_t timeout_ms)",
       "returns": "int",
-      "brief": "Enter Stop mode until a GPIO edge on the given pad, or until `timeout_ms` has passed (0 = no timeout). Configures the pad as input, arms its EXTI, enters Stop, and restores clocks on wake. If the watchdog is running, wakes every half timeout to feed it and goes back to sleep. Already at the wake level: EXTI latches only edges that happen after it is armed, so a line that is already at its wake level — a sensor INT held low until serviced, for EDGE_FALLING — would never wake the Core. After arming, this reads the pad and returns 1 at once if it is already low (EDGE_FALLING) or high (EDGE_RISING). EDGE_BOTH always waits for a change.",
+      "brief": "Enter Stop mode until a GPIO edge on the given pad, or until `timeout_ms` has passed (0 = no timeout). Configures the pad as input, arms its EXTI, enters Stop, and restores clocks on wake. If the watchdog is running, wakes every half timeout to feed it and goes back to sleep. Core.ST.L4 with a USB host awake on the bus: waits in Sleep mode (see the USB note at the top). Already at the wake level: EXTI latches only edges that happen after it is armed, so a line that is already at its wake level — a sensor INT held low until serviced, for EDGE_FALLING — would never wake the Core. After arming, this reads the pad and returns 1 at once if it is already low (EDGE_FALLING) or high (EDGE_RISING). EDGE_BOTH always waits for a change.",
       "params": [
         {
           "name": "pad",

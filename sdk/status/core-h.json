@@ -156,6 +156,7 @@
     "conn.scope_usb": "compile",
     "conn.scope_ble": "na",
     "conn.usb_hid": "verified",
+    "conn.usb_wake": "none",
     "conn.usb_msc": "",
     "conn.dfu": "verified",
     "conn.serial_update": {

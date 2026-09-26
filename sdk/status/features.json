@@ -526,6 +526,12 @@
           "desc": "Human Interface Device class — used for custom input devices, sensor streams, and control panels."
         },
         {
+          "id": "conn.usb_wake",
+          "layer": "Core",
+          "name": "USB-reachable sleep",
+          "desc": "core_stop_for / core_stop_until_on_change keep answering a USB host (Sleep mode while the bus is awake) and wake from Stop when a host resumes a suspended bus, so Studio and flash-serial reach a sleeping Core."
+        },
+        {
           "id": "conn.usb_msc",
           "name": "USB MSC",
           "desc": "Mass Storage Class — Core appears as a USB drive; useful for datalogging and drag-and-drop firmware updates."

@@ -222,11 +222,11 @@ static void ep_set_stat(uint8_t ep, int set_tx, uint16_t tx, int set_rx, uint16_
 static uint16_t ep_stat_tx(uint8_t ep) { return (USB_EPnR(ep) & USB_EP_STAT_TX_MASK) >> 4; }
 static uint16_t ep_stat_rx(uint8_t ep) { return (USB_EPnR(ep) & USB_EP_STAT_RX_MASK) >> 12; }
 
-/* Endpoint configuration: type + address, both directions NAK, toggles DATA0. */
+/* Endpoint configuration: type + address, both directions NAK, toggles DATA0
+ * (written explicitly: only a bus reset zeroes them by itself). */
 static void ep_config(uint8_t ep, uint16_t type)
 {
-    USB_EPnR(ep) = (uint16_t)(type | (ep & USB_EP_EA_MASK));
-    ep_set_stat_both(ep, USB_EP_STAT_NAK, USB_EP_STAT_NAK);
+    ll_usb_ep_config(ep, type, ep);
 }
 
 /* ============================================================
@@ -555,6 +555,13 @@ static int in_flash(const void *p)
     return a >= SU_FLASH_START && a < SU_FLASH_START + (uint32_t)FLASHSIZE_KB * 1024u;
 }
 
+/* A string the app built at run time (the UID serial) travels inside the
+ * handoff block itself, which nothing overwrites before take_handoff(). */
+static int in_handoff_serial(const su_handoff_t *h, const void *p)
+{
+    return (const char *)p == h->serial && h->serial[sizeof(h->serial) - 1] == '\0';
+}
+
 static void make_string(uint8_t *dst, const char *s)
 {
     uint8_t n = 0;
@@ -577,7 +584,7 @@ static int take_handoff(const su_handoff_t *h)
     if (!in_flash(h->dev_desc) || !in_flash(h->cfg_desc) || !in_flash(h->hid_report_desc))
         return 0;
     for (int i = 0; i < 3; i++)
-        if (!in_flash(h->strings[i])) return 0;
+        if (!in_flash(h->strings[i]) && !in_handoff_serial(h, h->strings[i])) return 0;
 
     for (int i = 0; i < 18; i++) U.dev[i] = h->dev_desc[i];
     for (int i = 0; i < h->cfg_desc_len; i++) U.cfg[i] = h->cfg_desc[i];

@@ -64,12 +64,15 @@ static void fault_usb_write(const uint8_t *data, uint16_t len)
     uint16_t sent = 0;
     while (sent < len) {
         /* Wait for EP1 TX to be NAK (ready for new data) */
+        /* Count down explicitly: a post-decrement loop leaves `timeout` at
+         * 0xFFFFFFFF on expiry, so the check below never fired. */
         uint32_t timeout = 500000;
-        while (timeout--) {
+        while (timeout) {
             uint16_t ep1r = ll_usb_ep_read(1);
             uint16_t stat = (ep1r >> 4) & 0x3;
             if (stat == 0x2)  /* NAK = ready */
                 break;
+            timeout--;
         }
         if (timeout == 0)
             return;  /* Timed out — host not reading, give up */

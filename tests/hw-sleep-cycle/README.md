@@ -46,7 +46,9 @@ idle, and attach only to read the result once the LED shows it.
 ## Reading the result
 
 **L4:** a report over USB CDC every 3 s (115200, any terminal). It is printed
-on a fresh boot after the run, because USB doesn't survive Stop:
+on a fresh boot after the run. That once worked around USB not surviving
+Stop; since 2026-09-26 the SDK keeps USB up (it waits in Sleep while a host is
+awake), and the fresh-boot report is kept because Standby resets anyway:
 
 ```
 [hw-sleep-cycle] PASS  (pass=0xff fail=0x00 expected=0xff)

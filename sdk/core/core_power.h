@@ -18,6 +18,15 @@
  * nothing can feed the watchdog until main() runs again. Core.ST.H5 keeps its
  * previous behavior (no chunking) until its own low-power pass.
  *
+ * USB (Core.ST.L4): Stop turns the USB clock off, so while a USB host is awake
+ * on the bus, core_stop_for() and core_stop_until_on_change() wait in Sleep
+ * mode instead (CPU halted, USB answering: Studio, flash-serial and prints
+ * keep working, and the timing is the same). They use real Stop when the bus
+ * is suspended or there is no host (on battery); a host that resumes the bus
+ * wakes the Core, it serves USB while the bus stays awake, then goes back to
+ * Stop for the rest of the sleep. On USB power from a live host the sleep
+ * current is therefore Sleep-mode current, not Stop current.
+ *
  * @studio category power label=Core.Power icon=☾
  *
  * @studio coverage
@@ -210,6 +219,44 @@ static inline void _core_stop_alarm_unmask(uint32_t masked)
 }
 
 /*
+ * USB on the L4 (hal_usb_cdc.c). Stop turns HSI48 off (RCC_CRRCR.HSI48ON,
+ * RM0394 §6.4.30), so a Core in Stop stops answering a host that has the bus
+ * awake: the host's next transfer fails and it may reset or drop the port.
+ * So while a host is awake on the bus, the sleeps below wait in Sleep mode
+ * instead (CPU halted; clocks, SysTick and the USB interrupt running; timing,
+ * wake sources and watchdog chunks unchanged), and use Stop only while the bus
+ * is suspended (host asleep or gone, or no host at all). The host's resume or
+ * reset then ends Stop through the USB wakeup (EXTI line 17), the clocks come
+ * back before the USB interrupt runs, the USB is serviced for as long as the
+ * bus stays awake, and the rest of the sleep resumes in Stop once it is
+ * suspended again. Weak: a build without the USB driver links without it.
+ */
+#if defined(STM32L422xx)
+extern int hal_usb_cdc_started(void) __attribute__((weak));
+extern int hal_usb_cdc_stop_allowed(void) __attribute__((weak));
+#endif
+
+/* 1: enter Stop. 0: a USB host is awake on the bus, wait in Sleep. */
+static inline int _core_stop_usb_ok(void)
+{
+#if defined(STM32L422xx)
+    return !hal_usb_cdc_stop_allowed || hal_usb_cdc_stop_allowed();
+#else
+    return 1;
+#endif
+}
+
+/* After Stop: the USB interrupt (possibly what ended it) can only answer at
+ * full clock with HSI48 back; the CRS resumes with HSI48 (RM0394 §7.5).
+ * core_clock_init() restores both, before the handler gets to run. */
+static inline void _core_stop_usb_exit(void)
+{
+#if defined(STM32L422xx)
+    if (hal_usb_cdc_started && hal_usb_cdc_started()) core_clock_init();
+#endif
+}
+
+/*
  * Sleep in Stop until the armed RTC wakeup timer fires (rtc != 0) and/or an
  * interrupt handler sets *edge. Returns 1 when *edge ended it.
  *
@@ -243,7 +290,12 @@ static inline int _core_stop_wait(int rtc, volatile uint8_t *edge)
         }
         if (rtc && ll_rtc_wakeup_flag()) break;
         if (edge && *edge) { by_edge = 1; break; }
-        ll_pwr_stop();
+        if (_core_stop_usb_ok()) {
+            ll_pwr_stop();
+            _core_stop_usb_exit();
+        } else {
+            ll_pwr_sleep_wfi();             /* USB host awake: see above */
+        }
         if (rtc && ll_rtc_wakeup_flag()) break;
         if (rtc) ll_nvic_disable_irq(LL_RTC_WKUP_IRQn);
         ll_irq_restore(pm);                 /* let the other handler run */
@@ -304,7 +356,8 @@ static inline void core_sleep(void)
  * Uses the RTC wakeup timer (LSI). Returns after wake with PLL + SysTick
  * restored; core_millis() advances by the time slept, as the RTC measured it.
  * If the watchdog is running, sleeps in chunks of half its timeout and feeds
- * it in between.
+ * it in between. Core.ST.L4 with a USB host awake on the bus: waits in Sleep
+ * mode so the host can still reach it (see the USB note at the top).
  *
  * @studio expose category=power name=stop_for
  * @studio twin full
@@ -400,7 +453,8 @@ static inline int _core_stop_pad_at_wake_level(uint8_t pad, uint32_t edge)
  * Enter Stop mode until a GPIO edge on the given pad, or until `timeout_ms`
  * has passed (0 = no timeout). Configures the pad as input, arms its EXTI,
  * enters Stop, and restores clocks on wake. If the watchdog is running, wakes
- * every half timeout to feed it and goes back to sleep.
+ * every half timeout to feed it and goes back to sleep. Core.ST.L4 with a USB
+ * host awake on the bus: waits in Sleep mode (see the USB note at the top).
  *
  * Already at the wake level: EXTI latches only edges that happen after it is
  * armed, so a line that is already at its wake level — a sensor INT held low

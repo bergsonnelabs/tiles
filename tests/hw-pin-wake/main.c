@@ -3,29 +3,34 @@
  * (core_stop_until_on_change, sdk/core/core_power.h) on Core.ST.L4.1.
  * See README.md for the bench procedure and how to read the result.
  *
- * Hardware (definitions/Core-ST-L4-1-b*.json): pad 4 is PB6, wired through a
- * 2.2 kOhm on-tile resistor to chip pin PA9. Driving PA9 high/low pulls pad 4
- * high/low. Pad 1 is GND, pad 10 is V+. The onboard LED is PA8, active-high.
- * PA9 is a raw chip pin, not a tile pad, so it's driven directly through the
- * LL GPIO layer (ll_gpio_*) rather than core_pad_*.
+ * Hardware (definitions/Core-ST-L4-1-b.json): pad 4 is PB6, and its 2.2 kOhm
+ * on-tile pull-up hangs off chip pin PC15 (config.pullups: "pad4" via PC15,
+ * "pad5" via PA9). Driving PC15 high/low pulls pad 4 high/low. Until
+ * 2026-09-25 this test drove PA9 (pad 5's pull-up), which is why its T1 read
+ * "pad 4 low whether PA9 high or low". config.json enables the pull-up
+ * ("pullups": ["pad4"]), so coregen's core_init() drives PC15 high; T1 checks
+ * that, then the tests drive PC15 directly through the LL GPIO layer (it is a
+ * raw chip pin, not a tile pad). Pad 1 is GND, pad 10 is V+. The onboard LED
+ * is PA8, active-high.
  *
  * Tests, one bit each in the pass/fail masks:
- *   T1  loopback   drive PA9 high/low, read pad 4 back high/low (run mode)
+ *   T1  loopback   pad 4 high after core_init() (coregen pull-up), then drive
+ *                    PC15 high/low and read pad 4 back high/low (run mode)
  *   T2  fast-fail   core_stop_until_on_change() on a pad with no GPIO (pad 1,
  *                    GND) returns right away instead of sleeping
  *   T3  wake        core_stop_until_on_change_timeout(4, EDGE_FALLING, 60 s)
  *                    actually wakes the Core from Stop when a human shorts pad 4
  *                    to pad 1 (unattended, it times out and T3 reports FAIL)
- *   T4  at-level    pad 4 already low (PA9 low) when a falling-edge wait starts:
+ *   T4  at-level    pad 4 already low (PC15 low) when a falling-edge wait starts:
  *                    both the old call and the _timeout call return at once
  *                    (1) instead of sleeping forever (added 2026-09-25)
  *   T5  timeout     pad 4 held high, core_stop_until_on_change_timeout(..., 3000)
  *                    returns 0 after 2.5-4 s of Stop, no watchdog reset
  *
- * T3 needs a human: nothing that runs in Stop can drive PA9, so a real
- * wake-from-Stop edge has to come from outside the chip. USB CDC doesn't
- * reliably survive Stop on the L4 (a known issue — see hw-sleep-cycle), so,
- * like that test, progress and results are kept in backup registers and the
+ * T3 needs a human: nothing that runs in Stop can drive PC15, so a real
+ * wake-from-Stop edge has to come from outside the chip. As in hw-sleep-cycle
+ * (whose USB-across-Stop workaround predates the 2026-09-26 USB fixes),
+ * progress and results are kept in backup registers and the
  * Core does a software reset after each Stop attempt to get a clean
  * re-enumeration before printing again. An attempt counter (also in a backup
  * register) bounds the retry loop so a human who is too fast (edge caught
@@ -68,10 +73,32 @@ enum { PH_START = 0, PH_RETRY, PH_ARMED, PH_REPORT, PH_T5 };
 
 #define T3_MAX_ATTEMPTS  5u
 /* PAD_GND (coregen, core_pads.h) is pad 1 -- no GPIO, proves the "can't take
- * an edge interrupt" path. LOOP_PAD is pad 4 (PB6), wired to PA9 through the
- * on-tile 2.2k. (Not PAD_4 -- coregen doesn't generate a name for it, and
+ * an edge interrupt" path. LOOP_PAD is pad 4 (PB6), pulled by PC15 through
+ * the on-tile 2.2k. (Not PAD_4 -- coregen doesn't generate a name for it, and
  * PAD_4_PORT/PAD_4_PIN already mean something else.) */
 #define LOOP_PAD  4u
+
+/* Pad 4's pull-up control pin, per definitions/Core-ST-L4-1-b.json
+ * config.pullups ("Pad 4 pull-up (via PC15)"). PC15 sits behind the backup-
+ * domain power switch and sources at most 3 mA (DS12470 §6.3.14); the 2.2k
+ * at 3.3 V asks ~1.5 mA. */
+#define PU_PORT   GPIOC
+#define PU_PIN    15u
+
+static void pu_drive(int high)
+{
+    ll_rcc_gpio_clk_enable(PU_PORT);
+    ll_gpio_config_output(PU_PORT, PU_PIN);
+    if (high) ll_gpio_set(PU_PORT, 1UL << PU_PIN);
+    else      ll_gpio_clear(PU_PORT, 1UL << PU_PIN);
+}
+
+/* PIN_WAKE_NO_T3 (make EXTRA_CFLAGS=-DPIN_WAKE_NO_T3): unattended build that
+ * runs only the automated tests (T1, T2, T4, T5) and reports T3 as skipped. */
+#ifdef PIN_WAKE_NO_T3
+#  undef  EXPECTED
+#  define EXPECTED  (T_T1 | T_T2 | T_T4 | T_T5)
+#endif
 
 /* SWD-readable copy of the result:
  *   arm-none-eabi-nm build/hw-pin-wake.elf | grep g_pin_wake */
@@ -113,25 +140,27 @@ static void do_reset(void)
     while (1) { }
 }
 
-/* T1: PA9 -[2.2k]- pad 4 (PB6) loopback, run mode only. */
+/* T1: PC15 -[2.2k]- pad 4 (PB6) loopback, run mode only. First the state
+ * core_init() left: config.json's "pullups": ["pad4"] has coregen drive PC15
+ * high, so pad 4 must already read high. */
 static int run_t1(void)
 {
-    ll_rcc_gpio_clk_enable(GPIOA);
-    ll_gpio_config_output(GPIOA, 9);
     core_pad_input(LOOP_PAD, PULL_NONE);
+    core_delay_ms(5);
+    int boot = core_pad_read(LOOP_PAD);
 
-    ll_gpio_set(GPIOA, 1UL << 9);           /* PA9 high */
+    pu_drive(1);                            /* PC15 high */
     core_delay_ms(5);
     int hi = core_pad_read(LOOP_PAD);
 
-    ll_gpio_clear(GPIOA, 1UL << 9);         /* PA9 low */
+    pu_drive(0);                            /* PC15 low */
     core_delay_ms(5);
     int lo = core_pad_read(LOOP_PAD);
 
-    int ok = (hi == 1) && (lo == 0);
-    core_usb_printf("[hw-pin-wake] T1 loopback: PA9 hi -> pad4=%d (want 1), "
-                    "PA9 lo -> pad4=%d (want 0)  %s\r\n",
-                    hi, lo, ok ? "PASS" : "FAIL");
+    int ok = (boot == 1) && (hi == 1) && (lo == 0);
+    core_usb_printf("[hw-pin-wake] T1 loopback: after core_init pad4=%d (want 1, coregen "
+                    "pull-up), PC15 hi -> pad4=%d (want 1), PC15 lo -> pad4=%d (want 0)  %s\r\n",
+                    boot, hi, lo, ok ? "PASS" : "FAIL");
     return ok;
 }
 
@@ -161,7 +190,7 @@ static int run_t2(void)
     return ok;
 }
 
-/* T4: PA9 low pulls pad 4 low (2.2k beats the ~40k internal pull-up the
+/* T4: PC15 low pulls pad 4 low (2.2k beats the ~40k internal pull-up the
  * falling-edge arm selects). A falling-edge wait must see the pad is already
  * at its wake level and return without entering Stop.
  *
@@ -172,12 +201,10 @@ static int run_t2(void)
 static int run_t4(int loop_ok)
 {
     if (!loop_ok) {
-        core_usb_printf("[hw-pin-wake] T4 skipped: needs T1's PA9 -> pad 4 loopback  FAIL\r\n");
+        core_usb_printf("[hw-pin-wake] T4 skipped: needs T1's PC15 -> pad 4 loopback  FAIL\r\n");
         return 0;
     }
-    ll_rcc_gpio_clk_enable(GPIOA);
-    ll_gpio_config_output(GPIOA, 9);
-    ll_gpio_clear(GPIOA, 1UL << 9);
+    pu_drive(0);
     core_delay_ms(5);
 
     uint32_t t0 = core_millis();
@@ -198,14 +225,12 @@ static int run_t4(int loop_ok)
     return ok;
 }
 
-/* T5: pad 4 held high by PA9, a 3 s falling-edge wait with nothing touching
- * it must time out (return 0) after ~3 s of Stop. USB doesn't survive Stop:
+/* T5: pad 4 held high by PC15, a 3 s falling-edge wait with nothing touching
+ * it must time out (return 0) after ~3 s of Stop. As in hw-sleep-cycle,
  * the result goes to a backup register and the Core resets to report it. */
 static void run_t5(uint32_t s_pass, uint32_t s_fail)
 {
-    ll_rcc_gpio_clk_enable(GPIOA);
-    ll_gpio_config_output(GPIOA, 9);
-    ll_gpio_set(GPIOA, 1UL << 9);
+    pu_drive(1);
     core_delay_ms(5);
     core_usb_printf("[hw-pin-wake] T5: 3 s timed wait in Stop (don't touch pad 4)\r\n");
     core_delay_ms(50);
@@ -222,7 +247,7 @@ static void run_t5(uint32_t s_pass, uint32_t s_fail)
 }
 
 /*
- * T3: one attempt at a real wake-from-Stop. Drives PA9 high (pull-up on pad
+ * T3: one attempt at a real wake-from-Stop. Drives PC15 high (pull-up on pad
  * 4 through the 2.2k, ~1.5 mA if shorted to GND -- safe), prompts, blinks the
  * LED for ~30 s so a human has time to get the tweezers on pad 4 and pad 1,
  * then calls core_stop_until_on_change_timeout(4, EDGE_FALLING, 60 s). With
@@ -237,11 +262,11 @@ static void run_t5(uint32_t s_pass, uint32_t s_fail)
  * human who never touches it at all and eventually power-cycles the board --
  * can't spin this forever).
  *
- * USB CDC doesn't reliably survive Stop on the L4, so results are saved to
+ * Results are saved to
  * backup registers and the Core does its own software reset after every
  * attempt; the next boot picks the story back up from BKP_STATE.
  */
-static void t3_attempt(uint32_t s_pass, uint32_t s_fail, uint32_t attempt, uint32_t wd_seen)
+__attribute__((unused)) static void t3_attempt(uint32_t s_pass, uint32_t s_fail, uint32_t attempt, uint32_t wd_seen)
 {
     attempt++;
 
@@ -255,11 +280,9 @@ static void t3_attempt(uint32_t s_pass, uint32_t s_fail, uint32_t attempt, uint3
         return;   /* USB is still fine this boot (never slept again) -- no reset needed */
     }
 
-    /* PA9 high: pull-up on pad 4. GPIO state is retained through Stop, so this
+    /* PC15 high: pull-up on pad 4. GPIO state is retained through Stop, so this
      * holds for the whole wait, including while the Core is actually asleep. */
-    ll_rcc_gpio_clk_enable(GPIOA);
-    ll_gpio_config_output(GPIOA, 9);
-    ll_gpio_set(GPIOA, 1UL << 9);
+    pu_drive(1);
 
     core_usb_printf("\r\n[hw-pin-wake] T3 attempt %lu/%lu: touch pad 4 to GND (pad 1) "
                     "within 30 s\r\n", (unsigned long)attempt, (unsigned long)T3_MAX_ATTEMPTS);
@@ -321,7 +344,8 @@ static void print_report(uint32_t verdict, uint32_t s_pass, uint32_t s_fail,
     for (uint32_t i = 0; i < N_TESTS; i++) {
         uint32_t b = 1u << i;
         core_usb_printf("  %-22s %s\r\n", names[i],
-                        (s_pass & b) ? "PASS" : (s_fail & b) ? "FAIL" : "not run");
+                        (s_pass & b) ? "PASS" : (s_fail & b) ? "FAIL" :
+                        (EXPECTED & b) ? "not run" : "skipped");
     }
     if (slept_ms & 0x80000000u)
         core_usb_printf("  T3: no touch -- timed out after %lu ms (needs a human, see README)\r\n",
@@ -393,10 +417,19 @@ int main(void)
         /* Reset inside T5's timed Stop: a watchdog reset (or a manual one). */
         s_fail |= T_T5;
         save(PH_RETRY, s_pass, s_fail, 0u, wd ? 1u : 0u, 0u);
+#ifdef PIN_WAKE_NO_T3
+        save(PH_REPORT, s_pass, s_fail, 0u, wd ? 1u : 0u, 0u);
+#else
         t3_attempt(s_pass, s_fail, 0u, wd ? 1u : 0u);
+#endif
         break;
     case PH_RETRY:
+#ifdef PIN_WAKE_NO_T3
+        core_usb_printf("[hw-pin-wake] T3 skipped (built with PIN_WAKE_NO_T3)\r\n");
+        save(PH_REPORT, s_pass, s_fail, attempt, wd_seen, slept_ms);
+#else
         t3_attempt(s_pass, s_fail, attempt, wd_seen);  /* does not return (resets) unless giving up */
+#endif
         break;
     case PH_REPORT:
     default:

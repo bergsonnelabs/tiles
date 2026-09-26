@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@57d174b",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
@@ -30,10 +30,25 @@
       "layer": "core"
     },
     {
+      "name": "core_usb_wait_host",
+      "signature": "core_usb_wait_host(uint32_t timeout_ms)",
+      "returns": "int",
+      "brief": "Wait up to `timeout_ms` for a host terminal to open the port (DTR set). Feeds the watchdog while it waits. Not needed just to see early output: on Core.ST.L4 text printed before the port opens is kept (up to HAL_USB_CDC_TX_QUEUE_SIZE bytes) and sent when it does.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "ctype": "uint32_t",
+          "description": "Longest wait in milliseconds; 0 only checks."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_usb_write",
       "signature": "core_usb_write(const uint8_t * buf, uint16_t len)",
       "returns": "int",
-      "brief": "Transmit data (blocking). Returns bytes sent, or -1 if not configured.",
+      "brief": "Transmit data. Core.ST.L4: queued, never waits long (see hal_usb_cdc_write); returns bytes queued, -1 before init. Core.ST.H5: blocking; bytes sent, or -1 with no terminal.",
       "params": [
         {
           "name": "buf",
@@ -235,7 +250,7 @@
       "name": "hal_usb_cdc_init",
       "signature": "hal_usb_cdc_init(void)",
       "returns": "void",
-      "brief": "Initialize USB CDC. This function: - Enables HSI48 + CRS (crystal-less 48MHz for USB) - Selects HSI48 as USB clock source - Enables VDDUSB power supply - Configures PA11/PA12 as AF10 - Enables USB peripheral clock - Configures USB device and endpoints - Enables USB interrupt - Connects DP pull-up (host sees device)",
+      "brief": "Initialize USB CDC. This function: - Enables HSI48 + CRS (crystal-less 48MHz for USB) - Selects HSI48 as USB clock source - Enables VDDUSB power supply - Configures PA11/PA12 as AF10 - Enables USB peripheral clock - Configures USB device and endpoints - Enables USB interrupt - Connects DP pull-up (host sees device) L4: core_init() already calls it; later calls do nothing.",
       "params": [],
       "studio_exposed": false,
       "layer": "hal"
@@ -253,7 +268,7 @@
       "name": "hal_usb_cdc_write",
       "signature": "hal_usb_cdc_write(const uint8_t * buf, uint16_t len)",
       "returns": "int",
-      "brief": "Transmit data over USB CDC (blocking). Waits for the host to consume data if the EP is busy. Returns number of bytes sent, or -1 if not configured.",
+      "brief": "Transmit data over USB CDC. L4: queues into the TX FIFO (HAL_USB_CDC_TX_QUEUE_SIZE) and returns once the bytes are queued. Before a terminal opens the port (DTR) the bytes wait in the FIFO and go out when it does; what doesn't fit is dropped (the oldest text is kept). With a terminal that isn't reading, it waits at most HAL_USB_CDC_TX_TIMEOUT_MS, then drops. Never waits in an interrupt handler. Returns the number of bytes queued (short = the rest was dropped), or -1 before hal_usb_cdc_init(). H5: blocking; waits for each packet. Returns bytes sent, or -1 if no terminal is connected.",
       "params": [
         {
           "name": "buf",
@@ -371,7 +386,7 @@
       "name": "hal_usb_hid_send_report",
       "signature": "hal_usb_hid_send_report(const uint8_t * buf, uint16_t len)",
       "returns": "int",
-      "brief": "Send a HID report (up to 64 bytes) via EP3 interrupt IN. Blocking — waits for previous report to complete. Returns bytes sent, or -1 if not configured.",
+      "brief": "Send a HID report (up to 64 bytes) via EP3 interrupt IN. Waits for the previous report to complete (L4: at most HAL_USB_HID_TX_TIMEOUT_MS, never in an interrupt handler or while the bus is suspended; a report that can't go is dropped). Returns bytes sent, or -1 if not configured or dropped.",
       "params": [
         {
           "name": "buf",
@@ -448,7 +463,7 @@
       "name": "ll_usb_ep_config",
       "signature": "ll_usb_ep_config(uint8_t ep, uint16_t type, uint8_t addr)",
       "returns": "void",
-      "brief": "Configure an endpoint: type and address. Clears data toggles and sets STAT to NAK for both directions.",
+      "brief": "Configure an endpoint: type and address, EP_KIND clear, both data toggles DATA0 and both directions NAK, in one write. A USB reset already zeroes the toggles; SET_CONFIGURATION without one does not, and RM0394 §46.6.2 makes initializing DTOG mandatory for non-control endpoints. Stale CTR flags are cleared (written 0).",
       "params": [
         {
           "name": "ep",
