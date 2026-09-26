@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "ST.C0",
+  "pads": [],
+  "power": [],
+  "family": "mCore",
+  "package": {
+    "pads": 10,
+    "type": "T24",
+    "size_x": 2000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 89,
+  "headline": "low cost Cortex MCU",
+  "components": [
+    {
+      "url": "",
+      "part": "STM32C071",
+      "datasheet": "",
+      "manufacturer": "ST Microelectronics"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-09-25T15:09:05.935Z",
+  "description": "",
+  "json_version": "0.3",
+  "application_notes": []
+}

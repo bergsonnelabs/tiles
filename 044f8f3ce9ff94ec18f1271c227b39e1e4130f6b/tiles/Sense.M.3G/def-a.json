@@ -1,0 +1,276 @@
+{
+  "rev": "a",
+  "name": "M.3G",
+  "pads": [
+    {
+      "pad": "1",
+      "geometry": {
+        "size_x": 1000,
+        "size_y": 400,
+        "center_x": -1500,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "power",
+          "function": "GND",
+          "direction": "input"
+        }
+      ]
+    },
+    {
+      "pad": "2",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 800
+      },
+      "functions": []
+    },
+    {
+      "pad": "3",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "4",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -800
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.CLK",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "5",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": -1600,
+        "center_y": -1600
+      },
+      "functions": [
+        {
+          "note": "",
+          "type": "digital",
+          "function": "I2C.DAT",
+          "direction": "bidirectional",
+          "interface": "I2C"
+        }
+      ]
+    },
+    {
+      "pad": "6",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -1600
+      },
+      "functions": []
+    },
+    {
+      "pad": "7",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": -800
+      },
+      "functions": []
+    },
+    {
+      "pad": "8",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 0
+      },
+      "functions": []
+    },
+    {
+      "pad": "9",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 800
+      },
+      "functions": [
+        {
+          "note": "data-ready interrupt, push-pull at V+ levels, active low by default",
+          "type": "digital",
+          "function": "INT",
+          "direction": "output"
+        }
+      ]
+    },
+    {
+      "pad": "10",
+      "geometry": {
+        "size_x": 800,
+        "size_y": 400,
+        "center_x": 1600,
+        "center_y": 1600
+      },
+      "functions": [
+        {
+          "note": "1.72-3.6V",
+          "type": "power",
+          "function": "V+",
+          "direction": "input"
+        }
+      ]
+    }
+  ],
+  "power": [
+    {
+      "max": 3.6,
+      "min": 1.72,
+      "type": "system",
+      "notes": "V+ is the BMM350 I/O supply (VDDIO) and feeds its 1.8 V core supply through an on-tile TPS7A2018 LDO. About 100 µA at 25 Hz with 4x averaging, 1.8 µA in suspend, up to ~0.46 mA at 400 Hz; the LDO adds 6.5 µA.",
+      "gnd_pad": [
+        "1"
+      ],
+      "function": "",
+      "direction": "input",
+      "is_required": true,
+      "max_current": "0.5mA",
+      "positive_pad": [
+        "10"
+      ]
+    }
+  ],
+  "config": {
+    "interrupt": {
+      "kind": "boolean",
+      "group": "Sidebands",
+      "label": "Use INT line",
+      "binding": {
+        "pad": "9",
+        "kind": "output"
+      },
+      "default": false,
+      "options": [
+        {
+          "value": false,
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "disabled",
+              "register": "INT_CTRL"
+            }
+          ]
+        },
+        {
+          "value": true,
+          "netlist": {
+            "expects": [
+              {
+                "to": {
+                  "kind": "matchFunction",
+                  "function": "GPIO",
+                  "capabilities": [
+                    "EXTI"
+                  ]
+                },
+                "tag": "interrupt.attached",
+                "from": {
+                  "pad": "9",
+                  "kind": "tile"
+                },
+                "role": "interrupt"
+              }
+            ]
+          },
+          "firmware_contract": [
+            {
+              "via": "i2c",
+              "type": "register",
+              "value": "enabled",
+              "register": "INT_CTRL"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "family": "Sense",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 29,
+  "headline": "triaxial geomagnetic magnetometer",
+  "components": [
+    {
+      "url": "https://www.bosch-sensortec.com/products/motion-sensors/magnetometers/bmm350/",
+      "part": "BMM350",
+      "datasheet": "",
+      "manufacturer": "Bosch Sensortec"
+    },
+    {
+      "url": "https://www.ti.com/product/TPS7A20",
+      "part": "TPS7A2018PYCKR",
+      "datasheet": "https://www.ti.com/lit/ds/symlink/tps7a20.pdf",
+      "manufacturer": "Texas Instruments"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "I2C",
+      "type": "I2C",
+      "parameters": {
+        "modes": [
+          "slave"
+        ],
+        "addresses": [
+          {
+            "address": "0x14",
+            "is_default": true
+          }
+        ],
+        "max_clock_speed": "1MHz"
+      },
+      "pad_assignments": [
+        {
+          "pad": "4",
+          "role": "bus",
+          "function": "I2C.CLK",
+          "is_required": true
+        },
+        {
+          "pad": "5",
+          "role": "bus",
+          "function": "I2C.DAT",
+          "is_required": true
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-09-25T08:06:37.340Z",
+  "description": "The Sense.M.3G is a three-axis geomagnetic sensor built on the Bosch Sensortec BMM350. It measures fields up to ±2000 µT per axis with about 190 nT rms noise, which resolves the Earth's 25-65 µT field for compass headings, and reads nearby magnets well beyond it. Output rates run from 1.56 Hz to 400 Hz, with averaging to trade current for noise, and the part keeps a factory trim for offset, sensitivity, temperature drift and cross-axis coupling that the driver applies. A single measurement on demand, a data-ready interrupt and a 1.8 µA suspend mode suit battery-powered projects.",
+  "json_version": "0.4",
+  "application_notes": []
+}
