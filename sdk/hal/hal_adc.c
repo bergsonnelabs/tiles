@@ -336,7 +336,7 @@ static void _set_channel_samp(ADC_TypeDef *adc, uint8_t channel, uint32_t smpr_v
  * Enable VREFINT and temperature sensor in ADC_CCR.
  * Must be called before reading those channels.
  */
-static void _enable_internal_channels(void)
+static void _enable_internal_channels(uint32_t sysclk_hz)
 {
 #if defined(STM32L011xx)
     /* L0 (RM0377): two enables, both required.
@@ -351,8 +351,21 @@ static void _enable_internal_channels(void)
      * reading CCR and SYSCFG_CFGR3 back as 0 over SWD. */
     SET_BITS(REG32(RCC_BASE + 0x34UL), 1UL << 0);         /* APB2ENR.SYSCFGEN */
     (void)REG32(RCC_BASE + 0x34UL);
-    SET_BITS(SYSCFG_CFGR3, SYSCFG_CFGR3_ENBUF_VREFINT | SYSCFG_CFGR3_ENBUF_SENSOR);
-    SET_BITS(ADC_CCR, (1UL << 22) | (1UL << 23));         /* VREFEN, TSEN */
+    const uint32_t bufs = SYSCFG_CFGR3_ENBUF_VREFINT | SYSCFG_CFGR3_ENBUF_SENSOR;
+    const uint32_t ens = (1UL << 22) | (1UL << 23);       /* VREFEN, TSEN */
+    if ((SYSCFG_CFGR3 & bufs) == bufs && (ADC_CCR & ens) == ens) {
+        return;                                           /* on and settled */
+    }
+    SET_BITS(SYSCFG_CFGR3, bufs);
+    SET_BITS(ADC_CCR, ens);
+    /* Settle: the ADC's VREFINT buffer and the temperature sensor each start
+     * in 10 us max (DS DocID027973 Table 21 T_ADC_BUF, Table 58 tSTART).
+     * Wait ~20 us at the actual clock. The shared 5000-iteration loop below
+     * took ~60 ms at the 1 MHz "low" level (bench, 2026-09-26), inside every
+     * LED heartbeat that re-read VDD. A loop pass is >= 4 cycles. */
+    uint32_t mhz = sysclk_hz ? sysclk_hz / 1000000UL + 1UL : 32UL;   /* unknown: L0 max */
+    for (volatile uint32_t i = mhz * 20UL / 4UL; i; i--) {}
+    return;
 
 #elif defined(STM32L422xx)
     /* L4: ADC_CCR bits VREFEN[22] and TSEN[23] */
@@ -366,6 +379,7 @@ static void _enable_internal_channels(void)
     /* H5: ADC_CCR VREFEN[22], VSENSESEL[23] */
     SET_BITS(ADC_CCR, (1UL << 22) | (1UL << 23));
 #endif
+    (void)sysclk_hz;
 
     /* Temp sensor and VREFINT need stabilisation time after enable.
      * L4: t_START ≈ 120 µs (RM0394), others similar.
@@ -630,7 +644,7 @@ void hal_adc_deinit(hal_adc_t *adc)
 
 uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
 {
-    _enable_internal_channels();
+    _enable_internal_channels(adc->sysclk_hz);
 
     /* Temporarily add VREFINT channel with slow sampling */
     bool was_present = false;
@@ -730,7 +744,7 @@ uint32_t hal_adc_read_mv(hal_adc_t *adc, uint8_t channel)
 
 int32_t hal_adc_read_temp_decidegc(hal_adc_t *adc)
 {
-    _enable_internal_channels();
+    _enable_internal_channels(adc->sysclk_hz);
 
     /* Ensure VDDA is known for scaling */
     if (adc->vdda_mv == 0) {

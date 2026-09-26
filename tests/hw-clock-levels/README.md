@@ -22,7 +22,7 @@ a wrong table in the SDK can't pass itself.
 |------|-----------|-------|
 | L4 | USB start-of-frame count (`USB_FNR`), 1 per ms from the host (±500 ppm) over 1.5 s | ±2 % (MSI / HSI16 at room temperature) |
 | W5 | TIM16 input capture of HSE32 / 32 (`TISEL` = 3, RM0493 Table 295), /8, over 200 ms: measures SYSCLK itself | ±0.1 % on HSE levels; ±1.2 % at `low` (HSI16, DS Table 65) |
-| L0 | LPTIM1 counting HSI16 / 16 over 50 SysTick ms | ±2.5 % at MSI levels (MSI and HSI16 are both factory-trimmed RCs); ±0.5 % at HSI16 levels (a ratio check) |
+| L0 | LPTIM1 counting HSI16 / 128 over 50 SysTick ms | ±2.5 % at MSI levels (MSI and HSI16 are both factory-trimmed RCs); ±0.5 % at HSI16 levels (a ratio check) |
 
 On the L0 a range-3 build (`low`) steps up to range 2 for the LPTIM
 measurement, because HSI16 can't run in range 3 (RM0377 Table 43), and back

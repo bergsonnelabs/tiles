@@ -66,12 +66,28 @@ static uint32_t led_vdd_mv(void)
         return hal_adc_read_vdda_mv(&core_adc1);
     }
     /* No project ADC: bring one up, read VREFINT, and power it back down. */
+#if defined(STM32L011xx)
+    /* Put VREFINT's ADC buffers and the temperature sensor back the way they
+     * were: left on they draw ~17 uA typ (DS DocID027973 Table 21 I_BUF_ADC
+     * 13.5 uA, Table 58 I_DDA(TEMP) 3.4 uA), in Stop too. Bench, 2026-09-26:
+     * one heartbeat left SYSCFG_CFGR3 = 0x40000300, ADC_CCR VREFEN | TSEN. */
+    const uint32_t bufs = SYSCFG_CFGR3_ENBUF_VREFINT | SYSCFG_CFGR3_ENBUF_SENSOR;
+    const uint32_t ens = (1UL << 22) | (1UL << 23);           /* VREFEN, TSEN */
+    uint32_t apb2 = REG32(RCC_BASE + 0x34UL);                 /* APB2ENR */
+    uint32_t bufs_was = (apb2 & 1UL) ? (SYSCFG_CFGR3 & bufs) : 0u;
+    uint32_t ens_was = (apb2 & (1UL << 9)) ? (ADC_CCR & ens) : 0u;
+#endif
     hal_adc_t adc;
-    if (hal_adc_init(&adc, LED_VDD_ADC, SYSCLK_HZ, HAL_ADC_RES_12BIT) != HAL_OK) {
-        return CORE_LED_REF_MV;
+    uint32_t mv = CORE_LED_REF_MV;
+    if (hal_adc_init(&adc, LED_VDD_ADC, SYSCLK_HZ, HAL_ADC_RES_12BIT) == HAL_OK) {
+        mv = hal_adc_read_vdda_mv(&adc);
+        hal_adc_deinit(&adc);
     }
-    uint32_t mv = hal_adc_read_vdda_mv(&adc);
-    hal_adc_deinit(&adc);
+#if defined(STM32L011xx)
+    MOD_BITS(ADC_CCR, ens, ens_was);                          /* ADC is off: writable */
+    MOD_BITS(SYSCFG_CFGR3, bufs, bufs_was);
+    CLR_BITS(REG32(RCC_BASE + 0x34UL), ~apb2 & ((1UL << 9) | 1UL));  /* ADCEN, SYSCFGEN we set */
+#endif
     return mv;
 #else
     return CORE_LED_REF_MV;

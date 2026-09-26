@@ -1,7 +1,7 @@
 /**
  * ll_iwdg.h — Low-level Independent Watchdog
  *
- * The IWDG is clocked from LSI (LL_LSI_HZ: 32 kHz nominal, 37 kHz on
+ * The IWDG is clocked from LSI (ll_lsi_hz(): 32 kHz nominal; measured on
  * the L0) and runs independently of the main clock. Once started, it
  * cannot be stopped — only the MCU reset will disable it. The register
  * layout is identical across all STM32 families.
@@ -15,7 +15,7 @@
  * the MCU. Use this for fault recovery in deployed systems.
  *
  * Timeout calculation:
- *   timeout_ms = (reload + 1) * prescaler * 1000 / LL_LSI_HZ
+ *   timeout_ms = (reload + 1) * prescaler * 1000 / ll_lsi_hz()
  *
  * Prescaler values: 4, 8, 16, 32, 64, 128, 256
  * Reload range: 0-4095 (12-bit)
@@ -115,32 +115,39 @@ static inline void ll_iwdg_refresh(void)
  * Convenience: common timeout values
  * ============================================================ */
 
-/* Reload values scale with the per-family LSI nominal (ll_common.h), so these
- * are the same registers as before at 32 kHz (999 / 1999 / 2499 / 1249) and
- * correct on the 37 kHz L0 instead of ~14 % short. */
+/* Reload values scale with the LSI in use (ll_lsi_hz(), ll_common.h): the
+ * same registers as before at 32 kHz (999 / 1999 / 2499 / 1249), and on the L0
+ * the measured LSI. Clamped to the 12-bit reload: at the top of the L0's LSI
+ * band (56 kHz) the 5 s preset tops out at ~4.7 s. */
+static inline uint32_t _ll_iwdg_preset_reload(uint32_t seconds, uint32_t psc_div)
+{
+    uint32_t r = (seconds * ll_lsi_hz()) / psc_div;
+    if (r > 4096UL) r = 4096UL;
+    return r - 1UL;
+}
 
 /** Start IWDG with ~1 second timeout */
 static inline void ll_iwdg_init_1s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_32, (1UL * LL_LSI_HZ) / 32UL - 1UL);
+    ll_iwdg_init(LL_IWDG_PSC_32, _ll_iwdg_preset_reload(1UL, 32UL));
 }
 
 /** Start IWDG with ~2 second timeout */
 static inline void ll_iwdg_init_2s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_32, (2UL * LL_LSI_HZ) / 32UL - 1UL);
+    ll_iwdg_init(LL_IWDG_PSC_32, _ll_iwdg_preset_reload(2UL, 32UL));
 }
 
 /** Start IWDG with ~5 second timeout */
 static inline void ll_iwdg_init_5s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_64, (5UL * LL_LSI_HZ) / 64UL - 1UL);
+    ll_iwdg_init(LL_IWDG_PSC_64, _ll_iwdg_preset_reload(5UL, 64UL));
 }
 
 /** Start IWDG with ~10 second timeout */
 static inline void ll_iwdg_init_10s(void)
 {
-    ll_iwdg_init(LL_IWDG_PSC_256, (10UL * LL_LSI_HZ) / 256UL - 1UL);
+    ll_iwdg_init(LL_IWDG_PSC_256, _ll_iwdg_preset_reload(10UL, 256UL));
 }
 
 /* ============================================================

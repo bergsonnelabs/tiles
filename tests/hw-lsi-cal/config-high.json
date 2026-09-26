@@ -1,0 +1,8 @@
+{
+  "core": "Core.ST.L0.1",
+  "clock": "high",
+  "iwdg": {
+    "enabled": false
+  },
+  "pads": {}
+}

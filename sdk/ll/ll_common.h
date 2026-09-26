@@ -53,13 +53,32 @@
  *   L4 (STM32L422): 32 kHz (DS: 29.5-34 kHz over temperature).
  *   WBA55 (LSI1):   32 kHz (DS: 30.4-33.6 kHz, LSI1PREDIV = 0).
  *   H5:             32 kHz (unchanged).
- * No calibration against HSI16 is done; the RTC and IWDG share the LSI, so
- * durations measured in RTC ticks against the watchdog stay consistent even
- * when the absolute frequency is off. */
+ * The L0's LSI is untrimmed and its band is +-40 %, so it is measured once
+ * instead: see ll_lsi_hz() below. Elsewhere the nominal value is used. The
+ * RTC and IWDG share the LSI, so durations measured in RTC ticks against the
+ * watchdog stay consistent either way. */
 #if defined(STM32L011xx)
   #define LL_LSI_HZ         37000UL
 #else
   #define LL_LSI_HZ         32000UL
+#endif
+
+/* ---- LSI frequency in use (Hz) ----
+ * What the RTC prescalers, the RTC wakeup timer and the IWDG reload are
+ * computed from. Every caller gets the same value, so a sleep chunked to half
+ * the watchdog timeout stays inside it.
+ *   L0: measured the first time it is asked for (in practice when core_init()
+ *       starts the watchdog) with TIM21 input capture of the LSI (TIM21_OR
+ *       TI1_RMP = LSI, RM0377 §17.4.14) against the TIM21 clock: SYSCLK,
+ *       which is HSI16 at the high / max levels and MSI at low / medium.
+ *       About 3.5 ms, once; the cached value is kept after that. Falls back
+ *       to LL_LSI_HZ when TIM21 is already in use or the reading is out of
+ *       band. sdk/hal/hal_lsi.c.
+ *   Others: LL_LSI_HZ. */
+#if defined(STM32L011xx)
+uint32_t ll_lsi_hz(void);
+#else
+static inline uint32_t ll_lsi_hz(void) { return LL_LSI_HZ; }
 #endif
 
 /* ---- GPIO register structure ---- */

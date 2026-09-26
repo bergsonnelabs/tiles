@@ -433,8 +433,13 @@ static void measure_reference(void)
 }
 
 #elif defined(STM32L011xx)
-/* LPTIM1 counting HSI16 / 16 = 1 MHz (RCC_CCIPR.LPTIM1SEL = 10, RM0377
- * §7.3.19). HSI16 can't run in range 3, so a range-3 build steps up to range 2
+/* LPTIM1 counting HSI16 / 128 = 125 kHz, 8 us a count (RCC_CCIPR.LPTIM1SEL =
+ * 10, RM0377 §7.3.19; PRESC Table 87). Not /16: LPTIM_CNT is asynchronous and
+ * only a pair of equal back-to-back reads is valid (RM0377 §19.7.8), and at
+ * the `low` level (MSI 1.05 MHz) a 1 MHz counter moves between the two reads,
+ * so the pair almost never matched. Bench, 2026-09-26: the read spun ~85 ms
+ * and the window hit the 16-bit wrap (135 SysTick ms read back as 3.9 ms).
+ * At 125 kHz the counter wraps after 524 ms. HSI16 can't run in range 3, so a range-3 build steps up to range 2
  * for the measurement (MSI doesn't change with the range) and back after. */
 static uint32_t lptim_cnt(void)
 {
@@ -466,13 +471,13 @@ static void measure_reference(void)
     R_RCC_APB1ENR |= (1UL << 31);             /* LPTIM1EN */
     (void)R_RCC_APB1ENR;
     LPTIM1_CR = 0;
-    LPTIM1_CFGR = (4UL << 9);                 /* PRESC = /16 */
+    LPTIM1_CFGR = (7UL << 9);                 /* PRESC = /128 */
     LPTIM1_CR = 1u;                           /* ENABLE */
     LPTIM1_ARR = 0xFFFFu;
     LPTIM1_CR = 1u | (1u << 2);               /* CNTSTRT: continuous */
     core_delay_ms(2);
 
-    /* 50 SysTick ms = 50000 counts if SysTick is right (16-bit counter) */
+    /* 50 SysTick ms = 6250 counts if SysTick is right (16-bit counter) */
     uint32_t t0 = core_millis();
     while (core_millis() == t0) ;
     uint32_t c0 = lptim_cnt(), m0 = core_millis();
@@ -486,7 +491,7 @@ static void measure_reference(void)
         R_PWR_CR = (R_PWR_CR & ~(3UL << 11)) | (3UL << 11);
         while (R_PWR_CSR & (1UL << 4)) ;
     }
-    uint32_t us = (c1 - c0) & 0xFFFFu;
+    uint32_t us = ((c1 - c0) & 0xFFFFu) * 8u;
     g_clock_levels.ref_ms  = us / 1000u;
     g_clock_levels.tick_ms = m1 - m0;
     /* SysTick ms vs HSI16 time */
