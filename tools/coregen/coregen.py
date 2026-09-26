@@ -178,11 +178,16 @@ MCU_DB = {
         "fpu": "fpv5-sp-d16",
         "max_sysclk_mhz": 250,
         "pll": {
+            # PLL1 in the wide VCO range, DS14540 Table 46: ref1_ck 2-16 MHz,
+            # VCO 128-560 MHz. SYSCLK is pll1_p_ck, and P must be even
+            # (RM0481 §11.8.10). This allowed odd P and a 150-836 MHz VCO.
             "m_range": (1, 63),
             "n_range": (4, 512),
-            "r_values": [1, 2, 3, 4, 5, 6, 7, 128],
-            "vco_min_mhz": 150,
-            "vco_max_mhz": 836,
+            "r_values": list(range(2, 129, 2)),
+            "in_min_mhz": 2,
+            "in_max_mhz": 16,
+            "vco_min_mhz": 128,
+            "vco_max_mhz": 560,
         },
     },
 }
@@ -1012,6 +1017,17 @@ def build_clock_config(config, tile, mcu):
                f"'low' and 'medium' are the same clock on this Core.")
         target_mhz = 16
 
+    if define == "STM32H523xx" and source == "csi":
+        # RM0481 §55.5.2: the USB needs APB2 >= 12 MHz, and every H5 build
+        # starts USB (the 1200-baud and serial-update paths depend on it). CSI
+        # is 4 MHz, so 'low' runs the HSI through HSIDIV /4 instead. (The USB
+        # driver used to switch SYSCLK behind the generated code's back,
+        # leaving SYSCLK_HZ and every baud rate wrong.)
+        eprint(f"  NOTE: clock '{level}' runs the HSI at 16 MHz, not CSI at {target_mhz} MHz, "
+               f"on the {part}: USB is always on and needs APB2 >= 12 MHz (RM0481 §55.5.2).")
+        source = "hsi"
+        target_mhz = 16
+
     ble_on = bool((config.get("ble") or {}).get("enabled"))
     if define == "STM32WBA55xx" and ble_on and target_mhz <= 16:
         eprint(f"  ERROR: BLE needs clock medium or higher. Clock '{level}' runs HSI16 "
@@ -1037,6 +1053,12 @@ def build_clock_config(config, tile, mcu):
         if src["type"] == source and source != "msi":
             source_mhz = src["frequency_mhz"]
             break
+    # H5: the HSI runs through HSIDIV (64 MHz >> 0..3, RM0481 §11.8.1). A
+    # direct-HSI level at 8/16/32/64 MHz is the HSI divided down, not a PLL.
+    h5_hsidiv = 0
+    if define == "STM32H523xx" and source == "hsi" and target_mhz in (8, 16, 32):
+        h5_hsidiv = {32: 1, 16: 2, 8: 3}[target_mhz]
+        source_mhz = target_mhz
 
     pll_config = None
 
@@ -1105,14 +1127,18 @@ def build_clock_config(config, tile, mcu):
             hpre5 = next(d for d in WBA_HPRE5_DIVS if target_mhz / d <= WBA_HCLK5_MAX_MHZ)
     elif define == "STM32H523xx" and target_mhz > 32:
         needs_vos = True
-        # H5 VOS register encoding (inverted from scale number):
-        # VOS=00(0)→Scale3(32MHz), 01(1)→Scale2(100MHz), 10(2)→Scale1(150MHz), 11(3)→Scale0(250MHz)
+        # PWR_VOSCR.VOS field (RM0481 §10.11.4): 0 = VOS3 .. 3 = VOS0. The
+        # scale limits are VOS3 100, VOS2 150, VOS1 200, VOS0 250 MHz (DS14540
+        # Table 20); this stays one scale above that because the SPI kernel
+        # clock (per_ck = HSI, 64 MHz) is over VOS3's 50 MHz SPI limit.
         if target_mhz <= 100:
-            vos_value = 1   # VOS=01, Scale 2
+            vos_value = 1   # VOS2
         elif target_mhz <= 150:
-            vos_value = 2   # VOS=10, Scale 1
+            vos_value = 2   # VOS1
         else:
-            vos_value = 3   # VOS=11, Scale 0 (boost)
+            vos_value = 3   # VOS0
+    if define == "STM32H523xx" and not needs_vos:
+        vos_value = 0       # VOS3, the reset scale
 
     # MSI range define (STM32L0/L4)
     _msi_range_map = {
@@ -1144,6 +1170,7 @@ def build_clock_config(config, tile, mcu):
         "vos_range": vos_range,
         "hsi16_kernel": hsi16_kernel,
         "hpre5": hpre5,
+        "h5_hsidiv": h5_hsidiv,
     }
 
 
@@ -1505,9 +1532,11 @@ SPI_CLK_MAP = {
     # WBA: SPI1 on APB2, SPI3 on APB7
     ("STM32WBA55xx", 1): ("ll_rcc_apb2_clk_enable", "LL_APB2_SPI1"),
     ("STM32WBA55xx", 3): ("ll_rcc_apb7_clk_enable", "LL_APB7_SPI3"),
-    # H5: SPI1 on APB2, SPI3 on APB3
+    # H5: SPI1 on APB2, SPI2/SPI3 on APB1 (RM0481 §11.8.29/31; APB3 bit 5 is
+    # SPI5EN, which this used to set for SPI3)
     ("STM32H523xx", 1): ("ll_rcc_apb2_clk_enable", "LL_APB2_SPI1"),
-    ("STM32H523xx", 3): ("ll_rcc_apb3_clk_enable", "LL_APB3_SPI3"),
+    ("STM32H523xx", 2): ("ll_rcc_apb1_clk_enable", "LL_APB1_SPI2"),
+    ("STM32H523xx", 3): ("ll_rcc_apb1_clk_enable", "LL_APB1_SPI3"),
 }
 
 SPI_PRESCALER_MAP = {

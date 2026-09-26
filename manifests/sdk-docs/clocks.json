@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6f27e78",
+  "source": "tiles@6af026f",
   "category": "clocks",
   "label": "Clocks",
   "icon": "⏱",
@@ -45,7 +45,7 @@
       "name": "ll_flash_latency_for_mhz",
       "signature": "ll_flash_latency_for_mhz(uint32_t mhz)",
       "returns": "uint32_t",
-      "brief": "Flash wait states for SYSCLK `mhz` in the highest voltage range (range 1 on L0/L4/WBA). The WBA and L0 generated clock setup uses ll_flash_latency_for_range(), which also covers their lower ranges.",
+      "brief": "Flash wait states for SYSCLK `mhz` in the highest voltage range (range 1 on L0/L4/WBA; on the H5, the voltage scale currently applied). The WBA and L0 generated clock setup uses ll_flash_latency_for_range(), which also covers their lower ranges.",
       "params": [
         {
           "name": "mhz",

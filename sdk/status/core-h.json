@@ -10,18 +10,21 @@
       "note": "LED not mounted on prototype — PA15 ODR toggles correctly via SWD readback"
     },
     "system.delay": {
-      "status": "partial",
-      "note": "Delays are timed from SYSCLK_HZ, which is 2x the real clock until the HSI divider is fixed. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "SYSCLK measured against 1000 USB SOFs at every level, within 0.15 % (tests/hw-h5-bringup, 2026-09-26)"
     },
     "system.tick": {
-      "status": "partial",
-      "note": "SysTick reload assumes SYSCLK_HZ, which is 2x the real clock. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "SysTick from SYSCLK_HZ, which now matches the measured SYSCLK (tests/hw-h5-bringup, 2026-09-26)"
     },
     "system.fault": "verified",
-    "system.uid": "compile",
+    "system.uid": {
+      "status": "verified",
+      "note": "USB serial number = the 96-bit UID read with the ICACHE off (tests/hw-h5-bringup, 2026-09-26)"
+    },
     "system.recovery": {
       "status": "compile",
-      "note": "Strike words reserved at the top of SRAM (hal_dfu.h); not bench-run on the H5"
+      "note": "Strike words at the top of SRAM (hal_dfu.h); the escalation itself is not bench-run. The ROM entry it ends in works (conn.dfu, BOOT0 low)"
     },
     "system.swo": "compile",
     "system.wamr": {
@@ -29,62 +32,65 @@
       "note": "examples/h1-wasm-blink builds with WAMR_ENABLED=1"
     },
     "clocks.hsi": {
-      "status": "partial",
-      "note": "The HSI divider is left at /2, so HSI runs at 32 MHz, not 64, and everything timed from SYSCLK_HZ is off by 2x. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "HSIDIV set by ll_rcc_h5_clock_config (it reset to /2): medium measured 64.08 MHz (tests/hw-h5-bringup, 2026-09-26)"
     },
     "clocks.hse": "na",
     "clocks.msi": "na",
-    "clocks.csi": "verified",
+    "clocks.csi": {
+      "status": "verified",
+      "note": "CSI itself works; coregen's 'low' now runs HSI/4 (16 MHz) instead, as USB needs APB2 >= 12 MHz"
+    },
     "clocks.pll": {
-      "status": "partial",
-      "note": "Fed from the halved HSI, so the PLL levels run at half the documented clock (\"max\" at about 124 MHz). Flash wait states also ignore voltage scaling. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "high 128.17 MHz, max 248.35 MHz measured; flash wait states + WRHIGHFREQ per RM0481 Table 45 read back (tests/hw-h5-bringup, 2026-09-26)"
     },
     "gpio.digital": "verified",
     "gpio.exti": {
-      "status": "partial",
-      "note": "Port B pin-change interrupts watch the wrong pins (the port select goes to a reserved SBS offset), and the vector table is shifted from IRQ 27. Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Port select now in EXTI_EXTICRx (was a reserved SBS offset); read back right on a clean boot (tests/hw-h5-bringup, 2026-09-26); pin interrupt not benched"
     },
     "gpio.af": "verified",
     "gpio.od_pull": "verified",
     "uart.polling": {
-      "status": "partial",
-      "note": "Baud rates are computed from SYSCLK_HZ, which is 2x the real clock. Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Baud rates from SYSCLK_HZ, which now matches the real clock; not benched"
     },
     "uart.irq": "compile",
     "uart.lp": "compile",
     "i2c.std": {
-      "status": "partial",
-      "note": "Bus timing assumes 2x the real clock (the bus runs at half speed), and I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Timing now at the real clock; I2C3 clock bit fixed (APB3ENR bit 7), clock on and TIMINGR read back on a clean boot (tests/hw-h5-bringup, 2026-09-26); no bus benched"
     },
     "i2c.fast": {
-      "status": "partial",
-      "note": "Bus timing assumes 2x the real clock (the bus runs at half speed), and I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Timing now at the real clock; no bus benched"
     },
     "i2c.fmp": "compile",
     "i2c.irq": "",
     "i2c.target": {
-      "status": "partial",
-      "note": "I2C1 only. The vector table is shifted from IRQ 27, so target mode enables the SPI interrupts; I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "I2C1 only; vector table fixed (RM0481 Table 147); not benched"
     },
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
     "spi.master": {
       "status": "partial",
-      "note": "SPI has no kernel clock (PLL1Q is never enabled) and the transfer loop has no timeout, so it hangs. Pending the H5 fix session (portal task #282)"
+      "note": "Kernel clock now per_ck (HSI) and the SPI2/SPI3 enables fixed. SPI1 and SPI3 still time out, also after a clean BOOT0-low power-on (tests/hw-h5-bringup, 2026-09-26): by hand, a 4-frame session counts CTSIZE down to 1 and sets TXTF, but no frame reaches the RxFIFO and EOT never comes. Same with per_ck, CSI or pll1_q_ck. Cause open"
     },
     "timer.tick": {
-      "status": "partial",
-      "note": "The vector table is shifted from IRQ 27, so the TIM1 tick never fires. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "Vector table fixed, TIM6/TIM7 get their vectors. TIM1 1 kHz update: 1002 ticks over 1000 USB SOFs at 248 MHz (tests/hw-h5-bringup, 2026-09-26, BOOT0 low; after a BOOT0-high ROM leave GTZC1_TZSC blocks the TIM1 clock until a reset)"
     },
     "timer.pwm": {
-      "status": "partial",
-      "note": "PWM frequencies are off by 2x (timer clock assumed from SYSCLK_HZ). Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Timer clock now the real clock; not benched"
     },
     "timer.stepdir": "compile",
     "timer.capture": {
-      "status": "partial",
-      "note": "Measured periods are off by 2x (timer clock assumed from SYSCLK_HZ). Pending the H5 fix session (portal task #282)"
+      "status": "compile",
+      "note": "Timer clock now the real clock; not benched"
     },
     "timer.oneshot": "",
     "timer.encoder": "",
@@ -92,15 +98,15 @@
     "timer.wdog": "verified",
     "adc.raw": "verified",
     "adc.mv": {
-      "status": "partial",
-      "note": "VREFINT is read from channel 19 (PA5, pad 9) instead of 17, so millivolts are not supply-compensated. Pending the H5 fix session (portal task #282)"
+      "status": "verified",
+      "note": "VREFINT is channel 17, the calibration word is read 16-bit with the ICACHE off: VDDA 3293-3297 mV calibrated (tests/hw-h5-bringup, 2026-09-26, BOOT0 low)"
     },
     "adc.temp": "verified",
     "adc.res": "verified",
     "adc.oversamp": "verified",
     "adc.dma": {
       "status": "partial",
-      "note": "The vector table is shifted from IRQ 27, so ADC DMA completion never arrives. Pending the H5 fix session (portal task #282)"
+      "note": "GPDMA1 vector fixed; half and full transfer callbacks arrive with good data (tests/hw-h5-bringup, 2026-09-26), but the GPDMA channel is not re-armed (no linked list), so it runs once instead of circular"
     },
     "adc.dma_mv": "compile",
     "adc.cont": "compile",
@@ -152,16 +158,25 @@
       "note": "The STM32H523 has a PKA (ECDSA signature verification, DS14540); no driver yet"
     },
     "security.hash": "none",
-    "conn.usb_cdc": "verified",
+    "conn.usb_cdc": {
+      "status": "verified",
+      "note": "tiles#285 behavior ported; tests/hw-usb-robust 7/7 (early, serial, zlp, burst, dtr, stall) with BOOT0 high and with BOOT0 low across a real reset; CRS trims HSI48 from SOF (SYNCOK), 2026-09-26"
+    },
     "conn.scope_usb": "compile",
     "conn.scope_ble": "na",
-    "conn.usb_hid": "verified",
+    "conn.usb_hid": {
+      "status": "compile",
+      "note": "HID path rewritten with the #285 port (report timeout, no blocking in interrupts); not re-benched"
+    },
     "conn.usb_wake": "none",
     "conn.usb_msc": "",
-    "conn.dfu": "verified",
+    "conn.dfu": {
+      "status": "verified",
+      "note": "make flash-dfu (1200-baud touch, ROM DFU, download, leave): BOOT0 high resets into the ROM; BOOT0 low jumps to the ROM (0x0BF97000) from core_init before the clocks, 2026-09-26"
+    },
     "conn.serial_update": {
-      "status": "none",
-      "note": "The flasher is written for the L4's USB block (sdk/serial_update/flasher_l4.c)"
+      "status": "verified",
+      "note": "make flash-serial (flasher_h5.c): 5 in a row hands-free with BOOT0 high (28 KB in 0.2-0.5 s), a 336 KB image across both banks, and 3 in a row with BOOT0 low, 2026-09-26. An interrupted update needs BOOT0 high to recover"
     },
     "conn.swd": "none",
     "conn.ble": "na",

@@ -13,6 +13,13 @@ python3 host_test.py sleep       # sleep + reachability, ~15 s
 
 Never build this with `BOOTLOADER := 1`.
 
+Core.ST.H5 runs the same robustness checks: `make TILE=Core.ST.H5`, then
+`TILE=Core.ST.H5 python3 host_test.py --no-reset`. `--no-reset` restarts the
+Core for the `early` check with `make flash-serial` instead of a reset, for a
+board strapped BOOT0-high (every reset lands in the ROM bootloader). 7/7 on
+2026-09-26. The sleep mode and `W` are L4-only (the H5's Stop path doesn't
+consult USB yet).
+
 ## Robustness (`host_test.py`)
 
 | Check | What passes |

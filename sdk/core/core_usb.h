@@ -70,9 +70,8 @@ static inline int core_usb_wait_host(uint32_t timeout_ms)
     return 1;
 }
 
-/** Transmit data. Core.ST.L4: queued, never waits long (see hal_usb_cdc_write);
- * returns bytes queued, -1 before init. Core.ST.H5: blocking; bytes sent, or
- * -1 with no terminal. */
+/** Transmit data: queued, never waits long (see hal_usb_cdc_write); returns
+ * bytes queued, -1 before init. */
 static inline int core_usb_write(const uint8_t *buf, uint16_t len)
 {
     return hal_usb_cdc_write(buf, len);

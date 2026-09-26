@@ -6,7 +6,7 @@
  *   L4:  DMA1 CH2 = SPI1_RX, CH3 = SPI1_TX (request 1, RM0394 Table 45)
  *   WBA: GPDMA1 CH6 = RX, CH7 = TX (REQSEL spi1_rx 1 / spi1_tx 2 /
  *        spi3_rx 3 / spi3_tx 4, RM0493 Table 125)
- *   H5:  no DMA yet (HAL_ERROR)
+ *   H5:  no DMA yet (HAL_ERROR); kernel clock per_ck = hsi_ker_ck
  * The ADC uses DMA1 CH1 (L4) / GPDMA1 CH0 (WBA); nothing else in the SDK
  * claims these channels.
  */
@@ -46,8 +46,13 @@ static void _spi_clk_enable(SPI_TypeDef *instance)
 #if defined(STM32WBA55xx)
     if (instance == SPI3) ll_rcc_apb7_clk_enable(LL_APB7_SPI3);
 #elif defined(STM32H523xx)
-    if (instance == SPI2) ll_rcc_apb1_clk_enable((1UL << 14));
-    if (instance == SPI3) SET_BITS(REG32(RCC_BASE + 0xA8UL), LL_APB3_SPI3);
+    /* SPI2/SPI3 are APB1 (RCC_APB1LENR bits 14/15, RM0481 §11.8.29); SPI3 used
+     * to set APB3ENR bit 5, which is SPI5EN. The kernel clock (SPI123SEL,
+     * RCC_CCIPR3[8:0], §11.8.42) resets to pll1_q_ck, which no clock level
+     * enables: select per_ck, which is hsi_ker_ck (CKPERSEL resets to HSI). */
+    if (instance == SPI2) ll_rcc_apb1_clk_enable(LL_APB1_SPI2);
+    if (instance == SPI3) ll_rcc_apb1_clk_enable(LL_APB1_SPI3);
+    ll_rcc_h5_spi_kernel_per_ck();
 #endif
     (void)REG32(RCC_BASE);
 }
@@ -72,8 +77,18 @@ static void _spi_reset(SPI_TypeDef *instance)
         SET_BITS(REG32(RCC_BASE + 0x80UL), 1UL << 5);
         CLR_BITS(REG32(RCC_BASE + 0x80UL), 1UL << 5);
     }
+#elif defined(STM32H523xx)
+    /* RCC_APB2RSTR.SPI1RST bit 12 (0x07C), RCC_APB1LRSTR.SPI2RST/SPI3RST bits
+     * 14/15 (0x074), RM0481 §11.8.22 / §11.8.24. */
+    uint32_t off = 0, bit = 0;
+    if (instance == SPI1) { off = 0x7CUL; bit = 1UL << 12; }
+    if (instance == SPI2) { off = 0x74UL; bit = 1UL << 14; }
+    if (instance == SPI3) { off = 0x74UL; bit = 1UL << 15; }
+    if (bit) {
+        SET_BITS(REG32(RCC_BASE + off), bit);
+        CLR_BITS(REG32(RCC_BASE + off), bit);
+    }
 #else
-    /* H5: left to the H5 SPI work (its SPI has no kernel clock yet). */
     ll_spi_disable(instance);
 #endif
 }
@@ -172,7 +187,7 @@ void hal_spi_set_cs_map(hal_spi_t *h, const hal_spi_cs_t *map, uint8_t n)
 uint32_t hal_spi_sck_hz(const hal_spi_t *h)
 {
     if (!h || !h->instance) return 0;
-    return (_ll_spi_cycles_per_ms() * 1000UL) >> ((h->cfg.prescaler & 7UL) + 1UL);
+    return (_ll_spi_kernel_per_ms() * 1000UL) >> ((h->cfg.prescaler & 7UL) + 1UL);
 }
 
 /* ============================================================

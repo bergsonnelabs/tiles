@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@3b946ad",
+  "source": "tiles@6af026f",
   "subsystems": [
     {
       "id": "adc",
@@ -522,8 +522,8 @@
           "value": "M"
         },
         {
-          "title": "Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI has no clock",
-          "brief": "Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3, 1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE sessions, GPDMA) but has not run it on hardware yet; the camera tile's LL half-duplex path is the only W5 SPI use proven on silicon. Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled), so a transfer returns HAL_TIMEOUT instead of moving data.",
+          "title": "Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI still stalls",
+          "brief": "Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3, 1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE sessions, GPDMA) but has not run it on hardware yet; the camera tile's LL half-duplex path is the only W5 SPI use proven on silicon. Core.ST.H5: the kernel clock is now per_ck (the HSI), but on the bench SPI1 still never clocks a frame and a transfer returns HAL_TIMEOUT (2026-09-26, only tried on a board started by the ROM bootloader).",
           "tier": 1,
           "value": "M"
         },

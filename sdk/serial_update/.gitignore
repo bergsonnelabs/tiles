@@ -1,3 +1,5 @@
 build/
 test/su_sim
 test/su_sim.dSYM/
+test/su_sim_h5
+test/su_sim_h5.dSYM/

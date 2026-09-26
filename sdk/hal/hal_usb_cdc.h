@@ -1,7 +1,7 @@
 /**
  * hal_usb_cdc.h — USB CDC (Virtual Serial Port) driver
  *
- * Implements USB Device with CDC-ACM class on STM32L422.
+ * Implements USB Device with CDC-ACM class on STM32L422 and STM32H523.
  * When initialized, the device appears as /dev/tty.usbmodem*
  * on the host. Provides printf-style output and byte-level RX.
  *
@@ -22,11 +22,10 @@
  * ============================================================ */
 
 #ifndef HAL_USB_CDC_TX_QUEUE_SIZE
-  #define HAL_USB_CDC_TX_QUEUE_SIZE 512   /* Must be power of 2. L4: every write;
-                                             H5: try_write only */
+  #define HAL_USB_CDC_TX_QUEUE_SIZE 512   /* Must be power of 2; every write */
 #endif
 
-/* L4: longest a write waits for a terminal that has stopped reading (no
+/* Longest a write waits for a terminal that has stopped reading (no
  * packet collected for this long) before it drops, and a HID report for the
  * previous one. After one timeout, writes drop at once until the host reads. */
 #ifndef HAL_USB_CDC_TX_TIMEOUT_MS
@@ -36,7 +35,7 @@
   #define HAL_USB_HID_TX_TIMEOUT_MS 50
 #endif
 
-/* L4: after a terminal raises DTR, output waits this long (USB frames, ms)
+/* After a terminal raises DTR, output waits this long (USB frames, ms)
  * before it flows, so the host's open-time input flush (pyserial, Windows
  * PurgeComm) doesn't discard what was printed before the port opened. */
 #ifndef HAL_USB_CDC_OPEN_SETTLE_MS
@@ -87,7 +86,7 @@ typedef void (*hal_usb_hid_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx
  *   - Enables USB interrupt
  *   - Connects DP pull-up (host sees device)
  *
- * L4: core_init() already calls it; later calls do nothing.
+ * core_init() already calls it; later calls do nothing.
  */
 void hal_usb_cdc_init(void);
 
@@ -102,16 +101,14 @@ int hal_usb_cdc_connected(void);
 /**
  * Transmit data over USB CDC.
  *
- * L4: queues into the TX FIFO (HAL_USB_CDC_TX_QUEUE_SIZE) and returns once the
+ * Queues into the TX FIFO (HAL_USB_CDC_TX_QUEUE_SIZE) and returns once the
  * bytes are queued. Before a terminal opens the port (DTR) the bytes wait in
  * the FIFO and go out when it does; what doesn't fit is dropped (the oldest
  * text is kept). With a terminal that isn't reading, it waits at most
  * HAL_USB_CDC_TX_TIMEOUT_MS, then drops. Never waits in an interrupt handler.
  * Returns the number of bytes queued (short = the rest was dropped), or -1
- * before hal_usb_cdc_init().
- *
- * H5: blocking; waits for each packet. Returns bytes sent, or -1 if no
- * terminal is connected.
+ * before hal_usb_cdc_init(). (Core.ST.H5 until 2026-09-26: blocking, and -1
+ * with no terminal.)
  */
 int hal_usb_cdc_write(const uint8_t *buf, uint16_t len);
 
@@ -121,7 +118,7 @@ int hal_usb_cdc_write(const uint8_t *buf, uint16_t len);
  * interrupt sends it. Returns `len` if queued, 0 if the queue has no room
  * right now (offer it again later), -1 if not configured / no terminal.
  * A queued buffer reaches the host contiguously and in call order relative
- * to hal_usb_cdc_write() (L4: the same FIFO; H5: write waits for it to empty).
+ * to hal_usb_cdc_write() (the same FIFO).
  * Call from one context only (the main loop). len <= HAL_USB_CDC_TX_QUEUE_SIZE.
  */
 int hal_usb_cdc_try_write(const uint8_t *buf, uint16_t len);
@@ -170,7 +167,6 @@ uint16_t hal_usb_cdc_read(uint8_t *buf, uint16_t max_len);
  */
 uint16_t hal_usb_cdc_available(void);
 
-#if defined(STM32L422xx)
 /**
  * 1 while the bus is suspended (no SOF for 3 ms: the host is asleep, has
  * suspended the port, or there is no host). Writes don't wait meanwhile.
@@ -189,7 +185,8 @@ int hal_usb_cdc_started(void);
  * low-power mode; the host's resume or reset then ends Stop (USB wakeup on
  * EXTI line 17; Stop 0/1 only). 0 while a host has the bus awake: HSI48 stops
  * in Stop and the Core would stop answering, so wait in Sleep instead.
- * Call with interrupts masked, right before entering Stop.
+ * Core.ST.H5: 1 only while USB is not started (its suspended-bus Stop is not
+ * implemented). Call with interrupts masked, right before entering Stop.
  */
 int hal_usb_cdc_stop_allowed(void);
 
@@ -199,7 +196,6 @@ int hal_usb_cdc_stop_allowed(void);
 void hal_usb_cdc_test_stats(uint32_t *stops, uint32_t *wakes);
 uint32_t hal_usb_cdc_test_log(const uint32_t **log);   /* (ms << 8) | event */
 void hal_usb_cdc_test_force_suspend(void);   /* next Stop as if suspended */
-#endif
 #endif
 
 /**
@@ -212,7 +208,7 @@ void hal_usb_cdc_poll(void);
 
 /**
  * Send a HID report (up to 64 bytes) via EP3 interrupt IN.
- * Waits for the previous report to complete (L4: at most
+ * Waits for the previous report to complete (at most
  * HAL_USB_HID_TX_TIMEOUT_MS, never in an interrupt handler or while the bus
  * is suspended; a report that can't go is dropped).
  * Returns bytes sent, or -1 if not configured or dropped.

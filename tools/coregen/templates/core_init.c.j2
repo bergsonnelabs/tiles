@@ -418,6 +418,20 @@ void core_clock_init(void)
     ll_rcc_set_hdiv5(0);
 {% endif %}
 
+{% elif mcu.define == "STM32H523xx" %}
+    /* STM32H523, RM0481: {{ clock_config.source }}{{ " -> PLL1" if clock_config.pll else "" }} = {{ clock_config.sysclk_mhz }} MHz in VOS{{ 3 - clock_config.vos_value }}.
+     * ll_rcc_h5_clock_config() works from any state (reset, the ST ROM
+     * bootloader's DFU "leave", the serial-update flasher): SYSCLK onto the
+     * HSI, PLL1 off, scale, HSIDIV (the HSI resets to /2, 32 MHz), the new
+     * source, then the Table 45 wait states and WRHIGHFREQ. */
+{% if clock_config.pll %}
+    (void)ll_rcc_h5_clock_config(LL_RCC_H5_SYSCLK_PLL, LL_RCC_HSIDIV_1,
+                                 {{ clock_config.pll.m }}, {{ clock_config.pll.n }}, {{ clock_config.pll.r }}, SYSCLK_HZ, {{ clock_config.vos_value }});
+{% else %}
+    (void)ll_rcc_h5_clock_config(LL_RCC_H5_SYSCLK_HSI, {{ clock_config.h5_hsidiv }}UL, 0, 0, 0, SYSCLK_HZ, {{ clock_config.vos_value }});
+{% endif %}
+    ll_icache_enable();             /* RM0481 §8.4.13: off at boot */
+
 {% else %}
 {% if clock_config.pll %}
 {% if clock_config.needs_vos %}
@@ -738,8 +752,18 @@ void core_init(void)
     /* ROM DFU: check for magic before ANY peripheral/clock init.
      * If found, jump to the factory ROM bootloader (DfuSe, 0483:DF11).
      * The MCU is in near-reset state here — only .data/.bss init has run. */
+#if defined(STM32H523xx)
+    /* Left by a ROM entry that worked (hal_dfu_jump_to_rom): the guard is
+     * only for a fault in the same boot. */
+    if (DFU_MAGIC_ADDR == DFU_MAGIC_TRYING) DFU_MAGIC_ADDR = 0;
+#endif
     if (DFU_MAGIC_ADDR == DFU_MAGIC) {
         DFU_MAGIC_ADDR = 0;
+#if defined(STM32H523xx)
+        /* BOOT0 high: the touch's reset went to the ROM, which then started
+         * this image; the magic is stale. */
+        if (!hal_dfu_started_by_rom())
+#endif
         hal_dfu_jump_to_rom();  /* does not return */
     }
     /* Brick recovery: after CORE_RECOVERY_STRIKE_LIMIT consecutive watchdog

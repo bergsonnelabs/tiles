@@ -25,8 +25,8 @@
  *        TS_CAL1      @ 0x0BF90710 (30°C, 3.0V)
  *        TS_CAL2      @ 0x0BF90742 (130°C, 3.0V)   (RM0493 Tables 144/145)
  *   H5:  VREFINT_CAL  @ 0x08FFF810 (calibrated at 3.3V)
- *        TS_CAL1      @ 0x08FFF800 (30°C, 3.3V)
- *        TS_CAL2      @ 0x08FFF804 (110°C, 3.3V)
+ *        TS_CAL1      @ 0x08FFF814 (30°C, 3.3V)
+ *        TS_CAL2      @ 0x08FFF818 (130°C, 3.3V)
  */
 
 #include "hal_adc.h"
@@ -58,8 +58,9 @@
   #define ADC_CH_TEMP       13
 
 #elif defined(STM32H523xx)
-  /* ADC1/ADC2 on H523 — see RM0481 §24 */
-  #define ADC_CH_VREFINT    19
+  /* ADC1 on H523: VINP[16] = VSENSE, VINP[17] = VREFINT (RM0481 §26.4.2,
+   * Table 257; ADC2 VINP[16] is VBAT/4). This said 19. */
+  #define ADC_CH_VREFINT    17
   #define ADC_CH_TEMP       16
 #endif
 
@@ -109,11 +110,22 @@
 
 /* Factory calibration words, read a byte at a time: the WBA's VREFINT_CAL is
  * at an odd address, and an unaligned halfword load from the info block is
- * not something to rely on. Little-endian, 12 bits used. */
+ * not something to rely on. Little-endian, 12 bits used.
+ * H5: the words are in the flash's read-only area, where an 8-bit read is an
+ * AHB bus error (RM0481 §7.3.4) — that is what the "VREFINT read needs
+ * debugging" stub below papered over, along with the wrong channel. Read the
+ * (even-addressed) halfword with the ICACHE off, as core_uid_read() does. */
 static uint16_t _cal_read(volatile const uint16_t *addr)
 {
+#if defined(STM32H523xx)
+    int ic = ll_icache_disable();
+    uint16_t v = *addr;
+    if (ic) ll_icache_enable();
+    return v;
+#else
     volatile const uint8_t *b = (volatile const uint8_t *)addr;
     return (uint16_t)(b[0] | ((uint16_t)b[1] << 8));
+#endif
 }
 
 /* ============================================================
@@ -660,14 +672,6 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
 
     uint16_t vref_raw = hal_adc_read(adc, ADC_CH_VREFINT);
 
-#if defined(STM32H523xx)
-    /* H523: use nominal 3.3V VDDA.
-     * H523: VREFINT channel read via hal_adc_read needs further debugging —
-     * the read returns incorrect values despite correct calibration data.
-     * TODO: debug H523 VREFINT channel read path. */
-    (void)vref_raw;
-    uint32_t vdda = 3300UL;
-#else
     uint16_t vref_cal = _cal_read(VREFINT_CAL_ADDR);
 
     /* A bad read or missing calibration falls back to nominal 3.3 V, and
@@ -686,7 +690,6 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
             calibrated = true;
         }
     }
-#endif
 
     /* Remove the channel if we added it ourselves */
     if (!was_present && adc->n_channels > 0) {
@@ -708,11 +711,7 @@ uint32_t hal_adc_read_vdda_mv(hal_adc_t *adc)
      * VDDA and threw it away. That meant "prime VDDA before DMA" never
      * primed, and the first raw_to_mv call converted mid-DMA. */
     adc->vdda_mv = vdda;
-#if defined(STM32H523xx)
-    adc->vdda_calibrated = false;
-#else
     adc->vdda_calibrated = calibrated;
-#endif
     return vdda;
 }
 

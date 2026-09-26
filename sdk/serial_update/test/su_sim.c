@@ -1,5 +1,7 @@
 /**
- * su_sim.c — the serial-update protocol core on a simulated STM32L422 flash.
+ * su_sim.c — the serial-update protocol core on a simulated STM32L422 flash,
+ * or with -DSIM_H5 an STM32H523 one (512 KB, 8 KB sectors, 16-byte program
+ * unit that may be written only once: build with the H5 flasher's -D flags).
  *
  * Runs su_core.c natively: frames arrive on stdin (in 64-byte "USB packets"),
  * replies go to stdout, and the simulated flash is written to a file whenever
@@ -8,7 +10,7 @@
  *
  *   su_sim <flash-in> <flash-out> [--fail-program-at N] [--idle-ms MS]
  *
- * <flash-in> is the 128 KB flash before the update (the "old app").
+ * <flash-in> is the whole flash before the update (the "old app").
  * --fail-program-at N  the Nth program() call reports an error
  * --idle-ms MS         at EOF, advance the idle timer by MS before stopping
  */
@@ -20,8 +22,19 @@
 #include "su_core.h"
 
 #define SIM_FLASH_BASE  0x08000000u
+#if defined(SIM_H5)
+#define SIM_FLASH_SIZE  (512u * 1024u)
+#define SIM_PAGE        8192u
+#define SIM_DEV_ID      0x478u
+#define SIM_SRAM_END    0x20044000u
+#define SIM_RESERVED    SU_NVM_RESERVED_H5
+#else
 #define SIM_FLASH_SIZE  (128u * 1024u)
 #define SIM_PAGE        2048u
+#define SIM_DEV_ID      0x464u
+#define SIM_SRAM_END    0x2000A000u
+#define SIM_RESERVED    SU_NVM_RESERVED
+#endif
 
 static uint8_t     flash[SIM_FLASH_SIZE];
 static const char *out_path;
@@ -51,13 +64,14 @@ static int sim_program(uint32_t addr, const uint8_t *buf, uint32_t len)
 {
     if (++program_calls == fail_program_at) return -1;
     if (addr < SIM_FLASH_BASE || addr + len > SIM_FLASH_BASE + SIM_FLASH_SIZE) return -1;
-    if ((addr & 7u) || (len & 7u)) return -1;              /* L4 double-word unit */
+    if ((addr % SU_PROG_UNIT) || (len % SU_PROG_UNIT)) return -1;   /* program unit */
     uint32_t off = addr - SIM_FLASH_BASE;
-    for (uint32_t i = 0; i < len; i += 8) {
-        /* Like the L4: programming a double-word that isn't erased is PROGERR. */
-        for (uint32_t k = 0; k < 8; k++)
+    for (uint32_t i = 0; i < len; i += SU_PROG_UNIT) {
+        /* Like the chip: a unit that isn't erased can't be programmed again
+         * (L4 PROGERR; on the H5 a second write breaks the word's ECC). */
+        for (uint32_t k = 0; k < SU_PROG_UNIT; k++)
             if (flash[off + i + k] != 0xFF) return -1;
-        memcpy(flash + off + i, buf + i, 8);
+        memcpy(flash + off + i, buf + i, SU_PROG_UNIT);
     }
     return 0;
 }
@@ -96,11 +110,11 @@ int main(int argc, char **argv)
     static const su_ops_t ops = {
         .flash_base = SIM_FLASH_BASE,
         .flash_size = SIM_FLASH_SIZE,
-        .image_limit = SIM_FLASH_SIZE - SU_NVM_RESERVED,
+        .image_limit = SIM_FLASH_SIZE - SIM_RESERVED,
         .page_size  = SIM_PAGE,
-        .dev_id     = 0x464,
+        .dev_id     = SIM_DEV_ID,
         .sram_start = 0x20000000u,
-        .sram_end   = 0x2000A000u,
+        .sram_end   = SIM_SRAM_END,
         .flash_read = flash,
         .erase_page = sim_erase,
         .program    = sim_program,

@@ -218,6 +218,18 @@ static inline uint32_t _ll_spi_cycles_per_ms(void)
     return rvr ? rvr + 1UL : 100000UL;
 }
 
+/* SPI kernel clock cycles per millisecond. SYSCLK everywhere but the H5,
+ * whose SPI1/2/3 run from per_ck = hsi_ker_ck (hal_spi.c selects it):
+ * 64 MHz >> HSIDIV, independent of SYSCLK (RM0481 §11.8.42). */
+static inline uint32_t _ll_spi_kernel_per_ms(void)
+{
+#if defined(STM32H523xx)
+    return (64000000UL >> ((REG32(0x44020C00UL) >> 3) & 0x3UL)) / 1000UL;
+#else
+    return _ll_spi_cycles_per_ms();
+#endif
+}
+
 static inline void _ll_spi_deadline_start(ll_spi_deadline_t *d, uint32_t cycles)
 {
     d->last  = SYSTICK_CVR & 0x00FFFFFFUL;
@@ -309,7 +321,13 @@ static inline uint32_t _ll_spi_prescaler_code(SPI_TypeDef *spi)
  */
 static inline uint32_t ll_spi_stall_cycles(SPI_TypeDef *spi)
 {
-    uint32_t frame = 8UL * (2UL << _ll_spi_prescaler_code(spi));
+    uint32_t frame = 8UL * (2UL << _ll_spi_prescaler_code(spi));   /* kernel cycles */
+#if defined(STM32H523xx)
+    /* Kernel cycles to CPU cycles: the H5 kernel (per_ck) can be ~4x slower
+     * than SYSCLK. */
+    uint32_t k = _ll_spi_kernel_per_ms();
+    frame = (uint32_t)(((uint64_t)frame * _ll_spi_cycles_per_ms() + k - 1UL) / k);
+#endif
     return 2UL * _ll_spi_cycles_per_ms() + frame * _ll_spi_fifo_frames(spi) * 4UL;
 }
 

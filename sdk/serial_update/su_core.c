@@ -108,19 +108,20 @@ static void reboot(void)
 }
 
 /* Program `len` bytes at flash offset `off`, padding the tail with 0xFF to the
- * 8-byte programming unit, then read it back. `skip_head` leaves the first
- * 8 bytes for a separate, final write (page 0's SP + reset vector). */
+ * programming unit (SU_PROG_UNIT: 8 bytes L4, 16 H5), then read it back.
+ * `skip_head` leaves the first unit for a separate, final write (page 0's SP
+ * and reset vector are in it). */
 static int write_verify(uint32_t off, const uint8_t *buf, uint32_t len, int skip_head)
 {
-    uint32_t start   = skip_head ? 8u : 0u;
-    uint32_t aligned = len & ~7u;
+    uint32_t start   = skip_head ? SU_PROG_UNIT : 0u;
+    uint32_t aligned = len & ~(SU_PROG_UNIT - 1u);
 
     if (aligned > start && O->program(O->flash_base + off + start, buf + start, aligned - start) != 0)
         return -1;
     if (len > aligned) {
-        uint8_t tail[8];
-        for (uint32_t i = 0; i < 8; i++) tail[i] = (aligned + i < len) ? buf[aligned + i] : 0xFF;
-        if (O->program(O->flash_base + off + aligned, tail, 8) != 0) return -1;
+        uint8_t tail[SU_PROG_UNIT];
+        for (uint32_t i = 0; i < SU_PROG_UNIT; i++) tail[i] = (aligned + i < len) ? buf[aligned + i] : 0xFF;
+        if (O->program(O->flash_base + off + aligned, tail, SU_PROG_UNIT) != 0) return -1;
     }
     for (uint32_t i = start; i < len; i++)
         if (O->flash_read[off + i] != buf[i]) return -1;
@@ -157,6 +158,10 @@ static void on_query(void)
     put_str(&l, " ");
     put_dec(&l, O->page_size);
     put_str(&l, page0_erased ? " 1" : " 0");
+#if SU_PROTOCOL_VERSION >= 2
+    put_str(&l, " ");
+    put_dec(&l, O->image_limit);
+#endif
     send_line(&l);
 }
 
@@ -216,13 +221,15 @@ static void on_end(void)
     c = su_crc32(c, O->flash_read + page0_len, img_size - page0_len);
     if (c != img_crc) { reply_err(SU_ERR_IMAGE_CRC, "image-crc"); return; }
 
-    /* Page 0 body first, then its first double-word (SP + reset vector) last:
-     * a failure anywhere before that final write leaves 0x08000000 erased. */
-    if (write_verify(0, page0, page0_len, 1) != 0 || O->program(O->flash_base, page0, 8) != 0) {
+    /* Page 0 body first, then its first programming unit (SP + reset vector)
+     * last: a failure anywhere before that final write leaves 0x08000000
+     * erased. */
+    if (write_verify(0, page0, page0_len, 1) != 0 ||
+        O->program(O->flash_base, page0, SU_PROG_UNIT) != 0) {
         reply_err(SU_ERR_FLASH, "flash");
         return;
     }
-    for (uint32_t i = 0; i < 8; i++)
+    for (uint32_t i = 0; i < SU_PROG_UNIT; i++)
         if (O->flash_read[i] != page0[i]) { reply_err(SU_ERR_FLASH, "flash"); return; }
 
     page0_erased = 0;
