@@ -836,6 +836,28 @@ void hal_adc_read_all(hal_adc_t *adc, uint16_t *buf)
 #define HAL_ADC_MAX_DMA_INSTANCES  2
 static hal_adc_t *_adc_dma_handles[HAL_ADC_MAX_DMA_INSTANCES];
 
+#if defined(STM32WBA55xx) || defined(STM32H523xx)
+/* The GPDMA has no circular bit. The ring is one linked-list item that links
+ * to itself: in run-to-completion mode a recursive last LLI never completes
+ * the channel (RM0481 §16.4.7, RM0493 §17.4.7), so at each block end the
+ * channel reloads the same block from here and raises HT and TC again. The
+ * node must be word aligned; CLBAR supplies its upper 16 address bits. */
+static ll_gpdma_node_t _adc_lli;
+
+/* Abort a (circular) channel: suspend, wait for SUSPF, reset (RM0481 §16.4.4,
+ * RM0493 §17.4.4). Bounded: a channel that never suspends is reset anyway. */
+static void _adc_gpdma_abort(GPDMA_Channel_TypeDef *ch)
+{
+    if (ch->CCR & LL_GPDMA_CCR_EN) {
+        SET_BITS(ch->CCR, LL_GPDMA_CCR_SUSP);
+        uint32_t guard = 100000;
+        while (!(ch->CSR & (LL_GPDMA_CSR_SUSPF | LL_GPDMA_CSR_IDLEF)) && --guard) { }
+    }
+    ch->CCR  = LL_GPDMA_CCR_RESET;
+    ch->CFCR = LL_GPDMA_CFCR_ALL;
+}
+#endif
+
 hal_status_t hal_adc_set_trigger(hal_adc_t *adc, uint8_t extsel,
                                  hal_adc_trig_edge_t edge)
 {
@@ -858,6 +880,9 @@ hal_status_t hal_adc_start_dma(hal_adc_t *adc, uint16_t *buf, uint16_t len,
 {
     if (adc->dma_active) return HAL_BUSY;
     if (adc->n_channels == 0 || len == 0) return HAL_ERROR;
+#if defined(STM32WBA55xx) || defined(STM32H523xx)
+    if (len > 0x7FFFu) return HAL_ERROR;    /* GPDMA BNDT is 16 bits of bytes */
+#endif
 
     adc->dma_buf          = buf;
     adc->dma_len          = len;
@@ -972,42 +997,31 @@ hal_status_t hal_adc_start_dma(hal_adc_t *adc, uint16_t *buf, uint16_t len,
     hal_nvic_enable_irq(HAL_IRQ_DMA1_CH1);
     ll_dma_enable(DMA1_CH1);
 
-#elif defined(STM32WBA55xx)
-    /* GPDMA Channel 0 for ADC4 on WBA */
-    ll_gpdma_disable(GPDMA1_CH0);
+#elif defined(STM32WBA55xx) || defined(STM32H523xx)
+    /* GPDMA1 channel 0, circular through _adc_lli. Request 0 on both:
+     * adc4_dma on the WBA (RM0493 Table 125), adc1_dma on the H5 (RM0481
+     * Table 136). TCEM = 0: TC at each block end, HT at each half. */
+    _adc_gpdma_abort(GPDMA1_CH0);
 
     uint32_t ctr1 = LL_GPDMA_CTR1_SDW_HALF  /* src: 16-bit */
                   | LL_GPDMA_CTR1_DDW_HALF  /* dst: 16-bit */
                   | LL_GPDMA_CTR1_DINC;     /* memory increment */
-    /* Request for ADC4 on WBA — see RM0493 Table 79 */
-    /* ADC4 DMA request: REQSEL = 0 (channel 0 default) */
-    uint32_t ctr2 = (0UL << LL_GPDMA_CTR2_REQSEL_SHIFT);
+    uint32_t ctr2 = (0UL << LL_GPDMA_CTR2_REQSEL_SHIFT) | LL_GPDMA_CTR2_TCEM_BLOCK;
 
+    /* LLI0 (the channel's own registers) and LLI1 (the node) are the same
+     * block; LLI1 links to itself. */
+    ll_gpdma_node_init(&_adc_lli, &adc->instance->DR, buf, (uint32_t)len * 2, ctr1, ctr2);
+    ll_gpdma_node_link(&_adc_lli, &_adc_lli);
     ll_gpdma_config(GPDMA1_CH0, &adc->instance->DR, buf,
                     (uint32_t)len * 2, ctr1, ctr2);
+    GPDMA1_CH0->CLBAR = (uint32_t)&_adc_lli & 0xFFFF0000UL;
+    GPDMA1_CH0->CLLR  = _adc_lli.CLLR;
 
     /* Enable TC + HT interrupts */
     SET_BITS(GPDMA1_CH0->CCR, LL_GPDMA_CCR_TCIE | LL_GPDMA_CCR_HTIE);
     hal_nvic_set_priority(HAL_IRQ_GPDMA1_CH0, 6);
     hal_nvic_enable_irq(HAL_IRQ_GPDMA1_CH0);
-    ll_gpdma_enable(GPDMA1_CH0);
-
-#elif defined(STM32H523xx)
-    /* GPDMA Channel 0 for ADC1 on H5 */
-    ll_gpdma_disable(GPDMA1_CH0);
-
-    uint32_t ctr1 = LL_GPDMA_CTR1_SDW_HALF
-                  | LL_GPDMA_CTR1_DDW_HALF
-                  | LL_GPDMA_CTR1_DINC;
-    /* H5 ADC1 DMA request number — see RM0481 Table 80 */
-    uint32_t ctr2 = (0UL << LL_GPDMA_CTR2_REQSEL_SHIFT);
-
-    ll_gpdma_config(GPDMA1_CH0, &adc->instance->DR, buf,
-                    (uint32_t)len * 2, ctr1, ctr2);
-
-    SET_BITS(GPDMA1_CH0->CCR, LL_GPDMA_CCR_TCIE | LL_GPDMA_CCR_HTIE);
-    hal_nvic_set_priority(HAL_IRQ_GPDMA1_CH0, 6);
-    hal_nvic_enable_irq(HAL_IRQ_GPDMA1_CH0);
+    __asm volatile ("dmb 0xF" ::: "memory");    /* node written before EN */
     ll_gpdma_enable(GPDMA1_CH0);
 #endif
 
@@ -1035,8 +1049,8 @@ void hal_adc_stop_dma(hal_adc_t *adc)
     ll_dma_disable(DMA1_CH1);
     hal_nvic_disable_irq(HAL_IRQ_DMA1_CH1);
 #elif defined(STM32WBA55xx) || defined(STM32H523xx)
-    ll_gpdma_disable(GPDMA1_CH0);
     hal_nvic_disable_irq(HAL_IRQ_GPDMA1_CH0);
+    _adc_gpdma_abort(GPDMA1_CH0);       /* a circular channel never ends by itself */
 #endif
 
     adc->dma_active = false;

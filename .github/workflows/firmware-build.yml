@@ -217,8 +217,9 @@ jobs:
         run: make -C sdk/serial_update check
 
       # core_nvm's flash emulation (sdk/core/core_nvm.c) on a simulated flash,
-      # L4 and W5 geometry: random workloads, with a power cut at every erase
-      # and every program unit. Host cc only, a few seconds.
+      # L4, W5 and H5 geometry: random workloads, with a power cut at every
+      # erase and every program unit (every 16-bit word on the H5's data
+      # area). Host cc only, about 40 s.
       - name: core_nvm power-cut simulation
         run: make -C tests/host-nvm-sim
 

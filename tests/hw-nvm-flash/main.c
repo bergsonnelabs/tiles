@@ -1,6 +1,7 @@
 /**
  * hw-nvm-flash — bench test for core_nvm's flash emulation on Core.ST.L4 /
- * L4.2 and Core.ST.W5. See README.md; host_test.py drives the reflash test.
+ * L4.2, Core.ST.W5 and Core.ST.H5 (its flash high-cycle data area). See
+ * README.md; host_test.py drives the reflash test.
  *
  * config.json arms the 5 s watchdog in core_init(), as in a Studio project.
  * Tests, one bit each in the pass / fail masks:
@@ -21,9 +22,9 @@
  *   T7 bonds     (W5, BLE build) a record added to the BLE bond store reaches
  *                page 127 through the flash manager, and a discard erases it
  *
- * Progress survives the resets in backup registers 0-9. The L4 reports over
- * USB CDC every 3 s; every Core fills g_nvm_result (read it over SWD) and
- * blinks the verdict on the status LED.
+ * Progress survives the resets in backup registers 0-23. The L4 and H5
+ * report over USB CDC every 3 s; every Core fills g_nvm_result (read it over
+ * SWD) and blinks the verdict on the status LED.
  */
 
 #include "core.h"
@@ -32,8 +33,12 @@
 #include "core_watchdog.h"
 #include "core_uid.h"
 #include "core_rng.h"
-#if defined(STM32L422xx)
+#if defined(STM32L422xx) || defined(STM32H523xx)
 #include "core_usb.h"
+#define NVM_CDC 1                 /* report over USB CDC */
+#endif
+#if defined(STM32H523xx)
+#include "ll_usb_drd.h"           /* the 15 s no-USB safety net */
 #endif
 #if defined(BLE_ENABLED) && BLE_ENABLED
 #include "core_ble.h"
@@ -96,11 +101,23 @@ enum { PH_START = 0, PH_T3, PH_PL, PH_ARMED, PH_DONE, PH_CAL };
  * (~10 ms on the L4 including its read-back), the rest a compaction (a ~22 ms
  * erase, then ~20 ms of copying on the L4). Before each one the log is set up
  * (unarmed writes) so the armed write is the kind wanted. */
+#if defined(STM32H523xx)
+/* H5 (bench 2026-09-26, "medium", 64 MHz): a 600-byte append is 304 16-bit
+ * programs plus its read-back, ~12 ms; a compaction erases a sector, checks
+ * it blank, then copies up to eight 136-byte records, up to ~35 ms. The last
+ * delays of each kind land after the write has finished ("new"). */
+static const uint16_t PL_DELAY_US[] = {
+    /* appends */      200, 1000, 2500, 4000, 5500, 7000, 8500, 10000, 11500, 14000,
+    /* compactions */  300, 1200, 2500, 4000, 6000, 9000, 12000, 15000,
+                       18000, 21000, 25000, 29000, 34000, 40000,
+};
+#else
 static const uint16_t PL_DELAY_US[] = {
     /* appends */      300, 900, 1600, 2400, 3200, 4000, 5000, 6000, 7500, 9500,
     /* compactions */  1000, 8000, 16000, 21000, 22500, 24000, 26000, 29000,
                        32000, 35000, 38000, 41000, 43500, 47000,
 };
+#endif
 #define PL_N        (sizeof(PL_DELAY_US) / sizeof(PL_DELAY_US[0]))
 #define PL_APPENDS  10u
 
@@ -206,15 +223,21 @@ static uint32_t us_since(uint32_t c0)
 }
 
 /* FLASH_ECCR's address field (0 after reset) shows an ECC error was hit and
- * recovered (core_nvm's NMI handler clears the flag, not the address). */
+ * recovered (core_nvm's NMI handler clears the flag, not the address). On the
+ * H5, core_nvm counts the data-area words it read with an uncorrectable
+ * error (a torn write leaves some). */
 static int ecc_seen(void)
 {
+#if defined(STM32H523xx)
+    return _core_nvm_h5_ecc_errors() != 0;
+#else
 #if defined(STM32L422xx)
     uint32_t a = 0x08000000u + (REG32(0x40022018UL) & 0x7FFFFu);
 #else
     uint32_t a = 0x08000000u + (REG32(0x40022030UL) & 0xFFFFFu);
 #endif
     return a >= CORE_NVM_FLASH_ADDR && a < CORE_NVM_FLASH_ADDR + CORE_NVM_FLASH_SIZE;
+#endif
 }
 
 /* ---- T6: arm the window watchdog to reset us `us` from now ----
@@ -488,7 +511,7 @@ static uint32_t first_failure(uint32_t missing)
     return 0;
 }
 
-#if defined(STM32L422xx)
+#if defined(NVM_CDC)
 static void print_report(uint32_t verdict, uint32_t phase)
 {
     static const char *const names[6] = {
@@ -528,6 +551,14 @@ static void print_report(uint32_t verdict, uint32_t phase)
                     phase == PH_ARMED ? "armed: reflash another image, then this one"
                                       : "checked after reflash");
     if (g_nvm_result.last_rc) core_usb_printf("  last core_nvm error %ld\r\n", (long)(int32_t)g_nvm_result.last_rc);
+#if defined(STM32H523xx)
+    const core_nvm_h5_prov_t *pv = _core_nvm_h5_prov();
+    core_usb_printf("  H5 data area: FLASH_EDATA2R_CUR 0x%08lx; first-boot record %s state %ld, "
+                    "%lu option change(s) in %lu boot(s) since power-on\r\n",
+                    (unsigned long)REG32(FLASH_BASE + 0x1F0UL), pv ? "present," : "none",
+                    pv ? (long)pv->state : 0L, pv ? (unsigned long)pv->writes : 0UL,
+                    pv ? (unsigned long)pv->boots : 0UL);
+#endif
 }
 #endif
 
@@ -669,16 +700,21 @@ int main(void)
     while (1) {
         pump();
         uint32_t cmd = g_nvm_cmd;
-#if defined(STM32L422xx)
+#if defined(NVM_CDC)
         uint8_t ch;
         if (core_usb_try_read(&ch)) cmd = ch;
+#endif
+#if defined(STM32H523xx)
+        /* Bench safety net (as in hw-h5-bringup): no USB address 15 s after
+         * boot means USB never came up; reset (BOOT0 high: into the ROM). */
+        if ((USB_DADDR & USB_DADDR_ADD_MASK) == 0 && core_millis() > 15000u) soft_reset();
 #endif
         if (cmd == 'R') {
             (void)write_u32(OFF_ARMED, 0u);
             save(PH_START, 0);
             soft_reset();
         }
-#if defined(STM32L422xx)
+#if defined(NVM_CDC)
         if ((uint32_t)(core_millis() - last_print) >= 3000u) {
             last_print = core_millis();
             print_report(verdict, phase);

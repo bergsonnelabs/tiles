@@ -1,9 +1,10 @@
 /**
  * nvm_sim.c — core_nvm's flash emulation on the host, with power cuts
  *
- * Builds sdk/core/core_nvm.c itself (L4 or W5 geometry) against a simulated
- * two-page flash, runs random workloads of writes and erase_all calls, and
- * checks, after every call, that core_nvm_read returns what was written.
+ * Builds sdk/core/core_nvm.c itself (L4, W5 or H5 geometry) against a
+ * simulated two-page flash, runs random workloads of writes and erase_all
+ * calls, and checks, after every call, that core_nvm_read returns what was
+ * written.
  *
  * Then, for every flash operation in the workload (each unit program and each
  * page erase), it runs the workload again and cuts the power there: the
@@ -14,11 +15,20 @@
  * then run correctly. Half the runs cut a second time, later on, which lands
  * some cuts inside the recovery (the compaction a torn append forces).
  *
- * Not modelled: ECC. On the chip a torn unit can also read with an
- * uncorrectable ECC error; core_nvm's NMI handler turns that into "invalid",
- * the same outcome as the corrupt CRC this simulation produces.
+ * L4 / W5: ECC is not modelled. On the chip a torn unit can also read with
+ * an uncorrectable ECC error; core_nvm's NMI handler turns that into
+ * "invalid", the same outcome as the corrupt CRC this simulation produces.
  *
- *   make            # both geometries
+ * H5: the data area (EDATA) is modelled word by word, 16 bits with their own
+ * ECC (RM0481 §7.3.10): a word is virgin (erased, never written: reads 0xFFFF
+ * and core_nvm treats it as blank), written, or bad (an uncorrectable ECC
+ * error). A cut inside a word's program leaves it untouched, finished, partly
+ * programmed (reads clean but wrong: the worst case for the CRC), bad, or
+ * "torn virgin": reads virgin, but writing it again comes out bad or wrong,
+ * as overwriting a partly written word does on the chip. A cut inside an
+ * erase leaves a mix of all of these. Each 16-bit program is a cut point.
+ *
+ *   make            # all three geometries
  */
 
 #include <setjmp.h>
@@ -27,8 +37,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core_nvm.h"
+#if CORE_NVM_EDATA
+enum { W_VIRGIN, W_DATA, W_BAD, W_TORN };
+#define SIM_WORDS  (2u * CORE_NVM_PAGE_SIZE / 2u)
+static uint16_t sim_w[SIM_WORDS];       /* data (W_DATA), partial bits (W_TORN) */
+static uint8_t  sim_st[SIM_WORDS];
+#else
 static uint8_t sim_flash[2 * 8192];
 #define NVM_MEM(addr)     ((uintptr_t)(sim_flash + ((addr) - CORE_NVM_FLASH_ADDR)))
+#endif
 #define NVM_LAYOUT_OK()   1
 #include "core_nvm.c"
 
@@ -50,6 +68,88 @@ static int cut_now(void)
     return n == sim_cut_at || n == sim_cut2_at;
 }
 
+#if CORE_NVM_EDATA
+int ll_flash_erase_page(uint32_t page)
+{
+    if (page < CORE_NVM_FIRST_PAGE || page > CORE_NVM_FIRST_PAGE + 1u) {
+        fprintf(stderr, "erase of page %u, outside the NVM pages\n", page);
+        abort();
+    }
+    uint32_t w0 = (page - CORE_NVM_FIRST_PAGE) * (CORE_NVM_PAGE_SIZE / 2u);
+    int cut = cut_now();
+    for (uint32_t k = w0; k < w0 + CORE_NVM_PAGE_SIZE / 2u; k++) {
+        uint32_t r = cut ? rnd() % 20u : 0u;
+        if (r < 10u)       { sim_st[k] = W_VIRGIN; sim_w[k] = 0xFFFF; }
+        else if (r < 14u)  sim_st[k] = W_BAD;
+        else if (r < 17u)  { sim_st[k] = W_DATA; sim_w[k] |= (uint16_t)rnd(); }
+        else               { sim_st[k] = W_TORN; sim_w[k] = (uint16_t)(0xFFFFu & ~(rnd() & rnd())); }
+    }
+    if (cut) longjmp(sim_cut, 1);
+    return 0;
+}
+
+static uint32_t word_at(uint32_t addr)
+{
+    if (addr < CORE_NVM_FLASH_ADDR || addr >= CORE_NVM_FLASH_ADDR + CORE_NVM_FLASH_SIZE || (addr & 1u)) {
+        fprintf(stderr, "data-area access at 0x%08x, outside the NVM pages or odd\n", addr);
+        abort();
+    }
+    return (addr - CORE_NVM_FLASH_ADDR) / 2u;
+}
+
+int ll_flash_edata_read_half(uint32_t addr, uint16_t *v)
+{
+    uint32_t k = word_at(addr);
+    switch (sim_st[k]) {
+    case W_DATA: *v = sim_w[k]; return 0;
+    case W_BAD:  *v = 0xFFFF;   return -1;
+    default:     *v = 0xFFFF;   return 1;      /* virgin, or torn but reads virgin */
+    }
+}
+
+int ll_flash_edata_program_half(uint32_t addr, uint16_t v)
+{
+    uint32_t k = word_at(addr);
+    if (sim_st[k] == W_DATA || sim_st[k] == W_BAD) {
+        fprintf(stderr, "program over a written word at 0x%08x\n", addr);
+        abort();                                /* core_nvm checks for blank first */
+    }
+    if (cut_now()) {
+        uint32_t r = rnd() % 5u;
+        if (r == 1u)      { sim_st[k] = W_TORN; sim_w[k] &= (uint16_t)(v | rnd()); }
+        else if (r == 2u) sim_st[k] = W_BAD;
+        else if (r == 3u) { sim_st[k] = W_DATA; sim_w[k] = (uint16_t)(sim_w[k] & (v | rnd())); }
+        else if (r == 4u) { sim_st[k] = W_DATA; sim_w[k] = v; }
+        longjmp(sim_cut, 1);                    /* r == 0: never started */
+    }
+    if (sim_st[k] == W_TORN) {                  /* over a partly written word */
+        sim_w[k] &= v;
+        sim_st[k] = (rnd() & 1u) ? W_BAD : W_DATA;
+        return 0;                               /* no FLASH_NSSR error for this */
+    }
+    sim_st[k] = W_DATA;
+    sim_w[k] = v;
+    return 0;
+}
+
+int ll_flash_program_dword(uint32_t addr, uint32_t w0, uint32_t w1)
+{
+    (void)addr; (void)w0; (void)w1;
+    abort();
+}
+
+int ll_flash_program_qword(uint32_t addr, const uint32_t w[4])
+{
+    (void)addr; (void)w;
+    abort();
+}
+
+static void sim_blank(void)
+{
+    memset(sim_st, W_VIRGIN, sizeof(sim_st));
+    memset(sim_w, 0xFF, sizeof(sim_w));
+}
+#else
 int ll_flash_erase_page(uint32_t page)
 {
     if (page < CORE_NVM_FIRST_PAGE || page > CORE_NVM_FIRST_PAGE + 1u) {
@@ -93,12 +193,20 @@ int ll_flash_program_qword(uint32_t addr, const uint32_t w[4])
     return program(addr, (const uint8_t *)w, 16);
 }
 
+static void sim_blank(void)
+{
+    memset(sim_flash, 0xFF, sizeof(sim_flash));
+}
+#endif
+
 /* A reset: core_nvm keeps nothing but the flash. */
 static void reboot(void)
 {
     memset(&s, 0, sizeof(s));
     s_busy = 0;
+#if !CORE_NVM_EDATA
     s_ecc_hit = 0;
+#endif
 }
 
 /* ---- Workload ---- */
@@ -160,7 +268,7 @@ static long run(uint32_t seed, long cut1, long cut2)
     sim_cut_at = cut1;
     sim_cut2_at = cut2;
     memset(model, 0xFF, sizeof(model));
-    memset(sim_flash, 0xFF, sizeof(sim_flash));
+    sim_blank();
     reboot();
 
     for (j = 0; j < NOPS; j++) {
@@ -197,9 +305,11 @@ int main(void)
 {
     long runs = 0;
     uint32_t workloads = 12;
-    printf("core_nvm on a simulated %s: %u B pages, %u B units\n",
-           CORE_NVM_PAGE_SIZE == 2048u ? "Core.ST.L4 (STM32L422)" : "Core.ST.W5 (STM32WBA55)",
-           CORE_NVM_PAGE_SIZE, CORE_NVM_PROG_UNIT);
+    printf("core_nvm on a simulated %s: %u B pages, %u B units%s\n",
+           CORE_NVM_PAGE_SIZE == 2048u ? "Core.ST.L4 (STM32L422)" :
+           CORE_NVM_EDATA ? "Core.ST.H5 (STM32H523)" : "Core.ST.W5 (STM32WBA55)",
+           CORE_NVM_PAGE_SIZE, CORE_NVM_PROG_UNIT,
+           CORE_NVM_EDATA ? " written 16 bits at a time (each a cut point)" : "");
     for (uint32_t w = 1; w <= workloads; w++) {
         make_workload(w);
         long total = run(w, -1, -1);

@@ -129,8 +129,10 @@ app**, **the ROM bootloader**, or **the complete new image** — never a mix.
 7. Only the pages the image covers are erased, and an image may not reach the
    top 4 KB (`SU_NVM_RESERVED`; on the H5 the top 16 KB, two 8 KB sectors,
    `SU_NVM_RESERVED_H5`): that is core_nvm's store (its last two pages,
-   `sdk/core/core_nvm.h`; still to come on the H5), so saved settings survive
-   an update. The linker scripts end every image below it; the flasher and
+   `sdk/core/core_nvm.h`; on the H5 those sectors are switched to the flash
+   high-cycle data area and read at 0x09015000), so saved settings survive an
+   update (bench, 2026-09-26: tests/hw-nvm-flash T4 on the H5, by flash-serial
+   and by flash-dfu). The linker scripts end every image below it; the flasher and
    `tools/serial_update.py` both refuse one that doesn't (`SU ERR 3`).
 
 `tools/test_serial_update.py` checks this on a simulated flash: a power cut after

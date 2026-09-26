@@ -16,16 +16,28 @@
  *            host's 1 kHz frame clock (+-500 ppm, USB 2.0 §7.1.12), with the
  *            flash wait states and WRHIGHFREQ each level set
  *   TIM1     update ticks at 1 kHz over 1000 SOFs (expect 1000)
- *   ADC      VREFINT raw, VREFINT_CAL, VDDA mV, and a GPDMA1 circular run
- *            (half / full callbacks seen)
- *   PERIPH   I2C3 clock (APB3ENR bit 7) + a register read-back; SPI1/SPI3
- *            clocks, kernel clock select, and a 4-byte polled exchange
- *            (HAL_OK means the kernel clock runs); EXTI port select read-back
+ *   ADC      VREFINT raw, VREFINT_CAL, VDDA mV, and a GPDMA1 circular run:
+ *            half / full callbacks counted over 1 s (they keep coming), and
+ *            none after hal_adc_stop_dma
+ *   PERIPH   I2C3 clock (APB3ENR bit 7) + a register read-back; SPI (below);
+ *            EXTI port select read-back
+ *   SPI      SPI1 on its pads (pad 9 PA5 SCK, pad 8 PA7 MOSI, pad 3 PB4 MISO)
+ *            and SPI3 (SCK on PB3, a ball no pad uses; MISO on pad 3): each
+ *            first with SCK left analog, which must time out (the SPI v2
+ *            master clocks only with SCK in AF mode, ll_spi.h), then with the
+ *            pins in AF: polled and DMA exchanges. With the pad 8 -> pad 3
+ *            strap SPI1 reads back what it sent, and SPI3 reads pad 8 driven
+ *            high then low as a GPIO
  *   USB      the serial number (chip UID) the host should report
  *   IDS      DEV_ID, REV_ID, flash size
+ *   NVM      ("N") core_nvm on the flash high-cycle data area: the first-boot
+ *            record (_core_nvm_h5_boot: option registers before / after the
+ *            one change, writes, boots), the option registers now, and
+ *            "NW <hex off> <hex val>" / "NR <hex off>" / "NE" to write, read
+ *            and erase the store
  *
  * Other commands (one per line): "L" re-measures the clock levels, "T" / "A"
- * / "P" / "I" run one check, "M <hex addr> [n]" / "W <hex addr> <hex val>"
+ * / "P" / "S" / "I" run one check, "M <hex addr> [n]" / "W <hex addr> <hex val>"
  * peek and poke, "E <text>" echoes, "Q" drops off the bus to test the 15 s
  * no-USB safety net, "X" resets (with BOOT0 high: into the ST ROM
  * bootloader), "V" says hello.
@@ -44,6 +56,8 @@
 #include "hal_spi.h"
 #include "hal_dfu.h"
 #include "hal_fault.h"
+#include "core_nvm.h"
+#include "ll_flash_edata.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -204,15 +218,126 @@ static void check_adc(void)
     core_usb_printf("ADC init=%d VREFINT raw=%u cal=%u VDDA=%lumV (calibrated=%d) CCR=0x%08lx\n",
                     (int)st, raw, cal, (unsigned long)vdda, (int)adc.vdda_calibrated,
                     (unsigned long)REG32(0x42028308UL));
+    /* Circular DMA: half + full callbacks keep coming (2 per pass over the
+     * 32-sample ring); counted at 250 ms steps for 1 s, then after stop. */
     g_dma_cb = 0;
+    memset(buf, 0, sizeof buf);
     st = hal_adc_start_dma(&adc, buf, 32, adc_cb, 0);
-    uint32_t t0 = core_millis();
-    while (g_dma_cb < 4 && (uint32_t)(core_millis() - t0) < 200u) feed();
-    uint32_t cbs = g_dma_cb;
+    uint32_t t0 = core_millis(), at[4];
+    for (int k = 0; k < 4; k++) {
+        while ((uint32_t)(core_millis() - t0) < 250u * (uint32_t)(k + 1)) feed();
+        at[k] = g_dma_cb;
+    }
     hal_adc_stop_dma(&adc);
-    core_usb_printf("ADC DMA start=%d callbacks=%lu in %lu ms buf[0]=%u buf[31]=%u\n",
-                    (int)st, (unsigned long)cbs, (unsigned long)(core_millis() - t0),
-                    buf[0], buf[31]);
+    uint32_t stopped = g_dma_cb;
+    core_delay_ms(50);
+    uint16_t lo = 0xFFFF, hi = 0;
+    for (int i = 0; i < 32; i++) { if (buf[i] < lo) lo = buf[i]; if (buf[i] > hi) hi = buf[i]; }
+    core_usb_printf("ADC DMA start=%d callbacks at 250/500/750/1000 ms: %lu %lu %lu %lu "
+                    "(%lu/s), after stop +50 ms: %lu; buf min/max %u/%u (VREFINT)\n",
+                    (int)st, (unsigned long)at[0], (unsigned long)at[1], (unsigned long)at[2],
+                    (unsigned long)at[3], (unsigned long)at[3], (unsigned long)(g_dma_cb - stopped),
+                    lo, hi);
+}
+
+/* ---- SPI ---- */
+typedef struct { uint32_t moder, otyper, ospeedr, pupdr, afr0, afr1, odr; } gpio_save_t;
+static void gpio_save(GPIO_TypeDef *p, gpio_save_t *g)
+{
+    g->moder = p->MODER; g->otyper = p->OTYPER; g->ospeedr = p->OSPEEDR;
+    g->pupdr = p->PUPDR; g->afr0 = p->AFR[0]; g->afr1 = p->AFR[1]; g->odr = p->ODR;
+}
+static void gpio_restore(GPIO_TypeDef *p, const gpio_save_t *g)
+{
+    p->ODR = g->odr; p->AFR[0] = g->afr0; p->AFR[1] = g->afr1; p->OTYPER = g->otyper;
+    p->OSPEEDR = g->ospeedr; p->PUPDR = g->pupdr; p->MODER = g->moder;
+}
+static void spi_af(GPIO_TypeDef *p, uint32_t pin, uint32_t af)
+{
+    ll_gpio_config_af(p, pin, af, LL_GPIO_OTYPE_PP, LL_GPIO_SPEED_VHIGH, LL_GPIO_PULL_NONE);
+}
+
+/* One polled or DMA exchange: status, time, and the bytes that came back. */
+static hal_status_t spi_run(hal_spi_t *h, int dma, const uint8_t *tx, uint8_t *rx,
+                            uint32_t n, uint32_t *us)
+{
+    memset(rx, 0x3C, n);
+    uint32_t t0 = DWT_CYC;
+    hal_status_t st = dma ? hal_spi_exchange_dma(h, tx, rx, n) : hal_spi_exchange(h, tx, rx, n);
+    *us = (DWT_CYC - t0) / (SYSCLK_HZ / 1000000UL);
+    return st;
+}
+
+static void check_spi(void)
+{
+    static hal_spi_t spi;
+    static uint8_t tx[256], rx[256];
+    for (uint32_t i = 0; i < sizeof tx; i++) tx[i] = (uint8_t)(i * 37u + 11u);
+    hal_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };
+    gpio_save_t ga, gb;
+    ll_rcc_gpio_clk_enable(GPIOA);
+    ll_rcc_gpio_clk_enable(GPIOB);
+    gpio_save(GPIOA, &ga);
+    gpio_save(GPIOB, &gb);
+    uint32_t us;
+
+    /* SPI1, SCK (PA5) still analog: must time out (HAL_TIMEOUT = -3). */
+    ll_gpio_config_analog(GPIOA, 5);
+    hal_spi_init(&spi, SPI1, &cfg);
+    hal_status_t st = spi_run(&spi, 0, tx, rx, 4, &us);
+    core_usb_printf("SPI1 SCK analog: exchange=%d in %lu us (want -3, timeout)\n", (int)st,
+                    (unsigned long)us);
+
+    /* SPI1 on its pads, AF5: pad 9 PA5 SCK, pad 8 PA7 MOSI, pad 3 PB4 MISO. */
+    spi_af(GPIOA, 5, 5);
+    spi_af(GPIOA, 7, 5);
+    spi_af(GPIOB, 4, 5);
+    static const uint32_t sizes[] = { 1, 4, 17, 256 };
+    for (int dma = 0; dma < 2; dma++) {
+        for (unsigned k = 0; k < sizeof sizes / sizeof sizes[0]; k++) {
+            uint32_t n = sizes[k];
+            st = spi_run(&spi, dma, tx, rx, n, &us);
+            core_usb_printf("SPI1 %s n=%lu exchange=%d in %lu us rx==tx %s (rx[0]=0x%02x, strap pad 8->3)\n",
+                            dma ? "DMA   " : "polled", (unsigned long)n, (int)st, (unsigned long)us,
+                            memcmp(tx, rx, n) ? "NO" : "yes", rx[0]);
+        }
+    }
+    core_usb_printf("SPI1 sck=%lu Hz SR=0x%08lx CFG1=0x%08lx CFG2=0x%08lx\n",
+                    (unsigned long)hal_spi_sck_hz(&spi), (unsigned long)SPI1->SR,
+                    (unsigned long)SPI1->CFG1, (unsigned long)SPI1->CFG2);
+    hal_spi_deinit(&spi);
+
+    /* SPI3: no pad carries SPI3_SCK on this Core. PB3 (WLCSP39 ball A3,
+     * JTDO) does (AF6, DS14540 Table 14) and no pad uses it; MISO is pad 3
+     * (PB4, AF6). Pad 8 (PA7) is a GPIO output here, strapped to pad 3. */
+    ll_gpio_config_analog(GPIOB, 3);
+    spi_af(GPIOB, 4, 6);
+    hal_spi_init(&spi, SPI3, &cfg);
+    st = spi_run(&spi, 0, tx, rx, 4, &us);
+    core_usb_printf("SPI3 SCK analog: exchange=%d in %lu us (want -3, timeout)\n", (int)st,
+                    (unsigned long)us);
+    spi_af(GPIOB, 3, 6);
+    ll_gpio_config_output(GPIOA, 7);
+    for (int lvl = 1; lvl >= 0; lvl--) {
+        if (lvl) ll_gpio_set(GPIOA, 1UL << 7); else ll_gpio_clear(GPIOA, 1UL << 7);
+        for (int dma = 0; dma < 2; dma++) {
+            st = spi_run(&spi, dma, tx, rx, 17, &us);
+            int all = 1;
+            for (int i = 0; i < 17; i++) if (rx[i] != (lvl ? 0xFF : 0x00)) all = 0;
+            core_usb_printf("SPI3 %s pad 8 %s: exchange=%d in %lu us, rx all 0x%02x %s\n",
+                            dma ? "DMA   " : "polled", lvl ? "high" : "low ", (int)st,
+                            (unsigned long)us, lvl ? 0xFF : 0x00, all ? "yes" : "NO");
+        }
+    }
+    hal_spi_deinit(&spi);
+
+    gpio_restore(GPIOA, &ga);
+    gpio_restore(GPIOB, &gb);
+    core_usb_printf("SPI APB2ENR.SPI1EN=%lu APB1LENR.SPI2EN/SPI3EN=%lu/%lu APB3ENR.SPI5EN=%lu "
+                    "CCIPR3=0x%08lx CCIPR5=0x%08lx\n",
+                    (unsigned long)((RCCR(0xA4) >> 12) & 1UL), (unsigned long)((RCCR(0x9C) >> 14) & 1UL),
+                    (unsigned long)((RCCR(0x9C) >> 15) & 1UL), (unsigned long)((RCCR(0xA8) >> 5) & 1UL),
+                    (unsigned long)RCCR(0xE0), (unsigned long)RCCR(0xE8));
 }
 
 static void check_periph(void)
@@ -226,26 +351,7 @@ static void check_periph(void)
                     (unsigned long)REG32(0x44002810UL));
     REG32(0x44002810UL) = 0;
 
-    static hal_spi_t spi;
-    hal_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };
-    uint8_t tx[4] = { 0x55, 0xAA, 0x0F, 0xF0 }, rx[4];
-    SPI_TypeDef *inst[2] = { SPI1, SPI3 };
-    const char *nm[2] = { "SPI1", "SPI3" };
-    for (int i = 0; i < 2; i++) {
-        hal_status_t si = hal_spi_init(&spi, inst[i], &cfg);
-        uint32_t t0 = DWT_CYC;
-        hal_status_t sx = hal_spi_exchange(&spi, tx, rx, 4);
-        uint32_t us = (DWT_CYC - t0) / (SYSCLK_HZ / 1000000UL);
-        core_usb_printf("%s init=%d exchange=%d (0 = OK) in %lu us sck=%lu Hz\n",
-                        nm[i], (int)si, (int)sx, (unsigned long)us,
-                        (unsigned long)hal_spi_sck_hz(&spi));
-        hal_spi_deinit(&spi);
-    }
-    core_usb_printf("SPI APB2ENR.SPI1EN=%lu APB1LENR.SPI2EN/SPI3EN=%lu/%lu APB3ENR.SPI5EN=%lu "
-                    "CCIPR3=0x%08lx CCIPR5=0x%08lx\n",
-                    (unsigned long)((RCCR(0xA4) >> 12) & 1UL), (unsigned long)((RCCR(0x9C) >> 14) & 1UL),
-                    (unsigned long)((RCCR(0x9C) >> 15) & 1UL), (unsigned long)((RCCR(0xA8) >> 5) & 1UL),
-                    (unsigned long)RCCR(0xE0), (unsigned long)RCCR(0xE8));
+    check_spi();
 
     /* EXTI: line 5 from port B (index 1), read EXTI_EXTICR2 (0x064) byte 1. */
     uint32_t before = REG32(EXTI_BASE + 0x64UL);
@@ -254,6 +360,51 @@ static void check_periph(void)
     ll_exti_set_source(5, 0);
     core_usb_printf("EXTI EXTICR2 before=0x%08lx after set(5, B)=0x%08lx (want byte1 = 0x01)\n",
                     (unsigned long)before, (unsigned long)after);
+}
+
+/* ---- NVM (core_nvm on the data area) ---- */
+static void report_nvm(void)
+{
+    const core_nvm_h5_prov_t *p = _core_nvm_h5_prov();
+    if (!p) {
+        core_usb_printf("NVM PROV no record\n");
+    } else {
+        core_usb_printf("NVM PROV state=%ld writes=%lu boots=%lu EDATA2R before=0x%08lx after=0x%08lx "
+                        "EDATA1R=0x%08lx OPTSR=0x%08lx NSSR=0x%08lx OPSR=0x%08lx mismatch=0x%03lx\n",
+                        (long)p->state, (unsigned long)p->writes, (unsigned long)p->boots,
+                        (unsigned long)p->edata2_before, (unsigned long)p->edata2_after,
+                        (unsigned long)p->edata1, (unsigned long)p->optsr, (unsigned long)p->nssr,
+                        (unsigned long)p->opsr, (unsigned long)p->mismatch);
+    }
+    if (p && p->writes) {
+        static const char *const nm[CORE_NVM_H5_OB_N] = {
+            "OPTSR", "NSEPOCHR", "SECEPOCHR", "OPTSR2", "NSBOOTR", "SECBOOTR", "OTPBLR",
+            "SECWM1R", "WRP1R", "EDATA1R", "HDP1R", "SECWM2R", "WRP2R", "EDATA2R", "HDP2R" };
+        static const uint16_t off[CORE_NVM_H5_OB_N] = {
+            0x050, 0x060, 0x068, 0x070, 0x080, 0x088, 0x090, 0x0E0, 0x0E8, 0x0F0, 0x0F8,
+            0x1E0, 0x1E8, 0x1F0, 0x1F8 };
+        for (uint32_t i = 0; i < CORE_NVM_H5_OB_N; i++)
+            core_usb_printf("NVM PROV %-9s _CUR before 0x%08lx after 0x%08lx now 0x%08lx%s\n", nm[i],
+                            (unsigned long)p->ob_before[i], (unsigned long)p->ob_after[i],
+                            (unsigned long)REG32(FLASH_BASE + off[i]),
+                            p->ob_before[i] != p->ob_after[i] ? "  <- changed" : "");
+    }
+    core_usb_printf("NVM OB EDATA2R CUR=0x%08lx PRG=0x%08lx EDATA1R CUR=0x%08lx PRG=0x%08lx "
+                    "OPTSR CUR=0x%08lx PRG=0x%08lx OPTSR2 CUR=0x%08lx OPTCR=0x%08lx NSSR=0x%08lx\n",
+                    (unsigned long)FLASH_EDATA2R_CUR, (unsigned long)FLASH_EDATA2R_PRG,
+                    (unsigned long)FLASH_EDATA1R_CUR, (unsigned long)REG32(FLASH_BASE + 0x0F4UL),
+                    (unsigned long)REG32(FLASH_BASE + 0x050UL), (unsigned long)REG32(FLASH_BASE + 0x054UL),
+                    (unsigned long)REG32(FLASH_BASE + 0x070UL), (unsigned long)FLASH_OPTCR,
+                    (unsigned long)FLASH_SR);
+    uint32_t v = 0;
+    uint32_t t0 = DWT_CYC;
+    int rc = core_nvm_read(0, &v, 4);
+    uint32_t us = (DWT_CYC - t0) / (SYSCLK_HZ / 1000000UL);
+    extern uint32_t _core_nvm_log_free(void);
+    core_usb_printf("NVM read(0,4) rc=%d val=0x%08lx in %lu us; log free %lu B; uncorrectable reads %lu; "
+                    "ICACHE on=%lu\n", rc, (unsigned long)v, (unsigned long)us,
+                    (unsigned long)_core_nvm_log_free(), (unsigned long)_core_nvm_h5_ecc_errors(),
+                    (unsigned long)(REG32(0x40030400UL) & 1UL));
 }
 
 static uint32_t hexarg(const char **p)
@@ -412,7 +563,29 @@ int main(void)
             case 'T': check_tim1(); break;
             case 'A': check_adc(); break;
             case 'P': check_periph(); break;
+            case 'S': check_spi(); break;
             case 'I': report_ids(); break;
+            case 'N': {
+                const char *a = line + 2;
+                if (line[1] == 'W') {
+                    uint32_t off = hexarg(&a), val = hexarg(&a);
+                    uint32_t t0 = DWT_CYC;
+                    int rc = core_nvm_write(off, &val, 4);
+                    core_usb_printf("NVM write(0x%lx, 0x%08lx) rc=%d in %lu us\n", (unsigned long)off,
+                                    (unsigned long)val, rc,
+                                    (unsigned long)((DWT_CYC - t0) / (SYSCLK_HZ / 1000000UL)));
+                } else if (line[1] == 'R') {
+                    uint32_t off = hexarg(&a), val = 0;
+                    int rc = core_nvm_read(off, &val, 4);
+                    core_usb_printf("NVM read(0x%lx) rc=%d val=0x%08lx\n", (unsigned long)off, rc,
+                                    (unsigned long)val);
+                } else if (line[1] == 'E') {
+                    core_usb_printf("NVM erase_all rc=%d\n", core_nvm_erase_all());
+                } else {
+                    report_nvm();
+                }
+                break;
+            }
             case 'M': peek(line + 1); break;
             case 'W': poke(line + 1); break;
             case 'V': core_usb_printf("HELLO hw-h5-bringup\n"); break;

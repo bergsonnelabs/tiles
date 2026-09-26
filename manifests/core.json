@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3b946ad",
+  "source": "tiles@044f8f3",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -538,7 +538,7 @@
       "symbol": "core_nvm_read_byte",
       "header": "core_nvm.h",
       "category": "nvm",
-      "description": "Read a single byte from NVM at `offset`. Returns the byte (0..255) on success or -1 on any error (offset out of range, NVM disabled). A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 and 0 on Core.ST.L0. The signed return lets DSL programs branch on `< 0` without an out-pointer.",
+      "description": "Read a single byte from NVM at `offset`. Returns the byte (0..255) on success or -1 on any error (offset out of range, NVM disabled). A byte never written reads 255 (0xFF) on Core.ST.L4 / W5 / H5 and 0 on Core.ST.L0. The signed return lets DSL programs branch on `< 0` without an out-pointer.",
       "params": [
         {
           "name": "offset",
@@ -561,7 +561,7 @@
       "symbol": "core_nvm_write_byte",
       "header": "core_nvm.h",
       "category": "nvm",
-      "description": "Write a single byte to NVM at `offset`. Returns 1 on success or -1 on any error (offset out of range, flash error, no NVM on this Core). Each call is one flash record on Core.ST.L4 / W5: fine for a setting or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).",
+      "description": "Write a single byte to NVM at `offset`. Returns 1 on success or -1 on any error (offset out of range, flash error, no NVM on this Core). Each call is one flash record on Core.ST.L4 / W5 / H5: fine for a setting or a boot counter, wasteful in a tight loop (see core_nvm.h on wear).",
       "params": [
         {
           "name": "offset",

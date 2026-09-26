@@ -12,6 +12,17 @@
  * LL_SPI_TIMEOUT when no frame completes for a "stall" budget derived from
  * the configured baud rate, so a stuck bus returns instead of hanging until
  * the watchdog.
+ *
+ * SPI v2 master: the SCK pin must be in its alternate function before a
+ * transfer. The master's serial-interface clock domain runs from SCK
+ * (RM0481 §52.4.1: the clock is "provided to the slaves via the SCK pin and
+ * internally to the serial interface domain of the master"), and a pin left
+ * in analog mode, the H5's reset state (§13.3.1), forces its input to 0
+ * (§13.3.12). Measured on a Core.ST.H5, 2026-09-26: with SCK (PA5) in analog
+ * mode, a 4-frame SPI1 transfer takes the frames from the TxFIFO (CTSIZE
+ * 4 -> 1) and stops, with nothing in the RxFIFO and no EOT, at every kernel
+ * clock; with PA5 in AF5 the same register sequence ends with EOT. Here that
+ * is a bounded LL_SPI_TIMEOUT. coregen sets the pins for every SPIx.CLK pad.
  */
 
 #ifndef LL_SPI_H
@@ -261,7 +272,7 @@ static inline int _ll_spi_deadline_expired(ll_spi_deadline_t *d)
  * never overrun, however late the CPU gets back to it (an ISR, say).
  *   L4:  32-bit RxFIFO = 4 x 8-bit frames (RM0394 §41.4.9).
  *   WBA: SPI1 16 x 8 bits, SPI3 8 x 8 bits (RM0493 Table 394).
- *   H5:  8 (the smaller FIFO; not checked per instance on the H5).
+ *   H5:  SPI1/2/3 16 x 8 bits, SPI4 8 x 8 bits (RM0481 Table 569).
  *   L0:  1 (no FIFO: a single RX buffer; no Core routes SPI on the L0). */
 static inline uint32_t _ll_spi_fifo_frames(SPI_TypeDef *spi)
 {
@@ -273,6 +284,8 @@ static inline uint32_t _ll_spi_fifo_frames(SPI_TypeDef *spi)
     return 4;
 #elif defined(STM32WBA55xx)
     return (spi == SPI1) ? 16 : 8;
+#elif defined(STM32H523xx)
+    return (spi == SPI1 || spi == SPI2 || spi == SPI3) ? 16 : 8;
 #else
     (void)spi;
     return 8;
@@ -280,15 +293,16 @@ static inline uint32_t _ll_spi_fifo_frames(SPI_TypeDef *spi)
 }
 
 /* Largest TSIZE a single SPI v2 session can count (RM0493 §41.8.2: TSIZE[15:10]
- * are reserved on the limited-feature SPI3). Longer transfers are chunked;
- * the chip select is a GPIO, so it stays asserted across chunks. */
+ * are reserved on the limited-feature SPI3; on the H5 every instance is
+ * full-featured, TSIZE up to 65535, RM0481 Table 569). Longer transfers are
+ * chunked; the chip select is a GPIO, so it stays asserted across chunks. */
 static inline uint32_t _ll_spi_max_frames(SPI_TypeDef *spi)
 {
 #if defined(STM32WBA55xx)
     return (spi == SPI1) ? 0xFFFFUL : 0x3FFUL;
 #elif defined(STM32H523xx)
     (void)spi;
-    return 0x3FFUL;
+    return 0xFFFFUL;
 #else
     (void)spi;
     return 0xFFFFUL;

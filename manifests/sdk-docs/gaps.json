@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@6af026f",
+  "source": "tiles@044f8f3",
   "subsystems": [
     {
       "id": "adc",
@@ -257,12 +257,6 @@
           "brief": "read_byte / write_byte round-trip within a single run, but the per-slot store is cleared on every project reload — DSL programs that rely on NVM state surviving a soft reset (boot counters, crash flags) can't be exercised end-to-end in the IDE. Same issue the Backup register gap calls out; closing both needs persistent per-slot state across worker resets.",
           "tier": 2,
           "value": "L"
-        },
-        {
-          "title": "No NVM on Core.ST.H5 yet",
-          "brief": "core_nvm_write returns -1 on Core.ST.H5 (CORE_NVM_SIZE is 0). The flash emulation behind Core.ST.L4 and Core.ST.W5 has not been ported to the H523's 8 KB sectors yet. Until it is, H5 programs that need persistent state are limited to backup registers.",
-          "tier": 1,
-          "value": "M"
         },
         {
           "title": "No wear-tracking API",

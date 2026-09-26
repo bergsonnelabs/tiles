@@ -1,8 +1,9 @@
 # hw-nvm-flash
 
 Bench test for `core_nvm`'s flash emulation (`sdk/core/core_nvm.c`) on
-**Core.ST.L4 / L4.2** and **Core.ST.W5**. It runs unattended in about a
-minute, with the 5 s watchdog armed by `core_init()` as in a Studio project.
+**Core.ST.L4 / L4.2**, **Core.ST.W5** and **Core.ST.H5** (where the store is
+the flash high-cycle data area). It runs unattended in about a minute, with
+the 5 s watchdog armed by `core_init()` as in a Studio project.
 `host_test.py` adds the reflash test (T4).
 
 | Test | What passes |
@@ -21,8 +22,9 @@ an IWDG strike, so the L4's brick recovery doesn't count it. Progress is kept
 in backup registers 0-23.
 
 `../host-nvm-sim` runs the same `core_nvm.c` on a simulated flash with a power
-cut at every erase and program step (about 30,000 cuts); this test checks the
-real chip at a couple of dozen points.
+cut at every erase and program step (about 30,000 cuts on the L4 and W5, 76,000
+on the H5, one per 16-bit word); this test checks the real chip at a couple of
+dozen points.
 
 ## Build and flash
 
@@ -34,6 +36,8 @@ python3 host_test.py                   # the whole run + T4 with flash-serial (~
 python3 host_test.py --dfu             # ... T4 with make flash-dfu (ROM DFU)
 
 make distclean && make TILE=Core.ST.L4.2
+make distclean && make TILE=Core.ST.H5 && make TILE=Core.ST.H5 flash-serial   # config-h5.json
+python3 host_test.py --tile Core.ST.H5            # the whole run + T4 (add --dfu for flash-dfu)
 make distclean && make TILE=Core.ST.W5            # result in g_nvm_result (SWD)
 make distclean && make TILE=Core.ST.W5 BLE=1      # adds T5 and T7
 ```
@@ -43,7 +47,14 @@ this with `BOOTLOADER := 1`.
 
 ## Reading the result
 
-**L4:** a report over USB CDC every 3 s (115200). Send `R` for a fresh run.
+**L4, H5:** a report over USB CDC every 3 s (115200). Send `R` for a fresh run.
+The H5 report ends with the data area's option register and the first-boot
+record (`_core_nvm_h5_boot`, see `sdk/core/core_nvm.h`), and the H5 build
+resets itself if USB has no address 15 s after boot (as `hw-h5-bringup` does).
+
+H5 bench, 2026-09-26 ("medium", 64 MHz): PASS with the T4 reflash by
+flash-serial and by flash-dfu. A 600-byte append takes 12.6 ms and a
+compaction ~34 ms; T6: 24 resets, 20 old, 4 new, 0 garbage.
 
 ```
 [hw-nvm-flash] PASS  (pass=0x27 fail=0x00 expected=0x27)

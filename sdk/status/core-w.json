@@ -75,7 +75,10 @@
       "note": "12-bit hw-verified; 8 / 10-bit compile only"
     },
     "adc.oversamp": "verified",
-    "adc.dma": "verified",
+    "adc.dma": {
+      "status": "partial",
+      "note": "Circular since 2026-09-26: the GPDMA ring is a self-linked linked-list item (RM0493 §17.4.7); before, one block ran and the channel stopped. Compile-only on the W5; the same code is bench-verified on Core.ST.H5 (tests/hw-h5-bringup)."
+    },
     "adc.dma_mv": "compile",
     "adc.cont": "verified",
     "adc.trigger": {

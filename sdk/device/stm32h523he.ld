@@ -1,15 +1,19 @@
 /* Linker script for STM32H523HE */
 /* 512KB Flash, 272KB SRAM */
 
-/* The top two 8 KB sectors (0x0807C000-0x0807FFFF) are kept out of every
- * image, as the L4 keeps its top 4 KB: they are the NVM store's place
- * (core_nvm on the H5 is still to come), and the serial-update flasher
- * refuses an image that reaches them (SU_NVM_RESERVED_H5). */
+/* The top two 8 KB sectors (0x0807C000-0x0807FFFF, bank 2 sectors 30-31)
+ * are kept out of every image, as the L4 keeps its top 4 KB: they are
+ * core_nvm's store, switched to the flash high-cycle data area and read at
+ * 0x09015000 (sdk/core/core_nvm.h), and the serial-update flasher refuses an
+ * image that reaches them (SU_NVM_RESERVED_H5). */
 MEMORY
 {
     FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K - 16K
     SRAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 272K - 16  /* Last 16 bytes reserved for DFU magic */
 }
+
+/* core_nvm checks it: the pages above the image are its own. */
+__core_nvm_start = 0x0807C000;
 
 /* Entry point */
 ENTRY(Reset_Handler)
@@ -93,6 +97,16 @@ SECTIONS
         . = ALIGN(4);
         _ebss = .;
         __bss_end__ = _ebss;
+    } >SRAM
+
+    /* Kept across a reset: startup neither copies nor zeroes it (core_nvm's
+     * first-boot record on the H5). Random after a power-on. */
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        *(.noinit)
+        *(.noinit*)
+        . = ALIGN(4);
     } >SRAM
 
     /* Heap grows up, stack grows down — check they don't collide */
