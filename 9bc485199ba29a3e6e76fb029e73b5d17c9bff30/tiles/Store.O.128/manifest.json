@@ -1,0 +1,300 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@bc1921a",
+  "tile": "Store.O.128",
+  "palette": {
+    "label": "Store.O.128",
+    "icon": "memory"
+  },
+  "driver": {
+    "prefix": "tile_store_o_128",
+    "header": "tile_store_o_128.h",
+    "version": "1.1.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_store_o_128_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "read_jedec_id"
+      ],
+      "symbol": "tile_store_o_128_read_jedec_id",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Read the 24-bit JEDEC ID (manufacturer << 16 | type << 8 | capacity).",
+      "params": [],
+      "returns": "uint32_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_status"
+      ],
+      "symbol": "tile_store_o_128_read_status",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Read Status Register 1.",
+      "params": [],
+      "returns": "uint8_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_busy"
+      ],
+      "symbol": "tile_store_o_128_is_busy",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Whether a program/erase is in progress (WIP bit).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_capacity"
+      ],
+      "symbol": "tile_store_o_128_get_capacity",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Total flash capacity in bytes.",
+      "params": [],
+      "returns": "uint32_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read"
+      ],
+      "symbol": "tile_store_o_128_read",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Read `len` bytes starting at `addr` (READ 0x03).",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Byte address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "type": "?uint8_t*",
+          "description": "Output buffer."
+        },
+        {
+          "name": "len",
+          "type": "int",
+          "description": "Number of bytes."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "fast_read"
+      ],
+      "symbol": "tile_store_o_128_fast_read",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Fast-read `len` bytes from `addr` (FAST_READ 0x0B, 1 dummy byte).",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Byte address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "type": "?uint8_t*",
+          "description": "Output buffer."
+        },
+        {
+          "name": "len",
+          "type": "int",
+          "description": "Number of bytes."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_enable"
+      ],
+      "symbol": "tile_store_o_128_write_enable",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Issue Write-Enable (sets WEL). Required before any program/erase.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "page_program"
+      ],
+      "symbol": "tile_store_o_128_page_program",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Program up to one page (≤256 B) within a single page boundary.",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Start address."
+        },
+        {
+          "name": "buf",
+          "type": "?const uint8_t*",
+          "description": "Data to program."
+        },
+        {
+          "name": "len",
+          "type": "int",
+          "description": "Byte count (1..256)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write"
+      ],
+      "symbol": "tile_store_o_128_write",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Program an arbitrary-length span, splitting across page boundaries.",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Start address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "type": "?const uint8_t*",
+          "description": "Data to program."
+        },
+        {
+          "name": "len",
+          "type": "int",
+          "description": "Byte count."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "erase_sector"
+      ],
+      "symbol": "tile_store_o_128_erase_sector",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Erase the 4 KB sector containing `addr` (and wait, up to 0.5 s).",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Any address inside the sector (low 12 bits ignored)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "erase_block"
+      ],
+      "symbol": "tile_store_o_128_erase_block",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Erase the 64 KB block containing `addr` (and wait, up to 3 s).",
+      "params": [
+        {
+          "name": "addr",
+          "type": "int",
+          "description": "Any address inside the block (low 16 bits ignored)."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "erase_chip"
+      ],
+      "symbol": "tile_store_o_128_erase_chip",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Erase the entire chip (and wait; typ 60 s, max 300 s).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_ready"
+      ],
+      "symbol": "tile_store_o_128_wait_ready",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Block until any in-progress program/erase finishes, or timeout.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "description": "Max wait."
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "deep_power_down"
+      ],
+      "symbol": "tile_store_o_128_deep_power_down",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Enter Deep Power-Down (typ 2 µA; every command except release is ignored).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "release"
+      ],
+      "symbol": "tile_store_o_128_release",
+      "header": "tile_store_o_128.h",
+      "category": "tile",
+      "description": "Release from Deep Power-Down.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    }
+  ],
+  "events": []
+}
