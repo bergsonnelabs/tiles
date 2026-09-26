@@ -3,7 +3,7 @@
  * @brief  Dual-channel audio output driver for the Drive.A.2 tile
  *         (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).
  *         Supports I2C and SPI bus access via tiles_pal_t.
- * @version 3.2.0
+ * @version 3.3.0
  *
  * The Drive.A.2 tile provides two independent audio output channels,
  * each consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.
@@ -20,6 +20,13 @@
  *   - I2C-programmable gain: -28 dB to +30 dB in 1 dB steps
  *   - AGC with configurable compression, attack/release/hold times
  *   - Both amplifiers share I2C address 0x58 — writes affect both
+ *
+ * Speaker safety: init() leaves the TPA2028D1 output limiter ON at
+ * DRIVE_A_2_LIMITER_DEFAULT (3 dBV, 2.0 V peak, 0.25 W into 8 ohm),
+ * with AGC compression off. Without it, +30 dB of gain on a full-scale
+ * DAC signal drives a clipped square wave at the V+ rail (about 1.4 W
+ * into 8 ohm at 3.3 V), enough to burn a small speaker. Raise or
+ * disable it with tile_drive_a_2_amp_set_limiter().
  *
  * In SPI mode, only the DAC is controllable; amplifier functions
  * become no-ops since the I2C bus pins are repurposed for SPI.
@@ -88,7 +95,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_DRIVE_A_2_VERSION_MAJOR  3
-#define TILE_DRIVE_A_2_VERSION_MINOR  2
+#define TILE_DRIVE_A_2_VERSION_MINOR  3
 #define TILE_DRIVE_A_2_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -149,8 +156,14 @@ TILES_CHECK_VERSION(1, 0);
 /** @brief  Expected DEVICE-ID value in GENERAL-STATUS bits[7:2]. */
 #define DAC63202W_DEVICE_ID               0x06
 
-/** @brief  Internal reference voltage in mV. */
+/** @brief  Internal reference voltage in mV (SLASF73A §6.4.1.1.1). */
 #define DAC63202W_VREF_INT_MV             1210
+
+/** @brief  Tile V+ range in mV (Drive-A-2 power rail; also the DAC's VDD). */
+#define DRIVE_A_2_VDD_MIN_MV              2500
+#define DRIVE_A_2_VDD_MAX_MV              5500
+/** @brief  V+ assumed when the app does not give one (cfg->vdd_mv = 0). */
+#define DRIVE_A_2_VDD_DEFAULT_MV          3300
 
 /** @brief  DAC resolution in bits. */
 #define DAC63202W_DAC_BITS                12
@@ -167,6 +180,21 @@ TILES_CHECK_VERSION(1, 0);
 #define TPA2028D1_REG_AGC_GAIN            0x05  /**< Fixed gain [5:0], two's complement */
 #define TPA2028D1_REG_AGC_CTRL1           0x06  /**< Limiter disable, noise gate, limiter level */
 #define TPA2028D1_REG_AGC_CTRL2           0x07  /**< Max gain [7:4], compression ratio [1:0] */
+
+/**
+ * @brief  Output limiter level init() programs (AGC_CTRL1[4:0]).
+ *
+ * Level n is -6.5 + 0.5 n dBV (SLOS660C Table 11). 19 = 3.0 dBV:
+ * 1.41 V rms, 2.0 V peak, 0.25 W into 8 ohm (0.5 W into 4 ohm). That
+ * is within the rating of common 0.25 W+ micro speakers, and 2.0 V
+ * peak stays below the tile's 2.5 V minimum V+, so the limited output
+ * never clips at any legal supply (the datasheet's second limiter
+ * constraint, §9.3.1). The chip's own default is 26 (6.5 dBV, 3.0 V
+ * peak, 0.56 W into 8 ohm).
+ */
+#define DRIVE_A_2_LIMITER_DEFAULT         19
+/** @brief  Highest limiter level: 31 = 9 dBV, 3.99 V peak, 0.99 W into 8 ohm. */
+#define DRIVE_A_2_LIMITER_MAX             31
 
 /* -------------------------------------------------------------- */
 /* DAC gain / reference selection                                  */
@@ -292,7 +320,10 @@ typedef enum {
  * power-on setup (that is compression 4:1, fixed gain 6 dB, max gain
  * 30 dB, limiter 6.5 dBV, attack 5, release 11, hold 0, noise gate 1;
  * SLOS660C Table 5). With compression 1:1 the fixed gain is only valid
- * from 0 to +30 dB, and the output limiter is disabled.
+ * from 0 to +30 dB (clamped). The output limiter stays ON unless
+ * `limiter_disable` is set, which the chip honours only with
+ * compression 1:1 (Table 11). Note that a zeroed limiter_level is the
+ * lowest level (-6.5 dBV, 0.03 W into 8 ohm), not the default.
  */
 typedef struct {
     uint8_t compression;     /**< drive_a_2_comp_t. 0 = 1:1 (off). */
@@ -303,6 +334,7 @@ typedef struct {
     uint8_t release;         /**< 0–63 (0.0137 s per step). 0 = fastest. */
     uint8_t hold;            /**< 0–63 (0.0137 s per step). 0 = disabled. */
     uint8_t noise_gate;      /**< 0–3 (0=1mV, 1=4mV, 2=10mV, 3=20mV rms). */
+    uint8_t limiter_disable; /**< 1 = limiter off (compression 1:1 only). UNSAFE for small speakers. 0 = on. */
 } drive_a_2_agc_cfg_t;
 
 /* -------------------------------------------------------------- */
@@ -335,11 +367,13 @@ typedef enum {
  * @brief  Optional configuration for tile_drive_a_2_init().
  *
  * Pass NULL for defaults: 1x external-VREF gain on both channels (the
- * tile ties VREF to V+), 6 dB amp gain, AGC compression off.
+ * tile ties VREF to V+), V+ taken as 3.3 V, 6 dB amp gain, AGC
+ * compression off, output limiter on at DRIVE_A_2_LIMITER_DEFAULT.
  */
 typedef struct {
-    uint8_t gain;            /**< DAC gain (drive_a_2_gain_t). Default: DRIVE_A_2_GAIN_1X_EXT. */
-    int8_t  amp_gain_db;     /**< Amplifier fixed gain in dB (0 to +30; init turns compression off). 0 = default 6 dB. */
+    uint8_t  gain;           /**< DAC gain (drive_a_2_gain_t). Default: DRIVE_A_2_GAIN_1X_EXT. */
+    int8_t   amp_gain_db;    /**< Amplifier fixed gain in dB (0 to +30; init turns compression off). 0 = default 6 dB. */
+    uint16_t vdd_mv;         /**< Tile V+ in mV (2500–5500), the DAC's reference in the 1x gains. 0 = default 3300. */
 } drive_a_2_cfg_t;
 
 /* -------------------------------------------------------------- */
@@ -358,8 +392,11 @@ uint8_t tile_drive_a_2_find(tiles_pal_t *hal, uint8_t instance);
 /**
  * @brief  Initialize the Drive.A.2 tile.
  *
- * Resets the DAC, verifies DEVICE-ID, powers up both VOUT channels,
- * configures gain, and (in I2C mode) probes and configures the amplifiers.
+ * Verifies DEVICE-ID, powers up both VOUT channels at mid-scale,
+ * configures gain, and (in I2C mode) probes and configures the
+ * amplifiers: shutdown, fixed gain, compression 1:1, output limiter on
+ * at DRIVE_A_2_LIMITER_DEFAULT with the chip-default attack / release /
+ * hold times, then wake. Init starts unmuted: it clears the mute state.
  *
  * @param  hal       Platform HAL handle (see core_tiles.h).
  * @param  instance  Instance index (I2C: address variant, SPI: CS index)
@@ -382,8 +419,11 @@ void tile_drive_a_2_sleep(tile_t *tile);
  * @brief  Wake from sleep.
  * @studio expose category=tile name=wake section=lifecycle
  *
- * Powers up both DAC VOUT channels and re-enables the amplifiers.
- * Restores cached gain settings.
+ * Powers up both VOUT channels, parks them at mid-scale, restores the
+ * cached DAC gains, then brings the amplifiers back to the state they
+ * were in before sleep: a pair that was muted (mute()) or disabled
+ * (amp_disable()) stays in software shutdown; otherwise it is enabled
+ * once the DAC has settled.
  */
 void tile_drive_a_2_wake(tile_t *tile);
 
@@ -412,7 +452,11 @@ void tile_drive_a_2_set(tile_t *tile, uint8_t channel, uint16_t value);
  * @brief  Set a DAC channel output in millivolts.
  * @studio expose category=tile name=set_mv section=runtime
  *
- * Computes the DAC code from the cached reference voltage and gain.
+ * Computes the DAC code from this channel's gain: full scale is V+
+ * (set_supply_mv() / cfg->vdd_mv) in the 1x gains (the VDD reference,
+ * or the VREF pin, which the tile ties to V+), or 1.21 V times 1.5,
+ * 2, 3 or 4 with the internal reference (SLASF73A Eq 1-3). The output
+ * cannot exceed V+, so requests above it are clamped to V+.
  *
  * @param  channel  0 or 1
  * @param  mv       Desired output in millivolts
@@ -437,13 +481,28 @@ uint16_t tile_drive_a_2_get(tile_t *tile, uint8_t channel);
  * @studio expose category=tile name=set_gain section=config
  *
  * Automatically enables the internal reference when an internal-reference
- * gain is selected, and updates the cached Vref for set_mv() calculations.
+ * gain is selected, and records the gain for this channel so set_mv()
+ * uses the right full scale (each channel keeps its own).
  *
  * @param  channel  0 or 1
  * @param  gain     One of the drive_a_2_gain_t values
  */
 void tile_drive_a_2_set_gain(tile_t *tile, uint8_t channel,
                              drive_a_2_gain_t gain);
+
+/**
+ * @brief  Tell the driver the tile's V+ supply voltage.
+ * @studio expose category=tile name=set_supply_mv section=config
+ * @studio control mv label="V+ supply" tier=advanced default=3300 unit=mV
+ *
+ * The DAC63202W's VDD is the tile's V+ (2.5–5.5 V). In the 1x gains
+ * the DAC's full scale is V+, so set_mv() needs it to pick the right
+ * code; the internal-reference gains need it to clamp requests above
+ * V+. No bus traffic. Default 3300 mV (or cfg->vdd_mv).
+ *
+ * @param  mv  [2500..5500] V+ in millivolts (clamped).
+ */
+void tile_drive_a_2_set_supply_mv(tile_t *tile, uint16_t mv);
 
 /* -------------------------------------------------------------- */
 /* Public API — Waveform generation                                */
@@ -589,8 +648,9 @@ void tile_drive_a_2_set_waveform_params(tile_t *tile, uint8_t channel,
  *
  * @note  init() turns AGC compression off (1:1), and with compression
  *        off the TPA2028D1 fixed gain is only specified from 0 to
- *        +30 dB (SLOS660C Table 10). Negative gains need compression
- *        on (amp_set_agc()).
+ *        +30 dB (SLOS660C Table 10), so negative gains are raised to
+ *        0 dB. Negative gains need compression on (amp_set_agc()).
+ *        The output limiter still caps the output level.
  *
  * @param  gain_db   [-28..30] Gain in dB. Clamped if out of range.
  */
@@ -608,7 +668,8 @@ int8_t tile_drive_a_2_amp_get_gain(tile_t *tile);
  * @brief  Enable the amplifiers (clear software shutdown).
  * @studio expose category=tile name=amp_enable section=runtime
  *
- * No-op in SPI mode.
+ * While the tile is asleep this only records the request, and wake()
+ * applies it once the DAC has settled at mid-scale. No-op in SPI mode.
  */
 void tile_drive_a_2_amp_enable(tile_t *tile);
 
@@ -616,7 +677,7 @@ void tile_drive_a_2_amp_enable(tile_t *tile);
  * @brief  Disable the amplifiers (enter software shutdown).
  * @studio expose category=tile name=amp_disable section=runtime
  *
- * No-op in SPI mode.
+ * The amplifiers stay off across sleep() / wake(). No-op in SPI mode.
  */
 void tile_drive_a_2_amp_disable(tile_t *tile);
 
@@ -628,11 +689,39 @@ void tile_drive_a_2_amp_disable(tile_t *tile);
  * limiter, compression, noise gate, max gain).  Affects both amps.
  * No-op in SPI mode. The compression register is written before the
  * limiter register, because the limiter can only be disabled while
- * compression is 1:1 (SLOS660C Table 11).
+ * compression is 1:1 (SLOS660C Table 11). The limiter stays on unless
+ * cfg->limiter_disable is set. The compression ratio also sets the
+ * valid fixed-gain range that amp_set_gain() and set_volume_pct() use.
  *
  * @param  cfg   AGC configuration
  */
 void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg);
+
+/**
+ * @brief  Set, or disable, the amplifiers' output limiter.
+ * @studio expose category=tile name=amp_set_limiter section=config
+ * @studio control enabled label="Output limiter" tier=advanced type=bool default=1
+ * @studio control level label="Limiter level" tier=advanced default=19
+ * @studio require expr="enabled == 1" message="With the output limiter off, full gain on a loud signal drives a clipped square wave at the V+ rail (about 1.4 W into 8 ohm at 3.3 V), which can burn a small speaker. Keep it on unless the speaker is rated for that."
+ *
+ * The limiter caps the amplifier output at level n = -6.5 + 0.5 n dBV
+ * (SLOS660C Table 11; power figures are for 8 ohm): 0 = 0.67 V peak,
+ * 0.03 W; 19 = 2.0 V peak, 0.25 W (init's default); 26 = 3.0 V peak,
+ * 0.56 W (chip default); 31 = 3.99 V peak, 0.99 W. A level whose peak
+ * is above V+ cannot be reached, so the output clips first. Read-
+ * modify-write of AGC_CTRL1 (the noise-gate bits are kept). Affects
+ * both amps. No-op in SPI mode.
+ *
+ * @warning Disabling the limiter (enabled = 0), or a level above the
+ *          speaker's rating, is unsafe for small speakers. The chip
+ *          only honours a disable while AGC compression is 1:1 (init's
+ *          default); with compression on the driver keeps the limiter
+ *          enabled and only sets the level.
+ *
+ * @param  enabled  1 = limiter on (default), 0 = off (unsafe)
+ * @param  level    [0..31] Limiter level (clamped)
+ */
+void tile_drive_a_2_amp_set_limiter(tile_t *tile, uint8_t enabled, uint8_t level);
 
 /**
  * @brief  Read the amplifier status register.
@@ -686,9 +775,8 @@ void tile_drive_a_2_nvm_save(tile_t *tile);
  * Triggers NVM-RELOAD in COMMON-TRIGGER. Restores the saved
  * power-on configuration without a full reset — equivalent to
  * the load that happens automatically on POR. Blocks until the
- * reload completes. Note that this resets the cached gain /
- * vref state in the driver: call set_gain() afterwards if you
- * need set_mv() to work correctly.
+ * reload completes, then re-reads both channels' VOUT-GAIN so
+ * set_mv() follows whatever gain the NVM held.
  *
  */
 void tile_drive_a_2_nvm_reload(tile_t *tile);
@@ -799,14 +887,16 @@ void tile_drive_a_2_play_chirp(tile_t *tile, drive_a_2_channel_t channel,
  * @brief  Map a 0–100 percent volume to amplifier fixed gain.
  * @studio expose category=tile name=set_volume_pct section=runtime
  *
- * Linear mapping from `pct` to the TPA2028D1's full -28 dB to
- * +30 dB programmable range:
+ * Linear-in-dB mapping from `pct` onto the fixed-gain range the
+ * TPA2028D1 specifies for the active compression ratio (SLOS660C
+ * Table 10):
  *
- *   gain_db = -28 + (pct × 58) / 100
+ *   compression 1:1 (init's default):  gain_db = (pct × 30) / 100
+ *   compression 2:1, 4:1 or 8:1:       gain_db = -28 + (pct × 58) / 100
  *
- * 0 % → -28 dB (near-mute), 50 % → +1 dB, 100 % → +30 dB. Below
- * 49 % the gain is negative, which the TPA2028D1 only specifies with
- * AGC compression on; init() turns compression off. The
+ * With compression off, 0 % → 0 dB (the lowest valid gain, not
+ * silence; use mute() for silence), 50 % → +15 dB, 100 % → +30 dB.
+ * The output limiter still caps the level. The
  * mapping is intentionally linear-in-dB rather than perceptually
  * weighted; for finer dB control use @ref
  * tile_drive_a_2_amp_set_gain directly. Because both amps share
@@ -827,7 +917,8 @@ void tile_drive_a_2_set_volume_pct(tile_t *tile, drive_a_2_channel_t channel,
  * Stashes the current fixed-gain register so a later @ref
  * tile_drive_a_2_unmute restores it byte-exact, then puts the amp
  * pair into software shutdown (SWS=1). Both physical amps mute
- * regardless of `channel` (shared I²C address).
+ * regardless of `channel` (shared I²C address). The mute survives
+ * sleep() / wake(); only unmute(), amp_enable() or init() clear it.
  *
  * @param  channel  DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)
  */
@@ -841,7 +932,7 @@ void tile_drive_a_2_mute(tile_t *tile, drive_a_2_channel_t channel);
  * tile_drive_a_2_mute and clears software shutdown (SWS=0). If
  * the channel was never muted by this driver instance the call
  * still wakes the amp using whatever gain is currently in the
- * register.
+ * register. While the tile is asleep the amp is woken by wake().
  *
  * @param  channel  DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH (advisory)
  */

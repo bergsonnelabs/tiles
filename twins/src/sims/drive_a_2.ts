@@ -11,11 +11,12 @@
 // padOutputs read those same fields, so the speaker drive follows the program.
 //
 // Signal chain: the amp input sits at VDD/2, so DAC mid-scale (2048) is silence
-// (tile_drive_a_2.c:232-236). The differential input is (code − 2048)·VREF/4096,
-// amplified by the fixed gain and clipped at the V+ rail. The tile ties VREF to
-// VDD, so the ACTUAL full scale is V+ — while the driver's set_mv() assumes 3.3 V
-// (resolve_vref, tile_drive_a_2.c:145-156). The twin keeps both: set_mv() uses
-// the driver's table, the output uses the real rail.
+// (tile_drive_a_2_init). The differential input is (code − 2048)·VREF/4096,
+// amplified by the fixed gain, capped by the TPA2028D1 output limiter (on by
+// default since driver 3.3.0) and clipped at the V+ rail. The tile ties VREF to
+// VDD, so the ACTUAL full scale is V+. set_mv() uses the V+ the driver was told
+// (`vdd_mv`, set_supply_mv(), default 3.3 V) and each channel's own gain; the
+// output uses the real rail (`vplus_mv`), so a wrong set_supply_mv() shows.
 import type { TileSim } from '../tileSim';
 
 const DAC_MID = 2048;
@@ -27,9 +28,22 @@ const GEN_ID_STATUS = 0x06 << 2; // GENERAL-STATUS DEVICE-ID[7:2] = 0x06
 // ±1638 codes about mid-scale, whatever the margins are.
 const SINE_PEAK_CODES = 0xe66 - DAC_MID;
 
-// Driver's resolve_vref() (tile_drive_a_2.c:145-156): full-scale mV per gain.
-const DRIVER_VREF_MV = [3300, 3300, 1815, 2420, 3630, 4840];
-const driverVref = (gain: number) => DRIVER_VREF_MV[gain] ?? 3300;
+// Driver's full_scale_mv(): V+ (as told) in the 1× gains, 1.21 V × 1.5/2/3/4
+// with the internal reference (SLASF73A Eq 1-3, Table 6-26).
+const INT_FS_MV = [0, 0, 1815, 2420, 3630, 4840];
+const driverFullScale = (gain: number, vddMv: number) =>
+  gain >= 2 && gain <= 5 ? INT_FS_MV[gain] : vddMv;
+const VDD_MIN_MV = 2500;
+const VDD_MAX_MV = 5500;
+const VDD_DEFAULT_MV = 3300;
+
+// TPA2028D1 output limiter (SLOS660C Table 11): level n = -6.5 + 0.5·n dBV.
+const LIMITER_DEFAULT = 19; // DRIVE_A_2_LIMITER_DEFAULT: 3 dBV, 2.0 V peak, 0.25 W / 8 Ω
+const limiterPeakMv = (level: number) =>
+  Math.pow(10, (-6.5 + 0.5 * level) / 20) * Math.SQRT2 * 1000;
+const COMP_1_1 = 0;
+// Lowest valid fixed gain: 0 dB at compression 1:1, -28 dB otherwise (Table 10).
+const minGain = (s: State) => (s.agc_compression === COMP_1_1 ? 0 : -28);
 
 // Supply currents on V+ (datasheets).
 const I_DAC_CH_UA = 150; // DAC63202W IDD per powered channel (VOUT, ext ref at VDD)
@@ -57,7 +71,7 @@ interface State {
   ch1_code: number;
   ch0_gain: number; // drive_a_2_gain_t (VOUT-GAIN)
   ch1_gain: number;
-  vref_mv: number; // driver shadow: vref of the LAST set_gain(), used by set_mv on both channels
+  vdd_mv: number; // driver shadow: the V+ it was told (set_supply_mv / cfg->vdd_mv)
   ch0_wave: number; // FUNC-CONFIG (7 = off)
   ch1_wave: number;
   ch0_wave_running: number; // START-FUNC issued and not stopped
@@ -80,11 +94,13 @@ interface State {
   // ── amps (shared 0x58) ──
   amp_gain_db: number; // AGC fixed gain, -28..+30
   amp_enabled: number; // FUNC_CTRL SWS = 0
+  amp_shutdown: number; // driver shadow: app asked for SWS (amp_disable / mute); wake() keeps it
   amp_muted: number; // driver shadow `is_muted`
   amp_muted_gain_db: number; // driver shadow `muted_gain_db`
   agc_compression: number;
   agc_max_gain_db: number;
   agc_limiter_level: number;
+  agc_limiter_enabled: number; // AGC_CTRL1 bit 7 = 0
   agc_attack: number;
   agc_release: number;
   agc_hold: number;
@@ -135,18 +151,29 @@ function outLevel(s: State, c: Ch): number {
   if (s.sleeping || !s.amp_enabled || s.amp_fault || s.amp_thermal) return 0;
   const vref = realVref(s, c === 0 ? s.ch0_gain : s.ch1_gain);
   const vinMv = (inputCodes(s, c) * vref) / 4096;
-  const voutMv = vinMv * Math.pow(10, s.amp_gain_db / 20);
+  let voutMv = vinMv * Math.pow(10, s.amp_gain_db / 20);
+  // The limiter's gain reduction settles the peak at its level (attack ramp not modeled).
+  if (s.agc_limiter_enabled) voutMv = Math.min(voutMv, limiterPeakMv(s.agc_limiter_level));
   return s.vplus_mv > 0 ? clamp(voutMv / s.vplus_mv, 0, 1) : 0;
 }
 
-// Driver mute()/unmute() (tile_drive_a_2.c:857-877).
+// Driver amp_enable()/amp_disable(): the request is recorded in amp_shutdown;
+// while asleep amp_enable() only records it and wake() applies it.
+const enableState = (s: State): Partial<State> => ({
+  amp_shutdown: 0,
+  amp_enabled: s.sleeping ? 0 : 1,
+});
+const disableState: Partial<State> = { amp_shutdown: 1, amp_enabled: 0 };
+// Driver mute()/unmute(): amp_disable()/amp_enable() plus the gain shadow.
 const muteState = (s: State): Partial<State> => ({
-  amp_enabled: 0,
+  ...disableState,
   ...(s.amp_muted ? {} : { amp_muted: 1, amp_muted_gain_db: s.amp_gain_db }),
 });
 const unmuteState = (s: State): Partial<State> => ({
-  amp_enabled: 1,
-  ...(s.amp_muted ? { amp_muted: 0, amp_gain_db: s.amp_muted_gain_db } : {}),
+  ...enableState(s),
+  ...(s.amp_muted
+    ? { amp_muted: 0, amp_gain_db: clamp(s.amp_muted_gain_db, minGain(s), 30) }
+    : {}),
 });
 
 // Sine pitch per SLEW-RATE code 1..15 in 0.1 Hz: f = 1 / (24 × time_step)
@@ -179,9 +206,10 @@ const onCh = (args: number[], fn: (c: Ch) => Partial<State>): { nextState?: Part
 const sim: TileSim<State> = {
   tile: 'Drive.A.2',
 
-  // After tile_drive_a_2_init(cfg = NULL) (tile_drive_a_2.c:178-277): gain
-  // 1× EXT on both channels, both DACs at mid-scale, amp gain 6 dB, AGC
-  // compression 1:1 / max 30 dB / limiter off, amps on (FUNC_CTRL 0xC2).
+  // After tile_drive_a_2_init(cfg = NULL): gain 1× EXT on both channels, V+
+  // taken as 3.3 V, both DACs at mid-scale, amp gain 6 dB, AGC compression 1:1
+  // / max 30 dB, limiter ON at level 19 (AGC_CTRL1 0x33), attack / release /
+  // hold at chip defaults, amps on (FUNC_CTRL 0xC2).
   defaultState: {
     vplus_mv: 3300, // the driver's VDD assumption (resolve_vref)
     amp_fault: 0,
@@ -191,7 +219,7 @@ const sim: TileSim<State> = {
     ch1_code: DAC_MID,
     ch0_gain: 0,
     ch1_gain: 0,
-    vref_mv: 3300,
+    vdd_mv: VDD_DEFAULT_MV,
     ch0_wave: WAVE_OFF,
     ch1_wave: WAVE_OFF,
     ch0_wave_running: 0,
@@ -213,15 +241,17 @@ const sim: TileSim<State> = {
 
     amp_gain_db: 6,
     amp_enabled: 1,
+    amp_shutdown: 0,
     amp_muted: 0,
     amp_muted_gain_db: 6,
     agc_compression: 0, // AGC_CTRL2 0xC0
     agc_max_gain_db: 30,
-    agc_limiter_level: 0, // AGC_CTRL1 0x80 (limiter off)
-    agc_attack: 0x05, // chip defaults, not written by init
+    agc_limiter_level: LIMITER_DEFAULT, // AGC_CTRL1 0x33 (limiter on, NG 4 mV)
+    agc_limiter_enabled: 1,
+    agc_attack: 0x05, // chip defaults, rewritten by init
     agc_release: 0x0b,
     agc_hold: 0x00,
-    agc_noise_gate: 0,
+    agc_noise_gate: 1,
 
     sleeping: 0,
 
@@ -242,7 +272,7 @@ const sim: TileSim<State> = {
       step: 50,
       unit: 'mV',
       description:
-        "Tile supply. It is also the DAC's reference, so it sets the real full scale; set_mv() still assumes 3.3 V.",
+        "Tile supply. It is also the DAC's reference, so it sets the real full scale; set_mv() uses the V+ the program gave set_supply_mv() (3.3 V by default).",
     },
     {
       type: 'toggle',
@@ -268,20 +298,25 @@ const sim: TileSim<State> = {
         ch1_code: DAC_MID,
         ch0_gain: 0,
         ch1_gain: 0,
-        vref_mv: 3300,
+        vdd_mv: VDD_DEFAULT_MV, // cfg->vdd_mv is behind a pointer the host call can't read
         amp_gain_db: 6,
         amp_enabled: 1,
+        amp_shutdown: 0,
         amp_muted: 0,
         amp_fault: 0,
         amp_thermal: 0,
         agc_compression: 0,
         agc_max_gain_db: 30,
-        agc_limiter_level: 0,
-        agc_noise_gate: 0,
+        agc_limiter_level: LIMITER_DEFAULT,
+        agc_limiter_enabled: 1,
+        agc_attack: 0x05,
+        agc_release: 0x0b,
+        agc_hold: 0x00,
+        agc_noise_gate: 1,
         sleeping: 0,
       },
     }),
-    // VOUT Hi-Z + amp SWS (tile_drive_a_2.c:279-293).
+    // VOUT Hi-Z + amp SWS; the app's amp_shutdown request is kept for wake().
     tile_drive_a_2_sleep: () => ({
       nextState: {
         sleeping: 1,
@@ -292,14 +327,14 @@ const sim: TileSim<State> = {
         ch1_sw_wave: 0,
       },
     }),
-    // DACs back at mid-scale, then FUNC_CTRL = 0xC2 — the amps come on even if
-    // mute() was in effect, and FAULT/Thermal clear (tile_drive_a_2.c:295-324).
-    tile_drive_a_2_wake: () => ({
+    // DACs back at mid-scale, then FUNC_CTRL = 0xC2, or 0xE2 when the amps were
+    // muted / disabled before sleep (they stay off); FAULT/Thermal clear.
+    tile_drive_a_2_wake: ({ state }) => ({
       nextState: {
         sleeping: 0,
         ch0_code: DAC_MID,
         ch1_code: DAC_MID,
-        amp_enabled: 1,
+        amp_enabled: state.amp_shutdown ? 0 : 1,
         amp_fault: 0,
         amp_thermal: 0,
       },
@@ -308,11 +343,13 @@ const sim: TileSim<State> = {
     // ── DAC output ──
     tile_drive_a_2_set: ({ args }) =>
       onCh(args, (c) => patch([c], { code: clamp((args[1] ?? 0) & 0xffff, 0, DAC_MAX) })),
-    // code = mv·4096 / vref_mv, the driver's single cached vref (tile_drive_a_2.c:343-351).
+    // mv clamped to V+, then code = round(mv·4096 / full scale), the channel's own
+    // gain (SLASF73A Eq 1-3).
     tile_drive_a_2_set_mv: ({ state, args }) =>
       onCh(args, (c) => {
-        const mv = (args[1] ?? 0) & 0xffff;
-        const code = state.vref_mv ? Math.floor((mv * 4096) / state.vref_mv) : 0;
+        const mv = Math.min((args[1] ?? 0) & 0xffff, state.vdd_mv);
+        const fs = driverFullScale(c === 0 ? state.ch0_gain : state.ch1_gain, state.vdd_mv);
+        const code = fs ? Math.floor((mv * 4096 + Math.floor(fs / 2)) / fs) : 0;
         return patch([c], { code: Math.min(DAC_MAX, code) });
       }),
     tile_drive_a_2_get: ({ state, args }) => {
@@ -320,10 +357,11 @@ const sim: TileSim<State> = {
       return { scalar: ch === 0 ? state.ch0_code : ch === 1 ? state.ch1_code : 0 };
     },
     tile_drive_a_2_set_gain: ({ args }) =>
-      onCh(args, (c) => {
-        const gain = (args[1] ?? 0) & 0x07;
-        return { ...patch([c], { gain }), vref_mv: driverVref(gain) };
-      }),
+      onCh(args, (c) => patch([c], { gain: (args[1] ?? 0) & 0x07 })),
+    // Driver shadow only, clamped to the tile's 2.5-5.5 V; no bus traffic.
+    tile_drive_a_2_set_supply_mv: ({ args }) => ({
+      nextState: { vdd_mv: clamp((args[0] ?? 0) & 0xffff, VDD_MIN_MV, VDD_MAX_MV) },
+    }),
 
     // ── function generator ──
     tile_drive_a_2_set_waveform: ({ args }) =>
@@ -358,16 +396,26 @@ const sim: TileSim<State> = {
       ),
 
     // ── amps (both, shared 0x58) ──
-    tile_drive_a_2_amp_set_gain: ({ args }) => {
+    // Clamped to the gain range valid for the compression ratio (0..30 at 1:1).
+    tile_drive_a_2_amp_set_gain: ({ state, args }) => {
       const raw = (args[0] ?? 0) & 0xff;
-      return { nextState: { amp_gain_db: clamp(raw > 127 ? raw - 256 : raw, -28, 30) } };
+      return {
+        nextState: { amp_gain_db: clamp(raw > 127 ? raw - 256 : raw, minGain(state), 30) },
+      };
     },
     tile_drive_a_2_amp_get_gain: ({ state }) => ({ scalar: state.amp_gain_db }),
-    // EN = 1, SWS = 0; the mute shadow is untouched (tile_drive_a_2.c:507-513).
-    tile_drive_a_2_amp_enable: () => ({ nextState: { amp_enabled: 1 } }),
-    tile_drive_a_2_amp_disable: () => ({ nextState: { amp_enabled: 0 } }),
+    // EN = 1, SWS = 0 (deferred to wake() while asleep); the mute shadow is untouched.
+    tile_drive_a_2_amp_enable: ({ state }) => ({ nextState: enableState(state) }),
+    tile_drive_a_2_amp_disable: () => ({ nextState: disableState }),
     // The config is a struct pointer the host call can't read; no state change.
     tile_drive_a_2_amp_set_agc: () => ({}),
+    // Level clamped to 0..31; a disable is honoured only at compression 1:1.
+    tile_drive_a_2_amp_set_limiter: ({ state, args }) => ({
+      nextState: {
+        agc_limiter_level: clamp((args[1] ?? LIMITER_DEFAULT) & 0xff, 0, 31),
+        agc_limiter_enabled: (args[0] ?? 1) || state.agc_compression !== COMP_1_1 ? 1 : 0,
+      },
+    }),
     // FUNC_CTRL raw: [7]=1 [6]EN [5]SWS [3]FAULT [2]Thermal [1]=1 [0]NG_EN=0.
     tile_drive_a_2_amp_read_status: ({ state }) => ({
       scalar:
@@ -380,10 +428,10 @@ const sim: TileSim<State> = {
     // ── DAC status / NVM / raw ──
     tile_drive_a_2_read_status: () => ({ scalar: GEN_ID_STATUS }),
     tile_drive_a_2_nvm_save: () => ({}),
-    // Registers reload from NVM (factory: gain 1× EXT); the driver re-derives
-    // its gain shadow and takes vref from channel 0 (tile_drive_a_2.c:584-599).
+    // Registers reload from NVM (factory: gain 1× EXT); the driver re-reads
+    // both channels' gains.
     tile_drive_a_2_nvm_reload: () => ({
-      nextState: { ch0_gain: 0, ch1_gain: 0, vref_mv: driverVref(0) },
+      nextState: { ch0_gain: 0, ch1_gain: 0 },
     }),
     tile_drive_a_2_read_reg: ({ state, args }) => {
       const reg = (args[0] ?? 0) & 0xff;
@@ -470,10 +518,14 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // -28 + pct·58/100 dB on both amps; the mute shadow follows (tile_drive_a_2.c:838-853).
+    // pct·30/100 dB at compression 1:1, else -28 + pct·58/100 dB, on both amps;
+    // the mute shadow follows.
     tile_drive_a_2_set_volume_pct: ({ state, args }) => {
       const pct = Math.min(100, (args[1] ?? 0) & 0xff);
-      const db = -28 + Math.trunc((pct * 58) / 100);
+      const db =
+        state.agc_compression === COMP_1_1
+          ? Math.trunc((pct * 30) / 100)
+          : -28 + Math.trunc((pct * 58) / 100);
       return {
         nextState: { amp_gain_db: db, ...(state.amp_muted ? { amp_muted_gain_db: db } : {}) },
       };
@@ -485,7 +537,8 @@ const sim: TileSim<State> = {
   provenance: {
     tile_drive_a_2_find: 'canonical',
     tile_drive_a_2_set: 'canonical', // DAC-X-DATA, 12-bit
-    tile_drive_a_2_set_mv: 'canonical', // driver math incl. its single cached vref
+    tile_drive_a_2_set_mv: 'canonical', // Eq 1-3, per-channel gain, V+ as told
+    tile_drive_a_2_set_supply_mv: 'canonical', // driver shadow, clamped 2.5-5.5 V
     tile_drive_a_2_get: 'canonical',
     tile_drive_a_2_set_gain: 'canonical', // VOUT-GAIN table
     tile_drive_a_2_set_waveform: 'canonical', // FUNC-CONFIG codes
@@ -496,6 +549,7 @@ const sim: TileSim<State> = {
     tile_drive_a_2_amp_get_gain: 'canonical',
     tile_drive_a_2_amp_enable: 'canonical', // FUNC_CTRL EN/SWS
     tile_drive_a_2_amp_disable: 'canonical',
+    tile_drive_a_2_amp_set_limiter: 'canonical', // Table 11 levels; disable only at 1:1
     tile_drive_a_2_amp_read_status: 'canonical', // FUNC_CTRL bits
     tile_drive_a_2_read_status: 'canonical', // GENERAL-STATUS DEVICE-ID
     tile_drive_a_2_set_volume_pct: 'canonical',
@@ -515,7 +569,7 @@ const sim: TileSim<State> = {
     tile_drive_a_2_write_reg: 'inferred',
     tile_drive_a_2_nvm_save: 'hallucinated', // no NVM model
     tile_drive_a_2_amp_set_agc: 'hallucinated', // struct arg unreadable → no-op
-    power: 'inferred', // IC currents datasheet; speaker load assumed 8 Ω
+    power: 'inferred', // IC currents datasheet; speaker load assumed 8 Ω; limiter caps the peak
   },
 
   // A blocking helper ends: stop the generator / software sweep, park at

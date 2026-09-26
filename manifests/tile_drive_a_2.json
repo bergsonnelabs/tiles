@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@bc1921a",
+  "source": "tiles@f70bca2",
   "tile": "Drive.A.2",
   "palette": {
     "label": "Drive.A.2",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_a_2",
     "header": "tile_drive_a_2.h",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -164,6 +164,38 @@
         }
       ],
       "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_supply_mv"
+      ],
+      "symbol": "tile_drive_a_2_set_supply_mv",
+      "header": "tile_drive_a_2.h",
+      "category": "tile",
+      "description": "Tell the driver the tile's V+ supply voltage.",
+      "params": [
+        {
+          "name": "mv",
+          "type": "int",
+          "range": [
+            2500,
+            5500
+          ],
+          "description": "V+ in millivolts (clamped)."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mv",
+          "label": "V+ supply",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3300
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -793,6 +825,67 @@
       ],
       "returns": "void",
       "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "amp_set_limiter"
+      ],
+      "symbol": "tile_drive_a_2_amp_set_limiter",
+      "header": "tile_drive_a_2.h",
+      "category": "tile",
+      "description": "Set, or disable, the amplifiers' output limiter.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = limiter on (default), 0 = off (unsafe)"
+        },
+        {
+          "name": "level",
+          "type": "int",
+          "range": [
+            0,
+            31
+          ],
+          "description": "Limiter level (clamped)"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Output limiter",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        },
+        {
+          "param": "level",
+          "label": "Limiter level",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 19
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "amp_set_limiter.enabled"
+              },
+              {
+                "num": 1
+              }
+            ]
+          },
+          "message": "With the output limiter off, full gain on a loud signal drives a clipped square wave at the V+ rail (about 1.4 W into 8 ohm at 3.3 V), which can burn a small speaker. Keep it on unless the speaker is rated for that."
+        }
+      ]
     },
     {
       "qname": [

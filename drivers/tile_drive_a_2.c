@@ -40,7 +40,9 @@ static uint8_t resolve_id(uint8_t instance)
 typedef struct {
     uint8_t  amp_addr;        /* TPA2028D1 address (0x58), or 0 if unavailable */
     uint8_t  gain[2];         /* Cached VOUT-GAIN-X per DAC channel */
-    uint16_t vref_mv;         /* Effective full-scale voltage in mV */
+    uint16_t vdd_mv;          /* Tile V+ = DAC VDD, in mV (set_mv full scale in the 1x gains) */
+    uint8_t  amp_comp;        /* Cached AGC compression ratio (drive_a_2_comp_t) */
+    uint8_t  amp_shutdown;    /* 1 = app asked for software shutdown (amp_disable / mute) */
     int8_t   muted_gain_db;   /* Gain saved at mute() so unmute() can restore */
     uint8_t  is_muted;        /* 1 if mute() has been called and not yet undone */
 } drive_a_2_state_t;
@@ -140,19 +142,51 @@ static uint8_t dac_margin_low_reg(uint8_t ch)
                      : DAC63202W_REG_DAC_1_MARGIN_LOW;
 }
 
-/* --- Reference voltage resolution --- */
+/* --- Reference / full-scale resolution --- */
 
-static uint16_t resolve_vref(uint8_t gain_sel)
+static uint16_t clamp_vdd(uint16_t mv)
 {
-    switch (gain_sel) {
-    case DRIVE_A_2_GAIN_1X_EXT:   return 3300;  /* assume 3.3V external */
-    case DRIVE_A_2_GAIN_1X_VDD:   return 3300;  /* assume 3.3V VDD */
-    case DRIVE_A_2_GAIN_1P5X_INT: return 1815;  /* 1210 * 1.5 */
-    case DRIVE_A_2_GAIN_2X_INT:   return 2420;  /* 1210 * 2 */
-    case DRIVE_A_2_GAIN_3X_INT:   return 3630;  /* 1210 * 3 */
-    case DRIVE_A_2_GAIN_4X_INT:   return 4840;  /* 1210 * 4 */
-    default:                      return 3300;
+    if (mv < DRIVE_A_2_VDD_MIN_MV) return DRIVE_A_2_VDD_MIN_MV;
+    if (mv > DRIVE_A_2_VDD_MAX_MV) return DRIVE_A_2_VDD_MAX_MV;
+    return mv;
+}
+
+/* DAC full scale (the voltage code 4096 would give) for one channel,
+ * from its VOUT-GAIN-X (SLASF73A Table 6-26):
+ *   000  1x, VREF pin  -> Eq 2, VREF; the tile ties VREF to V+
+ *   001  1x, VDD       -> Eq 3, VDD = V+
+ *   010..101  1.5x/2x/3x/4x internal 1.21 V -> Eq 1 */
+static uint16_t full_scale_mv(const drive_a_2_state_t *s, uint8_t ch)
+{
+    switch (s->gain[ch]) {
+    case DRIVE_A_2_GAIN_1P5X_INT: return (DAC63202W_VREF_INT_MV * 3u) / 2u;  /* 1815 */
+    case DRIVE_A_2_GAIN_2X_INT:   return DAC63202W_VREF_INT_MV * 2u;         /* 2420 */
+    case DRIVE_A_2_GAIN_3X_INT:   return DAC63202W_VREF_INT_MV * 3u;         /* 3630 */
+    case DRIVE_A_2_GAIN_4X_INT:   return DAC63202W_VREF_INT_MV * 4u;         /* 4840 */
+    case DRIVE_A_2_GAIN_1X_EXT:
+    case DRIVE_A_2_GAIN_1X_VDD:
+    default:                      return s->vdd_mv;
     }
+}
+
+/* --- TPA2028D1 IC Function Control (reg 1, SLOS660C Table 6) --- */
+
+#define TPA_FUNC_FIXED  0x82u      /* bits 7 and 1: unused, read as 1 */
+#define TPA_FUNC_EN     (1u << 6)
+#define TPA_FUNC_SWS    (1u << 5)  /* 1 = software shutdown */
+/* NG_EN (bit 0) stays 0: the noise gate only works with compression on. */
+
+/* AGC_CTRL1 (reg 6, Table 11) */
+#define TPA_CTRL1_LIM_DIS   (1u << 7)  /* only honoured with compression 1:1 */
+#define TPA_CTRL1_NG_MASK   (0x03u << 5)
+#define TPA_CTRL1_NG_4MV    (0x01u << 5)  /* chip default */
+#define TPA_CTRL1_LVL_MASK  0x1Fu
+
+/* Lowest fixed gain the TPA2028D1 specifies for a compression ratio:
+ * 0 dB with compression 1:1, -28 dB otherwise (SLOS660C Table 10). */
+static int8_t amp_min_gain(const drive_a_2_state_t *s)
+{
+    return (s->amp_comp == DRIVE_A_2_COMP_1_1) ? 0 : -28;
 }
 
 /* ================================================================
@@ -220,7 +254,8 @@ void tile_drive_a_2_init(tiles_pal_t *hal, uint8_t instance,
     uint8_t gain_sel = cfg ? cfg->gain : DRIVE_A_2_GAIN_1X_EXT;
     s->gain[0] = gain_sel;
     s->gain[1] = gain_sel;
-    s->vref_mv = resolve_vref(gain_sel);
+    s->vdd_mv = (cfg && cfg->vdd_mv) ? clamp_vdd(cfg->vdd_mv)
+                                     : DRIVE_A_2_VDD_DEFAULT_MV;
 
     /* Power up both VOUT channels, power down IOUT.
      * No software reset — preserve NVM defaults for analog config. */
@@ -250,25 +285,47 @@ void tile_drive_a_2_init(tiles_pal_t *hal, uint8_t instance,
      * The TPA2028D1 AGC can cause saturation if it ramps gain while
      * there is any DC offset at the input.  Sequence:
      *   1. Put amp in software shutdown
-     *   2. Configure for fixed gain, AGC compression off
+     *   2. Configure: fixed gain, AGC compression off, output limiter
+     *      ON at a speaker-safe level
      *   3. Wake amp — DAC is already settled at mid-scale */
     if (!(hal->buses & TILES_BUS_SPI)) {
         if (hal->i2c_is_ready(hal->handle, TPA2028D1_I2C_ADDR) == 0) {
             s->amp_addr = TPA2028D1_I2C_ADDR;
 
-            /* Shutdown amp while configuring */
-            amp_write(tile, TPA2028D1_REG_FUNC_CTRL, 0xE2);  /* EN=1, SWS=1, NG_EN=0 */
+            /* Shutdown amp while configuring (EN=1, SWS=1, NG_EN=0) */
+            amp_write(tile, TPA2028D1_REG_FUNC_CTRL,
+                      TPA_FUNC_FIXED | TPA_FUNC_EN | TPA_FUNC_SWS);  /* 0xE2 */
             hal->delay_ms(5);
 
-            /* Set fixed gain (default 6 dB), AGC compression off */
+            /* The limiter paces its gain steps with the AGC attack /
+             * release / hold times. Restore the chip defaults (SLOS660C
+             * Table 5: 05h, 0Bh, 00h) so a re-init after amp_set_agc()
+             * does not leave a slow limiter behind. */
+            amp_write(tile, TPA2028D1_REG_AGC_ATTACK,  0x05);  /* 6.4 ms / 6 dB */
+            amp_write(tile, TPA2028D1_REG_AGC_RELEASE, 0x0B);  /* 1.81 s / 6 dB */
+            amp_write(tile, TPA2028D1_REG_AGC_HOLD,    0x00);  /* disabled */
+
+            /* Fixed gain (default 6 dB). With compression 1:1 the fixed
+             * gain is only valid from 0 to +30 dB (Table 10). */
             int8_t amp_gain = (cfg && cfg->amp_gain_db) ? cfg->amp_gain_db : 6;
+            if (amp_gain < 0)  amp_gain = 0;
+            if (amp_gain > 30) amp_gain = 30;
             amp_write(tile, TPA2028D1_REG_AGC_GAIN,
                       (uint8_t)(amp_gain & 0x3F));
-            amp_write(tile, TPA2028D1_REG_AGC_CTRL2, 0xC0);  /* max 30 dB, comp 1:1 */
-            amp_write(tile, TPA2028D1_REG_AGC_CTRL1, 0x80);  /* limiter off */
 
-            /* Wake amp — DAC is settled, no transient */
-            amp_write(tile, TPA2028D1_REG_FUNC_CTRL, 0xC2);  /* EN=1, SWS=0, NG_EN=0 */
+            /* Compression 1:1 first (0x07 before 0x06, as amp_set_agc
+             * does), then the limiter: enabled (bit 7 = 0) at
+             * DRIVE_A_2_LIMITER_DEFAULT, noise gate at its chip default
+             * (inactive at 1:1). */
+            amp_write(tile, TPA2028D1_REG_AGC_CTRL2, 0xC0);  /* max 30 dB, comp 1:1 */
+            amp_write(tile, TPA2028D1_REG_AGC_CTRL1,
+                      TPA_CTRL1_NG_4MV | DRIVE_A_2_LIMITER_DEFAULT);  /* 0x33 */
+            s->amp_comp = DRIVE_A_2_COMP_1_1;
+            s->amp_shutdown = 0;
+
+            /* Wake amp — DAC is settled, no transient (EN=1, SWS=0) */
+            amp_write(tile, TPA2028D1_REG_FUNC_CTRL,
+                      TPA_FUNC_FIXED | TPA_FUNC_EN);  /* 0xC2 */
             hal->delay_ms(10);
         }
     }
@@ -284,7 +341,9 @@ void tile_drive_a_2_sleep(tile_t *tile)
     common_cfg |= (0x03 << 1);   /* VOUT-PDN-1 = 11 (Hi-Z) */
     dac_write(tile, DAC63202W_REG_COMMON_CONFIG, common_cfg);
 
-    /* Put amps into software shutdown */
+    /* Put amps into software shutdown. s->amp_shutdown (the app's own
+     * enable / disable / mute request) is left alone so wake() can
+     * restore it. */
     uint8_t reg1 = amp_read(tile, TPA2028D1_REG_FUNC_CTRL);
     reg1 |= (1 << 5);   /* SWS = 1 */
     amp_write(tile, TPA2028D1_REG_FUNC_CTRL, reg1);
@@ -316,9 +375,13 @@ void tile_drive_a_2_wake(tile_t *tile)
         dac_write(tile, dac_vout_cmp_reg(ch), vout_cfg);
     }
 
-    /* Wake amp after DAC is settled */
-    amp_write(tile, TPA2028D1_REG_FUNC_CTRL, 0xC2);  /* EN=1, SWS=0, NG_EN=0 */
-    tile->hal->delay_ms(10);
+    /* Wake amp after DAC is settled, unless the app had it muted or
+     * disabled before sleep: then it stays in software shutdown. The
+     * full-byte write also clears FAULT / Thermal (write-0-to-clear). */
+    uint8_t func = TPA_FUNC_FIXED | TPA_FUNC_EN;
+    if (s->amp_shutdown) func |= TPA_FUNC_SWS;
+    amp_write(tile, TPA2028D1_REG_FUNC_CTRL, func);  /* 0xC2, or 0xE2 muted */
+    if (!s->amp_shutdown) tile->hal->delay_ms(10);
 
     tile->state = TILE_STATE_READY;
 }
@@ -344,8 +407,12 @@ void tile_drive_a_2_set_mv(tile_t *tile, uint8_t channel, uint16_t mv)
 {
     if (channel > 1) return;
     drive_a_2_state_t *s = state_for(tile);
-    if (s->vref_mv == 0) return;
-    uint32_t code = ((uint32_t)mv * 4096) / s->vref_mv;
+    /* VOUT cannot exceed VDD (= V+) in any reference mode. */
+    if (mv > s->vdd_mv) mv = s->vdd_mv;
+    uint16_t fs = full_scale_mv(s, channel);
+    if (fs == 0) return;
+    /* VOUT = code / 2^12 x full scale (Eq 1-3), rounded to nearest. */
+    uint32_t code = ((uint32_t)mv * 4096u + fs / 2u) / fs;
     if (code > DAC63202W_DAC_MAX) code = DAC63202W_DAC_MAX;
     tile_drive_a_2_set(tile, channel, (uint16_t)code);
 }
@@ -381,9 +448,13 @@ void tile_drive_a_2_set_gain(tile_t *tile, uint8_t channel,
         common_cfg &= ~(1 << 12);  /* safe to disable if neither channel needs it */
     dac_write(tile, DAC63202W_REG_COMMON_CONFIG, common_cfg);
 
-    /* Cache */
+    /* Cache (per channel; set_mv derives the full scale from it) */
     s->gain[channel] = (uint8_t)gain;
-    s->vref_mv = resolve_vref((uint8_t)gain);
+}
+
+void tile_drive_a_2_set_supply_mv(tile_t *tile, uint16_t mv)
+{
+    state_for(tile)->vdd_mv = clamp_vdd(mv);
 }
 
 /* ================================================================
@@ -507,7 +578,8 @@ void tile_drive_a_2_set_waveform_params(tile_t *tile, uint8_t channel,
 
 void tile_drive_a_2_amp_set_gain(tile_t *tile, int8_t gain_db)
 {
-    if (gain_db < -28) gain_db = -28;
+    int8_t lo = amp_min_gain(state_for(tile));
+    if (gain_db < lo) gain_db = lo;
     if (gain_db > 30) gain_db = 30;
     amp_write(tile, TPA2028D1_REG_AGC_GAIN, (uint8_t)(gain_db & 0x3F));
 }
@@ -522,6 +594,11 @@ int8_t tile_drive_a_2_amp_get_gain(tile_t *tile)
 
 void tile_drive_a_2_amp_enable(tile_t *tile)
 {
+    drive_a_2_state_t *s = state_for(tile);
+    s->amp_shutdown = 0;
+    /* Asleep: the DAC outputs are Hi-Z, so waking the amp now would
+     * break the startup rule. wake() applies the request. */
+    if (tile->state == TILE_STATE_SLEEPING) return;
     uint8_t reg1 = amp_read(tile, TPA2028D1_REG_FUNC_CTRL);
     reg1 |= (1 << 6);   /* EN = 1 */
     reg1 &= ~(1 << 5);  /* SWS = 0 */
@@ -530,6 +607,7 @@ void tile_drive_a_2_amp_enable(tile_t *tile)
 
 void tile_drive_a_2_amp_disable(tile_t *tile)
 {
+    state_for(tile)->amp_shutdown = 1;
     uint8_t reg1 = amp_read(tile, TPA2028D1_REG_FUNC_CTRL);
     reg1 |= (1 << 5);   /* SWS = 1 (software shutdown) */
     amp_write(tile, TPA2028D1_REG_FUNC_CTRL, reg1);
@@ -539,8 +617,12 @@ void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)
 {
     if (!cfg) return;
 
+    uint8_t comp = cfg->compression & 0x03;
+    /* Fixed gain: -28..+30 dB with compression on, 0..+30 dB at 1:1
+     * (SLOS660C Table 10). */
     int8_t fixed_gain = cfg->fixed_gain_db;
-    if (fixed_gain < -28) fixed_gain = -28;
+    int8_t lo = (comp == DRIVE_A_2_COMP_1_1) ? 0 : -28;
+    if (fixed_gain < lo)  fixed_gain = lo;
     if (fixed_gain > 30)  fixed_gain = 30;
 
     amp_write(tile, TPA2028D1_REG_AGC_ATTACK,
@@ -562,14 +644,33 @@ void tile_drive_a_2_amp_set_agc(tile_t *tile, const drive_a_2_agc_cfg_t *cfg)
     uint8_t max_gain = cfg->max_gain_db;
     if (max_gain < 18) max_gain = 18;
     if (max_gain > 30) max_gain = 30;
-    uint8_t ctrl2 = ((max_gain - 18) << 4) | (cfg->compression & 0x03);
+    uint8_t ctrl2 = (uint8_t)(((max_gain - 18) << 4) | comp);
     amp_write(tile, TPA2028D1_REG_AGC_CTRL2, ctrl2);
+    state_for(tile)->amp_comp = comp;
 
-    /* Register 0x06: [7] limiter disable, [6:5] noise gate, [4:0] limiter level */
-    uint8_t ctrl1 = (cfg->limiter_level & 0x1F)
+    /* Register 0x06: [7] limiter disable, [6:5] noise gate, [4:0] limiter level.
+     * The limiter stays on unless the caller explicitly disables it,
+     * and the chip only honours that at 1:1. */
+    uint8_t ctrl1 = (cfg->limiter_level & TPA_CTRL1_LVL_MASK)
                   | ((cfg->noise_gate & 0x03) << 5);
-    if (cfg->compression == DRIVE_A_2_COMP_1_1)
-        ctrl1 |= (1 << 7);  /* disable limiter when compression is off */
+    if (cfg->limiter_disable && comp == DRIVE_A_2_COMP_1_1)
+        ctrl1 |= TPA_CTRL1_LIM_DIS;
+    amp_write(tile, TPA2028D1_REG_AGC_CTRL1, ctrl1);
+}
+
+void tile_drive_a_2_amp_set_limiter(tile_t *tile, uint8_t enabled, uint8_t level)
+{
+    drive_a_2_state_t *s = state_for(tile);
+    if (!s->amp_addr) return;
+    if (level > DRIVE_A_2_LIMITER_MAX) level = DRIVE_A_2_LIMITER_MAX;
+
+    /* Keep the noise-gate bits; replace the level and the disable bit. */
+    uint8_t ctrl1 = amp_read(tile, TPA2028D1_REG_AGC_CTRL1) & TPA_CTRL1_NG_MASK;
+    ctrl1 |= level;
+    /* Output Limiter Disable is only honoured with compression 1:1
+     * (SLOS660C Table 11); with compression on, leave it enabled. */
+    if (!enabled && s->amp_comp == DRIVE_A_2_COMP_1_1)
+        ctrl1 |= TPA_CTRL1_LIM_DIS;
     amp_write(tile, TPA2028D1_REG_AGC_CTRL1, ctrl1);
 }
 
@@ -610,15 +711,13 @@ void tile_drive_a_2_nvm_reload(tile_t *tile)
     dac_write(tile, DAC63202W_REG_COMMON_TRIGGER, 0x0001);
     tile->hal->delay_ms(DRIVE_A_2_NVM_WRITE_DELAY_MS);
 
-    /* The reload may have changed the active gain; re-derive the
-     * cached vref from whatever is now in DAC-0-VOUT-CMP-CONFIG so
-     * set_mv() keeps producing sensible output codes. */
+    /* The reload may have changed the active gains; re-read both
+     * channels' VOUT-GAIN-X so set_mv() uses the right full scale. */
     drive_a_2_state_t *s = state_for(tile);
     uint16_t vout0 = dac_read(tile, dac_vout_cmp_reg(0));
     uint16_t vout1 = dac_read(tile, dac_vout_cmp_reg(1));
     s->gain[0] = (vout0 >> 10) & 0x07;
     s->gain[1] = (vout1 >> 10) & 0x07;
-    s->vref_mv = resolve_vref(s->gain[0]);
 }
 
 /* ================================================================
@@ -867,15 +966,18 @@ void tile_drive_a_2_set_volume_pct(tile_t *tile, drive_a_2_channel_t channel,
 {
     (void)channel;  /* shared amp address — no per-channel split possible */
     if (pct > 100) pct = 100;
-    /* Linear-in-dB across the full -28..+30 dB programmable range
-     * (58 dB span). Documented in the header. */
-    int32_t gain_db = -28 + ((int32_t)pct * 58) / 100;
+    drive_a_2_state_t *s = state_for(tile);
+    /* Linear-in-dB across the fixed-gain range valid for the active
+     * compression ratio (SLOS660C Table 10): 0..+30 dB at 1:1,
+     * -28..+30 dB with compression on. Documented in the header. */
+    int32_t gain_db = (s->amp_comp == DRIVE_A_2_COMP_1_1)
+                    ? ((int32_t)pct * 30) / 100
+                    : -28 + ((int32_t)pct * 58) / 100;
     tile_drive_a_2_amp_set_gain(tile, (int8_t)gain_db);
 
     /* Keep the muted_gain shadow in sync if the user adjusts volume
      * while muted — unmute() should restore the most-recently-set
      * volume, not the volume at the time of mute(). */
-    drive_a_2_state_t *s = state_for(tile);
     if (s->is_muted) s->muted_gain_db = (int8_t)gain_db;
 }
 

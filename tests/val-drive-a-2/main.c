@@ -29,6 +29,7 @@ int main(void)
     drive_a_2_cfg_t cfg = {
         .gain        = DRIVE_A_2_GAIN_1X_VDD,
         .amp_gain_db = 6,
+        .vdd_mv      = 5000,
     };
     tile_drive_a_2_init(hal, 0, &dac, &cfg);
 
@@ -56,6 +57,11 @@ int main(void)
     tile_drive_a_2_set_gain(&dac, 0, DRIVE_A_2_GAIN_2X_INT);
     tile_drive_a_2_set_gain(&dac, 1, DRIVE_A_2_GAIN_3X_INT);
     tile_drive_a_2_set_gain(&dac, 1, DRIVE_A_2_GAIN_4X_INT);
+
+    /* v3.3: V+ drives set_mv's full scale in the 1x gains */
+    tile_drive_a_2_set_supply_mv(&dac, 5000);
+    tile_drive_a_2_set_mv(&dac, 0, 2500);
+    tile_drive_a_2_set_supply_mv(&dac, DRIVE_A_2_VDD_DEFAULT_MV);
 
     /* ---- Waveform generation ---- */
     tile_drive_a_2_set_waveform(&dac, 0, DRIVE_A_2_WAVE_TRIANGLE);
@@ -114,8 +120,14 @@ int main(void)
         .release       = 11,
         .hold          = 0,
         .noise_gate    = 1,
+        .limiter_disable = 0,
     };
     tile_drive_a_2_amp_set_agc(&dac, &agc);
+
+    /* v3.3: output limiter (on by default after init) */
+    tile_drive_a_2_amp_set_limiter(&dac, 1, DRIVE_A_2_LIMITER_DEFAULT);
+    tile_drive_a_2_amp_set_limiter(&dac, 1, DRIVE_A_2_LIMITER_MAX);
+    tile_drive_a_2_amp_set_limiter(&dac, 0, 0);  /* unsafe; honoured at 1:1 only */
 
     uint8_t amp_status = tile_drive_a_2_amp_read_status(&dac);
     (void)amp_status;
