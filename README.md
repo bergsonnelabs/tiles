@@ -103,3 +103,12 @@ Then `make doctor` from Git Bash. Three things it can't check for you:
 The tile pages on the website are generated from the Doxygen comments in those
 driver headers, so the headers are the source of truth — when prose and header
 disagree, fix the header and regenerate.
+
+## Pull requests and CI
+
+`main` requires three checks: `firmware-ok`, `studio-manifest-ok` and
+`twins-ok`. Every PR gets all three. Each workflow first checks which paths
+changed and skips its heavy jobs when none of its paths are touched, so a
+docs-only PR passes in seconds, while an SDK change builds every Core, the
+BLE projects, the manifests and the twins. PRs can auto-merge once the checks
+pass (`gh pr merge --auto --merge`); merged branches are deleted.
