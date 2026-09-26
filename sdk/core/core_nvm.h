@@ -4,9 +4,10 @@
  * Provides a simple byte-level read/write API that works across
  * all Core tiles:
  *   - Core.ST.L0 (STM32L011): True EEPROM, 512 bytes at 0x08080000
- *   - Core.ST.L4 (STM32L422): Flash emulation (TODO)
- *   - Core.ST.W5 (STM32WBA55): Flash emulation (TODO)
- *   - Core.ST.H5 (STM32H523): Flash emulation (TODO)
+ *   - Core.ST.L4 (STM32L422): not implemented yet (flash emulation planned)
+ *   - Core.ST.W5 (STM32WBA55): not implemented yet (flash emulation planned)
+ *   - Core.ST.H5 (STM32H523): not implemented yet (flash emulation planned)
+ *   On those three CORE_NVM_SIZE is 0, so every read and write returns -1.
  *
  * Usage:
  *   core_nvm_write(0, &data, sizeof(data));  // write at offset 0
@@ -69,11 +70,14 @@
 
 /**
  * Read bytes from NVM.
- *   offset: byte offset within NVM region (0 to CORE_NVM_SIZE-1)
- *   buf:    destination buffer
- *   len:    number of bytes to read
  *
- * Returns 0 on success, -1 if out of range.
+ * Only Core.ST.L0 has NVM today (512 B of EEPROM). On Core.ST.L4 / W5 / H5
+ * CORE_NVM_SIZE is 0, so this always returns -1.
+ *
+ * @param offset Byte offset within the NVM region (0 to CORE_NVM_SIZE-1).
+ * @param buf    Destination buffer.
+ * @param len    Number of bytes to read.
+ * @return 0 on success, -1 if the range falls outside the NVM region.
  */
 static inline int core_nvm_read(uint32_t offset, void *buf, uint32_t len)
 {
@@ -90,11 +94,16 @@ static inline int core_nvm_read(uint32_t offset, void *buf, uint32_t len)
 
 /**
  * Write bytes to NVM.
- *   offset: byte offset within NVM region (0 to CORE_NVM_SIZE-1)
- *   data:   source buffer
- *   len:    number of bytes to write
  *
- * Returns 0 on success, -1 if out of range or write error.
+ * Only Core.ST.L0 has NVM today (512 B of EEPROM, ~3.2 ms per byte). On
+ * Core.ST.L4 / W5 / H5 flash emulation is not implemented yet: CORE_NVM_SIZE
+ * is 0 and every call returns -1 without writing anything.
+ *
+ * @param offset Byte offset within the NVM region (0 to CORE_NVM_SIZE-1).
+ * @param data   Source buffer.
+ * @param len    Number of bytes to write.
+ * @return 0 on success (Core.ST.L0), -1 if the range falls outside the NVM
+ *         region or the Core has no NVM.
  */
 static inline int core_nvm_write(uint32_t offset, const void *data, uint32_t len)
 {
@@ -187,7 +196,7 @@ static inline uint32_t core_nvm_size(void)
 static inline int core_nvm_read_byte(uint32_t offset)
 {
     uint8_t b = 0;
-    if (core_nvm_read(offset, &b, 1) != 1) return -1;
+    if (core_nvm_read(offset, &b, 1) != 0) return -1;
     return (int)b;
 }
 
@@ -202,7 +211,7 @@ static inline int core_nvm_read_byte(uint32_t offset)
  */
 static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
 {
-    if (core_nvm_write(offset, &value, 1) != 1) return -1;
+    if (core_nvm_write(offset, &value, 1) != 0) return -1;
     return 1;
 }
 
@@ -223,7 +232,7 @@ static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
 //   the Backup register gap calls out; closing both needs persistent
 //   per-slot state across worker resets.
 //
-// @studio unsupported tier=1 value=H title="Flash emulation missing on U / W / H"
+// @studio unsupported tier=1 value=H title="Flash emulation missing on Core.ST.L4 / W5 / H5"
 //   core_nvm_write returns -1 on Core.ST.L4 / Core.ST.W5 / Core.ST.H5. Tracked in
 //   the SDK roadmap and called out in the Studio A4cd PR notes —
 //   blocked on a flash-emu layer in core_nvm with wear-leveling. Until

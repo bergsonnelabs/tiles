@@ -27,6 +27,19 @@
  * Before 2026-09-25 the clear was documented as the starter template's job,
  * but nothing called it (only tests/hw-watchdog-recovery): three watchdog
  * resets anywhere in a powered session parked a working Core in ROM DFU.
+ *
+ * Core.ST.L4 and Core.ST.H5 only (the USB Cores). Bench-verified on a
+ * Core.ST.L4.1; compile-only on the H5.
+ *
+ * @studio category recovery label=Core.Recovery icon=⟲
+ *
+ * @studio coverage
+ *   id:    recovery
+ *   name:  Recovery — watchdog-strike brick recovery
+ *   page:  /docs/sdk/system
+ *   blurb: Tier 1 only, and automatic: core_init() calls note_boot and
+ *          over_limit, core_watchdog_feed() clears. Nothing to call unless
+ *          you want the counter cleared sooner.
  */
 
 #ifndef CORE_RECOVERY_H

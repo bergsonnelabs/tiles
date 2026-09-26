@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@f70bca2",
   "category": "serial",
   "label": "Core.Serial",
   "icon": "⌨",
@@ -168,6 +168,21 @@
       "layer": "core"
     },
     {
+      "name": "core_serial_handle_for_bus",
+      "signature": "core_serial_handle_for_bus(uint8_t bus)",
+      "returns": "hal_uart_t *",
+      "brief": "The UART handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any USART); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_HAS_SERIAL_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
+      "params": [
+        {
+          "name": "bus",
+          "ctype": "uint8_t",
+          "description": "Bus id (1 = the first instance, ...)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_serial_print_bus",
       "signature": "core_serial_print_bus(uint8_t bus, const char * str)",
       "returns": "int",
@@ -175,11 +190,13 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
         },
         {
           "name": "str",
-          "ctype": "const char *"
+          "ctype": "const char *",
+          "description": "NUL-terminated string to send."
         }
       ],
       "studio_exposed": true,
@@ -193,11 +210,13 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
         },
         {
           "name": "byte",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "Byte to send."
         }
       ],
       "studio_exposed": true,
@@ -303,7 +322,7 @@
     },
     {
       "name": "hal_uart_printf",
-      "signature": "hal_uart_printf(hal_uart_t * h, const char * fmt)",
+      "signature": "hal_uart_printf(hal_uart_t * h, const char * fmt, ...)",
       "returns": "int",
       "brief": "Printf over UART (blocking, uses vsnprintf from newlib-nano)",
       "params": [
@@ -405,7 +424,7 @@
       "name": "hal_uart_tx_dma",
       "signature": "hal_uart_tx_dma(hal_uart_t * h, const uint8_t * data, uint32_t len, hal_callback_t cb, void * ctx)",
       "returns": "hal_status_t",
-      "brief": "Transmit a buffer via DMA (non-blocking). The data buffer must remain valid until the callback fires. Returns HAL_BUSY if a DMA TX is already in progress.",
+      "brief": "Transmit a buffer via DMA (non-blocking). Not implemented yet: returns HAL_ERROR on every Core and never calls the callback. It needs a DMA channel assignment from coregen and per-family DMA setup. Use hal_uart_tx() (polled) until then.",
       "params": [
         {
           "name": "h",
@@ -435,7 +454,7 @@
       "name": "hal_uart_tx_busy",
       "signature": "hal_uart_tx_busy(hal_uart_t * h)",
       "returns": "int",
-      "brief": "Check if a DMA TX is in progress",
+      "brief": "Check if a DMA TX is in progress (always 0 while DMA TX is unimplemented).",
       "params": [
         {
           "name": "h",

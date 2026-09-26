@@ -54,7 +54,12 @@
  * auto-prescaler); including it here also keeps the old re-export working. */
 #include "core_watchdog.h"
 
-/* Generated per project in core_init.c (PLL + SysTick). */
+/**
+ * Bring up the clock tree for the project's `clock` level (oscillator, PLL,
+ * flash wait states, bus prescalers) and start SysTick. Generated per project
+ * by coregen into core_init.c and called by core_init(); call it again only
+ * to restore the clocks by hand (core_stop_for already does after a wake).
+ */
 extern void core_clock_init(void);
 
 #if !defined(STM32H523xx)
@@ -659,13 +664,14 @@ static inline void core_watchdog_start_seconds(uint32_t seconds)
 //   the host-call boundary. Tracked alongside the broader DSL event-
 //   model story.
 //
-// @studio unsupported tier=1 value=H title="Stop / Standby not bench-verified on Core.ST.L0 / Core.ST.W5"
+// @studio unsupported tier=1 value=H title="Stop / Standby not bench-verified on Core.ST.L0; Standby not on Core.ST.W5"
 //   The register maps behind stop_for / standby_for / RTC / backup were
 //   corrected against RM0377 and RM0493 on 2026-09-25 (the L0 enabled the
 //   LSE instead of the LSI and hung; the WBA wrote CCIPR instead of BDCR1,
-//   had no RTC bus clock and a reserved Standby LPMS). Compile-only until
-//   tests/hw-sleep-cycle passes on each board; Core.ST.L4 and Core.ST.H5
-//   have been verified end-to-end before.
+//   had no RTC bus clock and a reserved Standby LPMS). The W5's Stop passed
+//   tests/hw-sleep-cycle on 2026-09-25; its Standby and all of the L0 are
+//   compile-only until they do. Core.ST.L4 passed the same test; Core.ST.H5
+//   keeps its older sleep code until its own fix session.
 //
 // @studio unsupported tier=1 value=M title="Standby can't outlast the watchdog"
 //   The IWDG keeps counting in Standby (always on the L0, by option byte on

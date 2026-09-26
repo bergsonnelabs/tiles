@@ -1,16 +1,131 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@1f69849",
+  "source": "tiles@f70bca2",
   "category": "audio",
   "label": "Core.Audio",
   "icon": "🎤",
-  "header": "core_pdm.h",
+  "header": "core_audio.h",
   "headers": {
-    "core": "core_pdm.h",
+    "core": "core_audio.h, core_pdm.h",
     "hal": "hal_sai.h",
     "ll": "ll_sai.h"
   },
   "functions": [
+    {
+      "name": "core_audio_init",
+      "signature": "core_audio_init(core_audio_t * a, uint32_t kernel_clk_hz, uint32_t pcm_rate_hz, uint8_t data_line, uint8_t clock_line, uint8_t cic_order, uint8_t gain_shift)",
+      "returns": "hal_status_t",
+      "brief": "Configure the mic: SAI PDM block + decimator (capture not started).",
+      "params": [
+        {
+          "name": "kernel_clk_hz",
+          "ctype": "core_audio_t *",
+          "description": "SAI1 kernel clock (PLLSAI1), already routed."
+        },
+        {
+          "name": "kernel_clk_hz",
+          "ctype": "uint32_t",
+          "description": "SAI1 kernel clock (PLLSAI1), already routed."
+        },
+        {
+          "name": "pcm_rate_hz",
+          "ctype": "uint32_t",
+          "description": "output audio rate (e.g. 16000)."
+        },
+        {
+          "name": "data_line",
+          "ctype": "uint8_t",
+          "description": "SAI_Dn the mic sits on: 1 or 2 (sets MICNBR)."
+        },
+        {
+          "name": "clock_line",
+          "ctype": "uint8_t",
+          "description": "PDM clock pin: 2 = CK2/D2 (the Ring MIC tile)."
+        },
+        {
+          "name": "cic_order",
+          "ctype": "uint8_t",
+          "description": "decimator order (4 = good voice default)."
+        },
+        {
+          "name": "gain_shift",
+          "ctype": "uint8_t",
+          "description": "extra digital gain (left shift on PCM; 0 = unity)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_audio_start",
+      "signature": "core_audio_start(core_audio_t * a, GPDMA_Channel_TypeDef * ch, uint8_t * pdm_buf, uint32_t pdm_len, int16_t * pcm_buf, core_audio_pcm_cb on_pcm, void * user_ctx)",
+      "returns": "hal_status_t",
+      "brief": "Start continuous capture; `on_pcm` fires per half-buffer with PCM.",
+      "params": [
+        {
+          "name": "pdm_buf",
+          "ctype": "core_audio_t *",
+          "description": "raw PDM byte ring (even length, 4-byte aligned)."
+        },
+        {
+          "name": "pcm_buf",
+          "ctype": "GPDMA_Channel_TypeDef *",
+          "description": "PCM scratch holding at least pdm_len/32 samples."
+        },
+        {
+          "name": "pdm_buf",
+          "ctype": "uint8_t *",
+          "description": "raw PDM byte ring (even length, 4-byte aligned)."
+        },
+        {
+          "name": "pdm_len",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "pcm_buf",
+          "ctype": "int16_t *",
+          "description": "PCM scratch holding at least pdm_len/32 samples."
+        },
+        {
+          "name": "on_pcm",
+          "ctype": "core_audio_pcm_cb"
+        },
+        {
+          "name": "user_ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_audio_stop",
+      "signature": "core_audio_stop(core_audio_t * a)",
+      "returns": "void",
+      "brief": "Stop capture.",
+      "params": [
+        {
+          "name": "a",
+          "ctype": "core_audio_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_audio_irq",
+      "signature": "core_audio_irq(core_audio_t * a)",
+      "returns": "void",
+      "brief": "Route the capture channel's GPDMA IRQ here.",
+      "params": [
+        {
+          "name": "a",
+          "ctype": "core_audio_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
     {
       "name": "core_pdm_init",
       "signature": "core_pdm_init(core_pdm_cic_t * st, uint8_t order, uint16_t decimation, uint8_t gain_shift, uint8_t lsb_first)",

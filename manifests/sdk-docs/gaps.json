@@ -1,0 +1,730 @@
+{
+  "schema": "studio-sdk-gaps/v1",
+  "source": "tiles@f70bca2",
+  "subsystems": [
+    {
+      "id": "adc",
+      "name": "ADC — analog-to-digital conversion",
+      "header": "core_adc.h",
+      "page": "/docs/sdk/adc",
+      "category": "adc",
+      "gaps": [
+        {
+          "title": "Twin VDD / die-temp are constants",
+          "brief": "read_pad / read_mv_pad use the per-pad slider on the chip view, but temp_decidegc and vdd_mv return fixed values (25.0 °C / 3300 mV). No UI affordance to vary them yet — DSL programs that branch on under-/over-temp or low-VDD logic always see nominal in the IDE.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No DSL access to sampling speed / resolution",
+          "brief": "Tier 2 calls the default instance at its compile-time resolution (12-bit) and per-pad sampling speed set during init. SAMP_FAST / MED / SLOW / VERY_SLOW and ADC_6/8/10/12BIT aliases are reachable only via the explicit-handle Tier 1 API.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No multi-instance ADC dispatch",
+          "brief": "Tier 2 wrappers always hit core_adc1. Cores with multiple ADCs (Core.ST.H5 has ADC1 + ADC2) need per-pad peripheral tagging in tile JSON before coregen can emit the dispatch. Until then DSL programs are limited to whichever pads coregen routed to ADC1.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No oversampling / averaging helper",
+          "brief": "STM32 ADCs can hardware-oversample 2×–256× for extra effective resolution. The HAL exposes the registers but core_adc has no convenience wrapper — callers reach into tal_adc / hal_adc to set OVSR/OVSS bits manually.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No injected channels",
+          "brief": "Regular-group external triggers ARE supported: core_adc_set_trigger() paces DMA conversions from a TIMx TRGO or EXTI line. Injected groups (a second, higher-priority conversion sequence that preempts the regular one) are not surfaced. Bring-your-own register writes if you need a preempting sample inside a control loop.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "backup",
+      "name": "Backup — persistent registers",
+      "header": "core_backup.h",
+      "category": "backup",
+      "gaps": [
+        {
+          "title": "Twin backup state wipes on Reset",
+          "brief": "read/write round-trip within a single run, but the per-slot store is cleared on every project reload — DSL programs that rely on backup state surviving a soft reset (e.g., boot counters across the user clicking Reset in the IDE) can't be exercised end-to-end.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No tamper / anti-tamper integration",
+          "brief": "The TAMP block on WBA/H5 hosts the backup registers but also drives tamper detection (active edge, anti-tamper erase, time-stamping on tamper). None of that is wrapped — backup is read/write only.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "ble",
+      "name": "BLE — Bluetooth Low Energy",
+      "header": "core_ble.h",
+      "page": "/docs/sdk/ble",
+      "category": "ble",
+      "gaps": [
+        {
+          "title": "No Twin coverage for BLE",
+          "brief": "DSL coverage landed: a project declares a contract, gets palette blocks to publish and receive, and can bind a characteristic to a variable so coregen generates the publisher. What is still missing is the simulator side, so a DSL program that uses BLE cannot be exercised without flashing a board.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Connect / disconnect are not DSL events",
+          "brief": "core_ble_on_connect() and core_ble_on_disconnect() take a callback pointer rather than overriding a weak symbol, so coregen has no seam to emit a dispatcher against. Every other event in the DSL arrives through that weak-symbol pipeline. Until this is wired the only way to notice a connection from the DSL is to poll.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Byte-array characteristics have no DSL form",
+          "brief": "A `bytes` characteristic can be declared and published from C, but the DSL has no type that carries a buffer and a length, so it gets neither a publish block nor a write handler, and it cannot be bound to a variable. Scalars and strings both work.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "Central / scanner mode",
+          "brief": "Peripheral-only today. No scanning, no central-role connections, no GATT-client reads/writes. Tracked as its own initiative — most Bergsonne use-cases are peripheral-role (sensor advertising to a phone). Apps that need central-role drop into the WBA BLE stack.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "Pairing refinements (LE Secure Connections, directed reconnect)",
+          "brief": "core_ble_enable_pairing() does Just Works *legacy* pairing with bonding: characteristics require an encrypted link and the keys persist in flash NVM, so a bonded host reconnects without re-prompting. Not yet exposed: LE Secure Connections (numeric-comparison / passkey MITM protection) and directed advertising for fast reconnect to a known bonded central.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "Arbitrary 128-bit UUIDs",
+          "brief": "Narrower than it used to be. A contract pins its own 16-bit ids, custom (placed in the Bergsonne base UUID) or SIG-adopted, and core_ble_add_service_id() / _sig() take them verbatim, so ids never shift and deployed clients keep working. What is still missing is a fully arbitrary 128-bit UUID, which is what interop with an existing app that expects some other vendor's base requires.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "Advanced features (LE Audio, extended adv, multi-link)",
+          "brief": "The WBA radio supports LE Audio (LC3), extended advertising / 2M PHY / coded PHY, and multi-link (multiple simultaneous connections). None of that is exposed.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "dac",
+      "name": "DAC — digital-to-analog output",
+      "header": "core_dac.h",
+      "category": "dac",
+      "gaps": [
+        {
+          "title": "No waveform / DMA generation",
+          "brief": "Single-sample writes only. STM32H5's DAC supports DMA-fed sample buffers + the internal noise / triangle wave generators — none of which are wrapped. Audio + arbitrary-waveform tiles need this.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No dual-channel synchronization",
+          "brief": "The DAC peripheral has two channels that can be triggered together for stereo / I-Q output. Only single-channel writes are exposed.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "debug",
+      "name": "Debug — SWO / ITM trace output",
+      "header": "core_debug.h",
+      "page": "/docs/sdk/system",
+      "category": "debug",
+      "gaps": [
+        {
+          "title": "No DSL surface",
+          "brief": "Debug output is intentionally Tier 1 — the DSL doesn't have a notion of \"debug print to a hardware probe.\" DSL programs use Core.USB.print for visible output; SWO is reserved for users who are already in C and have a probe attached.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No ITM channel selection / timestamps",
+          "brief": "All output goes to ITM stimulus port 0 with no timestamp packets. Multi-channel routing (e.g., separate streams for log vs. data) and ETM/CYCCNT correlation aren't wrapped.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "fault",
+      "name": "Fault — exception handlers",
+      "header": "core_fault.h",
+      "page": "/docs/sdk/system",
+      "category": "fault",
+      "gaps": [
+        {
+          "title": "No structured fault report capture",
+          "brief": "The default handler dumps to USB CDC at runtime on the L4 only (the W5, H5 and L0 lose the cause), and there's no crash log that survives reset for post-mortem analysis. A small ring buffer in backup or NVM (with the captured PC / LR / xPSR / fault status registers) would make field debugging tractable.",
+          "tier": 1,
+          "value": "M"
+        }
+      ]
+    },
+    {
+      "id": "i2c",
+      "name": "I2C — bus communication",
+      "header": "core_i2c.h",
+      "page": "/docs/sdk/i2c",
+      "category": "i2c",
+      "gaps": [
+        {
+          "title": "Tier 2 is byte-level only — no bulk / scan",
+          "brief": "The current Tier 2 surface is write_byte_bus / read_byte_bus / probe_bus. DSL programs that need to push a multi-byte payload (display init sequences, IMU FIFO drains) or discover what's on a bus (`scan -> int[]`) drop back to Tier 1 with a hal_i2c_t handle. Adds need the array-IN / array-OUT host-call ABI prototyped on the tile-driver side — track with the DSL Capability Coverage close.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Interrupt-driven / non-blocking I/O",
+          "brief": "All current operations are polled. A non-blocking variant (with completion callback or status poll) would let DSL programs interleave bus traffic without stalling the main loop. Tracked on the SDK roadmap as 'I2C interrupt-driven'.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "DMA transfers",
+          "brief": "No DMA path for bulk reads/writes. Long FIFO drains (e.g., IMU water-level batch reads) currently block on polled byte loops.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "Target mode is C-only",
+          "brief": "Target (device) mode landed at Tier 1: core_i2c_target_init() lets a Core answer as an I2C device on a host bus, using a register-file model with an optional ISR callback. There is no Tier 2 / DSL surface, because a register buffer and a callback have no representation in the DSL host-call ABI. A Studio-level version would need a declarative \"expose these variables as registers\" binding, close to what the BLE characteristic binding does.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Target mode on H5 I2C2 / I2C3",
+          "brief": "startup_stm32h523xx.s carries vectors for I2C1_EV, I2C1_ER and I2C2_EV only. There is no I2C2_ER or I2C3 entry, and slot 58 is labelled as I2C2 Error shared with USART1, so target mode is restricted to I2C1 on Core.ST.H5. I2C1 + I2C3 both work on Core.ST.L4 and Core.ST.W5; Core.ST.L0 has only I2C1.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "10-bit addressing",
+          "brief": "API takes uint8_t addr — 7-bit only. No path for 10-bit-addressed peripherals (rare in practice but in spec).",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "SMBus / PMBus extensions",
+          "brief": "No PEC, no Alert Response, no block read/write protocol framing. Not requested by any current tile.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "led",
+      "name": "LED — onboard status LED",
+      "header": "core_led.h",
+      "page": "/docs/sdk/led",
+      "category": "led",
+      "gaps": [
+        {
+          "title": "No DSL access to SOS",
+          "brief": "core_led_sos is `__attribute__((noreturn))` so it can't be exposed safely — DSL programs that \"call SOS\" would deadlock the worker. Reserved for fault-handler escape-to-C use.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No PWM brightness / color",
+          "brief": "The onboard LED is hard-wired as a digital push-pull output. No PWM dimming wrapper, no RGB/RGBW support (tiles with addressable LEDs use Disp.RGBW or similar, not core_led).",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "nvm",
+      "name": "NVM — non-volatile memory",
+      "header": "core_nvm.h",
+      "category": "nvm",
+      "gaps": [
+        {
+          "title": "No bulk read / write Tier 2 yet",
+          "brief": "Tier 2 covers the byte-level pair (read_byte, write_byte) — enough for boot counters, single flags, small struct fields. Multi-byte read_buf / write_buf still need the array-IN / array-OUT host-call ABI prototyped on the tile-driver side. Tracked with the DSL Capability Coverage close.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Twin NVM state wipes on Reset",
+          "brief": "read_byte / write_byte round-trip within a single run, but the per-slot store is cleared on every project reload — DSL programs that rely on NVM state surviving a soft reset (boot counters, crash flags) can't be exercised end-to-end in the IDE. Same issue the Backup register gap calls out; closing both needs persistent per-slot state across worker resets.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "Flash emulation missing on Core.ST.L4 / W5 / H5",
+          "brief": "core_nvm_write returns -1 on Core.ST.L4 / Core.ST.W5 / Core.ST.H5. Tracked in the SDK roadmap and called out in the Studio A4cd PR notes — blocked on a flash-emu layer in core_nvm with wear-leveling. Until it lands, on-Core programs that need persistent state are limited to backup registers (32 × uint32_t).",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "No erase / wear-tracking API",
+          "brief": "Even the EEPROM path doesn't surface erase, page count, or remaining write cycles. Long-running data-logger applications can't budget their write rate against EEPROM endurance.",
+          "tier": 1,
+          "value": "M"
+        }
+      ]
+    },
+    {
+      "id": "otp",
+      "name": "OTP — one-time-programmable identity",
+      "header": "core_otp.h",
+      "category": "otp",
+      "gaps": [
+        {
+          "title": "OTP only on Core.ST.W5",
+          "brief": "CORE_OTP_* is backed only on Core.ST.W5 (STM32WBA55, 512 B @ 0x0BF90000). L0 / L4 / H5 report size 0 and every read/program returns an error until their OTP geometry is added. WBA55 is the only Core that currently ships a product using OTP identity.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "program_slot is escape-to-C (destructive)",
+          "brief": "Reads (size, slot_count, slot_is_blank, read) are safe to surface, but the burn (core_otp_program_slot) is irreversible and write-once, so it is intentionally NOT exposed to the DSL — a stray palette call could permanently consume a slot. Provisioning burns happen from C / the production programmer, not from a Studio program.",
+          "tier": 2,
+          "value": "M"
+        }
+      ]
+    },
+    {
+      "id": "gpio",
+      "name": "GPIO — pad-level I/O",
+      "header": "core_pad.h",
+      "page": "/docs/sdk/gpio",
+      "category": "pad",
+      "gaps": [
+        {
+          "title": "No DSL access to slew-rate / pull / drive-strength",
+          "brief": "Tier 2 exposes write/read/toggle only. core_pad_speed, core_pad_output_od pull-config, and the analog-mode setter are reachable only by escaping to C. A Tier 2 wrapper (or @studio expose annotation) for slew-rate would let DSL programs tune SPI/UART rise times without leaving the IDE.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Bulk / fast pad write is C-only",
+          "brief": "The single-pad DSL ops do a pad→port/pin lookup each call. A C fast path now exists — core_pad_resolve() + core_pad_fast_* (resolved {port,mask} handle, direct BSRR/IDR) and core_pad_bulk_write() (one atomic BSRR for many pins) — used by bitbang inner loops like the CMSIS-DAP probe. Still no DSL surface (pointer/struct ABI), so synchronized-bus / LED-matrix updates from the IDE remain a gap.",
+          "tier": 2,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "power",
+      "name": "Power — sleep / Stop / Standby",
+      "header": "core_power.h",
+      "page": "/docs/sdk/system",
+      "category": "power",
+      "gaps": [
+        {
+          "title": "Standby family stays Tier 1 (noreturn)",
+          "brief": "core_standby_for / core_standby reset on wake — they never return on success and can't be safely exposed to the DSL, since the simulator would deadlock on a call that never returns. Recoverable variants (sleep, stop_for) are Tier 2; reaching Standby from a DSL program needs an \"escape-to-C\" fallthrough or a separate \"would have entered Standby\" event the simulator can model.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No wake-on-pad Tier 2",
+          "brief": "core_stop_until_on_change blocks until a configured pad edge wakes the chip. The DSL surface is straightforward in spirit but needs the EXTI handler bridge to express \"block until\" cleanly across the host-call boundary. Tracked alongside the broader DSL event- model story.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Stop / Standby not bench-verified on Core.ST.L0; Standby not on Core.ST.W5",
+          "brief": "The register maps behind stop_for / standby_for / RTC / backup were corrected against RM0377 and RM0493 on 2026-09-25 (the L0 enabled the LSE instead of the LSI and hung; the WBA wrote CCIPR instead of BDCR1, had no RTC bus clock and a reserved Standby LPMS). The W5's Stop passed tests/hw-sleep-cycle on 2026-09-25; its Standby and all of the L0 are compile-only until they do. Core.ST.L4 passed the same test; Core.ST.H5 keeps its older sleep code until its own fix session.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "Standby can't outlast the watchdog",
+          "brief": "The IWDG keeps counting in Standby (always on the L0, by option byte on the L4/WBA) and nothing feeds it until main() runs again, so with the watchdog on (the Studio default, 5 s) core_standby_for refuses anything longer than half the timeout and returns HAL_ERROR, and core_standby_until_on_change returns without sleeping. Long sleeps use core_stop_for, which wakes to feed. Changing the IWDG_STDBY option byte would lift this on the L4/WBA; the SDK doesn't touch option bytes.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "WKUP-pin Standby is L4-only",
+          "brief": "core_standby_until_on_change is implemented for STM32L422 only — Core.ST.L4.2's PA0/PA2 WKUP pins. Other Cores hit the (void) fallback and return without entering Standby.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No LPTIM (low-power timer) wakeup",
+          "brief": "The SDK roadmap flags LPTIM as Tier 1 high-impact: it runs in Stop without the RTC and gives finer wakeup granularity than seconds. Not wrapped here yet.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No autonomous-mode peripherals (Core.ST.W5)",
+          "brief": "The WBA's Stop2 autonomous mode (ADC / SPI / I2C / UART operating while the CPU sleeps) is on the roadmap as Tier 3 — none of it is surfaced through core_power yet.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "pwm",
+      "name": "PWM — pulse-width modulation",
+      "header": "core_pwm.h",
+      "page": "/docs/sdk/timers",
+      "category": "pwm",
+      "gaps": [
+        {
+          "title": "No DSL access to PWM frequency",
+          "brief": "Tier 2 only exposes duty. Frequency is fixed at coregen time from config.json's timer.freq_hz. DSL programs that want to sweep frequency (e.g., a buzzer playing notes) need set_freq exposed per-pad — the underlying tal_pwm has the path, but the wrapper + default-instance dispatch don't.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No DSL access to periodic 'every' callbacks",
+          "brief": "core_every_us is Tier 1 only — it takes a C function pointer for the ISR callback. The DSL surface is `Core.Timer.tick` (in core_timer.h) which fires at config.json's timer.tick_ms; finer custom periods aren't reachable.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No complementary PWM / dead-time (TIM1 advanced)",
+          "brief": "SDK roadmap Tier 2 item: TIM1's complementary outputs + dead-time insertion + break input are needed for half-bridge / motor / power-converter tiles. The PWM wrapper is single-channel only.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No phase / center-aligned modes",
+          "brief": "Edge-aligned PWM only. STM32 timers can do center-aligned (Mode 1 / 2 / 3) and per-channel phase offsets — useful for low-EMI switching. Not surfaced.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "rng",
+      "name": "RNG — hardware random numbers",
+      "header": "core_rng.h",
+      "category": "rng",
+      "gaps": [
+        {
+          "title": "No bias correction / health tests",
+          "brief": "The hardware exposes a CED (clock error) and SEIS (seed error) bit which core_rng_error checks, but there's no NIST SP 800-90B continuous-health-test wrapper. Crypto-grade users should consume the raw words through a vetted DRBG (mbedTLS, etc.).",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "rtc",
+      "name": "RTC — real-time clock",
+      "header": "core_rtc.h",
+      "category": "rtc",
+      "gaps": [
+        {
+          "title": "No DSL get_time / get_date",
+          "brief": "The C surface has core_rtc_get_time / get_date taking out-pointers; they're not exposed because the host-call ABI doesn't map cleanly to multi-out values. The newer multi-scalar-out ABI (see DSL Capability Coverage close, 2026-05-03) could land them.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "LSE / external crystal not exposed",
+          "brief": "core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift on the L4/WBA; the L0's is 26-56 kHz part to part and is not calibrated against HSI16, so its RTC second can be off by tens of percent). Cores with an LSE crystal need ll_rtc_init(1) — no Tier 2 wrapper that takes a clock-source argument.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No subsecond / millisecond accuracy",
+          "brief": "The wrapper exposes whole-second resolution. STM32 RTCs have a subsecond register (1/PREDIV_S) that's reachable from ll_rtc but not from this header — wall-clock timestamps round to the second.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "scope",
+      "name": "Scope — live variable streaming",
+      "header": "core_scope.h",
+      "category": "scope",
+      "gaps": [
+        {
+          "title": "No host-to-device control channel",
+          "brief": "The stream is one-way. A host cannot start, stop or re-rate it, or pick channels; core_scope_enable() is firmware-side only. USB has an RX path and BLE would need a write characteristic beside Studio Scope.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No units or scaling in the stream",
+          "brief": "The SDK is integer-only by convention (milli-units), so a channel in mdeg plots in mdeg. A per-channel unit + scale frame is planned (docs/scope-protocol.md, reserved frame types).",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "BLE packet size is assumed, not negotiated",
+          "brief": "core_ble does not report the ATT MTU, so the BLE link sends 180-byte notifications. A central that stayed at the 23-byte default would see nothing but CRC failures. Driver-deferred: needs core_ble_mtu().",
+          "tier": 3,
+          "value": "L"
+        },
+        {
+          "title": "No 64-bit or double channels",
+          "brief": "The wire has no 8-byte type. Watching one is a compile error by design.",
+          "tier": 3,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "serial",
+      "name": "Serial — UART",
+      "header": "core_serial.h",
+      "page": "/docs/sdk/uart",
+      "category": "serial",
+      "gaps": [
+        {
+          "title": "No Tier 2 read surface",
+          "brief": "Tier 2 wraps the write side (print_bus, putc_bus) only. getc_bus, read_bus, available_bus need a Twin input affordance to be meaningful — without one the read functions would just return -1/0 always, defeating the point. Adding a \"serial input\" pane (analog of the GPIO toggle / ADC slider) closes both ends.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No coregen auto-init for serial",
+          "brief": "Tier 2 wrappers assume the user has called core_serial_init on the matching handle before any send. Coregen doesn't yet read a `serial: { 1: { baud: 115200 } }` block out of config.json and emit the init in core_init(). Until it does, the bus has to be primed by hand even when using Tier 2.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No interrupt / DMA driven path",
+          "brief": "All calls block. SDK roadmap Tier 1 item: \"UART IRQ + coregen\" for non-blocking serial (GPS, RS-485). Long reads currently stall the main loop until the buffer fills or times out.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "No flow control / parity / 9-bit modes",
+          "brief": "The thin wrappers expose only the basics — RTS/CTS, parity, stop bits, 9-bit data, and inversion are reachable only via the hal_uart_config_t struct passed to init.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No LPUART (low-power UART)",
+          "brief": "SDK roadmap Tier 2: LPUART works in Stop mode for wake-on-serial. Compile-only on every Core today; not surfaced through this header.",
+          "tier": 1,
+          "value": "M"
+        }
+      ]
+    },
+    {
+      "id": "spi",
+      "name": "SPI — bus communication",
+      "header": "core_spi.h",
+      "page": "/docs/sdk/spi",
+      "category": "spi",
+      "gaps": [
+        {
+          "title": "Tier 2 is single-byte xfer only — no bulk / persistent CS",
+          "brief": "The Tier 2 surface is core_spi_xfer_byte_bus: one byte, CS auto- managed around the call. DSL programs that need to push a multi-byte payload with CS held (display init streams, SD-card sectors, audio frame transfers) drop back to Tier 1 with a hal_spi_t handle and manual select/deselect. Bulk variants need the array-IN / array-OUT host-call ABI prototyped on the tile- driver side — track with the DSL Capability Coverage close.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "core_spi is not bench-verified on any Core; broken on Core.ST.H5",
+          "brief": "Core.ST.W5: the SPI v2 bring-up is done and the LL half-duplex + GPDMA path ran against a camera, but the core_spi full-duplex path hasn't been bench-verified. Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled) and the transfer loop has no timeout, so it hangs until the H5 fix session. Core.ST.L4: builds, has not run on hardware yet. Tile drivers that need SPI should expect rough edges.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "DMA implemented only on Core.ST.L4",
+          "brief": "core_spi_xfer_dma is implemented for the L4 (classic DMA) but not yet run on hardware. On Core.ST.W5 / Core.ST.H5 it returns HAL_ERROR (SPI v2 needs TSIZE set while SPE=0); the W5's LL-level ll_spi_dma_* path works. Long buffer transfers (display refresh, audio) are slower on W5 / H5.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Slave mode missing",
+          "brief": "Master-only. No path for a Core to act as a SPI peripheral on another host's bus.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "Quad / Octo SPI / OctoSPI",
+          "brief": "SDK roadmap Tier 2: QUADSPI / OctoSPI (memory-mapped external flash for NOR / PSRAM tiles) is wired only on Core.ST.L4 + Core.ST.H5 silicon and isn't wrapped here.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "stepper",
+      "name": "Stepper — STEP/DIR pulse generation",
+      "header": "core_stepper.h",
+      "page": "/docs/sdk/stepper",
+      "category": "stepper",
+      "gaps": [
+        {
+          "title": "No default-instance / DSL surface",
+          "brief": "Everything takes a core_stepper_t*. Coregen does not yet read a `stepper` block from config.json, so there is no `core_stepper_move(pad, steps)`-style wrapper and nothing in the Studio palette. The natural Tier 2 shape is one axis per config.json entry with STEP/DIR pads, initialised in core_init().",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "STEP must be a timer output pad",
+          "brief": "The pulse is made by a compare channel, so STEP is restricted to pads carrying a TIMx.y function. There is no GPIO-bitbang fallback for arbitrary pads; DIR and ENABLE can be any pad.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "Linear ramps only",
+          "brief": "The profile is trapezoidal (constant acceleration). No S-curve, no per-move acceleration override, no synchronised multi-axis moves.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "No stall, fault or limit-switch inputs",
+          "brief": "Drivers' nFAULT / ALM outputs and end-stop switches are left to the application (core_pad_on_change + core_stepper_halt).",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "tiles",
+      "name": "Tiles — SDK ↔ tile-driver bridge",
+      "header": "core_tiles.h",
+      "gaps": [
+        {
+          "title": "Hard cap of 4 cached PALs per bus type",
+          "brief": "The internal slot table is sized to 4. Designs with >4 simultaneous I2C buses (or >4 SPI buses) will silently route extras to slot 0, which corrupts the cached function pointers if the bus types differ. No current Core has that many buses but the cap is undocumented for future-proofing.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No bus / address discovery",
+          "brief": "Tile drivers receive a bare tiles_pal_t* and a tile JSON; there's no wrapper here that walks coregen's tile_handles.h to enumerate \"what tiles are on what bus.\" Each test builds the wiring by hand.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "timer",
+      "name": "Timer — timebase, capture, periodic tick",
+      "header": "core_timer.h",
+      "page": "/docs/sdk/timers",
+      "category": "timer",
+      "gaps": [
+        {
+          "title": "Tick event period is set in config.json, not from DSL",
+          "brief": "The DSL's `Core.Timer.tick` event fires at the period baked into coregen from config.json's timer.tick_ms. There's no `Core.Timer.set_tick_ms()` host call to retune at runtime — the period is fixed for the life of the program.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No DSL access to per-channel capture / PWM",
+          "brief": "core_timer_capture_init / capture_read / pwm_set are Tier 1 — they take a core_timer_t* the DSL can't construct. PWM has its own default-instance helper (Core.PWM.duty); capture / measurement has no DSL surface.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No encoder / quadrature mode",
+          "brief": "The hardware supports incremental encoder mode (CH1+CH2 quadrature counting). The wrapper exposes neither encoder init nor read. Motion / rotary-encoder tiles can't use it without dropping into ll_tim.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No one-pulse mode (OPM)",
+          "brief": "STM32 timers can fire a single pulse of programmable width and then auto-disable — useful for camera trigger / strobe / ultrasound ranging. Not wrapped.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "timing",
+      "name": "Timing — delays and millis",
+      "header": "core_timing.h",
+      "category": "timing",
+      "gaps": [
+        {
+          "title": "No monotonic 64-bit clock",
+          "brief": "millis wraps at ~49.7 days. Long-running systems (industrial / datalogger) need either a 64-bit upcounter or a wrap-aware helper for diff-since-start.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "usb",
+      "name": "USB — virtual serial port (CDC)",
+      "header": "core_usb.h",
+      "page": "/docs/sdk/usb",
+      "category": "usb",
+      "gaps": [
+        {
+          "title": "No DSL surface for receive (byte read / available)",
+          "brief": "The Core.USB.receive event handles inbound bytes one at a time, but DSL programs can't poll core_usb_available() / core_usb_read(). That makes message-framed protocols (read N bytes after a header) awkward — the workaround is to accumulate bytes in a DSL array inside the receive handler.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No DSL printf-with-formatting",
+          "brief": "print_int / float / bool emit one value per call, each on its own line. For multi-field log lines DSL programs concatenate with string ops (or call print multiple times). A `print_fmt(template, ...args)` host call would be the next step.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "USB MSC (mass storage)",
+          "brief": "SDK roadmap Tier 3: drag-and-drop firmware / datalog volume needs SCSI + FAT. A feature gap, not a workflow blocker — projects that need persistent storage today reach for NVM or SD via SPI.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "USB Host mode",
+          "brief": "Core.ST.H5 has DRD silicon but the wrapper is device-only. Most projects don't need host mode; the few that do (USB-keyboard / thumb-drive readers) drop into the lower-layer USB stack.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No CDC line-coding callback",
+          "brief": "Host-side baud changes (1200-touch bootloader trigger included) land in the lower stack. The header doesn't expose a hook for programs that want to react to baud / DTR changes.",
+          "tier": 1,
+          "value": "M"
+        }
+      ]
+    },
+    {
+      "id": "usb_hid",
+      "name": "USB HID — vendor reports",
+      "header": "core_usb_hid.h",
+      "page": "/docs/sdk/usb",
+      "category": "usb",
+      "gaps": [
+        {
+          "title": "No DSL surface for HID",
+          "brief": "Sending a HID report needs a buffer pointer + length. The DSL's array-host ABI (used for tile reads) could carry it, but no default-instance wrapper is wired up.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Vendor descriptor only",
+          "brief": "The HID descriptor is hard-coded as a 64-byte vendor report with usage page 0xFF00. No way to register custom reports (keyboard, mouse, gamepad) — that needs the full HID descriptor tooling.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "watchdog",
+      "name": "Watchdog — independent watchdog (IWDG)",
+      "header": "core_watchdog.h",
+      "category": "watchdog",
+      "gaps": [
+        {
+          "title": "No DSL access to caused_reset / clear_flags",
+          "brief": "These return / clear hardware flags that only matter on the very first boot iteration. Exposing them needs a story for \"before studio_start runs\" — Studio doesn't currently model that phase.",
+          "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No window watchdog (WWDG)",
+          "brief": "STM32 also has a windowed watchdog (must feed within a window, not just before the deadline). Useful for catching feed-too-fast bugs. Not wrapped here.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    }
+  ]
+}

@@ -1,31 +1,35 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6bbf0d8",
+  "source": "tiles@f70bca2",
   "category": "nvm",
   "label": "Core.NVM",
   "icon": "▤",
   "header": "core_nvm.h",
   "headers": {
-    "core": "core_nvm.h"
+    "core": "core_nvm.h",
+    "ll": "ll_flash.h"
   },
   "functions": [
     {
       "name": "core_nvm_read",
       "signature": "core_nvm_read(uint32_t offset, void * buf, uint32_t len)",
       "returns": "int",
-      "brief": "Read bytes from NVM. offset: byte offset within NVM region (0 to CORE_NVM_SIZE-1) buf:    destination buffer len:    number of bytes to read Returns 0 on success, -1 if out of range.",
+      "brief": "Read bytes from NVM. Only Core.ST.L0 has NVM today (512 B of EEPROM). On Core.ST.L4 / W5 / H5 CORE_NVM_SIZE is 0, so this always returns -1.",
       "params": [
         {
           "name": "offset",
-          "ctype": "uint32_t"
+          "ctype": "uint32_t",
+          "description": "Byte offset within the NVM region (0 to CORE_NVM_SIZE-1)."
         },
         {
           "name": "buf",
-          "ctype": "void *"
+          "ctype": "void *",
+          "description": "Destination buffer."
         },
         {
           "name": "len",
-          "ctype": "uint32_t"
+          "ctype": "uint32_t",
+          "description": "Number of bytes to read."
         }
       ],
       "studio_exposed": false,
@@ -35,19 +39,22 @@
       "name": "core_nvm_write",
       "signature": "core_nvm_write(uint32_t offset, const void * data, uint32_t len)",
       "returns": "int",
-      "brief": "Write bytes to NVM. offset: byte offset within NVM region (0 to CORE_NVM_SIZE-1) data:   source buffer len:    number of bytes to write Returns 0 on success, -1 if out of range or write error.",
+      "brief": "Write bytes to NVM. Only Core.ST.L0 has NVM today (512 B of EEPROM, ~3.2 ms per byte). On Core.ST.L4 / W5 / H5 flash emulation is not implemented yet: CORE_NVM_SIZE is 0 and every call returns -1 without writing anything.",
       "params": [
         {
           "name": "offset",
-          "ctype": "uint32_t"
+          "ctype": "uint32_t",
+          "description": "Byte offset within the NVM region (0 to CORE_NVM_SIZE-1)."
         },
         {
           "name": "data",
-          "ctype": "const void *"
+          "ctype": "const void *",
+          "description": "Source buffer."
         },
         {
           "name": "len",
-          "ctype": "uint32_t"
+          "ctype": "uint32_t",
+          "description": "Number of bytes to write."
         }
       ],
       "studio_exposed": false,
@@ -108,6 +115,96 @@
       ],
       "studio_exposed": true,
       "layer": "core"
+    },
+    {
+      "name": "ll_flash_unlock",
+      "signature": "ll_flash_unlock(void)",
+      "returns": "void",
+      "brief": "Unlock flash for erase/program.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_lock",
+      "signature": "ll_flash_lock(void)",
+      "returns": "void",
+      "brief": "Lock flash (re-enable write protection).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_erase_page",
+      "signature": "ll_flash_erase_page(uint32_t page)",
+      "returns": "int",
+      "brief": "Erase a single flash page. Returns 0 on success, -1 on error.",
+      "params": [
+        {
+          "name": "page",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_program_dword",
+      "signature": "ll_flash_program_dword(uint32_t addr, uint32_t word0, uint32_t word1)",
+      "returns": "int",
+      "brief": "Program a double-word (8 bytes) at an 8-byte aligned address. Returns 0 on success, -1 on error.",
+      "params": [
+        {
+          "name": "addr",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "word0",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "word1",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_program_qword",
+      "signature": "ll_flash_program_qword(uint32_t addr, const uint32_t w[4])",
+      "returns": "int",
+      "brief": "Program a quad-word (128-bit / 16 bytes) at a 16-byte aligned address. WBA55 and H5 program in 128-bit lines: the flash controller only completes (and clears BSY) once all four 32-bit words have been written, so all four must be issued before the busy wait — a partial write never completes. This is also the native granularity of the OTP region, so it serves both main flash and OTP (same PG bit + NSKEYR unlock; only the target address differs). Returns 0 on success, -1 on error.",
+      "params": [
+        {
+          "name": "addr",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "w",
+          "ctype": "const uint32_t[4]"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_wait_bsy",
+      "signature": "ll_flash_wait_bsy(void)",
+      "returns": "void",
+      "brief": "Spin until flash is not busy.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_flash_clear_errors",
+      "signature": "ll_flash_clear_errors(void)",
+      "returns": "void",
+      "brief": "Clear all error flags.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
     }
   ]
 }

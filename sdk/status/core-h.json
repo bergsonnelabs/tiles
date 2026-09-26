@@ -9,52 +9,108 @@
       "status": "compile",
       "note": "LED not mounted on prototype — PA15 ODR toggles correctly via SWD readback"
     },
-    "system.delay": "verified",
-    "system.tick": "verified",
+    "system.delay": {
+      "status": "partial",
+      "note": "Delays are timed from SYSCLK_HZ, which is 2x the real clock until the HSI divider is fixed. Pending the H5 fix session (portal task #282)"
+    },
+    "system.tick": {
+      "status": "partial",
+      "note": "SysTick reload assumes SYSCLK_HZ, which is 2x the real clock. Pending the H5 fix session (portal task #282)"
+    },
     "system.fault": "verified",
-    "clocks.hsi": "verified",
+    "system.uid": "compile",
+    "system.recovery": {
+      "status": "compile",
+      "note": "Strike words reserved at the top of SRAM (hal_dfu.h); not bench-run on the H5"
+    },
+    "system.swo": "compile",
+    "system.wamr": {
+      "status": "compile",
+      "note": "examples/h1-wasm-blink builds with WAMR_ENABLED=1"
+    },
+    "clocks.hsi": {
+      "status": "partial",
+      "note": "The HSI divider is left at /2, so HSI runs at 32 MHz, not 64, and everything timed from SYSCLK_HZ is off by 2x. Pending the H5 fix session (portal task #282)"
+    },
     "clocks.hse": "na",
     "clocks.msi": "na",
     "clocks.csi": "verified",
-    "clocks.pll": "verified",
+    "clocks.pll": {
+      "status": "partial",
+      "note": "Fed from the halved HSI, so the PLL levels run at half the documented clock (\"max\" at about 124 MHz). Flash wait states also ignore voltage scaling. Pending the H5 fix session (portal task #282)"
+    },
     "gpio.digital": "verified",
-    "gpio.exti": "verified",
+    "gpio.exti": {
+      "status": "partial",
+      "note": "Port B pin-change interrupts watch the wrong pins (the port select goes to a reserved SBS offset), and the vector table is shifted from IRQ 27. Pending the H5 fix session (portal task #282)"
+    },
     "gpio.af": "verified",
     "gpio.od_pull": "verified",
-    "uart.polling": "compile",
+    "uart.polling": {
+      "status": "partial",
+      "note": "Baud rates are computed from SYSCLK_HZ, which is 2x the real clock. Pending the H5 fix session (portal task #282)"
+    },
     "uart.irq": "compile",
     "uart.lp": "compile",
-    "i2c.std": "compile",
-    "i2c.fast": "compile",
+    "i2c.std": {
+      "status": "partial",
+      "note": "Bus timing assumes 2x the real clock (the bus runs at half speed), and I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
+    },
+    "i2c.fast": {
+      "status": "partial",
+      "note": "Bus timing assumes 2x the real clock (the bus runs at half speed), and I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
+    },
     "i2c.fmp": "compile",
     "i2c.irq": "",
     "i2c.target": {
       "status": "partial",
-      "note": "I2C1 only. startup_stm32h523xx.s has no I2C2_ER or I2C3 vectors, and slot 58 marks I2C2 Error as shared with USART1."
+      "note": "I2C1 only. The vector table is shifted from IRQ 27, so target mode enables the SPI interrupts; I2C3 is never clocked. Pending the H5 fix session (portal task #282)"
     },
     "i2c.dma": "",
     "i2c.10bit": "",
     "i2c.smbus": "",
-    "spi.master": "compile",
-    "timer.tick": "verified",
-    "timer.pwm": "verified",
+    "spi.master": {
+      "status": "partial",
+      "note": "SPI has no kernel clock (PLL1Q is never enabled) and the transfer loop has no timeout, so it hangs. Pending the H5 fix session (portal task #282)"
+    },
+    "timer.tick": {
+      "status": "partial",
+      "note": "The vector table is shifted from IRQ 27, so the TIM1 tick never fires. Pending the H5 fix session (portal task #282)"
+    },
+    "timer.pwm": {
+      "status": "partial",
+      "note": "PWM frequencies are off by 2x (timer clock assumed from SYSCLK_HZ). Pending the H5 fix session (portal task #282)"
+    },
     "timer.stepdir": "compile",
-    "timer.capture": "verified",
+    "timer.capture": {
+      "status": "partial",
+      "note": "Measured periods are off by 2x (timer clock assumed from SYSCLK_HZ). Pending the H5 fix session (portal task #282)"
+    },
     "timer.oneshot": "",
     "timer.encoder": "",
     "timer.lptim": "",
     "timer.wdog": "verified",
     "adc.raw": "verified",
-    "adc.mv": "verified",
+    "adc.mv": {
+      "status": "partial",
+      "note": "VREFINT is read from channel 19 (PA5, pad 9) instead of 17, so millivolts are not supply-compensated. Pending the H5 fix session (portal task #282)"
+    },
     "adc.temp": "verified",
     "adc.res": "verified",
     "adc.oversamp": "verified",
-    "adc.dma": "compile",
+    "adc.dma": {
+      "status": "partial",
+      "note": "The vector table is shifted from IRQ 27, so ADC DMA completion never arrives. Pending the H5 fix session (portal task #282)"
+    },
     "adc.dma_mv": "compile",
     "adc.cont": "compile",
     "adc.trigger": {
       "status": "partial",
       "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
+    },
+    "audio.pdm": {
+      "status": "na",
+      "note": "No SAI peripheral"
     },
     "adc.watchdog": "",
     "coregen.gpio": "verified",
@@ -65,13 +121,13 @@
     "coregen.timer": "verified",
     "power.sleep": "verified",
     "power.stop": {
-      "status": "verified",
-      "note": "Stop 0 + RTC wakeup + clock recovery to 250MHz PLL"
+      "status": "partial",
+      "note": "Stop 0 + RTC wake-up worked before the audit. The H5 keeps the old sleep code: no watchdog-safe chunking (a sleep longer than the watchdog timeout resets the chip), and millis resets after Stop. Pending the H5 fix session (portal task #282)"
     },
     "power.standby": "compile",
     "power.rtc_wake": {
-      "status": "verified",
-      "note": "LSI RTC wakeup from Stop 0 (H5 requires Stop 0, init-mode WUTE, RTCAPBEN)"
+      "status": "partial",
+      "note": "LSI RTC wake-up from Stop 0 works, but the wake-up timer is set inside RTC init mode, which drags the calendar back by up to 1 s per core_stop_for. Pending the H5 fix session (portal task #282)"
     },
     "power.exti_wake": "compile",
     "power.wkup_wake": "",
@@ -83,9 +139,18 @@
       "status": "compile",
       "note": "32 backup registers (BKP0-31) at TAMP+0x100. Tested in tests/val-backup-rng-alarm (Core.ST.H5)"
     },
-    "security.rng": "none",
-    "security.aes": "none",
-    "security.pka": "na",
+    "security.rng": {
+      "status": "compile",
+      "note": "ll_rng conditioning-reset + enable for the H523; builds in tests/val-backup-rng-alarm, not bench-run"
+    },
+    "security.aes": {
+      "status": "na",
+      "note": "The STM32H523 has no AES engine (DS14540); AES is on the H533"
+    },
+    "security.pka": {
+      "status": "none",
+      "note": "The STM32H523 has a PKA (ECDSA signature verification, DS14540); no driver yet"
+    },
     "security.hash": "none",
     "conn.usb_cdc": "verified",
     "conn.scope_usb": "compile",
@@ -93,6 +158,11 @@
     "conn.usb_hid": "verified",
     "conn.usb_msc": "",
     "conn.dfu": "verified",
+    "conn.serial_update": {
+      "status": "none",
+      "note": "The flasher is written for the L4's USB block (sdk/serial_update/flasher_l4.c)"
+    },
+    "conn.swd": "none",
     "conn.ble": "na",
     "conn.ble_adv": "na",
     "conn.ble_gatt": "na",
@@ -107,6 +177,10 @@
     "ble.pairing": "na",
     "ble.central": "na",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none"
+    "nvm.flash_emu": "none",
+    "nvm.otp": {
+      "status": "none",
+      "note": "The STM32H523 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"
+    }
   }
 }

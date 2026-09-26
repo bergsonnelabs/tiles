@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6f27e78",
+  "source": "tiles@f70bca2",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -278,6 +278,21 @@
       "layer": "core"
     },
     {
+      "name": "core_i2c_handle_for_bus",
+      "signature": "core_i2c_handle_for_bus(uint8_t bus)",
+      "returns": "hal_i2c_t *",
+      "brief": "The I2C handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any I2C bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_HAS_I2C_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
+      "params": [
+        {
+          "name": "bus",
+          "ctype": "uint8_t",
+          "description": "Bus id (1 = the first instance, ...)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_i2c_write_byte_bus",
       "signature": "core_i2c_write_byte_bus(uint8_t bus, uint8_t addr, uint16_t reg, uint8_t value)",
       "returns": "hal_status_t",
@@ -285,19 +300,23 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "7-bit device address."
         },
         {
           "name": "reg",
-          "ctype": "uint16_t"
+          "ctype": "uint16_t",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
         },
         {
           "name": "value",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "Byte to write."
         }
       ],
       "studio_exposed": true,
@@ -311,15 +330,18 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "7-bit device address."
         },
         {
           "name": "reg",
-          "ctype": "uint16_t"
+          "ctype": "uint16_t",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
         }
       ],
       "studio_exposed": true,
@@ -333,11 +355,13 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "7-bit device address to probe."
         }
       ],
       "studio_exposed": true,
@@ -694,32 +718,6 @@
         },
         {
           "name": "max_count",
-          "ctype": "uint8_t"
-        }
-      ],
-      "studio_exposed": false,
-      "layer": "hal"
-    },
-    {
-      "name": "void",
-      "signature": "void(*hal_i2c_target_cb_t)(void * ctx, hal_i2c_target_event_t evt, uint16_t reg, uint8_t value)",
-      "returns": "typedef",
-      "brief": "Called from ISR context. Keep it short and touch only volatile state.",
-      "params": [
-        {
-          "name": "ctx",
-          "ctype": "*hal_i2c_target_cb_t)(void *"
-        },
-        {
-          "name": "evt",
-          "ctype": "hal_i2c_target_event_t"
-        },
-        {
-          "name": "reg",
-          "ctype": "uint16_t"
-        },
-        {
-          "name": "value",
           "ctype": "uint8_t"
         }
       ],

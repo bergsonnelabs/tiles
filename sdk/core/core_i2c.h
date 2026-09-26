@@ -183,13 +183,20 @@ static inline void core_i2c_scan(core_i2c_t *h, uint8_t *found,
  * for these; escape-to-C drops back to the Tier 1 handle-based forms
  * above when finer control is needed. */
 
-/* Forward-decl of the coregen-emitted dispatcher (definition lives in
- * core_init.c when the project declares any I2C bus). Forward-declared
- * here rather than `#include "core_init.h"` so this header compiles in
- * SDK contexts that don't have a project (val tests, examples without
- * config.json). The natives-side caller in studio_natives_project.c is
- * gated on CORE_HAS_I2C_BUSES, so the linker never asks for the symbol
- * unless the dispatcher actually exists. */
+/**
+ * The I2C handle for a bus id declared in config.json, or NULL if the
+ * project doesn't declare that bus. Emitted per project by coregen into
+ * core_init.c (when the project declares any I2C bus); the *_bus helpers below
+ * resolve their handle through it.
+ *
+ * Forward-declared here rather than `#include "core_init.h"` so this header
+ * compiles without a project (val tests, examples without config.json). The
+ * natives-side caller is gated on CORE_HAS_I2C_BUSES, so the linker never asks for
+ * the symbol unless the dispatcher exists.
+ *
+ * @param bus Bus id (1 = the first instance, ...).
+ * @return The coregen-initialized handle, or NULL.
+ */
 hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
 
 /**
@@ -199,6 +206,10 @@ hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
  *
  * @studio expose category=i2c name=write_byte returns=int
  * @studio twin full
+ * @param bus I2C bus id as declared in config.json (1 = I2C1, ...).
+ * @param addr 7-bit device address.
+ * @param reg Register address (two bytes, MSB first, when above 0xFF).
+ * @param value Byte to write.
  */
 static inline hal_status_t core_i2c_write_byte_bus(uint8_t bus, uint8_t addr,
                                                     uint16_t reg, uint8_t value)
@@ -216,6 +227,9 @@ static inline hal_status_t core_i2c_write_byte_bus(uint8_t bus, uint8_t addr,
  *
  * @studio expose category=i2c name=read_byte returns=int
  * @studio twin full
+ * @param bus I2C bus id as declared in config.json (1 = I2C1, ...).
+ * @param addr 7-bit device address.
+ * @param reg Register address (two bytes, MSB first, when above 0xFF).
  */
 static inline int core_i2c_read_byte_bus(uint8_t bus, uint8_t addr, uint16_t reg)
 {
@@ -232,6 +246,8 @@ static inline int core_i2c_read_byte_bus(uint8_t bus, uint8_t addr, uint16_t reg
  *
  * @studio expose category=i2c name=probe returns=bool
  * @studio twin full
+ * @param bus I2C bus id as declared in config.json (1 = I2C1, ...).
+ * @param addr 7-bit device address to probe.
  */
 static inline int core_i2c_probe_bus(uint8_t bus, uint8_t addr)
 {

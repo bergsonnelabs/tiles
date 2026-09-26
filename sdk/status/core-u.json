@@ -12,6 +12,16 @@
       "status": "verified",
       "note": "Register dump over polled USB CDC + SOS blink. HardFault verified on Core.ST.L4.2 (projects/fault-test)"
     },
+    "system.uid": "compile",
+    "system.recovery": {
+      "status": "verified",
+      "note": "Healthy feed, hang, 1-2-3 strikes, SOS, ROM DFU, reflash: bench-verified on Core.ST.L4.1 (tests/hw-watchdog-recovery, 2026-07-13). Since 2026-09-25 core_watchdog_feed() clears the count after max(10 s, 2x the timeout) of uptime."
+    },
+    "system.swo": "compile",
+    "system.wamr": {
+      "status": "na",
+      "note": "WAMR builds target the Cortex-M33 Cores only (Makefile WAMR_ENABLED guard)"
+    },
     "clocks.hsi": "verified",
     "clocks.hse": "na",
     "clocks.msi": {
@@ -81,6 +91,10 @@
       "status": "partial",
       "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
     },
+    "audio.pdm": {
+      "status": "na",
+      "note": "No SAI peripheral"
+    },
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
@@ -136,6 +150,14 @@
     "conn.usb_hid": "compile",
     "conn.usb_msc": "",
     "conn.dfu": "verified",
+    "conn.serial_update": {
+      "status": "verified",
+      "note": "Bench-verified on Core.ST.L4.1 (tiles#254, 2026-09-24): 13 x 120 KB and 10 x 15 KB updates, lost-reply resend, abort, and a power pull mid-update. Not yet run on Windows."
+    },
+    "conn.swd": {
+      "status": "none",
+      "note": "No SWD flash algorithm for the L4 yet; Studio flashes it over USB (DFU or serial update)"
+    },
     "conn.ble": "na",
     "conn.ble_adv": "na",
     "conn.ble_gatt": "na",
@@ -153,6 +175,14 @@
     "ble.pairing": "na",
     "ble.central": "na",
     "nvm.eeprom": "na",
-    "nvm.flash_emu": "none"
+    "nvm.flash_emu": "none",
+    "nvm.otp": {
+      "status": "none",
+      "note": "The STM32L422 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"
+    },
+    "spi.dma": {
+      "status": "compile",
+      "note": "hal_spi_xfer_dma: DMA1 CH2/CH3, full duplex, completion callback. Implemented April 2026; SPI on the L4 has not run on hardware yet"
+    }
   }
 }

@@ -1,5 +1,10 @@
 # Cores SDK Horizontal Consistency Report
 
+> **Superseded (kept for history).** This April 2026 report is mostly stale and partly wrong
+> (it claims SAI on the L4 and H5, and AES on the H5). The current findings are the portal page
+> "Core.ST SDK audit and priority list, September 2026" (SDK project), and the live per-Core
+> status is `core-*.json` in this folder.
+
 > 2026-04-06 — API patterns compared across subsystems within each layer
 > Goal: Ensure users can activate new functionality without learning new syntax
 

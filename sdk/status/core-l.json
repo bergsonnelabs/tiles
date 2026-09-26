@@ -9,6 +9,22 @@
     "system.delay": "verified",
     "system.tick": "verified",
     "system.fault": "verified",
+    "system.uid": {
+      "status": "compile",
+      "note": "Third ID word read from offset 0x14 (was 0x08, not part of the ID, RM0377 §28.2): fixed 2026-09-25, awaiting bench"
+    },
+    "system.recovery": {
+      "status": "na",
+      "note": "No USB, so no ROM DFU path to park in"
+    },
+    "system.swo": {
+      "status": "na",
+      "note": "Cortex-M0+ has no ITM/SWO; hal_debug_printf is a no-op"
+    },
+    "system.wamr": {
+      "status": "na",
+      "note": "WAMR builds target the Cortex-M33 Cores only (Makefile WAMR_ENABLED guard); 2 KB SRAM"
+    },
     "clocks.hsi": {
       "status": "compile",
       "note": "'high' now selects voltage range 1 (the L0 boots in range 2, where 16 MHz needs 1 WS) and ramps MSI 4.2 MHz -> HSI16 for the VDD < 2 V step rule (RM0377 §6.1.4). Changed 2026-09-25, awaiting bench (tests/hw-clock-levels)"
@@ -84,6 +100,10 @@
     },
     "adc.cont": "verified",
     "adc.trigger": "verified",
+    "audio.pdm": {
+      "status": "na",
+      "note": "No SAI peripheral"
+    },
     "adc.watchdog": "",
     "coregen.gpio": "verified",
     "coregen.i2c": "compile",
@@ -130,6 +150,11 @@
     "conn.usb_hid": "na",
     "conn.usb_msc": "na",
     "conn.dfu": "na",
+    "conn.serial_update": {
+      "status": "na",
+      "note": "No USB"
+    },
+    "conn.swd": "none",
     "conn.ble": "na",
     "conn.ble_adv": "na",
     "conn.ble_gatt": "na",
@@ -150,6 +175,10 @@
       "status": "compile",
       "note": "Writes step up from voltage range 3 (clock 'low') to range 2 for the program and back, since range 3 can't program the EEPROM (RM0377 §6.1.4). 2026-09-25"
     },
-    "nvm.flash_emu": "na"
+    "nvm.flash_emu": "na",
+    "nvm.otp": {
+      "status": "na",
+      "note": "The STM32L011 has no OTP area (it has data EEPROM, see nvm.eeprom)"
+    }
   }
 }

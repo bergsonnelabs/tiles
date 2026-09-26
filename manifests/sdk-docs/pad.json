@@ -1,14 +1,14 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@777be99",
+  "source": "tiles@f70bca2",
   "category": "pad",
   "label": "Core.Pad",
   "icon": "◼",
   "header": "core_pad.h",
   "headers": {
     "core": "core_pad.h",
-    "hal": "hal_gpio.h",
-    "ll": "ll_gpio.h"
+    "hal": "hal_gpio.h, hal_exti.h",
+    "ll": "ll_gpio.h, ll_exti.h"
   },
   "functions": [
     {
@@ -454,6 +454,50 @@
       "layer": "hal"
     },
     {
+      "name": "hal_exti_enable",
+      "signature": "hal_exti_enable(uint8_t pad, uint32_t edge, hal_callback_t cb, void * ctx)",
+      "returns": "hal_status_t",
+      "brief": "Enable an edge-triggered interrupt on a tile pad. Configures the pad's GPIO pin as an EXTI source, stores the callback, and enables the NVIC IRQ.  The pad must already be configured as an input (see hal_pad_input or tal_exti_enable which does this automatically).",
+      "params": [
+        {
+          "name": "pad",
+          "ctype": "uint8_t",
+          "description": "Tile pad number (2-22)"
+        },
+        {
+          "name": "edge",
+          "ctype": "uint32_t",
+          "description": "HAL_EXTI_RISING, HAL_EXTI_FALLING, or HAL_EXTI_BOTH"
+        },
+        {
+          "name": "cb",
+          "ctype": "hal_callback_t",
+          "description": "Function called from ISR context on each edge"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *",
+          "description": "Opaque pointer passed to cb"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_exti_disable",
+      "signature": "hal_exti_disable(uint8_t pad)",
+      "returns": "void",
+      "brief": "Disable the EXTI interrupt on a tile pad. Clears the callback and disables the EXTI line.  The NVIC IRQ is only disabled when no other lines sharing the same IRQ are active (relevant for grouped IRQs on L0/L4).",
+      "params": [
+        {
+          "name": "pad",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
       "name": "ll_gpio_set",
       "signature": "ll_gpio_set(GPIO_TypeDef * port, uint32_t pin_mask)",
       "returns": "void",
@@ -739,6 +783,120 @@
         },
         {
           "name": "pin",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_gpio_config",
+      "signature": "ll_exti_gpio_config(GPIO_TypeDef * port, uint32_t pin, uint32_t edge)",
+      "returns": "void",
+      "brief": "Set up a GPIO pin as an interrupt source. port: GPIO port (GPIOA, GPIOB, ...) pin:  pin number (0-15) edge: LL_EXTI_RISING, LL_EXTI_FALLING, or LL_EXTI_BOTH After calling this, enable the appropriate NVIC IRQ: ll_nvic_enable_irq(EXTI0_IRQn); Then implement the ISR handler (e.g. EXTI0_IRQHandler).",
+      "params": [
+        {
+          "name": "port",
+          "ctype": "GPIO_TypeDef *"
+        },
+        {
+          "name": "pin",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "edge",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_config",
+      "signature": "ll_exti_config(uint32_t line, uint32_t edge)",
+      "returns": "void",
+      "brief": "Configure an EXTI line for interrupt generation. line:  EXTI line (0-15) edge:  LL_EXTI_RISING, LL_EXTI_FALLING, or LL_EXTI_BOTH Prerequisites: - SYSCFG clock enabled - EXTI source selected via ll_exti_set_source() - GPIO pin configured as input - NVIC IRQ enabled after this call",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "edge",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_disable",
+      "signature": "ll_exti_disable(uint32_t line)",
+      "returns": "void",
+      "brief": "Disable an EXTI line interrupt",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_pending",
+      "signature": "ll_exti_pending(uint32_t line)",
+      "returns": "int",
+      "brief": "Check if an EXTI line has a pending interrupt",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_clear_pending",
+      "signature": "ll_exti_clear_pending(uint32_t line)",
+      "returns": "void",
+      "brief": "Clear the pending flag for an EXTI line (write 1 to clear)",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_sw_trigger",
+      "signature": "ll_exti_sw_trigger(uint32_t line)",
+      "returns": "void",
+      "brief": "Generate a software interrupt on an EXTI line",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_exti_set_source",
+      "signature": "ll_exti_set_source(uint32_t line, uint32_t port_index)",
+      "returns": "void",
+      "brief": "Select which GPIO port drives a given EXTI line. line:       EXTI line number (0-15, matches pin number) port_index: 0=GPIOA, 1=GPIOB, 2=GPIOC, ... Example: ll_exti_set_source(6, 1) → EXTI6 from GPIOB pin 6",
+      "params": [
+        {
+          "name": "line",
+          "ctype": "uint32_t"
+        },
+        {
+          "name": "port_index",
           "ctype": "uint32_t"
         }
       ],

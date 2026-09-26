@@ -6,6 +6,7 @@ name: notify-web-on-manifests
 # definitions/**) is sufficient — everything the web side vendors is derived into
 # manifests/, so a definitions change only matters here once it lands as a manifest.
 # twins/src/** is vendored too (the tile twins, until Studio loads them at runtime).
+# sdk/status/*.json is the SDK status matrix the site renders, vendored as is.
 #
 # Auth: the tiles-sync GitHub App, installed on bergsonnelabs/web with
 # Contents: write. Add its secrets to this repo (or as org secrets):
@@ -18,6 +19,7 @@ on:
     paths:
       - 'manifests/**'
       - 'twins/src/**'
+      - 'sdk/status/*.json'
 
 permissions: {}
 

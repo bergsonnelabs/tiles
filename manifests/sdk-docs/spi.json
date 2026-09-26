@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@d3cff63",
+  "source": "tiles@f70bca2",
   "category": "spi",
   "label": "Core.SPI",
   "icon": "⇆",
@@ -222,6 +222,21 @@
       "layer": "core"
     },
     {
+      "name": "core_spi_handle_for_bus",
+      "signature": "core_spi_handle_for_bus(uint8_t bus)",
+      "returns": "hal_spi_t *",
+      "brief": "The SPI handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any SPI bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_HAS_SPI_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
+      "params": [
+        {
+          "name": "bus",
+          "ctype": "uint8_t",
+          "description": "Bus id (1 = the first instance, ...)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "core_spi_xfer_byte_bus",
       "signature": "core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx)",
       "returns": "int",
@@ -229,15 +244,18 @@
       "params": [
         {
           "name": "bus",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "SPI bus id as declared in config.json (1 = SPI1, ...)."
         },
         {
           "name": "cs_pad",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "Tile pad driving chip select (asserted around the transfer)."
         },
         {
           "name": "tx",
-          "ctype": "uint8_t"
+          "ctype": "uint8_t",
+          "description": "Byte to send."
         }
       ],
       "studio_exposed": true,

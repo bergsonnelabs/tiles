@@ -58,15 +58,24 @@ LAYER_DIRS = {"hal": ROOT / "sdk/hal", "ll": ROOT / "sdk/ll"}
 # Per-category lower-layer docs. Maps a docs category to the hal_*/ll_*
 # headers that implement it, so the SDK reference can show the same surface at
 # the Core / HAL / LL layer the reader works in. Each layer value is
-# (header_filename, only): `only=None` includes every documented function in
+# (header_filename, only), or a list of those when a layer spans headers (e.g.
+# ll_gpio.h + ll_exti.h): `only=None` includes every documented function in
 # the header (source order); a list curates + orders the output — required for
-# sprawling headers like ll_rcc.h. Categories absent here are Core-only. An
-# entry may introduce a category that has no core header at all (e.g. clocks,
-# which is config-driven) — give it a label/icon via the `meta` key.
+# sprawling headers like ll_rcc.h, and for register-level headers where only
+# the public-facing calls belong in the reference. Categories absent here are
+# Core-only. An entry may introduce a category that has no core header at all
+# (e.g. clocks, which is config-driven) — give it a label/icon via the `meta`
+# key.
 LAYER_HEADERS = {
     "pad": {
-        "hal": ("hal_gpio.h", None),
-        "ll": ("ll_gpio.h", None),
+        "hal": [("hal_gpio.h", None), ("hal_exti.h", None)],
+        "ll": [
+            ("ll_gpio.h", None),
+            ("ll_exti.h",
+             ["ll_exti_gpio_config", "ll_exti_config", "ll_exti_disable",
+              "ll_exti_pending", "ll_exti_clear_pending", "ll_exti_sw_trigger",
+              "ll_exti_set_source"]),
+        ],
     },
     "led": {
         "ll": (
@@ -159,6 +168,59 @@ LAYER_HEADERS = {
              "hal_usb_cdc_available", "hal_usb_cdc_poll", "hal_usb_hid_send_report",
              "hal_usb_hid_set_rx_callback"],
         ),
+        # Two USB IPs: USB Device FS on the L4 (ll_usb.h), USB DRD on the H5
+        # (ll_usb_drd.h). Only the device-level calls; the endpoint / PMA /
+        # buffer-descriptor helpers are the CDC/HID stack's plumbing.
+        "ll": [
+            ("ll_usb.h",
+             ["ll_usb_power_on", "ll_usb_connect", "ll_usb_disconnect",
+              "ll_usb_set_address", "ll_usb_ep_config", "ll_usb_pma_write",
+              "ll_usb_pma_read"]),
+            ("ll_usb_drd.h",
+             ["ll_usb_drd_power_on", "ll_usb_drd_connect", "ll_usb_drd_disconnect",
+              "ll_usb_drd_set_address", "ll_usb_drd_chep_config",
+              "ll_usb_drd_pma_write", "ll_usb_drd_pma_read"]),
+        ],
+    },
+    "nvm": {
+        "ll": (
+            "ll_flash.h",
+            ["ll_flash_unlock", "ll_flash_lock", "ll_flash_erase_page",
+             "ll_flash_program_dword", "ll_flash_program_qword",
+             "ll_flash_wait_bsy", "ll_flash_clear_errors"],
+        ),
+    },
+    "dma": {
+        # No core_ layer: DMA is set up inside the ADC / SPI / SAI drivers.
+        # Classic DMA (L0 / L4) and GPDMA (W5 / H5, incl. linked lists).
+        "meta": {"label": "DMA", "icon": "⇶"},
+        "ll": (
+            "ll_dma.h",
+            ["ll_dma_set_request", "ll_dma_config", "ll_dma_enable",
+             "ll_dma_disable", "ll_dma_remaining", "ll_dma_transfer_complete",
+             "ll_dma_half_transfer", "ll_dma_transfer_error", "ll_dma_clear_flags",
+             "ll_gpdma_config", "ll_gpdma_enable", "ll_gpdma_disable",
+             "ll_gpdma_transfer_complete", "ll_gpdma_half_transfer",
+             "ll_gpdma_transfer_error", "ll_gpdma_clear_flags",
+             "ll_gpdma_node_init", "ll_gpdma_node_link", "ll_gpdma_node_terminate",
+             "ll_gpdma_list_start"],
+        ),
+    },
+    "recovery": {
+        "hal": (
+            "hal_dfu.h",
+            ["hal_dfu_jump_to_rom", "hal_dfu_reboot", "hal_recovery_strikes",
+             "hal_recovery_valid", "hal_recovery_set_strikes",
+             "hal_recovery_stash_cause", "hal_recovery_stashed_cause"],
+        ),
+    },
+    "debug": {
+        "hal": ("hal_debug.h", None),
+    },
+    "fault": {
+        # Curated: the documented callback typedef would otherwise parse as
+        # an entry.
+        "hal": ("hal_fault.h", ["hal_fault_set_callback"]),
     },
     "rtc": {
         "ll": (
@@ -190,8 +252,10 @@ UNIT_VOCAB = {
 }
 
 DOXY_BLOCK_RE = re.compile(r"/\*\*(.*?)\*/", re.DOTALL)
+# The return type ends in whitespace or `*`, so `hal_i2c_t *core_i2c_handle_for_bus(`
+# (pointer glued to the name) parses as well as `uint8_t * f(`.
 SIG_RE = re.compile(
-    r"(?:static\s+inline\s+)?([\w\s\*]+?)\s+(\w+)\s*\(([^;{]*)\)",
+    r"(?:static\s+inline\s+)?([\w\s\*]*?[\w\*][\s\*]+)(\w+)\s*\(([^;{]*)\)",
 )
 PARAM_RE = re.compile(
     r"^@param\s+(\S+)\s*(?:\{(\w+)\})?\s*(?:\[(-?[\d.]+)\.\.(-?[\d.]+)\])?\s*(.*)$"
@@ -364,23 +428,49 @@ def extract_signature(source, after_offset):
     if not m:
         return None
     ret = re.sub(r"\s+", " ", m.group(1)).strip()
+    ret = re.sub(r"\s+\*", " *", ret)
+    # A documented function-pointer typedef (`typedef void (*cb_t)(...)`) is
+    # not a function; it used to surface as a bogus entry named "void".
+    if ret.startswith("typedef"):
+        return None
     ret = re.sub(r"^(?:static|inline|extern|const)\s+", "", ret)
     ret = re.sub(r"^(?:static|inline|extern|const)\s+", "", ret)
     name = m.group(2)
     raw = m.group(3).strip()
-    if raw in ("", "void"):
-        params = []
-    else:
-        params = []
+    variadic = False
+    params = []
+    # Docs see every parameter, including array ones (`uint32_t out[3]`),
+    # which `params` has always skipped; hosts keep using `params` so the
+    # palette doesn't change shape.
+    doc_params = []
+    if raw not in ("", "void"):
         for p in raw.split(","):
             p = p.strip()
+            if p.startswith("..."):
+                # `...` (the lazy match may drag a trailing
+                # `__attribute__((format(...)))` along; ignore it).
+                variadic = True
+                continue
+            am = re.match(r"(.+?)(\w+)\s*(\[[^\]]*\])\s*$", p)
+            if am:
+                ptype = re.sub(r"\s+", " ", am.group(1)).strip()
+                doc_params.append({"name": am.group(2), "ctype": ptype, "array": am.group(3)})
+                continue
             pm = re.match(r"(.+?)(\w+)\s*$", p)
             if not pm:
                 continue
             ptype = re.sub(r"\s+", " ", pm.group(1)).strip()
             pname = pm.group(2).strip()
             params.append({"name": pname, "ctype": ptype})
-    return {"returns": ret, "name": name, "params": params}
+            doc_params.append({"name": pname, "ctype": ptype})
+    sig = {"returns": ret, "name": name, "params": params}
+    if len(doc_params) != len(params):
+        sig["doc_params"] = doc_params
+    if variadic:
+        # Docs only: printf-style functions keep their `...` in the published
+        # signature. Palette hosts never see it (the DSL has no varargs).
+        sig["variadic"] = True
+    return sig
 
 
 ENUM_TYPES = set()
@@ -1146,7 +1236,8 @@ def build_doc_entry(doxy_lines, sig, studio_exposed, source, doxy_end_offset):
     by_name = {p["name"]: p for p in doxy_params}
 
     doc_params = []
-    for i, cp in enumerate(sig["params"]):
+    c_params = sig.get("doc_params", sig["params"])
+    for i, cp in enumerate(c_params):
         # Prefer name-matched doxy meta; fall back to positional; fall back
         # to the C param name when no doxy exists at all (e.g., a void-init).
         meta = by_name.get(cp["name"]) or (
@@ -1154,7 +1245,7 @@ def build_doc_entry(doxy_lines, sig, studio_exposed, source, doxy_end_offset):
         )
         entry = {
             "name": meta.get("name", cp["name"]),
-            "ctype": cp["ctype"],
+            "ctype": cp["ctype"] + cp.get("array", ""),
         }
         if "range" in meta:
             entry["range"] = meta["range"]
@@ -1164,7 +1255,10 @@ def build_doc_entry(doxy_lines, sig, studio_exposed, source, doxy_end_offset):
             entry["description"] = meta["description"]
         doc_params.append(entry)
 
-    signature = f"{sig['name']}(" + format_c_params(sig["params"]) + ")"
+    c_sig = format_c_params(c_params)
+    if sig.get("variadic"):
+        c_sig = "..." if c_sig == "void" else c_sig + ", ..."
+    signature = f"{sig['name']}(" + c_sig + ")"
     attributes = detect_attributes(source, doxy_end_offset, sig["name"])
 
     entry = {
@@ -1214,10 +1308,88 @@ def parse_layer_docs(path, layer, only=None):
     return [by_name[n] for n in only if n in by_name]
 
 
+GAP_HEAD_RE = re.compile(r"^//\s*@studio\s+unsupported\s+(.*)$")
+GAP_ATTR_RE = re.compile(r'(\w+)=("([^"]*)"|\S+)')
+
+
+def parse_sdk_gaps(path):
+    """The SDK's own known-gap notes in one core header.
+
+    Returns None when the header declares none, else a dict with the header's
+    `@studio coverage` identity (id / name / page), its `@studio category`
+    (if any), and the gaps. A gap is a `//` comment block:
+
+        // @studio unsupported tier=<1|2|3> value=<H|M|L> title="..."
+        //   continuation lines, joined into `brief`, until a bare `//`,
+        //   a non-comment line or the next @-directive.
+
+    tier: which API tier the gap sits at (1 = C API, 2 = the DSL / Studio
+    default instance, 3 = wire format / later). value: how much closing it
+    is worth (H / M / L). These were written for an SDK coverage table and
+    fed nothing until this; the website now renders them per subsystem.
+    """
+    source = path.read_text()
+    lines = source.splitlines()
+    gaps = []
+    i = 0
+    while i < len(lines):
+        m = GAP_HEAD_RE.match(lines[i].strip())
+        if not m:
+            i += 1
+            continue
+        attrs = {k: (q if q else v) for k, v, q in GAP_ATTR_RE.findall(m.group(1))}
+        brief = []
+        j = i + 1
+        while j < len(lines):
+            t = lines[j].strip()
+            if not t.startswith("//"):
+                break
+            body = t[2:].strip()
+            if not body or body.startswith("@"):
+                break
+            brief.append(body)
+            j += 1
+        gap = {"title": attrs.get("title", ""), "brief": " ".join(brief)}
+        if "tier" in attrs:
+            gap["tier"] = int(attrs["tier"]) if attrs["tier"].isdigit() else attrs["tier"]
+        if "value" in attrs:
+            gap["value"] = attrs["value"]
+        gaps.append(gap)
+        i = j
+    if not gaps:
+        return None
+    ident = {"id": path.stem.removeprefix("core_"), "name": path.stem}
+    category = None
+    for m in DOXY_BLOCK_RE.finditer(source):
+        block = strip_doxy(m.group(1))
+        for verb, positional, _attrs in parse_studio_tags(block):
+            if verb == "category" and positional and category is None:
+                category = positional
+        in_cov = False
+        for line in block:
+            t = line.strip()
+            if t.startswith("@studio coverage"):
+                in_cov = True
+                continue
+            if in_cov:
+                cm = re.match(r"(id|name|page):\s*(.+)$", t)
+                if cm:
+                    ident[cm.group(1)] = cm.group(2).strip()
+                elif t.startswith("@") or not t:
+                    in_cov = False
+    entry = {"id": ident["id"], "name": ident["name"], "header": path.name}
+    if "page" in ident:
+        entry["page"] = ident["page"]
+    if category:
+        entry["category"] = category
+    entry["gaps"] = gaps
+    return entry
+
+
 def format_c_params(params):
     if not params:
         return "void"
-    return ", ".join(f"{p['ctype']} {p['name']}" for p in params)
+    return ", ".join(f"{p['ctype']} {p['name']}{p.get('array', '')}" for p in params)
 
 
 def detect_attributes(source, after_offset, _fn_name):
@@ -1358,6 +1530,14 @@ def main():
             core_categories[name] = meta
             for fn in docs:
                 fn["layer"] = "core"
+            if name in sdk_docs:
+                # A category may span headers (audio = core_audio.h +
+                # core_pdm.h, usb = core_usb.h + core_usb_hid.h): append, in
+                # file order, and list every header.
+                doc = sdk_docs[name]
+                doc["functions"].extend(docs)
+                doc["headers"]["core"] += ", " + p.name
+                continue
             sdk_docs[name] = {
                 "schema": "studio-sdk-docs/v2",
                 "source": f"tiles@{commit}",
@@ -1391,9 +1571,11 @@ def main():
         for layer in ("hal", "ll"):
             if layer not in spec:
                 continue
-            fname, only = spec[layer]
-            doc["functions"].extend(parse_layer_docs(LAYER_DIRS[layer] / fname, layer, only))
-            doc["headers"][layer] = fname
+            entries = spec[layer] if isinstance(spec[layer], list) else [spec[layer]]
+            for fname, only in entries:
+                doc["functions"].extend(
+                    parse_layer_docs(LAYER_DIRS[layer] / fname, layer, only))
+            doc["headers"][layer] = ", ".join(fname for fname, _ in entries)
 
     core_manifest = {
         "schema": "studio-manifest/v1",
@@ -1552,6 +1734,16 @@ def main():
     for category, doc in sdk_docs.items():
         targets.append((SDK_DOCS_OUT_DIR / f"{category}.json", doc))
 
+    # The SDK's own known gaps (`// @studio unsupported` in core headers), one
+    # file for the site: it renders them per subsystem and on the status page.
+    # Not a category (no `functions`), so gen_studio_natives skips it.
+    gap_subsystems = [g for g in (parse_sdk_gaps(p) for p in core_sources) if g]
+    targets.append((SDK_DOCS_OUT_DIR / "gaps.json", {
+        "schema": "studio-sdk-gaps/v1",
+        "source": f"tiles@{commit}",
+        "subsystems": gap_subsystems,
+    }))
+
     for t in tile_sources:
         hosts, sections, _docs, events = parse_header(t["path"], scope="tile")
         if len(sections) != 1:
@@ -1624,6 +1816,9 @@ def main():
         # Palette manifests carry `hosts`; SDK-docs carry `functions`.
         if "hosts" in data:
             summary = f"{len(data['hosts'])} hosts, {len(data.get('events', []))} events"
+        elif "subsystems" in data:
+            n = sum(len(x["gaps"]) for x in data["subsystems"])
+            summary = f"{n} gaps in {len(data['subsystems'])} headers"
         else:
             summary = f"{len(data.get('functions', []))} functions"
         print(f"wrote {path.relative_to(ROOT)}  ({summary})")

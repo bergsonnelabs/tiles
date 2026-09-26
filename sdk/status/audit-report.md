@@ -1,5 +1,10 @@
 # Cores SDK End-to-End Audit Report
 
+> **Superseded (kept for history).** This April 2026 report is mostly stale and partly wrong
+> (it claims SAI on the L4 and H5, and AES on the H5). The current findings are the portal page
+> "Core.ST SDK audit and priority list, September 2026" (SDK project), and the live per-Core
+> status is `core-*.json` in this folder.
+
 > 2026-04-06 — RM → Tile JSON → Coregen → LL → HAL → Core → Configurator → Docs
 > Covers STM32L011E4 (Core.ST.L0), STM32L422TB (Core.ST.L4), STM32WBA55HGF6 (Core.ST.W5), STM32H523HE (Core.ST.H5)
 

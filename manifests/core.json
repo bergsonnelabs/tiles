@@ -1,10 +1,14 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@4b95d38",
+  "source": "tiles@f70bca2",
   "categories": {
     "adc": {
       "label": "Core.ADC",
       "icon": "◐"
+    },
+    "audio": {
+      "label": "Core.Audio",
+      "icon": "🎤"
     },
     "backup": {
       "label": "Core.Backup",
@@ -17,6 +21,14 @@
     "dac": {
       "label": "Core.DAC",
       "icon": "◓"
+    },
+    "debug": {
+      "label": "Core.Debug",
+      "icon": "⌁"
+    },
+    "fault": {
+      "label": "Core.Fault",
+      "icon": "⚠"
     },
     "i2c": {
       "label": "Core.I2C",
@@ -38,10 +50,6 @@
       "label": "Core.Pad",
       "icon": "◼"
     },
-    "audio": {
-      "label": "Core.Audio",
-      "icon": "🎤"
-    },
     "power": {
       "label": "Core.Power",
       "icon": "☾"
@@ -49,6 +57,10 @@
     "pwm": {
       "label": "Core.PWM",
       "icon": "◲"
+    },
+    "recovery": {
+      "label": "Core.Recovery",
+      "icon": "⟲"
     },
     "rng": {
       "label": "Core.RNG",
@@ -319,19 +331,23 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "7-bit device address."
         },
         {
           "name": "reg",
-          "type": "int"
+          "type": "int",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
         },
         {
           "name": "value",
-          "type": "int"
+          "type": "int",
+          "description": "Byte to write."
         }
       ],
       "returns": "hal_status_t",
@@ -349,15 +365,18 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "7-bit device address."
         },
         {
           "name": "reg",
-          "type": "int"
+          "type": "int",
+          "description": "Register address (two bytes, MSB first, when above 0xFF)."
         }
       ],
       "returns": "int",
@@ -375,11 +394,13 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "I2C bus id as declared in config.json (1 = I2C1, ...)."
         },
         {
           "name": "addr",
-          "type": "int"
+          "type": "int",
+          "description": "7-bit device address to probe."
         }
       ],
       "returns": "int",
@@ -602,7 +623,8 @@
       "params": [
         {
           "name": "slot",
-          "type": "int"
+          "type": "int",
+          "description": "Slot index, 0 to core_otp_slot_count() - 1."
         }
       ],
       "returns": "int",
@@ -987,11 +1009,13 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
         },
         {
           "name": "str",
-          "type": "string"
+          "type": "string",
+          "description": "NUL-terminated string to send."
         }
       ],
       "returns": "int",
@@ -1009,11 +1033,13 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...)."
         },
         {
           "name": "byte",
-          "type": "int"
+          "type": "int",
+          "description": "Byte to send."
         }
       ],
       "returns": "int",
@@ -1031,15 +1057,18 @@
       "params": [
         {
           "name": "bus",
-          "type": "int"
+          "type": "int",
+          "description": "SPI bus id as declared in config.json (1 = SPI1, ...)."
         },
         {
           "name": "cs_pad",
-          "type": "int"
+          "type": "int",
+          "description": "Tile pad driving chip select (asserted around the transfer)."
         },
         {
           "name": "tx",
-          "type": "int"
+          "type": "int",
+          "description": "Byte to send."
         }
       ],
       "returns": "int",
