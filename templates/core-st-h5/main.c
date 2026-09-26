@@ -1,5 +1,5 @@
 /**
- * Core.ST.H5.1 starter — blink the status LED, print over USB CDC.
+ * Core.ST.H5 starter — blink the status LED, print over USB CDC.
  *
  * The H5 is the big one: STM32H523, Cortex-M33, up to 248 MHz. It shares the
  * L4's USB-DFU story, so config.json is in the same fleet-standard shape:

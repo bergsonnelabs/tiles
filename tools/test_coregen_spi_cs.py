@@ -26,18 +26,18 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools" / "coregen"))
 import coregen  # noqa: E402
 
-L41 = ROOT / "definitions" / "Core-ST-L4-1-b.json"
-with open(L41, encoding="utf-8") as f:
+L4 = ROOT / "definitions" / "Core-ST-L4-b.json"
+with open(L4, encoding="utf-8") as f:
     _TILE = json.load(f)
 PAD_MAP = coregen.build_pad_map(_TILE["pads"])
 MCU = coregen.MCU_DB[_TILE["components"][0]["part"]]
 
-# Core.ST.L4.1: pad 9 = PA4 (SPI1 NSS pad), pad 4 = PB6, pad 5 = PC15, pad 6 = PA11 (USB D-)
+# Core.ST.L4 (not the L4.2): pad 9 = PA4 (SPI1 NSS pad), pad 4 = PB6, pad 5 = PC15, pad 6 = PA11 (USB D-)
 BUS = {"2": "SPI1.MOSI", "3": "SPI1.CLK", "8": "SPI1.MISO"}
 
 
 def cfg(pads=None, tiles=None):
-    c = {"core": "Core.ST.L4.1", "pads": dict(BUS, **(pads or {})),
+    c = {"core": "Core.ST.L4", "pads": dict(BUS, **(pads or {})),
          "interfaces": {"SPI1": {"mode": 0, "prescaler": 8}}}
     if tiles is not None:
         c["tiles"] = tiles
@@ -314,7 +314,7 @@ class TestDualBusTiles(unittest.TestCase):
 class TestGenerated(unittest.TestCase):
     """End to end: the emitted core_init.c attaches the map before any transfer."""
 
-    def render(self, config, core=L41):
+    def render(self, config, core=L4):
         with tempfile.TemporaryDirectory() as d:
             proj = os.path.join(d, "proj")
             os.makedirs(proj)

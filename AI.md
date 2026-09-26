@@ -21,16 +21,30 @@ The **Cores SDK** is a firmware development kit for the Tiletown **Core** family
 
 | Public name | MCU | Definition stem | Architecture |
 |---|---|---|---|
-| `Core.ST.L0.1` | STM32L011E4 | `Core-ST-L0-1-a` | Cortex-M0+, 32 MHz max, ultra-low-power |
-| `Core.ST.L4.1` | STM32L422TB | `Core-ST-L4-1-b` | Cortex-M4F, 80 MHz (first shipping L4) |
+| `Core.ST.L0` | STM32L011E4 | `Core-ST-L0-a` | Cortex-M0+, 32 MHz max, ultra-low-power |
+| `Core.ST.L4` | STM32L422TB | `Core-ST-L4-b` | Cortex-M4F, 80 MHz (first shipping L4; was `Core.ST.L4.1`) |
 | `Core.ST.L4.2` | STM32L422TB | `Core-ST-L4-2-a` | Cortex-M4F, 80 MHz (more pads) |
 | `Core.ST.W5` | STM32WBA55HGF6 | `Core-ST-W5-b` | Cortex-M33, 100 MHz, BLE |
-| `Core.ST.H5.1` | STM32H523HE | `Core-ST-H5-1-a` | Cortex-M33, 250 MHz |
+| `Core.ST.H5` | STM32H523HE | `Core-ST-H5-a` | Cortex-M33, 250 MHz |
 
 Pass either the **public name** or the **definition stem** as `TILE`. The
-vendor-segmented public names resolve to their definition stem in the Makefile
-(e.g. `Core.ST.L4.1` → `Core-ST-L4-1-b`); the matching alias map lives in
-`tools/coregen/coregen.py`.
+public names (matching each board's silkscreen) resolve to their definition
+stem in the Makefile (e.g. `Core.ST.L4` → `Core-ST-L4-b`); the matching alias
+map is `CORE_NAME_ALIASES` in `tools/coregen/coregen.py`.
+
+- **`Core.ST.L4` is not `Core.ST.L4.2`.** Two different boards on the same
+  STM32L422, with different pad maps and their own templates. Where SDK
+  comments say "Core.ST.L4" about the MCU (USB, NVM, SPI, clocks), they mean
+  both L422 boards.
+- **Renamed 2026-09** (to the silkscreens): `Core.ST.L4.1` → `Core.ST.L4`,
+  `Core.ST.L0.1` → `Core.ST.L0`, `Core.ST.H5.1` → `Core.ST.H5`; stems lost the
+  `-1` (`Core-ST-L4-1-b` → `Core-ST-L4-b`, …); templates `core-st-l4-1/` →
+  `core-st-l4/` and likewise for L0 and H5. The old names are deprecated
+  aliases: still accepted as `TILE` and in config.json `"core"`, with a
+  one-line NOTE (`CORE_DEPRECATED_NAMES` in coregen, the matching block in the
+  Makefile). `Core.ST.L4.2` and `Core.ST.W5` are unchanged. The same DB change
+  moved the C0 Core and Sense.A.3 into the T24 "m" families:
+  `mCore-ST-C0-a` (mCore.ST.C0, not yet buildable) and `mSense-A-3-a`.
 
 MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `MCU_DB` inside `tools/coregen/coregen.py`.
 
@@ -55,7 +69,7 @@ cores/
 │   └── status/                 # SDK implementation status per Core subfamily
 │       ├── features.json       # Canonical feature manifest (groups, IDs, layer, desc)
 │       ├── core-l.json         # Core.ST.L0 (STM32L011) feature statuses
-│       ├── core-u.json         # Core.ST.L4 (STM32L422) feature statuses
+│       ├── core-u.json         # Core.ST.L4 + Core.ST.L4.2 (STM32L422) feature statuses
 │       ├── core-w.json         # Core.ST.W5 (STM32WBA55) feature statuses
 │       └── core-h.json         # Core.ST.H5 (STM32H523) feature statuses
 ├── tiles.h                     # Tile framework entry point — include this
@@ -72,11 +86,11 @@ cores/
 │       ├── templates/          # Jinja2 templates (see below)
 │       └── config-schema.json
 ├── templates/                  # One minimal, buildable starter per Core — copy one
-│   ├── core-st-l0-1/           # Makefile + config.json + main.c
-│   ├── core-st-l4-1/
+│   ├── core-st-l0/           # Makefile + config.json + main.c
+│   ├── core-st-l4/
 │   ├── core-st-l4-2/
 │   ├── core-st-w5/
-│   └── core-st-h5-1/
+│   └── core-st-h5/
 ├── projects/                   # User projects (each has config.json)
 │   └── my-project/
 └── examples/                   # Reference projects (no config.json changes needed)
@@ -87,7 +101,7 @@ cores/
 
 **Starting a new project:** copy the `templates/` folder for your Core rather
 than hand-assembling one. Each is a complete, building project, and the
-USB-capable ones (L4.1 / L4.2 / H5.1) come pre-wired in the fleet-standard
+USB-capable ones (Core.ST.L4 / L4.2 / H5) come pre-wired in the fleet-standard
 shape — `bootloader: "rom"`, USB CDC up before `main()`, and the `iwdg`
 watchdog + strike→ROM-DFU brick recovery, fed from the starter loop. See
 [`templates/README.md`](templates/README.md).

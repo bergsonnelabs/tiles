@@ -7,7 +7,7 @@ truth for tile definitions. This script mirrors every tile's JSON into
 `definitions/<stem>.json`, where the stem is derived from the DB columns:
 
     tile_families.name  +  tiles.name  +  tiles.rev
-    "Core"              +  "ST.L4.1"   +  "b"        -> Core-ST-L4-1-b.json
+    "Core"              +  "ST.L4"     +  "b"        -> Core-ST-L4-b.json
 
 It is a *faithful mirror*: it writes/updates every non-empty tile AND
 deletes any `definitions/*.json` that no longer corresponds to a DB row.
@@ -27,7 +27,7 @@ has no default and must be supplied.
 Usage:
     TILES_DB_PASSWORD=… python3 tools/sync_definitions.py            # dry-run
     TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --apply
-    TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --only Core-ST-L4-1-b.json
+    TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --only Core-ST-L4-b.json
 """
 
 from __future__ import annotations
@@ -67,14 +67,14 @@ DB = dict(
 
 
 def tile_filename(family: str, name: str, rev: str) -> str:
-    """Core + ST.L4.1 + b -> Core-ST-L4-1-b.json (dots in name become dashes)."""
+    """Core + ST.L4 + b -> Core-ST-L4-b.json (dots in name become dashes)."""
     return f"{family}-{name.replace('.', '-')}-{rev}.json"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Mirror the product DB into definitions/.")
     ap.add_argument("--apply", action="store_true", help="write changes (default: dry-run)")
-    ap.add_argument("--only", help="restrict to a single filename, e.g. Core-ST-L4-1-b.json")
+    ap.add_argument("--only", help="restrict to a single filename, e.g. Core-ST-L4-b.json")
     args = ap.parse_args()
 
     if not DB["password"]:

@@ -134,18 +134,51 @@ TILE    ?= Core.ST.L4.2
 PROJECT ?= blink
 
 # ---- Public Core name aliases ----
-# The vendor-segmented public names (Core.ST.<family>.<n>) resolve onto the
-# canonical, DB-synced definition stems. Either form is accepted as TILE; the
-# alias rewrites to the stem so the JSON lookup + MCU mapping below stay
-# unchanged. Each public name maps to the most-complete definition for its MCU.
+# The public names (Core.ST.<family>[.<n>], matching each board's silkscreen)
+# resolve onto the canonical, DB-synced definition stems. Either form is
+# accepted as TILE; the alias rewrites to the stem so the JSON lookup + MCU
+# mapping below stay unchanged. Each public name maps to the most-complete
+# definition for its board.
+#
+# Careful: Core.ST.L4 and Core.ST.L4.2 are two DIFFERENT boards (same STM32L422
+# MCU; the L4.2 has more pads). Core.ST.L4 was called Core.ST.L4.1 until the
+# 2026-09 rename.
+#
+# Retired names (before the 2026-09 rename) still resolve, with a NOTE, so
+# older projects keep building: Core.ST.L4.1 -> Core.ST.L4, Core.ST.L0.1 ->
+# Core.ST.L0, Core.ST.H5.1 -> Core.ST.H5, and the old stems Core-ST-L4-1-a/b,
+# Core-ST-L0-1-a and Core-ST-H5-1-a. (MAKE_RESTARTS: say it once, not again
+# when make re-reads itself after generating core_drivers.mk.)
+_CORE_OLD_NAME := $(TILE)
 ifeq ($(TILE),Core.ST.L4.1)
-  override TILE := Core-ST-L4-1-b
+  override TILE := Core.ST.L4
+else ifeq ($(TILE),Core.ST.L0.1)
+  override TILE := Core.ST.L0
+else ifeq ($(TILE),Core.ST.H5.1)
+  override TILE := Core.ST.H5
+else ifeq ($(TILE),Core-ST-L4-1-a)
+  override TILE := Core-ST-L4-a
+else ifeq ($(TILE),Core-ST-L4-1-b)
+  override TILE := Core-ST-L4-b
+else ifeq ($(TILE),Core-ST-L0-1-a)
+  override TILE := Core-ST-L0-a
+else ifeq ($(TILE),Core-ST-H5-1-a)
+  override TILE := Core-ST-H5-a
+endif
+ifneq ($(TILE),$(_CORE_OLD_NAME))
+  ifeq ($(MAKE_RESTARTS),)
+    $(info NOTE: TILE=$(_CORE_OLD_NAME) is now $(TILE) (the old name still works; update your Makefile))
+  endif
+endif
+
+ifeq ($(TILE),Core.ST.L4)
+  override TILE := Core-ST-L4-b
 else ifeq ($(TILE),Core.ST.L4.2)
   override TILE := Core-ST-L4-2-a
-else ifeq ($(TILE),Core.ST.H5.1)
-  override TILE := Core-ST-H5-1-a
-else ifeq ($(TILE),Core.ST.L0.1)
-  override TILE := Core-ST-L0-1-a
+else ifeq ($(TILE),Core.ST.H5)
+  override TILE := Core-ST-H5-a
+else ifeq ($(TILE),Core.ST.L0)
+  override TILE := Core-ST-L0-a
 else ifeq ($(TILE),Core.ST.W5)
   override TILE := Core-ST-W5-b
 endif
@@ -188,7 +221,7 @@ CONFIG_FOUND := $(shell [ -f "$(CONFIG_JSON)" ] && echo 1)
 # coregen generates the headers; the Makefile still needs to know
 # CPU architecture and linker script for compiler flags.
 
-ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-1-a Core-ST-L4-1-b Core-ST-L4-2-a))
+ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
   MCU_FAMILY  = stm32l4xx
   MCU_PART    = STM32L422xx
   PROBE_RS_CHIP = STM32L422KB
@@ -198,7 +231,7 @@ ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-1-a Core-ST-L4-1-b Core-ST-L4-2-a))
   LDSCRIPT    = $(SDK_DIR)sdk/device/stm32l422tb.ld
   STARTUP     = $(SDK_DIR)sdk/device/stm32l4xx/startup_stm32l422xx.s
   OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32l4.cfg
-else ifeq ($(TILE),Core-ST-L0-1-a)
+else ifeq ($(TILE),Core-ST-L0-a)
   MCU_FAMILY  = stm32l0xx
   MCU_PART    = STM32L011xx
   PROBE_RS_CHIP = STM32L011K4
@@ -217,7 +250,7 @@ else ifeq ($(TILE),Core-ST-W5-b)
   STARTUP     = $(SDK_DIR)sdk/device/stm32wbaxx/startup_stm32wba55xx.s
   OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32wba.cfg
   FLASH_TOOL  = cubeprog
-else ifeq ($(TILE),Core-ST-H5-1-a)
+else ifeq ($(TILE),Core-ST-H5-a)
   MCU_FAMILY  = stm32h5xx
   MCU_PART    = STM32H523xx
   PROBE_RS_CHIP = STM32H523CE
@@ -228,7 +261,7 @@ else ifeq ($(TILE),Core-ST-H5-1-a)
   STARTUP     = $(SDK_DIR)sdk/device/stm32h5xx/startup_stm32h523xx.s
   OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32h5.cfg
 else
-  $(error Unknown TILE: $(TILE). Supported: Core-ST-L0-1-a, Core-ST-L4-1-a, Core-ST-L4-1-b, Core-ST-L4-2-a, Core-ST-W5-b, Core-ST-H5-1-a — or public names Core.ST.L0.1 / Core.ST.L4.1 / Core.ST.L4.2 / Core.ST.W5 / Core.ST.H5.1)
+  $(error Unknown TILE: $(TILE). Supported: public names Core.ST.L0 / Core.ST.L4 / Core.ST.L4.2 / Core.ST.W5 / Core.ST.H5 (Core.ST.L4 and Core.ST.L4.2 are different boards), or stems Core-ST-L0-a, Core-ST-L4-a, Core-ST-L4-b, Core-ST-L4-2-a, Core-ST-W5-b, Core-ST-H5-a)
 endif
 
 # ---- Bootloader support ----
@@ -271,16 +304,16 @@ CUSTOM_BOOTLOADER_ACK=1)
   endif
   APP_ADDR   = 0x08002000
   APP_OFFSET = $(APP_ADDR)UL
-  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-1-a Core-ST-L4-1-b Core-ST-L4-2-a))
+  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32l422tb_app.ld
   endif
-  ifeq ($(TILE),Core-ST-H5-1-a)
+  ifeq ($(TILE),Core-ST-H5-a)
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32h523he_app.ld
   endif
 endif
 
 ifeq ($(ROM_DFU),1)
-  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-1-a Core-ST-L4-1-b Core-ST-L4-2-a))
+  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32l422tb_romdfu.ld
   endif
   # Core.ST.H5: standard linker script already has noinit reservation and
@@ -395,12 +428,13 @@ endif
 # Opt-in via `WAMR_ENABLED=1`. When enabled, links the WAMR
 # interpreter into the firmware so a user's DSL-compiled `.wasm`
 # blob can execute on-device. Gated only to Cortex-M33 targets
-# (Core.ST.H5, Core.ST.W5) — Core.ST.L4's M4 footprint is over budget per the
-# A4b spike and routes through a separate interpreter path.
+# (Core.ST.H5, Core.ST.W5) — the M4 footprint of the L4 Cores (Core.ST.L4,
+# Core.ST.L4.2) is over budget per the A4b spike and routes through a separate
+# interpreter path.
 WAMR_ENABLED ?= 0
 ifeq ($(WAMR_ENABLED),1)
   ifneq ($(CPU),cortex-m33)
-    $(error WAMR_ENABLED=1 is only supported on Cortex-M33 Cores (Core.ST.H5.1, Core.ST.W5))
+    $(error WAMR_ENABLED=1 is only supported on Cortex-M33 Cores (Core.ST.H5, Core.ST.W5))
   endif
   include $(SDK_DIR)sdk/wamr/wamr.mk
 endif
@@ -853,8 +887,8 @@ flash-rom: $(TARGET).bin
 	dfu-util -a 0 -s 0x08000000:leave -D $<
 
 # ---- Flash over USB serial (no bootloader, no driver) ----
-# Hands the running Core to its SRAM flasher over the CDC port (Core.ST.L4.x,
-# ROM-DFU layout). No dfu-util, and on Windows no Zadig / WinUSB. Needs the
+# Hands the running Core to its SRAM flasher over the CDC port (Core.ST.L4 and
+# Core.ST.L4.2, ROM-DFU layout). No dfu-util, and on Windows no Zadig / WinUSB. Needs the
 # firmware on the Core to be built with serial update; if it predates it, this
 # says so — run `make flash-dfu` once. SERIAL_PORT picks a port when more than
 # one Core is plugged in. Protocol: docs/serial-update-protocol.md.

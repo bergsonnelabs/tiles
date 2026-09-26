@@ -1,7 +1,7 @@
-# Bench test for core_spi on Core.ST.L4.1 / L4.2 and Core.ST.W5, with one
+# Bench test for core_spi on Core.ST.L4 / L4.2 and Core.ST.W5, with one
 # jumper from MOSI to MISO. See README.md.
 #
-#   make                            # Core.ST.L4.1 (report over USB CDC)
+#   make                            # Core.ST.L4 (report over USB CDC)
 #   make TILE=Core.ST.L4.2          # config-l42.json: MISO on pad 18, CS on pad 19
 #   make TILE=Core.ST.W5            # config-w5.json: SPI3; result in g_spi_lb over SWD
 #   make TWO_TILES=1                # config-2tiles.json: two SPI1 tiles, CS pads 9 and 4 (T7)
@@ -15,7 +15,7 @@
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in the configs gives
 # the ROM-DFU layout (app @ 0x08000000). The custom-bootloader layout is
 # parked, and flashing it onto a ROM-DFU board corrupts the resident app.
-TILE          ?= Core.ST.L4.1
+TILE          ?= Core.ST.L4
 TILES_ENABLED := 1
 BLE_ENABLED   := 0
 PROJECT       := $(notdir $(CURDIR))

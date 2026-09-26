@@ -25,11 +25,17 @@ not repeat it, or keep the project inside the SDK checkout.
 
 | Folder | Core | MCU | Flashing | USB |
 |---|---|---|---|---|
-| [`core-st-l0-1`](core-st-l0-1/) | `Core.ST.L0.1` | STM32L011 | SWD (`make flash`) | — |
-| [`core-st-l4-1`](core-st-l4-1/) | `Core.ST.L4.1` | STM32L422 | USB DFU (`make flash-dfu`) | CDC |
+| [`core-st-l0`](core-st-l0/) | `Core.ST.L0` | STM32L011 | SWD (`make flash`) | — |
+| [`core-st-l4`](core-st-l4/) | `Core.ST.L4` | STM32L422 | USB DFU (`make flash-dfu`) | CDC |
 | [`core-st-l4-2`](core-st-l4-2/) | `Core.ST.L4.2` | STM32L422 | USB DFU (`make flash-dfu`) | CDC |
 | [`core-st-w5`](core-st-w5/) | `Core.ST.W5` | STM32WBA55 | SWD via CubeProgrammer | — |
-| [`core-st-h5-1`](core-st-h5-1/) | `Core.ST.H5.1` | STM32H523 | USB DFU (`make flash-dfu`) | CDC |
+| [`core-st-h5`](core-st-h5/) | `Core.ST.H5` | STM32H523 | USB DFU (`make flash-dfu`) | CDC |
+
+`core-st-l4` and `core-st-l4-2` are for two different boards: the Core.ST.L4
+(called Core.ST.L4.1 until the 2026-09 rename) and the larger Core.ST.L4.2.
+They share the STM32L422 but not the pad map, so pick the one printed on your
+board. (The templates were `core-st-l0-1`, `core-st-l4-1` and `core-st-h5-1`
+before the rename.)
 
 Every template uses the clock level its Core JSON declares as the default
 (`"clock": "medium"`); raise it in `config.json` when you need the headroom.

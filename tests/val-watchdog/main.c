@@ -19,9 +19,9 @@
  *
  * Build all four Cores (all must succeed):
  *   make && make clean
- *   make TILE=Core.ST.L4.1 && make clean
- *   make TILE=Core.ST.H5.1 && make clean
- *   make TILE=Core.ST.L0.1 && make clean
+ *   make TILE=Core.ST.L4 && make clean
+ *   make TILE=Core.ST.H5 && make clean
+ *   make TILE=Core.ST.L0 && make clean
  *
  * Compile/link validation only — nothing here is meant to run on hardware.
  * core_watchdog_start() is deliberately NOT called: once started the IWDG

@@ -1,9 +1,9 @@
 # Compile validation for the I2C target-mode API and the ADC DMA millivolt
 # helpers. Builds on every Core:
 #   make                        # Core.ST.W5
-#   make TILE=Core.ST.L4.1
-#   make TILE=Core.ST.H5.1
-#   make TILE=Core.ST.L0.1
+#   make TILE=Core.ST.L4
+#   make TILE=Core.ST.H5
+#   make TILE=Core.ST.L0
 TILE         ?= Core.ST.W5
 TILES_ENABLED := 0
 BLE_ENABLED  := 0

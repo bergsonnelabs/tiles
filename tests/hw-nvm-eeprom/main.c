@@ -1,5 +1,5 @@
 /**
- * hw-nvm-eeprom — bench test for core_nvm on the Core.ST.L0.1's data EEPROM
+ * hw-nvm-eeprom — bench test for core_nvm on the Core.ST.L0's data EEPROM
  * (STM32L011, 512 B at 0x08080000), written for the 2026-09 fixes: the byte
  * helpers (tiles#284: read_byte used to return -1 for every byte) and the
  * FLASH_SR checks (tiles#291).
@@ -39,7 +39,7 @@
 #include "core_watchdog.h"
 
 #if !defined(STM32L011xx)
-#error "hw-nvm-eeprom is for Core.ST.L0.1 (true data EEPROM); hw-nvm-flash covers L4 / W5"
+#error "hw-nvm-eeprom is for Core.ST.L0 (true data EEPROM); hw-nvm-flash covers L4 / W5"
 #endif
 
 #ifndef REG32

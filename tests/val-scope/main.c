@@ -6,9 +6,9 @@
  * build on all four, and again with the module compiled out:
  *
  *   make && make clean
- *   make TILE=Core.ST.H5.1 && make clean
+ *   make TILE=Core.ST.H5 && make clean
  *   make TILE=Core.ST.W5   && make clean
- *   make TILE=Core.ST.L0.1 && make clean
+ *   make TILE=Core.ST.L0 && make clean
  *   make SCOPE_ENABLED=0   && make clean
  *
  * The Bluetooth link is covered by tests/val-ble-scope (W5, BLE on). Behavior

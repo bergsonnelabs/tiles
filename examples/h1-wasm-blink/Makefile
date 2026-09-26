@@ -5,7 +5,7 @@
 #
 # Run from this folder: `make`. Flash: `make flash-dfu`.
 
-TILE         := Core.ST.H5.1
+TILE         := Core.ST.H5
 TILES_ENABLED := 0
 ROM_DFU      := 1
 WAMR_ENABLED := 1

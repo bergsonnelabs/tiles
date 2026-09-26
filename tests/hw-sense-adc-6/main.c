@@ -1,7 +1,7 @@
 /**
  * hw-sense-adc-6 — hardware test for the Sense.ADC.6 driver.
  *
- * A Core.ST.L4.1 on I2C1 (pads 4/5) exercises every public entry point of
+ * A Core.ST.L4 on I2C1 (pads 4/5) exercises every public entry point of
  * tile_sense_adc_6 against a real tile, and reports over USB-CDC.
  *
  * Open the serial port to run the sequence; it repeats if you reopen it.

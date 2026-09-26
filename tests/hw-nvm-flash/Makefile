@@ -1,7 +1,7 @@
-# Bench test for core_nvm's flash emulation on Core.ST.L4.1 / L4.2 and
+# Bench test for core_nvm's flash emulation on Core.ST.L4 / L4.2 and
 # Core.ST.W5. See README.md.
 #
-#   make                            # Core.ST.L4.1 (report over USB CDC)
+#   make                            # Core.ST.L4 (report over USB CDC)
 #   make TILE=Core.ST.L4.2
 #   make TILE=Core.ST.W5            # result in g_nvm_result over SWD
 #   make TILE=Core.ST.W5 BLE=1      # adds T5 (writes while advertising)
@@ -12,7 +12,7 @@
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in config.json gives
 # the ROM-DFU layout (app @ 0x08000000). The custom-bootloader layout is
 # parked, and flashing it onto a ROM-DFU board corrupts the resident app.
-TILE          ?= Core.ST.L4.1
+TILE          ?= Core.ST.L4
 BLE           ?= 0
 TILES_ENABLED := 0
 PROJECT       := $(notdir $(CURDIR))

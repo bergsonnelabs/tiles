@@ -147,7 +147,7 @@ Built on branch `studio/l4-brick-recovery` (SDK + codegen only):
 hook + SOS + watchdog auto-start), `coregen.py` (`iwdg` config, default off).
 
 - **Verified (compile + on hardware):** compiles clean for L4 (`-Wall -Wextra`),
-  full link OK. **Bench-validated end-to-end on the CoreProbe (Core.ST.L4.1(b))**
+  full link OK. **Bench-validated end-to-end on the CoreProbe (Core.ST.L4 rev b, not the L4.2)**
   via `tests/hw-watchdog-recovery/`: healthy feed → hang → strike cascade
   (1→2→3, counter survives resets) → one rapid SOS on PA8 → ROM DFU (`0483:df11`)
   → reflash. `caused_reset()` reports WATCHDOG correctly after the early RMVF clear.
@@ -201,8 +201,9 @@ this design rather than fighting it:
   adds.
 
 **Separate but related workstream — Studio "SWD for all Core.ST.x":** SWD should
-be selectable for every Core.ST core (L0 = *only* way in, L4.2 always, L4.1 rev b
-new, H5 already, W5 done).
+be selectable for every Core.ST core (L0 = *only* way in, Core.ST.L4.2 always,
+Core.ST.L4 rev b new (the board called Core.ST.L4.1 before the 2026-09 rename,
+not the L4.2), H5 already, W5 done).
 
 *Transport: done.* Studio speaks two SWD probes — ST-Link (`lib/stlink/probe.ts`)
 and the in-house **CoreProbe** over WebHID CMSIS-DAP v1 (`lib/cmsisdap/coreprobe.ts`,

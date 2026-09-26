@@ -1,7 +1,7 @@
 /**
  * val-multi-i2c -- Validation: Dual I2C buses + ADC DMA on Core.ST.H5
  *
- * Core.ST.H5.1, clock=high (128 MHz)
+ * Core.ST.H5, clock=high (128 MHz)
  * Pad 4 = I2C1.CLK, Pad 5 = I2C1.DAT (400 kHz)
  * Pad 2 = I2C3.CLK, Pad 3 = I2C3.DAT (100 kHz)
  * Pad 8 = ADC7+

@@ -156,7 +156,7 @@ TILES_CHECK_VERSION(1, 0);
  * is ~1 mA per channel with PWM at maximum.
  *
  * Chosen against two measured limits on a Display.RGBW rev a
- * (bench fixture, Core.ST.L4.1, USB-fed rail, 2026-09-04):
+ * (bench fixture, Core.ST.L4, USB-fed rail, 2026-09-04):
  *
  *   - Comfort. ~6.4 mA on a bare, undiffused LED is genuinely painful
  *     to look at from bench distance; ~2 mA on all four channels at

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host side of tests/hw-usb-robust (Core.ST.L4.1). Needs python3 + pyserial.
+"""Host side of tests/hw-usb-robust (Core.ST.L4). Needs python3 + pyserial.
 
     python3 host_test.py            # robustness checks (~45 s)
     python3 host_test.py sleep      # sleep + reachability (flash-serial while asleep)

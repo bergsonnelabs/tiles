@@ -2756,12 +2756,12 @@
     }
   ],
   "updated_at": "2026-06-02T10:37:39.541Z",
-  "description": "The expanded-I/O USB-programmable Core.U.2 is based on the same 80-MHz Cortex-M4 STM32L422 as the smaller Core.ST.L4.1, with the top 12 pads (1-5 and 16-22) matching the pad layout of the Core.U.1.  The additional I/O pads provide a user-configurable combination of single-wire and trace debugging, two I2C ports, one SPI port, one quad SPI port, ten 12-bit ADC inputs, multiple timers, capacitive-touch inputs, and an on-board comparator.  The board also includes an onboard LED and a physical button for reset and bootloading (see Application Notes).",
+  "description": "The expanded-I/O USB-programmable Core.ST.L4.2 is based on the same 80-MHz Cortex-M4 STM32L422 as the smaller Core.ST.L4, with the top 12 pads (1-5 and 16-22) matching the pad layout of the Core.ST.L4.  The additional I/O pads provide a user-configurable combination of single-wire and trace debugging, two I2C ports, one SPI port, one quad SPI port, ten 12-bit ADC inputs, multiple timers, capacitive-touch inputs, and an on-board comparator.  The board also includes an onboard LED and a physical button for reset and bootloading (see Application Notes).",
   "json_version": "0.61",
   "application_notes": [
     {
       "sort": 0,
-      "details": "Similar to the Core.ST.L4.1, when the chip is blank, it will default into the bootloader when connected over USB.  Once there is code in the program space, you need to hold the BOOT0 pin HIGH during reset (either power-on or via the NRST pin) to enter the bootloader.  The physical button will also execute this behavior.",
+      "details": "Similar to the Core.ST.L4, when the chip is blank, it will default into the bootloader when connected over USB.  Once there is code in the program space, you need to hold the BOOT0 pin HIGH during reset (either power-on or via the NRST pin) to enter the bootloader.  The physical button will also execute this behavior.",
       "heading": "USB Bootloading",
       "image_url": ""
     },

@@ -133,17 +133,29 @@ markers** — re-running coregen will clobber them. Edit `config.json` instead.
 Selects `definitions/<Core>.json`, which fixes the MCU part, pad map, clock
 options, and on-board peripherals. Accepts either form:
 
-| Public name      | DB stem (also accepted) | MCU            | Max SYSCLK | USB? |
-|------------------|-------------------------|----------------|------------|------|
-| `Core.ST.L0.1`   | `Core-ST-L0-1-a`        | STM32L011      | 32 MHz     | no   |
-| `Core.ST.L4.1`   | `Core-ST-L4-1-b`        | STM32L422      | 80 MHz     | yes  |
-| `Core.ST.L4.2`   | `Core-ST-L4-2-a`        | STM32L422      | 80 MHz     | yes  |
-| `Core.ST.W5`     | `Core-ST-W5-b`          | STM32WBA55     | 100 MHz    | no   |
-| `Core.ST.H5.1`   | `Core-ST-H5-1-a`        | STM32H523      | 250 MHz    | yes  |
+| Public name    | DB stem (also accepted) | MCU            | Max SYSCLK | USB? |
+|----------------|-------------------------|----------------|------------|------|
+| `Core.ST.L0`   | `Core-ST-L0-a`          | STM32L011      | 32 MHz     | no   |
+| `Core.ST.L4`   | `Core-ST-L4-b`          | STM32L422      | 80 MHz     | yes  |
+| `Core.ST.L4.2` | `Core-ST-L4-2-a`        | STM32L422      | 80 MHz     | yes  |
+| `Core.ST.W5`   | `Core-ST-W5-b`          | STM32WBA55     | 100 MHz    | no   |
+| `Core.ST.H5`   | `Core-ST-H5-a`          | STM32H523      | 250 MHz    | yes  |
 
-Prefer the public name. (`Core.ST.L4.1` resolves to rev **b** — the PA13/PA14
+Prefer the public name. (`Core.ST.L4` resolves to rev **b** — the PA13/PA14
 superset of rev a.) If the name doesn't resolve cleanly to the tile JSON you
 pass, coregen prints a NOTE but continues.
+
+**`Core.ST.L4` is not `Core.ST.L4.2`.** They are two different boards on the
+same STM32L422, with different pad maps. Pick the name printed on the board.
+
+**Renamed 2026-09.** The Cores were renamed to match their silkscreens:
+`Core.ST.L4.1` is now `Core.ST.L4`, `Core.ST.L0.1` is now `Core.ST.L0`, and
+`Core.ST.H5.1` is now `Core.ST.H5` (stems `Core-ST-L4-1-a/b`, `Core-ST-L0-1-a`,
+`Core-ST-H5-1-a` lost their `-1` the same way). The old names still work, in
+`"core"` and as `TILE`, and print a one-line NOTE, e.g.
+`NOTE: config.json "core": "Core.ST.L4.1" is now "Core.ST.L4" (the old name
+still works; update config.json)`. `Core.ST.L4.2` and `Core.ST.W5` did not
+change.
 
 ---
 
@@ -166,7 +178,7 @@ value `"default"` resolves to the tile's schema default.
   `high`/`max`; WBA55: range 2 for `low` (HSI16), range 1 above 16 MHz; H5: the
   right VOS for higher speeds).
 - Per-Core adjustments, printed as a build NOTE or ERROR:
-  - **Core.ST.L4:** `low` runs at 16 MHz, not 8 MHz. USB is always on and
+  - **Core.ST.L4 and Core.ST.L4.2:** `low` runs at 16 MHz, not 8 MHz. USB is always on and
     needs an APB clock of at least 10 MHz (RM0394 §46.4), so `low` and
     `medium` are the same clock there.
   - **Core.ST.L0:** `low` runs in voltage range 3 (no Low-power run: that needs
@@ -268,7 +280,7 @@ names and control pins from there. Today that is:
 
 | Core             | `pad4`   | `pad5`   |
 |------------------|----------|----------|
-| Core.ST.L4.1 (b) | via PC15 | via PA9  |
+| Core.ST.L4 (b) | via PC15 | via PA9  |
 | Core.ST.W5 (b)   | via PC15 | via PC14 |
 
 Other Cores have no switchable pull-ups. Name the ones you want:
@@ -639,8 +651,8 @@ coregen is mostly **fail-fast** — most mistakes print an error and exit, so a
 bad config won't silently generate wrong code. Things that **exit**:
 
 - a pad that doesn't exist, or a function not available on that pad
-- on Core.ST.L4, anything other than `USB.*` on the USB D+/D- pads (6/7 on
-  L4.1, 16/17 on L4.2): USB is always on there
+- on the L4 Cores, anything other than `USB.*` on the USB D+/D- pads (6/7 on
+  Core.ST.L4, 16/17 on Core.ST.L4.2): USB is always on there
 - an unknown `pullups` name, or a pull-up control pin that is also a pad
 - on Core.ST.W5, `ble` enabled with `clock: "low"`
 - an `interfaces` key (in cross-checks) that doesn't match the core JSON
@@ -676,7 +688,7 @@ Things that are **silent** (no message):
 **GPIO in + out, input on a falling-edge interrupt with pull-up:**
 ```json
 {
-  "core": "Core.ST.L0.1", "clock": "max",
+  "core": "Core.ST.L0", "clock": "max",
   "pads": { "11": "GPIO.OUT", "8": "GPIO.IN" },
   "gpio": { "8": { "pull": "up", "exti": "falling" } }
 }
@@ -685,7 +697,7 @@ Things that are **silent** (no message):
 **Two I2C buses at different speeds, three tiles:**
 ```json
 {
-  "core": "Core.ST.L4.1", "clock": "max",
+  "core": "Core.ST.L4", "clock": "max",
   "pads": {
     "4": "I2C1.CLK", "5": "I2C1.DAT",
     "2": "I2C3.CLK", "8": "I2C3.DAT"
@@ -723,7 +735,7 @@ Things that are **silent** (no message):
 **ADC + UART logging:**
 ```json
 {
-  "core": "Core.ST.L0.1", "clock": "high",
+  "core": "Core.ST.L0", "clock": "high",
   "pads": { "6": "ADC1", "7": "USART2.TX", "2": "USART2.RX" },
   "interfaces": { "USART2": { "baud": 115200 } }
 }

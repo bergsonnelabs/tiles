@@ -1,7 +1,7 @@
 /**
  * val-power-rtc -- Validation: Sleep, stop modes, EXTI wakeup, RTC
  *
- * Core.ST.H5.1, clock=high (128MHz)
+ * Core.ST.H5, clock=high (128MHz)
  * Pad 8 = GPIO.IN with EXTI (falling edge wakeup)
  *
  * Exercises: core_init, core_sleep, core_stop_for,

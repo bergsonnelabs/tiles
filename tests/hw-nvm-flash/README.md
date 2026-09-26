@@ -1,7 +1,7 @@
 # hw-nvm-flash
 
 Bench test for `core_nvm`'s flash emulation (`sdk/core/core_nvm.c`) on
-**Core.ST.L4.1 / L4.2** and **Core.ST.W5**. It runs unattended in about a
+**Core.ST.L4 / L4.2** and **Core.ST.W5**. It runs unattended in about a
 minute, with the 5 s watchdog armed by `core_init()` as in a Studio project.
 `host_test.py` adds the reflash test (T4).
 
@@ -29,7 +29,7 @@ real chip at a couple of dozen points.
 `make distclean` when switching Cores or BLE.
 
 ```sh
-make && make flash-serial              # Core.ST.L4.1, then read the CDC
+make && make flash-serial              # Core.ST.L4, then read the CDC
 python3 host_test.py                   # the whole run + T4 with flash-serial (~2 min)
 python3 host_test.py --dfu             # ... T4 with make flash-dfu (ROM DFU)
 

@@ -1,5 +1,5 @@
 /**
- * Core.ST.L4.1 starter — blink the status LED, print over USB CDC.
+ * Core.ST.L4 starter — blink the status LED, print over USB CDC.
  *
  * config.json puts this project in the fleet-standard shape for an L4:
  *

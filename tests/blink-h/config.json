@@ -1,5 +1,5 @@
 {
-  "core": "Core.ST.H5.1",
+  "core": "Core.ST.H5",
   "clock": "low",
   "_note": "high = HSI 64MHz + PLL ÷4 ×32 ÷4 = 128MHz",
   "pads": {}

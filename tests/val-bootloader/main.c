@@ -1,7 +1,7 @@
 /**
  * val-bootloader -- Validation: BOOTLOADER=1 on Core.ST.H5
  *
- * Core.ST.H5.1, clock=default, USB enabled, BOOTLOADER=1
+ * Core.ST.H5, clock=default, USB enabled, BOOTLOADER=1
  *
  * The key test is that BOOTLOADER=1 in the Makefile causes APP_OFFSET
  * and DFU bootloader logic to compile correctly. The linker script

@@ -1,7 +1,7 @@
 /**
  * val-usb-dac-hid -- Validation: USB CDC + HID, DAC output, ADC read
  *
- * Core.ST.H5.1, clock=default, USB enabled
+ * Core.ST.H5, clock=default, USB enabled
  * Pad 9 = DAC1.OUT, Pad 8 = ADC7+
  *
  * Exercises: core_init, core_usb_init, core_usb_printf,

@@ -1,9 +1,9 @@
 /**
  * hw-pin-wake — bench test for pin-change wake from Stop
- * (core_stop_until_on_change, sdk/core/core_power.h) on Core.ST.L4.1.
+ * (core_stop_until_on_change, sdk/core/core_power.h) on Core.ST.L4.
  * See README.md for the bench procedure and how to read the result.
  *
- * Hardware (definitions/Core-ST-L4-1-b.json): pad 4 is PB6, and its 2.2 kOhm
+ * Hardware (definitions/Core-ST-L4-b.json): pad 4 is PB6, and its 2.2 kOhm
  * on-tile pull-up hangs off chip pin PC15 (config.pullups: "pad4" via PC15,
  * "pad5" via PA9). Driving PC15 high/low pulls pad 4 high/low. Until
  * 2026-09-25 this test drove PA9 (pad 5's pull-up), which is why its T1 read
@@ -78,7 +78,7 @@ enum { PH_START = 0, PH_RETRY, PH_ARMED, PH_REPORT, PH_T5 };
  * PAD_4_PORT/PAD_4_PIN already mean something else.) */
 #define LOOP_PAD  4u
 
-/* Pad 4's pull-up control pin, per definitions/Core-ST-L4-1-b.json
+/* Pad 4's pull-up control pin, per definitions/Core-ST-L4-b.json
  * config.pullups ("Pad 4 pull-up (via PC15)"). PC15 sits behind the backup-
  * domain power switch and sources at most 3 mA (DS12470 §6.3.14); the 2.2k
  * at 3.3 V asks ~1.5 mA. */

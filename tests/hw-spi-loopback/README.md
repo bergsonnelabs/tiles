@@ -1,6 +1,6 @@
 # hw-spi-loopback
 
-Bench test for `core_spi` (portal task #285) on **Core.ST.L4.1 / L4.2** and
+Bench test for `core_spi` (portal task #285) on **Core.ST.L4 / L4.2** and
 **Core.ST.W5**: bounded polled transfers, DMA, all four modes, timeouts, and
 the `core_tiles_pal()` SPI bridge. It needs one jumper from MOSI to MISO and
 runs unattended in under a second, with the 5 s watchdog armed as in a Studio
@@ -9,14 +9,14 @@ up for any project.
 
 | Core | Config | Jumper | SCK / CS (leave open) | Clock |
 |------|--------|--------|-----------------------|-------|
-| Core.ST.L4.1 | `config.json` | pad 2 (PA7, SPI1 MOSI) → pad 8 (PB4, SPI1 MISO) | pad 3 / pad 9 | max, 80 MHz |
+| Core.ST.L4 | `config.json` | pad 2 (PA7, SPI1 MOSI) → pad 8 (PB4, SPI1 MISO) | pad 3 / pad 9 | max, 80 MHz |
 | Core.ST.L4.2 | `config-l42.json` | pad 2 (PA7) → pad 18 (PB4) | pad 3 / pad 19 | max, 80 MHz |
 | Core.ST.W5 | `config-w5.json` | pad 6 (PB8, SPI3 MOSI) → pad 7 (PB9, SPI3 MISO) | pad 2 / pad 3 | high, 64 MHz |
-| Core.ST.L4.1, two tiles | `config-2tiles.json` (`make TWO_TILES=1`) | pad 2 → pad 8 | pad 3 / pads 9 and 4 | max, 80 MHz |
+| Core.ST.L4, two tiles | `config-2tiles.json` (`make TWO_TILES=1`) | pad 2 → pad 8 | pad 3 / pads 9 and 4 | max, 80 MHz |
 | Core.ST.W5, two tiles | `config-w5-2tiles.json` (`make TILE=Core.ST.W5 TWO_TILES=1`) | pad 6 → pad 7 | pad 2 / pads 3 (PA5) and 4 (PA6) | high, 64 MHz |
 | Core.ST.W5, dual-bus tile | `config-w5-dual.json` (`make TILE=Core.ST.W5 DUAL=1`) | pad 6 → pad 7 | pad 2 / pads 3 and 4; I2C1 on pads 10/11 (no device needed) | high, 64 MHz |
 
-Never use the L4's USB pads (6/7 on the L4.1, 16/17 on the L4.2). The fastest
+Never use the L4's USB pads (6/7 on the Core.ST.L4, 16/17 on the Core.ST.L4.2). The fastest
 SCK the test uses is the fastest the bench supply allows (`LB_SCK_MAX_HZ`): 40 MHz
 on the L4 (3.3 V), and 33 MHz on the W5, its limit below 2.7 V (DS14127 Table 94),
 which is safe for a W5 on a 1.8 V or a 3.3 V regulator. So /2 at every L4 level
@@ -50,7 +50,7 @@ next to the budget.
 `make distclean` when switching Cores: `make clean` keeps `coregen/`.
 
 ```sh
-make && make flash-serial               # Core.ST.L4.1 (exit 2 = old firmware: make flash-dfu once)
+make && make flash-serial               # Core.ST.L4 (exit 2 = old firmware: make flash-dfu once)
 make distclean && make TILE=Core.ST.L4.2
 make distclean && make TILE=Core.ST.W5  # result over SWD, see below
 python3 read_swd.py --flash TWO_TILES=1 # W5: build, flash over SWD, wait, read (adds T7)

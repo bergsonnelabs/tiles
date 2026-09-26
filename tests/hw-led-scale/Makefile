@@ -1,4 +1,4 @@
-# Bench test for core_led_scaled_on_ms() on Core.ST.L0.1, one build per clock
+# Bench test for core_led_scaled_on_ms() on Core.ST.L0, one build per clock
 # level (the LED code reads VDD through the ADC, whose clock differs per
 # level). Reading the result: main.c.
 #
@@ -8,7 +8,7 @@
 # The L0 has no USB: flash it over SWD (app at 0x08000000). Never build this
 # with BOOTLOADER := 1.
 
-TILE          ?= Core.ST.L0.1
+TILE          ?= Core.ST.L0
 CLOCK         ?= low
 TILES_ENABLED := 0
 BLE_ENABLED   := 0

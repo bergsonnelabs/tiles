@@ -2,7 +2,7 @@
 /**
  * val-availability -- peripheral availability guards
  *
- * Core.ST.L0.1, clock=default
+ * Core.ST.L0, clock=default
  *
  * This test MUST FAIL to compile. It verifies that core_dac.h correctly
  * produces a #error when included on a Core that lacks DAC hardware.

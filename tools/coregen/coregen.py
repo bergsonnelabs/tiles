@@ -49,17 +49,58 @@ def eprint(*args, **kwargs):
 
 
 # ---- Core naming ----
-# Vendor-segmented public names (Core.ST.<family>.<n>) are the standard; they
-# map onto the DB-synced definition file stems. The Makefile carries the same
-# map so either form resolves to the right definition.
+# Public names (Core.ST.<family>[.<n>], matching each board's silkscreen) are
+# the standard; they map onto the DB-synced definition file stems. The Makefile
+# carries the same map so either form resolves to the right definition.
+#
+# Core.ST.L4 and Core.ST.L4.2 are two DIFFERENT boards (same STM32L422; the
+# L4.2 has more pads). Core.ST.L4 was called Core.ST.L4.1 until the 2026-09
+# rename.
 CORE_NAME_ALIASES = {
-    "Core.ST.L0.1": "Core-ST-L0-1-a",
-    "Core.ST.L4.1": "Core-ST-L4-1-b",  # rev b — superset of rev a (adds PA13/PA14)
+    "Core.ST.L0": "Core-ST-L0-a",
+    "Core.ST.L4": "Core-ST-L4-b",  # rev b — superset of rev a (adds PA13/PA14)
     "Core.ST.L4.2": "Core-ST-L4-2-a",
     "Core.ST.W5": "Core-ST-W5-b",
-    "Core.ST.H5.1": "Core-ST-H5-1-a",
+    "Core.ST.H5": "Core-ST-H5-a",
 }
 CORE_STEM_TO_PUBLIC = {stem: name for name, stem in CORE_NAME_ALIASES.items()}
+
+# Names retired by the 2026-09 rename (the Cores renamed to their silkscreens),
+# old public name or old stem -> current one. Still accepted in config.json
+# "core" (and as the Makefile's TILE), with a one-line NOTE, so older projects
+# keep building.
+CORE_DEPRECATED_NAMES = {
+    "Core.ST.L0.1": "Core.ST.L0",
+    "Core.ST.L4.1": "Core.ST.L4",
+    "Core.ST.H5.1": "Core.ST.H5",
+    "Core-ST-L0-1-a": "Core-ST-L0-a",
+    "Core-ST-L4-1-a": "Core-ST-L4-a",
+    "Core-ST-L4-1-b": "Core-ST-L4-b",
+    "Core-ST-H5-1-a": "Core-ST-H5-a",
+}
+
+
+def core_public_name(stem):
+    """Public name for a definition stem: the alias table first, else the stem
+    itself read back (family-name-rev, dots in the name became dashes), so
+    Core-ST-L4-a -> Core.ST.L4 and mCore-ST-C0-a -> mCore.ST.C0. Deliberately
+    not the JSON's own family/name fields: those can lag a DB rename."""
+    if stem in CORE_STEM_TO_PUBLIC:
+        return CORE_STEM_TO_PUBLIC[stem]
+    base = stem.rsplit("-", 1)[0] if "-" in stem else stem
+    return base.replace("-", ".")
+
+
+def resolve_core_name(name):
+    """config.json "core" -> (definition stem, deprecation note or None)."""
+    note = None
+    if name in CORE_DEPRECATED_NAMES:
+        new = CORE_DEPRECATED_NAMES[name]
+        note = (f"NOTE: config.json \"core\": \"{name}\" is now \"{new}\" "
+                f"(the old name still works; update config.json)")
+        name = new
+    return CORE_NAME_ALIASES.get(name, name), note
+
 
 # ---- MCU database ----
 # Maps part numbers to build-relevant properties.
@@ -482,7 +523,7 @@ def validate_project_config(config, tile, pad_map, mcu=None):
     # Core.ST.L4: USB is always on (CDC console, 1200-baud DFU touch, serial
     # update), so its D+/D- pads can't be anything else. Assigning SPI1 /
     # USART1 / TIM1 / GPIO there silently fought the USB peripheral for PA11 /
-    # PA12 (pads 6/7 on L4.1, 16/17 on L4.2).
+    # PA12 (pads 6/7 on Core.ST.L4, 16/17 on Core.ST.L4.2).
     if mcu and mcu.get("define") == "STM32L422xx":
         for pad_num, assigned_func in pins.items():
             info = pad_lookup.get(pad_num)
@@ -498,7 +539,7 @@ def validate_project_config(config, tile, pad_map, mcu=None):
                 )
 
     # On-tile pull-ups switched by a GPIO (tile config "pullups", a DB-owned
-    # multiselect; Core.ST.L4.1 has pad 4 via PA9 and pad 5 via PC15).
+    # multiselect; Core.ST.L4 has pad 4 via PC15 and pad 5 via PA9).
     for msg in validate_pullups(config, tile, pad_map):
         errors.append(msg)
 
@@ -2266,17 +2307,18 @@ def generate(tile_path, output_dir, config_path=None):
     interfaces = build_interface_map(tile, pad_map)
     power = tile.get("power", [{}])[0] if tile.get("power") else {}
 
-    # Prefer the vendor-segmented public name (Core.ST.<family>.<n>) for
-    # user-visible output; fall back to the DB short name (family.name) for
-    # cores without a public alias yet.
+    # The public name (Core.ST.<family>[.<n>]) for user-visible output, from
+    # the alias table or else the file stem. The identity defines below follow
+    # it rather than the JSON's family/name fields, which can lag a DB rename.
     _stem = os.path.basename(tile_path).replace(".json", "")
-    tile_name = CORE_STEM_TO_PUBLIC.get(_stem, f"{tile['family']}.{tile['name']}")
+    tile_name = core_public_name(_stem)
+    _family, _, _variant = tile_name.partition(".")
 
     ctx = {
         "tile": tile,
         "tile_name": tile_name,
-        "tile_family": tile["family"],
-        "tile_variant": tile["name"],
+        "tile_family": _family,
+        "tile_variant": _variant,
         "tile_rev": tile["rev"],
         "tile_headline": tile.get("headline", ""),
         "json_version": tile.get("json_version", ""),
@@ -2298,11 +2340,14 @@ def generate(tile_path, output_dir, config_path=None):
         with open(config_path, encoding="utf-8") as f:
             project = json.load(f)
 
-        # Validate core matches. Public names (Core.ST.<family>.<n>) resolve to
-        # the canonical definition stem, so a config written against the public
-        # name doesn't spuriously warn.
+        # Validate core matches. Public names (Core.ST.<family>[.<n>]) resolve
+        # to the canonical definition stem, so a config written against the
+        # public name doesn't spuriously warn. Pre-rename names still resolve,
+        # with a NOTE on stderr (stdout is silenced in quiet builds).
         proj_core = project.get("core", "")
-        proj_core_stem = CORE_NAME_ALIASES.get(proj_core, proj_core)
+        proj_core_stem, rename_note = resolve_core_name(proj_core)
+        if rename_note:
+            eprint(f"  {rename_note}")
         tile_file_stem = os.path.basename(tile_path).replace(".json", "")
         if proj_core and proj_core_stem != tile_file_stem:
             print(f"  NOTE: config.json targets '{proj_core}', building for '{tile_file_stem}' (TILE= override)")
@@ -2522,7 +2567,7 @@ def generate(tile_path, output_dir, config_path=None):
         makefile_path = os.path.join(project_dir, "Makefile")
         if not os.path.exists(makefile_path):
             tile_stem = os.path.basename(tile_path).replace(".json", "")
-            tile_public = CORE_STEM_TO_PUBLIC.get(tile_stem, tile_stem)
+            tile_public = core_public_name(tile_stem)
             tiles_line = "TILES_ENABLED := 1\n" if ctx.get("tiles_config") else ""
             with open(makefile_path, "w", encoding="utf-8") as f:
                 f.write(f"# Project Makefile — run make from inside the project folder\n")

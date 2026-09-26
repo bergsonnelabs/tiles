@@ -2,7 +2,7 @@
 """
 Live audio plotter for the Sense.MIC streaming demo.
 
-Connects to the Core.ST.L4.1 USB serial, sends 's' to start streaming,
+Connects to the Core.ST.L4 USB serial, sends 's' to start streaming,
 and plots the ADC waveform in real time using matplotlib.
 
 Usage:
@@ -36,7 +36,7 @@ def find_port():
     """Auto-detect the USB serial port."""
     ports = glob.glob("/dev/tty.usbmodem*")
     if not ports:
-        print("No USB serial device found. Is the Core.ST.L4.1 connected?")
+        print("No USB serial device found. Is the Core.ST.L4 connected?")
         sys.exit(1)
     if len(ports) > 1:
         print(f"Multiple ports found: {ports}")

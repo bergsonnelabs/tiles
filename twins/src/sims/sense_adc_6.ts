@@ -1,7 +1,7 @@
 // Digital twin for Sense.ADC.6 — six-channel analog input tile on I2C.
 //
 // Unlike the sensor tiles, this one has no external chip to model: the tile is
-// a purpose-burned Core.ST.L0.1 (STM32L011E4) whose firmware we own, so the
+// a purpose-burned Core.ST.L0 (STM32L011E4) whose firmware we own, so the
 // "datasheet" for its behavior is the tile's own register map, verified on
 // hardware on 2026-09-22. That makes most of the modeled behavior canonical
 // rather than inferred; the electrical numbers come from the STM32L011

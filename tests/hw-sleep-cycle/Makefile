@@ -1,8 +1,8 @@
 # Bench test for sleep / RTC / backup registers / watchdog-during-sleep on
-# Core.ST.L0.1, Core.ST.L4.1 / L4.2 and Core.ST.W5. See README.md.
+# Core.ST.L0, Core.ST.L4 / L4.2 and Core.ST.W5. See README.md.
 #
-#   make                            # Core.ST.L4.1 (PASS/FAIL over USB CDC)
-#   make TILE=Core.ST.L0.1          # LED + SWD-readable result codes
+#   make                            # Core.ST.L4 (PASS/FAIL over USB CDC)
+#   make TILE=Core.ST.L0          # LED + SWD-readable result codes
 #   make TILE=Core.ST.W5
 #
 # Switching Cores: `make distclean` first — coregen/ is kept by `make clean`
@@ -11,7 +11,7 @@
 # BOOTLOADER is deliberately NOT set: "bootloader": "rom" in config.json gives
 # the ROM-DFU layout (app @ 0x08000000). The custom-bootloader layout is
 # parked, and flashing it onto a ROM-DFU board corrupts the resident app.
-TILE          ?= Core.ST.L4.1
+TILE          ?= Core.ST.L4
 TILES_ENABLED := 0
 BLE_ENABLED   := 0
 PROJECT       := $(notdir $(CURDIR))

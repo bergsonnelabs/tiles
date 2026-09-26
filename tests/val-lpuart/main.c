@@ -1,7 +1,7 @@
 /**
  * val-lpuart -- Validation: LPUART1 pad assignments on Core.ST.L0
  *
- * Core.ST.L0.1, clock=high
+ * Core.ST.L0, clock=high
  * Pad 4 = LPUART1.TX, Pad 2 = LPUART1.RX
  *
  * The primary test is that the LPUART1 pad assignments work through

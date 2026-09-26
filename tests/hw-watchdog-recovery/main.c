@@ -1,6 +1,6 @@
 /**
  * hw-watchdog-recovery — bench guinea pig for watchdog-default + strike→ROM-DFU
- * brick recovery on Core.ST.L4.1(b) (the CoreProbe).
+ * brick recovery on Core.ST.L4 rev b (the CoreProbe).
  *
  * core_init() (with iwdg.enabled in config.json) auto-starts the 5 s IWDG and, on
  * each boot, maintains the reserved-SRAM strike counter — after 3 consecutive

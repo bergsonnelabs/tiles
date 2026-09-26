@@ -1,6 +1,6 @@
 /**
  * hw-spi-loopback — bench test for core_spi (portal task #285) on
- * Core.ST.L4.1 / L4.2 and Core.ST.W5, with one jumper from MOSI to MISO.
+ * Core.ST.L4 / L4.2 and Core.ST.W5, with one jumper from MOSI to MISO.
  * See README.md for the wiring, flashing and reading the result.
  *
  * Tests, one bit each in the pass/fail masks:
@@ -48,16 +48,16 @@
 
 /* ---- Per-Core wiring (the Makefile passes LB_* for the L4.2 and W5) ---- */
 #ifndef LB_MOSI
-#define LB_MOSI  2      /* Core.ST.L4.1: PA7  SPI1.MOSI */
+#define LB_MOSI  2      /* Core.ST.L4: PA7  SPI1.MOSI */
 #endif
 #ifndef LB_MISO
-#define LB_MISO  8      /* Core.ST.L4.1: PB4  SPI1.MISO */
+#define LB_MISO  8      /* Core.ST.L4: PB4  SPI1.MISO */
 #endif
 #ifndef LB_CS
-#define LB_CS    9      /* Core.ST.L4.1: PA4  (GPIO chip select) */
+#define LB_CS    9      /* Core.ST.L4: PA4  (GPIO chip select) */
 #endif
 #ifndef LB_SCK
-#define LB_SCK   3      /* Core.ST.L4.1: PA1  SPI1.CLK */
+#define LB_SCK   3      /* Core.ST.L4: PA1  SPI1.CLK */
 #endif
 /* LB_CS2 (Makefile, TWO_TILES=1): the second tile's chip select, pad 4 (PB6).
  * Tile 0 (instance 0) then selects on LB_CS, tile 1 (instance 1) on LB_CS2.

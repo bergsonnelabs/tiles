@@ -1,4 +1,4 @@
-TILE         := Core.ST.L0.1
+TILE         := Core.ST.L0
 TILES_ENABLED := 0
 BLE_ENABLED  := 0
 BOOTLOADER   := 0

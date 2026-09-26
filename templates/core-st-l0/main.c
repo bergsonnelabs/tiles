@@ -1,5 +1,5 @@
 /**
- * Core.ST.L0.1 starter — blink the status LED.
+ * Core.ST.L0 starter — blink the status LED.
  *
  * The L0 is the small one: STM32L011, no USB. It is flashed over SWD
  * (`make flash`) or the ROM's USART/SPI bootloader — there is no USB DFU and
