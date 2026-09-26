@@ -1,0 +1,721 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@3edc9ed",
+  "tile": "Drive.DC.H",
+  "palette": {
+    "label": "Drive.DC.H",
+    "icon": "⚙"
+  },
+  "driver": {
+    "prefix": "tile_drive_dc_h",
+    "header": "tile_drive_dc_h.h",
+    "version": "4.3.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_drive_dc_h_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "forward"
+      ],
+      "symbol": "tile_drive_dc_h_forward",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Drive motor forward (OUT1=H, OUT2=L).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reverse"
+      ],
+      "symbol": "tile_drive_dc_h_reverse",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Drive motor in reverse (OUT1=L, OUT2=H).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "brake"
+      ],
+      "symbol": "tile_drive_dc_h_brake",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Active brake (slow-decay, both low-side FETs on).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "coast"
+      ],
+      "symbol": "tile_drive_dc_h_coast",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Coast (Hi-Z, all FETs off).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_control_mode"
+      ],
+      "symbol": "tile_drive_dc_h_set_control_mode",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Switch the bridge control source between I²C and the EN/PH or IN1/IN2 tile pads.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Bridge control source (DRIVE_DC_H_CTRL_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_CTRL_I2C",
+              "value": 0,
+              "label": "I²C registers control bridge (PWM mode)"
+            },
+            {
+              "name": "DRIVE_DC_H_CTRL_PAD_PHEN",
+              "value": 1,
+              "label": "Pads 2/3 = EN/PH (one PWM + dir)"
+            },
+            {
+              "name": "DRIVE_DC_H_CTRL_PAD_IN1IN2",
+              "value": 2,
+              "label": "Pads 2/3 = IN1/IN2 (independent half-bridge PWM)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_target"
+      ],
+      "symbol": "tile_drive_dc_h_set_target",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the regulation target (WSET_VSET).",
+      "params": [
+        {
+          "name": "value",
+          "type": "int",
+          "description": "Target setpoint (0-255)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_regulation_mode"
+      ],
+      "symbol": "tile_drive_dc_h_set_regulation_mode",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Select the regulation loop (open-loop / current / voltage / speed).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Regulation mode (DRIVE_DC_H_REG_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_REG_OPEN_LOOP",
+              "value": 0,
+              "label": "00b: fixed-off-time current reg only (open-loop drive)"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_CYCLE_BY_CYCLE",
+              "value": 1,
+              "label": "01b: cycle-by-cycle current reg"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_SPEED",
+              "value": 2,
+              "label": "10b: speed regulation (requires ripple counting)"
+            },
+            {
+              "name": "DRIVE_DC_H_REG_VOLTAGE",
+              "value": 3,
+              "label": "11b: voltage regulation (default)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mode",
+          "label": "Regulation",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 3
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_current_regulation_mode"
+      ],
+      "symbol": "tile_drive_dc_h_set_current_regulation_mode",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the current-regulation mode (IMODE in CONFIG3).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Current regulation mode (DRIVE_DC_H_IMODE_*)",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_IMODE_DISABLED",
+              "value": 0,
+              "label": "00b: no current regulation"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_INRUSH",
+              "value": 1,
+              "label": "01b: regulate during tINRUSH only (default for I²C)"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_ALWAYS",
+              "value": 2,
+              "label": "10b: always regulate at ITRIP threshold"
+            },
+            {
+              "name": "DRIVE_DC_H_IMODE_DISABLED_ALT",
+              "value": 3,
+              "label": "11b: disabled (alt encoding)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_current_sense_gain"
+      ],
+      "symbol": "tile_drive_dc_h_set_current_sense_gain",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the current-sense gain / max-current range.",
+      "params": [
+        {
+          "name": "code",
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "description": "CS_GAIN_SEL code"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "code",
+          "label": "Current range (0 = 4 A … 5 = 0.125 A)",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_stall_enabled"
+      ],
+      "symbol": "tile_drive_dc_h_set_stall_enabled",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Enable or disable hardware stall detection.",
+      "params": [
+        {
+          "name": "enabled",
+          "type": "int",
+          "description": "1 = stall detection on, 0 = off"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "enabled",
+          "label": "Stall detection",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_inrush_time_ms"
+      ],
+      "symbol": "tile_drive_dc_h_set_inrush_time_ms",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the inrush blanking time (TINRUSH).",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            0,
+            6710
+          ],
+          "unit": "ms",
+          "description": "Inrush blanking time"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Inrush time",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 100
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_stall_recovery"
+      ],
+      "symbol": "tile_drive_dc_h_set_stall_recovery",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the stall-detection recovery behavior (SMODE in CONFIG3).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "DRIVE_DC_H_STALL_LATCH or DRIVE_DC_H_STALL_REPORT",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_STALL_LATCH",
+              "value": 0,
+              "label": "0b: latch outputs off on stall"
+            },
+            {
+              "name": "DRIVE_DC_H_STALL_REPORT",
+              "value": 1,
+              "label": "1b: report only, keep driving (default)"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_ripple_threshold"
+      ],
+      "symbol": "tile_drive_dc_h_set_ripple_threshold",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the ripple-count threshold that fires CNT_DONE.",
+      "params": [
+        {
+          "name": "count",
+          "type": "int",
+          "description": "Threshold count (0 - 65472, larger = coarser scale)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_ripple_filter_gain"
+      ],
+      "symbol": "tile_drive_dc_h_set_ripple_filter_gain",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Set the ripple filter input scaling factor.",
+      "params": [
+        {
+          "name": "code",
+          "type": "int",
+          "description": "FLT_GAIN_SEL code (0-3)"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_fault"
+      ],
+      "symbol": "tile_drive_dc_h_get_fault",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read the raw FAULT register (0x00).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "clear_fault"
+      ],
+      "symbol": "tile_drive_dc_h_clear_fault",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Clear all latched faults.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_stalled"
+      ],
+      "symbol": "tile_drive_dc_h_is_stalled",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Check if a motor stall condition is active.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_voltage_mv"
+      ],
+      "symbol": "tile_drive_dc_h_get_voltage_mv",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read motor terminal voltage in millivolts.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_current_ma"
+      ],
+      "symbol": "tile_drive_dc_h_get_current_ma",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read motor current in milliamps.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_speed"
+      ],
+      "symbol": "tile_drive_dc_h_get_speed",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read the ripple speed estimate.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_speed_rpm"
+      ],
+      "symbol": "tile_drive_dc_h_get_speed_rpm",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read the estimated motor speed in RPM.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_ripple_count"
+      ],
+      "symbol": "tile_drive_dc_h_get_ripple_count",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Read the 16-bit ripple count.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "clear_ripple_count"
+      ],
+      "symbol": "tile_drive_dc_h_clear_ripple_count",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Reset the ripple counter to zero.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "sleep"
+      ],
+      "symbol": "tile_drive_dc_h_sleep",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Disable the output stage (all FETs Hi-Z).",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_drive_dc_h_wake",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Re-enable the output stage.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_speed_rpm"
+      ],
+      "symbol": "tile_drive_dc_h_set_speed_rpm",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Drive at a target speed (RPM) with closed-loop regulation.",
+      "params": [
+        {
+          "name": "rpm",
+          "type": "int",
+          "description": "Target shaft speed in revolutions per minute"
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_DIR_FORWARD",
+              "value": 0,
+              "label": "OUT1=H, OUT2=L (matches forward())"
+            },
+            {
+              "name": "DRIVE_DC_H_DIR_REVERSE",
+              "value": 1,
+              "label": "OUT1=L, OUT2=H (matches reverse())"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_motor_params"
+      ],
+      "symbol": "tile_drive_dc_h_set_motor_params",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Program the motor profile for ripple counting and speed regulation.",
+      "params": [
+        {
+          "name": "motor_mohm",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "mΩ Winding resistance. 0 = leave"
+        },
+        {
+          "name": "ripples_per_rev",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Commutation ripples per shaft revolution"
+        },
+        {
+          "name": "kv_uv_per_rpm",
+          "type": "int",
+          "range": [
+            0,
+            5000
+          ],
+          "description": "µV/RPM Back-EMF constant (typical small"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ripples_per_rev",
+          "label": "Ripples per revolution",
+          "tier": "basic",
+          "scope": "config",
+          "default": 12
+        },
+        {
+          "param": "motor_mohm",
+          "label": "Motor winding resistance",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "Ω",
+          "default": 0
+        },
+        {
+          "param": "kv_uv_per_rpm",
+          "label": "Motor Kv (back-EMF)",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "move_distance"
+      ],
+      "symbol": "tile_drive_dc_h_move_distance",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Drive `ripples` commutation ripples in `direction`, then brake.",
+      "params": [
+        {
+          "name": "ripples",
+          "type": "int",
+          "description": "Number of ripples to advance (0–65472)"
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "description": "DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE",
+          "choices": [
+            {
+              "name": "DRIVE_DC_H_DIR_FORWARD",
+              "value": 0,
+              "label": "OUT1=H, OUT2=L (matches forward())"
+            },
+            {
+              "name": "DRIVE_DC_H_DIR_REVERSE",
+              "value": 1,
+              "label": "OUT1=L, OUT2=H (matches reverse())"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_running"
+      ],
+      "symbol": "tile_drive_dc_h_is_running",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Check whether the bridge is actively driving the motor.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_stop"
+      ],
+      "symbol": "tile_drive_dc_h_wait_for_stop",
+      "header": "tile_drive_dc_h.h",
+      "category": "tile",
+      "description": "Block until the ripple counter stops advancing or `timeout_ms` elapses.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "description": "Maximum time to wait, in milliseconds"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    }
+  ],
+  "events": [],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x34",
+        "is_default": true
+      },
+      {
+        "address": "0x30"
+      },
+      {
+        "address": "0x31"
+      },
+      {
+        "address": "0x33"
+      }
+    ]
+  }
+}

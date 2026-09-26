@@ -1,0 +1,448 @@
+{
+  "schema": "tile-docs/v1",
+  "source": "tiles@bc1921a",
+  "file": "tile_store_o_128.h",
+  "brief": "Store.O.128 tile driver — Renesas/Adesto AT25QL128A 128 Mbit QSPI NOR flash.",
+  "description": "16 MB serial NOR flash on SPI / Quad-SPI. Standard SPI-NOR command set:\nJEDEC ID, status, write-enable, page program (256 B pages), 4 KB sector /\n64 KB block / chip erase, read, deep power-down.\n\nPlatform-agnostic: uses the framework's raw SPI transaction primitive\n(`tiles_pal_t.spi_transfer`) so command + 24-bit address + data fit one CS\nassertion. A platform that doesn't implement spi_transfer yet leaves it NULL;\nevery call here guards against that (init reports an error; later calls\nreturn 0 / do nothing) rather than faulting.\n\nSupply is 1.7-2.0 V only (datasheet §9, VCC). VIH max is VCC + 0.4 V, so\nthe SPI lines must be driven at the tile's 1.8 V rail, not 3.3 V.\n\nSidebands: the AT25QL128A ships with QE = 1 (datasheet §7.7, factory\ndefault), so WP (pad 6) and HOLD (pad 9) act as IO2/IO3 and their\nWP/HOLD functions are inactive in single-lane SPI. Neither pin has an\ninternal pull-up (datasheet Table 1); the tile fits a 47 kΩ pull-up on WP\nonly, HOLD is not pulled.\n\nTiming (datasheet Table 26, max): tPP 5 ms, tSE 0.4 s, tBE2 2.5 s,\ntCE 300 s. READ (0x03) is limited to 50 MHz SCK; FAST_READ (0x0B) to 104 MHz.\n\n\nDatasheet: Renesas AT25QL128A.\n\n@studio tile label=Store.O.128 icon=memory\n\n@studio unsupported severity=niche category=\"Quad / QPI I/O modes\"\n  The AT25QL128A supports Dual/Quad SPI and QPI (≤4 data lines). This driver\n  drives standard single-lane SPI only; quad modes need a quad-capable SPI\n  transfer in the platform layer (driver-deferred, not chip-gated).\n\n@studio unsupported severity=advanced category=\"Block protection / status register write\"\n  No Write Status Register (0x01/0x31) support: BP/TB/SEC/CMP block\n  protection, SRP lock modes and the QE bit can't be changed. Factory\n  default is nothing protected, so program/erase work out of the box\n  (driver-deferred).\n\n@studio unsupported severity=niche category=\"32 KB block erase\"\n  The chip also erases 32 KB blocks (0x52); the driver exposes only 4 KB\n  sector, 64 KB block and chip erase (driver-deferred).\n\n@studio unsupported severity=niche category=\"Suspend / resume, reset, OTP, SFDP\"\n  Erase/program suspend-resume (0x75/0x7A), software reset (0x66/0x99),\n  the 4 kbit one-time-programmable security register and the SFDP table\n  are not exposed (driver-deferred).",
+  "code_examples": [
+    {
+      "label": "Quick start",
+      "code": "  #include \"core_tiles.h\"\n\n  tile_t flash;\n  uint8_t buf[256];\n  tile_store_o_128_init(core_tiles_pal(&core_spi1), 0, &flash, NULL);\n  if (tile_is_ready(&flash)) {\n      tile_store_o_128_read(&flash, 0x000000, buf, sizeof buf);\n  }"
+    }
+  ],
+  "studio_ready": true,
+  "studio_unsupported": [
+    {
+      "severity": "niche",
+      "category": "Quad / QPI I/O modes",
+      "brief": "The AT25QL128A supports Dual/Quad SPI and QPI (≤4 data lines). This driver drives standard single-lane SPI only; quad modes need a quad-capable SPI transfer in the platform layer (driver-deferred, not chip-gated)."
+    },
+    {
+      "severity": "advanced",
+      "category": "Block protection / status register write",
+      "brief": "No Write Status Register (0x01/0x31) support: BP/TB/SEC/CMP block protection, SRP lock modes and the QE bit can't be changed. Factory default is nothing protected, so program/erase work out of the box (driver-deferred)."
+    },
+    {
+      "severity": "niche",
+      "category": "32 KB block erase",
+      "brief": "The chip also erases 32 KB blocks (0x52); the driver exposes only 4 KB sector, 64 KB block and chip erase (driver-deferred)."
+    },
+    {
+      "severity": "niche",
+      "category": "Suspend / resume, reset, OTP, SFDP",
+      "brief": "Erase/program suspend-resume (0x75/0x7A), software reset (0x66/0x99), the 4 kbit one-time-programmable security register and the SFDP table are not exposed (driver-deferred)."
+    }
+  ],
+  "defines": [
+    {
+      "name": "TILE_STORE_O_128_VERSION_MAJOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_STORE_O_128_VERSION_MINOR",
+      "value": "1",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "TILE_STORE_O_128_VERSION_PATCH",
+      "value": "0",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CAPACITY",
+      "value": "0x1000000",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_PAGE_SIZE",
+      "value": "256",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_SECTOR_SIZE",
+      "value": "4096",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_BLOCK_SIZE",
+      "value": "65536",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_MFR_ID",
+      "value": "0x1F",
+      "description": "Adesto / Renesas manufacturer",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CAPACITY_ID",
+      "value": "0x18",
+      "description": "2^24 bytes density code",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_WREN",
+      "value": "0x06",
+      "description": "Write Enable",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_WRDI",
+      "value": "0x04",
+      "description": "Write Disable",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_RDID",
+      "value": "0x9F",
+      "description": "Read JEDEC ID (3 bytes)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_RDSR1",
+      "value": "0x05",
+      "description": "Read Status Register 1",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_RDSR2",
+      "value": "0x35",
+      "description": "Read Status Register 2",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_WRSR",
+      "value": "0x01",
+      "description": "Write Status Register",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_READ",
+      "value": "0x03",
+      "description": "Read Data (cmd + 24-bit addr)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_FAST_READ",
+      "value": "0x0B",
+      "description": "Fast Read (+1 dummy byte)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_PP",
+      "value": "0x02",
+      "description": "Page Program",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_SE",
+      "value": "0x20",
+      "description": "Sector Erase (4 KB)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_BE",
+      "value": "0xD8",
+      "description": "Block Erase (64 KB)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_CE",
+      "value": "0xC7",
+      "description": "Chip Erase",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_DP",
+      "value": "0xB9",
+      "description": "Deep Power-Down",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_CMD_RDP",
+      "value": "0xAB",
+      "description": "Release from Deep Power-Down",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_SR1_WIP",
+      "value": "0x01",
+      "description": "Write In Progress (busy)",
+      "section": ""
+    },
+    {
+      "name": "AT25QL128A_SR1_WEL",
+      "value": "0x02",
+      "description": "Write Enable Latch",
+      "section": ""
+    }
+  ],
+  "enums": [],
+  "structs": [
+    {
+      "name": "store_o_128_cfg_t",
+      "brief": "Optional init config (pass NULL for defaults).",
+      "description": "",
+      "fields": [
+        {
+          "type": "uint8_t",
+          "name": "reserved",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "signature": "uint8_t tile_store_o_128_find(tiles_pal_t* hal, uint8_t instance)",
+      "params": [],
+      "notes": [],
+      "brief": "",
+      "description": "Probe instance `instance`: reads the JEDEC ID, returns 1 if it matches.",
+      "name": "tile_store_o_128_find"
+    },
+    {
+      "signature": "void tile_store_o_128_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile, const store_o_128_cfg_t* cfg)",
+      "params": [],
+      "notes": [],
+      "brief": "",
+      "description": "Initialize: verify JEDEC identity, wake from deep power-down.",
+      "name": "tile_store_o_128_init"
+    },
+    {
+      "signature": "uint32_t tile_store_o_128_read_jedec_id(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Packed JEDEC ID (e.g. 0x1F4218 for the AT25QL128A).",
+      "brief": "Read the 24-bit JEDEC ID (manufacturer << 16 | type << 8 | capacity).",
+      "description": "",
+      "name": "tile_store_o_128_read_jedec_id"
+    },
+    {
+      "signature": "uint8_t tile_store_o_128_read_status(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "SR1 byte (AT25QL128A_SR1_* bits).",
+      "brief": "Read Status Register 1.",
+      "description": "",
+      "name": "tile_store_o_128_read_status"
+    },
+    {
+      "signature": "uint8_t tile_store_o_128_is_busy(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if busy, 0 if idle.",
+      "brief": "Whether a program/erase is in progress (WIP bit).",
+      "description": "",
+      "name": "tile_store_o_128_is_busy"
+    },
+    {
+      "signature": "uint32_t tile_store_o_128_get_capacity(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "16777216 (16 MB).",
+      "brief": "Total flash capacity in bytes.",
+      "description": "",
+      "name": "tile_store_o_128_get_capacity"
+    },
+    {
+      "signature": "void tile_store_o_128_read(tile_t* tile, uint32_t addr, uint8_t* buf, uint16_t len)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Byte address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "description": "Output buffer."
+        },
+        {
+          "name": "len",
+          "description": "Number of bytes."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Read `len` bytes starting at `addr` (READ 0x03).",
+      "description": "",
+      "name": "tile_store_o_128_read"
+    },
+    {
+      "signature": "void tile_store_o_128_fast_read(tile_t* tile, uint32_t addr, uint8_t* buf, uint16_t len)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Byte address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "description": "Output buffer."
+        },
+        {
+          "name": "len",
+          "description": "Number of bytes."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Fast-read `len` bytes from `addr` (FAST_READ 0x0B, 1 dummy byte).",
+      "description": "Same result as tile_store_o_128_read(); use it when the SPI clock is above\nthe 50 MHz READ (0x03) limit (FAST_READ runs to 104 MHz).",
+      "name": "tile_store_o_128_fast_read"
+    },
+    {
+      "signature": "void tile_store_o_128_write_enable(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Issue Write-Enable (sets WEL). Required before any program/erase.",
+      "description": "",
+      "name": "tile_store_o_128_write_enable"
+    },
+    {
+      "signature": "void tile_store_o_128_page_program(tile_t* tile, uint32_t addr, const uint8_t* buf, uint16_t len)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Start address."
+        },
+        {
+          "name": "buf",
+          "description": "Data to program."
+        },
+        {
+          "name": "len",
+          "description": "Byte count (1..256)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Program up to one page (≤256 B) within a single page boundary.",
+      "description": "Issues Write-Enable, programs, and waits for completion (up to 10 ms;\ntPP max 5 ms). The caller must keep the write inside one 256-byte page:\n(addr & 0xFF) + len ≤ 256. Bytes past the page end wrap to the start of\nthe same page (chip behavior), so use tile_store_o_128_write() for\nunaligned spans. Programming only clears bits: erase first.",
+      "name": "tile_store_o_128_page_program"
+    },
+    {
+      "signature": "void tile_store_o_128_write(tile_t* tile, uint32_t addr, const uint8_t* buf, uint32_t len)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Start address (0 .. capacity-1)."
+        },
+        {
+          "name": "buf",
+          "description": "Data to program."
+        },
+        {
+          "name": "len",
+          "description": "Byte count."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Program an arbitrary-length span, splitting across page boundaries.",
+      "description": "Programming only clears bits (1 → 0); erase the covering sector(s) first.",
+      "name": "tile_store_o_128_write"
+    },
+    {
+      "signature": "void tile_store_o_128_erase_sector(tile_t* tile, uint32_t addr)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Any address inside the sector (low 12 bits ignored)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Erase the 4 KB sector containing `addr` (and wait, up to 0.5 s).",
+      "description": "",
+      "name": "tile_store_o_128_erase_sector"
+    },
+    {
+      "signature": "void tile_store_o_128_erase_block(tile_t* tile, uint32_t addr)",
+      "params": [
+        {
+          "name": "addr",
+          "description": "Any address inside the block (low 16 bits ignored)."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Erase the 64 KB block containing `addr` (and wait, up to 3 s).",
+      "description": "",
+      "name": "tile_store_o_128_erase_block"
+    },
+    {
+      "signature": "void tile_store_o_128_erase_chip(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "brief": "Erase the entire chip (and wait; typ 60 s, max 300 s).",
+      "description": "",
+      "name": "tile_store_o_128_erase_chip"
+    },
+    {
+      "signature": "uint8_t tile_store_o_128_wait_ready(tile_t* tile, uint32_t timeout_ms)",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "description": "Max wait."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "1 if ready, 0 if timed out.",
+      "brief": "Block until any in-progress program/erase finishes, or timeout.",
+      "description": "",
+      "name": "tile_store_o_128_wait_ready"
+    },
+    {
+      "signature": "void tile_store_o_128_deep_power_down(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Enter Deep Power-Down (typ 2 µA; every command except release is ignored).",
+      "description": "",
+      "name": "tile_store_o_128_deep_power_down"
+    },
+    {
+      "signature": "void tile_store_o_128_release(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "lifecycle",
+      "brief": "Release from Deep Power-Down.",
+      "description": "",
+      "name": "tile_store_o_128_release"
+    }
+  ],
+  "source_file": "tile_store_o_128.h",
+  "version": "1.1.0",
+  "tile_family": "Store",
+  "tile_name": "O.128",
+  "display_name": "Store.O.128"
+}

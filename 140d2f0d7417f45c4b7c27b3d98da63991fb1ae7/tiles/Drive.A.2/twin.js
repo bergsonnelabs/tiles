@@ -1,0 +1,535 @@
+// src/sims/drive_a_2.ts
+var DAC_MID = 2048;
+var DAC_MAX = 4095;
+var WAVE_SINE = 4;
+var WAVE_OFF = 7;
+var GEN_ID_STATUS = 6 << 2;
+var SINE_PEAK_CODES = 3686 - DAC_MID;
+var INT_FS_MV = [0, 0, 1815, 2420, 3630, 4840];
+var driverFullScale = (gain, vddMv) => gain >= 2 && gain <= 5 ? INT_FS_MV[gain] : vddMv;
+var VDD_MIN_MV = 2500;
+var VDD_MAX_MV = 5500;
+var VDD_DEFAULT_MV = 3300;
+var LIMITER_DEFAULT = 19;
+var limiterPeakMv = (level) => Math.pow(10, (-6.5 + 0.5 * level) / 20) * Math.SQRT2 * 1e3;
+var COMP_1_1 = 0;
+var minGain = (s) => s.agc_compression === COMP_1_1 ? 0 : -28;
+var I_DAC_CH_UA = 150;
+var I_DAC_INTREF_CH_UA = 12.5;
+var I_DAC_SLEEP_UA = 28;
+var R_SPEAKER_OHM = 8;
+var AMP_PMAX_5V_W = 1.4;
+var AMP_EFF = 0.91;
+function ampIq(vMv, on) {
+  const [a, b, c] = on ? [1500, 1700, 2e3] : [35, 50, 75];
+  if (vMv <= 3600) return a + (b - a) * (Math.max(2500, vMv) - 2500) / 1100;
+  return b + (c - b) * (Math.min(5500, vMv) - 3600) / 1900;
+}
+var clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+var chans = (ch) => ch === 2 ? [0, 1] : ch === 0 || ch === 1 ? [ch] : [];
+var maskOf = (cs) => cs.reduce((m, c) => m | 1 << c, 0);
+function patch(cs, fields) {
+  const out = {};
+  for (const c of cs) for (const [k, v] of Object.entries(fields)) out[`ch${c}_${k}`] = v;
+  return out;
+}
+var realVref = (s, gain) => gain <= 1 ? s.vplus_mv : Math.min(s.vplus_mv, 1210 * [0, 0, 1.5, 2, 3, 4][gain] | 0);
+function inputCodes(s, c) {
+  const g = (k) => s[`ch${c}_${k}`];
+  if (g("sw_wave")) return 2046;
+  if (g("wave_running") && g("wave") === WAVE_SINE) return SINE_PEAK_CODES;
+  if (g("wave_running") && g("wave") !== WAVE_OFF) {
+    const lo = g("margin_low");
+    const hi = g("margin_high");
+    return Math.abs((lo + hi) / 2 - DAC_MID) + (hi - lo) / 2;
+  }
+  return Math.abs(g("code") - DAC_MID);
+}
+function outLevel(s, c) {
+  if (s.sleeping || !s.amp_enabled || s.amp_fault || s.amp_thermal) return 0;
+  const vref = realVref(s, c === 0 ? s.ch0_gain : s.ch1_gain);
+  const vinMv = inputCodes(s, c) * vref / 4096;
+  let voutMv = vinMv * Math.pow(10, s.amp_gain_db / 20);
+  if (s.agc_limiter_enabled) voutMv = Math.min(voutMv, limiterPeakMv(s.agc_limiter_level));
+  return s.vplus_mv > 0 ? clamp(voutMv / s.vplus_mv, 0, 1) : 0;
+}
+var enableState = (s) => ({
+  amp_shutdown: 0,
+  amp_enabled: s.sleeping ? 0 : 1
+});
+var disableState = { amp_shutdown: 1, amp_enabled: 0 };
+var muteState = (s) => ({
+  ...disableState,
+  ...s.amp_muted ? {} : { amp_muted: 1, amp_muted_gain_db: s.amp_gain_db }
+});
+var unmuteState = (s) => ({
+  ...enableState(s),
+  ...s.amp_muted ? { amp_muted: 0, amp_gain_db: clamp(s.amp_muted_gain_db, minGain(s), 30) } : {}
+});
+var SINE_HZ_X10 = [
+  104167,
+  52083,
+  34722,
+  23148,
+  15409,
+  10293,
+  6862,
+  4573,
+  3048,
+  1742,
+  995,
+  569,
+  325,
+  163,
+  81
+];
+function waveParams(f) {
+  const fx10 = f * 10;
+  let k = 14;
+  for (let i = 0; i < 15; i++) {
+    if (fx10 >= SINE_HZ_X10[i]) {
+      k = i > 0 && fx10 * fx10 > SINE_HZ_X10[i] * SINE_HZ_X10[i - 1] ? i - 1 : i;
+      break;
+    }
+  }
+  return [k + 1, 0, SINE_HZ_X10[k] / 10];
+}
+var onCh = (args, fn) => {
+  const ch = args[0] ?? 0;
+  return ch === 0 || ch === 1 ? { nextState: fn(ch) } : {};
+};
+var sim = {
+  tile: "Drive.A.2",
+  // After tile_drive_a_2_init(cfg = NULL): gain 1× EXT on both channels, V+
+  // taken as 3.3 V, both DACs at mid-scale, amp gain 6 dB, AGC compression 1:1
+  // / max 30 dB, limiter ON at level 19 (AGC_CTRL1 0x33), attack / release /
+  // hold at chip defaults, amps on (FUNC_CTRL 0xC2).
+  defaultState: {
+    vplus_mv: 3300,
+    // the driver's VDD assumption (resolve_vref)
+    amp_fault: 0,
+    amp_thermal: 0,
+    ch0_code: DAC_MID,
+    ch1_code: DAC_MID,
+    ch0_gain: 0,
+    ch1_gain: 0,
+    vdd_mv: VDD_DEFAULT_MV,
+    ch0_wave: WAVE_OFF,
+    ch1_wave: WAVE_OFF,
+    ch0_wave_running: 0,
+    ch1_wave_running: 0,
+    ch0_sw_wave: 0,
+    ch1_sw_wave: 0,
+    ch0_freq: 0,
+    ch1_freq: 0,
+    ch0_phase: 0,
+    ch1_phase: 0,
+    ch0_slew: 0,
+    ch1_slew: 0,
+    ch0_step: 0,
+    ch1_step: 0,
+    ch0_margin_low: 0,
+    ch0_margin_high: DAC_MAX,
+    ch1_margin_low: 0,
+    ch1_margin_high: DAC_MAX,
+    amp_gain_db: 6,
+    amp_enabled: 1,
+    amp_shutdown: 0,
+    amp_muted: 0,
+    amp_muted_gain_db: 6,
+    agc_compression: 0,
+    // AGC_CTRL2 0xC0
+    agc_max_gain_db: 30,
+    agc_limiter_level: LIMITER_DEFAULT,
+    // AGC_CTRL1 0x33 (limiter on, NG 4 mV)
+    agc_limiter_enabled: 1,
+    agc_attack: 5,
+    // chip defaults, rewritten by init
+    agc_release: 11,
+    agc_hold: 0,
+    agc_noise_gate: 1,
+    sleeping: 0,
+    currently_playing: "",
+    play_channels: 0,
+    play_remute: 0,
+    play_ms: 0,
+    playing_until_ms: 0
+  },
+  controls: [
+    {
+      type: "slider",
+      field: "vplus_mv",
+      label: "V+ supply",
+      min: 2500,
+      max: 5500,
+      step: 50,
+      unit: "mV",
+      description: "Tile supply. It is also the DAC's reference, so it sets the real full scale; set_mv() uses the V+ the program gave set_supply_mv() (3.3 V by default)."
+    },
+    {
+      type: "toggle",
+      field: "amp_fault",
+      label: "Fault: speaker short",
+      description: "TPA2028D1 FAULT: output stops. Cleared when the driver rewrites FUNC_CTRL (init / wake)."
+    },
+    {
+      type: "toggle",
+      field: "amp_thermal",
+      label: "Fault: over-temp",
+      description: "TPA2028D1 thermal shutdown (die above 150 \xB0C): output stops."
+    }
+  ],
+  hostCalls: {
+    // ── lifecycle ──
+    tile_drive_a_2_find: () => ({ scalar: 1 }),
+    tile_drive_a_2_init: () => ({
+      nextState: {
+        ch0_code: DAC_MID,
+        ch1_code: DAC_MID,
+        ch0_gain: 0,
+        ch1_gain: 0,
+        vdd_mv: VDD_DEFAULT_MV,
+        // cfg->vdd_mv is behind a pointer the host call can't read
+        amp_gain_db: 6,
+        amp_enabled: 1,
+        amp_shutdown: 0,
+        amp_muted: 0,
+        amp_fault: 0,
+        amp_thermal: 0,
+        agc_compression: 0,
+        agc_max_gain_db: 30,
+        agc_limiter_level: LIMITER_DEFAULT,
+        agc_limiter_enabled: 1,
+        agc_attack: 5,
+        agc_release: 11,
+        agc_hold: 0,
+        agc_noise_gate: 1,
+        sleeping: 0
+      }
+    }),
+    // VOUT Hi-Z + amp SWS; the app's amp_shutdown request is kept for wake().
+    tile_drive_a_2_sleep: () => ({
+      nextState: {
+        sleeping: 1,
+        amp_enabled: 0,
+        ch0_wave_running: 0,
+        ch1_wave_running: 0,
+        ch0_sw_wave: 0,
+        ch1_sw_wave: 0
+      }
+    }),
+    // DACs back at mid-scale, then FUNC_CTRL = 0xC2, or 0xE2 when the amps were
+    // muted / disabled before sleep (they stay off); FAULT/Thermal clear.
+    tile_drive_a_2_wake: ({ state }) => ({
+      nextState: {
+        sleeping: 0,
+        ch0_code: DAC_MID,
+        ch1_code: DAC_MID,
+        amp_enabled: state.amp_shutdown ? 0 : 1,
+        amp_fault: 0,
+        amp_thermal: 0
+      }
+    }),
+    // ── DAC output ──
+    tile_drive_a_2_set: ({ args }) => onCh(args, (c) => patch([c], { code: clamp((args[1] ?? 0) & 65535, 0, DAC_MAX) })),
+    // mv clamped to V+, then code = round(mv·4096 / full scale), the channel's own
+    // gain (SLASF73A Eq 1-3).
+    tile_drive_a_2_set_mv: ({ state, args }) => onCh(args, (c) => {
+      const mv = Math.min((args[1] ?? 0) & 65535, state.vdd_mv);
+      const fs = driverFullScale(c === 0 ? state.ch0_gain : state.ch1_gain, state.vdd_mv);
+      const code = fs ? Math.floor((mv * 4096 + Math.floor(fs / 2)) / fs) : 0;
+      return patch([c], { code: Math.min(DAC_MAX, code) });
+    }),
+    tile_drive_a_2_get: ({ state, args }) => {
+      const ch = args[0] ?? 0;
+      return { scalar: ch === 0 ? state.ch0_code : ch === 1 ? state.ch1_code : 0 };
+    },
+    tile_drive_a_2_set_gain: ({ args }) => onCh(args, (c) => patch([c], { gain: (args[1] ?? 0) & 7 })),
+    // Driver shadow only, clamped to the tile's 2.5-5.5 V; no bus traffic.
+    tile_drive_a_2_set_supply_mv: ({ args }) => ({
+      nextState: { vdd_mv: clamp((args[0] ?? 0) & 65535, VDD_MIN_MV, VDD_MAX_MV) }
+    }),
+    // ── function generator ──
+    tile_drive_a_2_set_waveform: ({ args }) => onCh(args, (c) => patch([c], { wave: (args[1] ?? WAVE_OFF) & 7 })),
+    tile_drive_a_2_start_waveform: ({ args }) => onCh(args, (c) => patch([c], { wave_running: 1 })),
+    // START-FUNC-X cleared, FUNC-CONFIG = OFF (tile_drive_a_2_stop_waveform).
+    tile_drive_a_2_stop_waveform: ({ args }) => onCh(args, (c) => patch([c], { wave: WAVE_OFF, wave_running: 0 })),
+    tile_drive_a_2_set_slew_rate: ({ args }) => onCh(args, (c) => patch([c], { slew: (args[1] ?? 0) & 15 })),
+    tile_drive_a_2_set_code_step: ({ args }) => onCh(args, (c) => patch([c], { step: (args[1] ?? 0) & 7 })),
+    // Clamped and swapped so high > low (tile_drive_a_2.c:440-455).
+    tile_drive_a_2_set_margins: ({ args }) => onCh(args, (c) => {
+      const a = Math.min(DAC_MAX, (args[1] ?? 0) & 65535);
+      const b = Math.min(DAC_MAX, (args[2] ?? DAC_MAX) & 65535);
+      return patch([c], { margin_low: Math.min(a, b), margin_high: Math.max(a, b) });
+    }),
+    tile_drive_a_2_set_phase: ({ args }) => onCh(args, (c) => patch([c], { phase: (args[1] ?? 0) & 3 })),
+    // Margins to full scale + wave/step/slew (tile_drive_a_2.c:467-486).
+    tile_drive_a_2_set_waveform_params: ({ args }) => onCh(
+      args,
+      (c) => patch([c], {
+        margin_low: 0,
+        margin_high: DAC_MAX,
+        wave: (args[1] ?? WAVE_OFF) & 7,
+        step: (args[2] ?? 0) & 7,
+        slew: (args[3] ?? 0) & 15
+      })
+    ),
+    // ── amps (both, shared 0x58) ──
+    // Clamped to the gain range valid for the compression ratio (0..30 at 1:1).
+    tile_drive_a_2_amp_set_gain: ({ state, args }) => {
+      const raw = (args[0] ?? 0) & 255;
+      return {
+        nextState: { amp_gain_db: clamp(raw > 127 ? raw - 256 : raw, minGain(state), 30) }
+      };
+    },
+    tile_drive_a_2_amp_get_gain: ({ state }) => ({ scalar: state.amp_gain_db }),
+    // EN = 1, SWS = 0 (deferred to wake() while asleep); the mute shadow is untouched.
+    tile_drive_a_2_amp_enable: ({ state }) => ({ nextState: enableState(state) }),
+    tile_drive_a_2_amp_disable: () => ({ nextState: disableState }),
+    // The config is a struct pointer the host call can't read; no state change.
+    tile_drive_a_2_amp_set_agc: () => ({}),
+    // Level clamped to 0..31; a disable is honoured only at compression 1:1.
+    tile_drive_a_2_amp_set_limiter: ({ state, args }) => ({
+      nextState: {
+        agc_limiter_level: clamp((args[1] ?? LIMITER_DEFAULT) & 255, 0, 31),
+        agc_limiter_enabled: (args[0] ?? 1) || state.agc_compression !== COMP_1_1 ? 1 : 0
+      }
+    }),
+    // FUNC_CTRL raw: [7]=1 [6]EN [5]SWS [3]FAULT [2]Thermal [1]=1 [0]NG_EN=0.
+    tile_drive_a_2_amp_read_status: ({ state }) => ({
+      scalar: 194 | (state.amp_enabled ? 0 : 32) | (state.amp_fault ? 8 : 0) | (state.amp_thermal ? 4 : 0)
+    }),
+    // ── DAC status / NVM / raw ──
+    tile_drive_a_2_read_status: () => ({ scalar: GEN_ID_STATUS }),
+    tile_drive_a_2_nvm_save: () => ({}),
+    // Registers reload from NVM (factory: gain 1× EXT); the driver re-reads
+    // both channels' gains.
+    tile_drive_a_2_nvm_reload: () => ({
+      nextState: { ch0_gain: 0, ch1_gain: 0 }
+    }),
+    tile_drive_a_2_read_reg: ({ state, args }) => {
+      const reg = (args[0] ?? 0) & 255;
+      const map = {
+        34: GEN_ID_STATUS,
+        28: state.ch0_code << 4,
+        25: state.ch1_code << 4,
+        19: state.ch0_margin_high << 4,
+        20: state.ch0_margin_low << 4,
+        1: state.ch1_margin_high << 4,
+        2: state.ch1_margin_low << 4
+      };
+      return { scalar: map[reg] ?? 0 };
+    },
+    // Only the DAC data / margin registers feed the model.
+    tile_drive_a_2_write_reg: ({ args }) => {
+      const reg = (args[0] ?? 0) & 255;
+      const v = (args[1] ?? 0) >> 4 & 4095;
+      const field = {
+        28: "ch0_code",
+        25: "ch1_code",
+        19: "ch0_margin_high",
+        20: "ch0_margin_low",
+        1: "ch1_margin_high",
+        2: "ch1_margin_low"
+      };
+      const f = field[reg];
+      return f ? { nextState: { [f]: v } } : {};
+    },
+    // ── blocking helpers (played out on deriveState's clock) ──
+    // stop_waveform + mid-scale, then delay (tile_drive_a_2.c:676-691).
+    tile_drive_a_2_play_silence: ({ args }) => {
+      const cs = chans(args[0] ?? 0);
+      return {
+        nextState: patch(cs, { wave: WAVE_OFF, wave_running: 0, sw_wave: 0, code: DAC_MID })
+      };
+    },
+    // Unmute if muted, sine on the generator at the nearest of its 15 pitches
+    // for `ms`, then stop + mid-scale and re-mute (tile_drive_a_2.c).
+    tile_drive_a_2_play_tone: ({ state, args }) => {
+      const freq = (args[1] ?? 0) & 65535;
+      const ms = (args[2] ?? 0) & 65535;
+      if (freq === 0 || ms === 0) return {};
+      const cs = chans(args[0] ?? 0);
+      const [slew, step, pitch] = waveParams(freq);
+      return {
+        nextState: {
+          ...state.amp_muted ? unmuteState(state) : {},
+          ...patch(cs, {
+            margin_low: 0,
+            margin_high: DAC_MAX,
+            wave: WAVE_SINE,
+            step,
+            slew,
+            wave_running: 1,
+            freq: pitch
+          }),
+          currently_playing: `tone ${pitch} Hz (asked ${freq}) / ${ms} ms`,
+          play_channels: maskOf(cs),
+          play_remute: state.amp_muted,
+          play_ms: ms,
+          playing_until_ms: 0
+        }
+      };
+    },
+    // Software sine sweep at 8 ksps, full swing, then mid-scale
+    // (tile_drive_a_2.c:771-834).
+    tile_drive_a_2_play_chirp: ({ state, args }) => {
+      const start = (args[1] ?? 0) & 65535;
+      const end = (args[2] ?? 0) & 65535;
+      const ms = (args[3] ?? 0) & 65535;
+      if (ms === 0 || start === 0 && end === 0) return {};
+      const cs = chans(args[0] ?? 0);
+      return {
+        nextState: {
+          ...state.amp_muted ? unmuteState(state) : {},
+          ...patch(cs, { wave: WAVE_OFF, wave_running: 0, sw_wave: 1, freq: end }),
+          currently_playing: `chirp ${start}\u2192${end} Hz / ${ms} ms`,
+          play_channels: maskOf(cs),
+          play_remute: state.amp_muted,
+          play_ms: ms,
+          playing_until_ms: 0
+        }
+      };
+    },
+    // pct·30/100 dB at compression 1:1, else -28 + pct·58/100 dB, on both amps;
+    // the mute shadow follows.
+    tile_drive_a_2_set_volume_pct: ({ state, args }) => {
+      const pct = Math.min(100, (args[1] ?? 0) & 255);
+      const db = state.agc_compression === COMP_1_1 ? Math.trunc(pct * 30 / 100) : -28 + Math.trunc(pct * 58 / 100);
+      return {
+        nextState: { amp_gain_db: db, ...state.amp_muted ? { amp_muted_gain_db: db } : {} }
+      };
+    },
+    tile_drive_a_2_mute: ({ state }) => ({ nextState: muteState(state) }),
+    tile_drive_a_2_unmute: ({ state }) => ({ nextState: unmuteState(state) })
+  },
+  provenance: {
+    tile_drive_a_2_find: "canonical",
+    tile_drive_a_2_set: "canonical",
+    // DAC-X-DATA, 12-bit
+    tile_drive_a_2_set_mv: "canonical",
+    // Eq 1-3, per-channel gain, V+ as told
+    tile_drive_a_2_set_supply_mv: "canonical",
+    // driver shadow, clamped 2.5-5.5 V
+    tile_drive_a_2_get: "canonical",
+    tile_drive_a_2_set_gain: "canonical",
+    // VOUT-GAIN table
+    tile_drive_a_2_set_waveform: "canonical",
+    // FUNC-CONFIG codes
+    tile_drive_a_2_stop_waveform: "canonical",
+    tile_drive_a_2_set_margins: "canonical",
+    tile_drive_a_2_set_waveform_params: "canonical",
+    tile_drive_a_2_amp_set_gain: "canonical",
+    // -28..+30 dB
+    tile_drive_a_2_amp_get_gain: "canonical",
+    tile_drive_a_2_amp_enable: "canonical",
+    // FUNC_CTRL EN/SWS
+    tile_drive_a_2_amp_disable: "canonical",
+    tile_drive_a_2_amp_set_limiter: "canonical",
+    // Table 11 levels; disable only at 1:1
+    tile_drive_a_2_amp_read_status: "canonical",
+    // FUNC_CTRL bits
+    tile_drive_a_2_read_status: "canonical",
+    // GENERAL-STATUS DEVICE-ID
+    tile_drive_a_2_set_volume_pct: "canonical",
+    tile_drive_a_2_mute: "canonical",
+    tile_drive_a_2_unmute: "canonical",
+    tile_drive_a_2_sleep: "inferred",
+    tile_drive_a_2_wake: "inferred",
+    tile_drive_a_2_start_waveform: "canonical",
+    // START-FUNC-X, per channel; sine level from Table 6-10
+    tile_drive_a_2_set_slew_rate: "inferred",
+    // stored; frequency not derived from it
+    tile_drive_a_2_set_code_step: "inferred",
+    tile_drive_a_2_set_phase: "inferred",
+    tile_drive_a_2_play_tone: "canonical",
+    // pitch from Eq 8, level from Table 6-10
+    tile_drive_a_2_play_silence: "inferred",
+    tile_drive_a_2_play_chirp: "inferred",
+    tile_drive_a_2_nvm_reload: "inferred",
+    // assumes factory NVM
+    tile_drive_a_2_read_reg: "inferred",
+    // data/margin/status registers only
+    tile_drive_a_2_write_reg: "inferred",
+    tile_drive_a_2_nvm_save: "hallucinated",
+    // no NVM model
+    tile_drive_a_2_amp_set_agc: "hallucinated",
+    // struct arg unreadable → no-op
+    power: "inferred"
+    // IC currents datasheet; speaker load assumed 8 Ω; limiter caps the peak
+  },
+  // A blocking helper ends: stop the generator / software sweep, park at
+  // mid-scale, re-mute if the helper unmuted.
+  deriveState: (state, { t }) => {
+    if (state.play_ms > 0 && state.playing_until_ms === 0) {
+      return { playing_until_ms: t + state.play_ms, play_ms: 0 };
+    }
+    if (state.playing_until_ms !== 0 && t >= state.playing_until_ms) {
+      const cs = [0, 1].filter((c) => state.play_channels & 1 << c);
+      return {
+        ...patch(cs, { wave: WAVE_OFF, wave_running: 0, sw_wave: 0, code: DAC_MID }),
+        ...state.play_remute ? muteState(state) : {},
+        currently_playing: "",
+        play_channels: 0,
+        play_remute: 0,
+        playing_until_ms: 0
+      };
+    }
+    return {};
+  },
+  // OUT.0+ = pad 7, OUT.0- = pad 6, OUT.1+ = pad 9, OUT.1- = pad 8.
+  padOutputs(state) {
+    const o0 = outLevel(state, 0);
+    const o1 = outLevel(state, 1);
+    return { "7": o0, "6": o0, "9": o1, "8": o1 };
+  },
+  // Single V+ rail (pad 10): DAC (150 µA/ch) + two amps (TPA2028D1 IDD, or the
+  // software-shutdown current) + the audio power at ~91 % Class-D efficiency.
+  power(state, ctx) {
+    const vMv = ctx?.padVoltage["10"] ?? state.vplus_mv;
+    const intRef = [state.ch0_gain, state.ch1_gain].filter((g) => g >= 2).length;
+    const dacUa = state.sleeping ? I_DAC_SLEEP_UA : 2 * I_DAC_CH_UA + intRef * I_DAC_INTREF_CH_UA;
+    const ampOn = !state.sleeping && state.amp_enabled === 1;
+    const ampUa = 2 * ampIq(vMv, ampOn);
+    const o0 = outLevel(state, 0);
+    const o1 = outLevel(state, 1);
+    const pmaxW = AMP_PMAX_5V_W * Math.pow(vMv / 5e3, 2);
+    const audioW = (o0 * o0 + o1 * o1) * pmaxW;
+    const audioUa = vMv > 0 ? audioW / (AMP_EFF * (vMv / 1e3)) * 1e6 : 0;
+    const drawUa = Math.round(dacUa + ampUa + audioUa);
+    const outUa = (o) => Math.round(o * vMv / R_SPEAKER_OHM / Math.SQRT2 * 1e3);
+    return {
+      draw_ua: drawUa,
+      rails: [
+        {
+          name: "V+",
+          role: "supply",
+          v_mv: vMv,
+          i_ua: drawUa,
+          pads: ["10"],
+          note: "DAC + 2\xD7 amp + audio"
+        },
+        {
+          name: "OUT.0",
+          role: "output",
+          v_mv: Math.round(o0 * vMv),
+          i_ua: outUa(o0),
+          pads: ["7", "6"],
+          note: "amp0 speaker (8 \u03A9 assumed), peak"
+        },
+        {
+          name: "OUT.1",
+          role: "output",
+          v_mv: Math.round(o1 * vMv),
+          i_ua: outUa(o1),
+          pads: ["9", "8"],
+          note: "amp1 speaker (8 \u03A9 assumed), peak"
+        }
+      ]
+    };
+  }
+};
+var drive_a_2_default = sim;
+export {
+  drive_a_2_default as default
+};
