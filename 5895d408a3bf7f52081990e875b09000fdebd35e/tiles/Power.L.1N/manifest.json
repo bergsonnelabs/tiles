@@ -1,0 +1,411 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@c260a08",
+  "tile": "Power.L.1N",
+  "palette": {
+    "label": "Power.L.1N",
+    "icon": "🔋"
+  },
+  "driver": {
+    "prefix": "tile_power_l_1n",
+    "header": "tile_power_l_1n.h",
+    "version": "1.2.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_power_l_1n_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "charger_enable"
+      ],
+      "symbol": "tile_power_l_1n_charger_enable",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Enable or disable battery charging.",
+      "params": [
+        {
+          "name": "on",
+          "type": "int",
+          "description": "1 = enable charging, 0 = disable."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "on",
+          "label": "Charge the battery",
+          "tier": "basic",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_vbus_limit_ma"
+      ],
+      "symbol": "tile_power_l_1n_set_vbus_limit_ma",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set the VBUS (USB) input current limit.",
+      "params": [
+        {
+          "name": "ma",
+          "type": "int",
+          "range": [
+            100,
+            1500
+          ],
+          "unit": "mA",
+          "description": "Input current limit, in milliamps."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "USB input limit",
+          "tier": "basic",
+          "scope": "config",
+          "default": 500
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_charge_current_ma"
+      ],
+      "symbol": "tile_power_l_1n_set_charge_current_ma",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set the constant-current charge level.",
+      "params": [
+        {
+          "name": "ma",
+          "type": "int",
+          "range": [
+            32,
+            800
+          ],
+          "unit": "mA",
+          "description": "Charge current in milliamps."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "ma",
+          "label": "Charge current",
+          "tier": "basic",
+          "scope": "config",
+          "default": 100
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_term_mv"
+      ],
+      "symbol": "tile_power_l_1n_set_term_mv",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set the charge-termination (full) voltage.",
+      "params": [
+        {
+          "name": "mv",
+          "type": "int",
+          "range": [
+            3500,
+            4450
+          ],
+          "unit": "mV",
+          "description": "Termination voltage in millivolts (e.g. 4200)."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "mv",
+          "label": "Charge to",
+          "tier": "advanced",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 4200
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_charge_status"
+      ],
+      "symbol": "tile_power_l_1n_get_charge_status",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Read the raw charge-status register.",
+      "params": [],
+      "returns": "uint8_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_charge_error"
+      ],
+      "symbol": "tile_power_l_1n_get_charge_error",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Read the charger error-reason register.",
+      "params": [],
+      "returns": "uint8_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_charging"
+      ],
+      "symbol": "tile_power_l_1n_is_charging",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Whether the charger is actively charging (trickle / CC / CV).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_charge_complete"
+      ],
+      "symbol": "tile_power_l_1n_is_charge_complete",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Whether charging has completed (battery full).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "battery_present"
+      ],
+      "symbol": "tile_power_l_1n_battery_present",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Whether a battery is detected.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_vbat_mv"
+      ],
+      "symbol": "tile_power_l_1n_get_vbat_mv",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Measure the battery voltage.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_vsys_mv"
+      ],
+      "symbol": "tile_power_l_1n_get_vsys_mv",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Measure the system (VSYS) voltage.",
+      "params": [],
+      "returns": "uint16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_die_temp_c"
+      ],
+      "symbol": "tile_power_l_1n_get_die_temp_c",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Measure the PMIC die temperature.",
+      "params": [],
+      "returns": "int16_t",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "buck_enable"
+      ],
+      "symbol": "tile_power_l_1n_buck_enable",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Enable or disable a buck regulator.",
+      "params": [
+        {
+          "name": "buck",
+          "type": "int",
+          "description": "1 (VOUT1) or 2 (VOUT2)."
+        },
+        {
+          "name": "on",
+          "type": "int",
+          "description": "1 = enable, 0 = disable."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "buck_set_mv"
+      ],
+      "symbol": "tile_power_l_1n_buck_set_mv",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set a buck regulator's output voltage.",
+      "params": [
+        {
+          "name": "buck",
+          "type": "int",
+          "description": "1 (VOUT1) or 2 (VOUT2)."
+        },
+        {
+          "name": "mv",
+          "type": "int",
+          "range": [
+            1000,
+            3300
+          ],
+          "description": "Output voltage in mV, 100 mV steps."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "led_set_mode"
+      ],
+      "symbol": "tile_power_l_1n_led_set_mode",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Set an indicator LED's drive mode.",
+      "params": [
+        {
+          "name": "led",
+          "type": "int",
+          "description": "0, 1 or 2."
+        },
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "power_l_1n_led_mode_t.",
+          "choices": [
+            {
+              "name": "NPM1300_LED_ERROR",
+              "value": 0,
+              "label": "auto: on for charger error"
+            },
+            {
+              "name": "NPM1300_LED_CHARGING",
+              "value": 1,
+              "label": "auto: on while charging"
+            },
+            {
+              "name": "NPM1300_LED_HOST",
+              "value": 2,
+              "label": "software-controlled via led_set()"
+            },
+            {
+              "name": "NPM1300_LED_NOTUSED",
+              "value": 3,
+              "label": "disabled"
+            }
+          ]
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "led_set"
+      ],
+      "symbol": "tile_power_l_1n_led_set",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Turn a host-controlled LED on or off.",
+      "params": [
+        {
+          "name": "led",
+          "type": "int",
+          "description": "0, 1 or 2."
+        },
+        {
+          "name": "on",
+          "type": "int",
+          "description": "1 = on, 0 = off."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_reset_cause"
+      ],
+      "symbol": "tile_power_l_1n_get_reset_cause",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Read the reset-cause register (why the PMIC last reset).",
+      "params": [],
+      "returns": "uint8_t",
+      "receiver": "tile_t*"
+    }
+  ],
+  "events": [
+    {
+      "name": "charge_complete",
+      "payload": [],
+      "mask": "NPM1300_CHG_COMPLETED"
+    },
+    {
+      "name": "charging",
+      "payload": [],
+      "mask": "NPM1300_CHG_CONSTANTCURRENT"
+    }
+  ],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x6B"
+      }
+    ]
+  }
+}
