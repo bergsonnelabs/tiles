@@ -1,0 +1,18 @@
+{
+  "core": "Core.ST.W5",
+  "clock": "high",
+  "bootloader": "rom",
+  "iwdg": {
+    "enabled": true,
+    "timeout_ms": 5000
+  },
+  "pads": {
+    "2": "SPI3.CLK",
+    "3": "SPI3.CS",
+    "6": "SPI3.MOSI",
+    "7": "SPI3.MISO"
+  },
+  "interfaces": {
+    "SPI3": { "mode": 0, "prescaler": 8 }
+  }
+}

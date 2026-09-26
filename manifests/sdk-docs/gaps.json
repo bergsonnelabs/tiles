@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@60254ad",
+  "source": "tiles@3b946ad",
   "subsystems": [
     {
       "id": "adc",
@@ -517,21 +517,27 @@
       "gaps": [
         {
           "title": "Tier 2 is single-byte xfer only — no bulk / persistent CS",
-          "brief": "The Tier 2 surface is core_spi_xfer_byte_bus: one byte, CS auto- managed around the call. DSL programs that need to push a multi-byte payload with CS held (display init streams, SD-card sectors, audio frame transfers) drop back to Tier 1 with a hal_spi_t handle and manual select/deselect. Bulk variants need the array-IN / array-OUT host-call ABI prototyped on the tile- driver side — track with the DSL Capability Coverage close.",
+          "brief": "The Tier 2 surface is core_spi_xfer_byte_bus: one byte, CS auto- managed around the call. DSL programs that need to push a multi-byte payload with CS held (display init streams, SD-card sectors, audio frame transfers) drop back to Tier 1 (core_spi_xfer, core_spi_write_read, core_spi_exchange_dma). Bulk variants need the array-IN / array-OUT host-call ABI prototyped on the tile- driver side — track with the DSL Capability Coverage close.",
           "tier": 2,
           "value": "M"
         },
         {
-          "title": "core_spi is not bench-verified on any Core; broken on Core.ST.H5",
-          "brief": "Core.ST.W5: the SPI v2 bring-up is done and the LL half-duplex + GPDMA path ran against a camera, but the core_spi full-duplex path hasn't been bench-verified. Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled) and the transfer loop has no timeout, so it hangs until the H5 fix session. Core.ST.L4: builds, has not run on hardware yet. Tile drivers that need SPI should expect rough edges.",
+          "title": "Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI has no clock",
+          "brief": "Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3, 1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE sessions, GPDMA) but has not run it on hardware yet; the camera tile's LL half-duplex path is the only W5 SPI use proven on silicon. Core.ST.H5: SPI has no kernel clock (PLL1Q is never enabled), so a transfer returns HAL_TIMEOUT instead of moving data.",
           "tier": 1,
-          "value": "H"
+          "value": "M"
         },
         {
-          "title": "DMA implemented only on Core.ST.L4",
-          "brief": "core_spi_xfer_dma is implemented for the L4 (classic DMA) but not yet run on hardware. On Core.ST.W5 / Core.ST.H5 it returns HAL_ERROR (SPI v2 needs TSIZE set while SPE=0); the W5's LL-level ll_spi_dma_* path works. Long buffer transfers (display refresh, audio) are slower on W5 / H5.",
-          "tier": 2,
-          "value": "M"
+          "title": "SPI DMA not on Core.ST.H5",
+          "brief": "core_spi_exchange_dma / core_spi_xfer_dma run on Core.ST.L4 (DMA1) and Core.ST.W5 (GPDMA1 CH6/CH7) and return HAL_ERROR on Core.ST.H5, where polled transfers are the only path.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "8-bit Motorola frames only",
+          "brief": "Frames are 8 bits. No 16-bit frames, hardware CRC, TI frame format or hardware NSS at the core level; the LL layer has the Core.ST.W5 half-duplex (1-line) mode.",
+          "tier": 1,
+          "value": "L"
         },
         {
           "title": "Slave mode missing",

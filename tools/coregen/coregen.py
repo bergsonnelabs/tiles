@@ -615,9 +615,13 @@ def build_pad_config(config, pad_map):
             entry["af"] = None
         elif re.match(r'^SPI\d+\.CS$', assigned_func):
             # SPI CS pins are managed as GPIO output via hal_spi_set_cs(),
-            # not as hardware NSS alternate function.
+            # not as hardware NSS alternate function. Start deasserted: an
+            # output pin comes up low, which would select the device from
+            # boot until the SPI init ran.
             entry["mode"] = "output"
             entry["af"] = None
+            bus_cfg = config.get("interfaces", {}).get(assigned_func.split(".")[0], {})
+            entry["default"] = "low" if bus_cfg.get("cs_polarity") == "active-high" else "high"
         elif re.match(r'^ADC_?(?:IN)?\d+', assigned_func):
             # ADC input pads: set to analog mode (MODER=11).
             # No AF needed — analog functions bypass the AF mux entirely.
@@ -1329,14 +1333,27 @@ SPI_PRESCALER_MAP = {
 }
 
 
-def build_spi_config(config, mcu, pad_map):
+# Datasheet SCK ceilings for an SPI master, MHz: (VDD >= 2.7 V, below 2.7 V).
+# STM32L422 DS Table 80 (master receiver / full duplex, voltage range 1);
+# STM32WBA5x DS14127 Table 94 (master receiver). The Cores run the SPI kernel
+# at SYSCLK (APB dividers 1), so the fastest setting is SYSCLK / 2.
+SPI_MAX_SCK_MHZ = {
+    "STM32L422xx": (40, 16),
+    "STM32WBA55xx": (50, 33),
+}
+
+
+def build_spi_config(config, mcu, pad_map, clock_config=None):
     """Detect SPI buses from pin assignments and build SPI config list.
 
     Scans pads for patterns like 'SPI1.CLK', 'SPI1.MOSI', 'SPI1.MISO', 'SPI1.CS'
     and returns a list of dicts with bus configuration for template rendering.
 
-    Per-bus mode and prescaler settings come from the 'interfaces' section
-    of config.json.  Defaults: mode=0 (CPOL=0/CPHA=0), prescaler=8 (÷8).
+    Per-bus mode, prescaler and bit order come from the 'interfaces' section
+    of config.json.  Defaults: mode=0 (CPOL=0/CPHA=0), prescaler=8 (÷8),
+    bit_order="msb". With clock_config, a prescaler that puts SCK over the
+    part's datasheet ceiling is reported (a NOTE when only the low-VDD
+    ceiling is exceeded, an ERROR above the 2.7-3.6 V one).
 
     SPI1.CS pads are configured as GPIO output (software CS management via
     hal_spi_set_cs) rather than the hardware NSS alternate function.
@@ -1377,6 +1394,24 @@ def build_spi_config(config, mcu, pad_map):
                   f"(use 2, 4, 8, 16, 32, 64, 128, or 256)")
             sys.exit(1)
 
+        bit_order = bus_cfg.get("bit_order", "msb")
+        if bit_order not in ("msb", "lsb"):
+            eprint(f"  ERROR: SPI{bus_num} bit_order '{bit_order}' not valid (use \"msb\" or \"lsb\")")
+            sys.exit(1)
+
+        limits = SPI_MAX_SCK_MHZ.get(family_define)
+        if clock_config and limits:
+            kernel_hz = clock_config["sysclk_hz"] // clock_config.get("apb2_div", 1)
+            sck_mhz = kernel_hz / prescaler / 1e6
+            hi, lo = limits
+            if sck_mhz > hi:
+                eprint(f"  ERROR: SPI{bus_num} SCK {sck_mhz:.1f} MHz (SYSCLK / {prescaler}) is over the "
+                       f"{mcu['define']} master limit of {hi} MHz. Use a larger prescaler.")
+                sys.exit(1)
+            if sck_mhz > lo:
+                eprint(f"  NOTE: SPI{bus_num} SCK {sck_mhz:.1f} MHz is legal at VDD 2.7-3.6 V "
+                       f"(up to {hi} MHz) but over the {lo} MHz limit below 2.7 V.")
+
         key = (family_define, bus_num)
         clk_info = SPI_CLK_MAP.get(key)
         if clk_info is None:
@@ -1414,6 +1449,7 @@ def build_spi_config(config, mcu, pad_map):
             "cs_port": cs_port,
             "cs_pin": cs_pin,
             "cs_active_low": cs_active_low,
+            "lsb_first": bit_order == "lsb",
         })
 
     return spi_buses
@@ -2073,7 +2109,7 @@ def generate(tile_path, output_dir, config_path=None):
         ctx["i2c_buses"] = build_i2c_config(project, mcu, ctx["clock_config"])
         ctx["i2c_pullups"] = {bus["instance"]: bus["pullups"] for bus in ctx["i2c_buses"]}
         ctx["pullup_pins"] = build_pullup_config(project, tile, ctx["i2c_buses"])
-        ctx["spi_buses"] = build_spi_config(project, mcu, pad_map)
+        ctx["spi_buses"] = build_spi_config(project, mcu, pad_map, ctx["clock_config"])
         ctx["usart_buses"] = build_usart_config(project, mcu)
         ctx["pwm_timers"] = build_pwm_config(project, mcu)
         ctx["adc_config"] = build_adc_config(project)

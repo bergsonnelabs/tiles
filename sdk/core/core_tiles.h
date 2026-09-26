@@ -76,46 +76,37 @@ static inline int _ct_i2c_read_raw(void *h, uint8_t addr,
 static inline int _ct_spi_read(void *h, uint8_t cs, uint8_t reg,
                                uint8_t *data, uint16_t len)
 {
-    core_spi_t *spi = (core_spi_t *)h;
+    uint8_t cmd = reg | 0x80;
     (void)cs;
-    core_spi_select(spi);
-    core_spi_transfer(spi, reg | 0x80);
-    core_spi_read(spi, data, len);
-    core_spi_deselect(spi);
-    return 0;
+    return core_spi_write_read((core_spi_t *)h, &cmd, 1, data, len) == HAL_OK ? 0 : -1;
 }
 
 static inline int _ct_spi_write(void *h, uint8_t cs, uint8_t reg,
                                 const uint8_t *data, uint16_t len)
 {
     core_spi_t *spi = (core_spi_t *)h;
+    uint8_t cmd = reg & 0x7F;
     (void)cs;
     core_spi_select(spi);
-    core_spi_transfer(spi, reg & 0x7F);
-    core_spi_write(spi, data, len);
+    hal_status_t s = core_spi_write(spi, &cmd, 1);
+    if (s == HAL_OK) s = core_spi_write(spi, data, len);
     core_spi_deselect(spi);
-    return 0;
+    return s == HAL_OK ? 0 : -1;
 }
 
 /* Raw transaction (tiles_pal.h spi_transfer): one CS assertion, send tx_len
- * bytes, then clock in rx_len bytes, release CS. For command + address + data
- * protocols such as SPI-NOR (Store.O.128). As with the register adapters,
- * `cs` is ignored: the chip select is the bus's own (coregen). */
+ * bytes, then clock in rx_len bytes (0xFF on MOSI), release CS. For command +
+ * address + data protocols such as SPI-NOR (Store.O.128). As with the register
+ * adapters, `cs` is ignored: the chip select is the bus's own (the SPIn.CS pad
+ * coregen attaches to core_spiN). Bounded: a stalled bus returns -1. */
 static inline int _ct_spi_transfer(void *h, uint8_t cs,
                                    const uint8_t *tx, uint16_t tx_len,
                                    uint8_t *rx, uint16_t rx_len)
 {
-    core_spi_t *spi = (core_spi_t *)h;
     (void)cs;
     if ((tx_len && !tx) || (rx_len && !rx))
         return -1;
-    core_spi_select(spi);
-    if (tx_len)
-        core_spi_write(spi, tx, tx_len);
-    if (rx_len)
-        core_spi_read(spi, rx, rx_len);
-    core_spi_deselect(spi);
-    return 0;
+    return core_spi_write_read((core_spi_t *)h, tx, tx_len, rx, rx_len) == HAL_OK ? 0 : -1;
 }
 
 #endif /* _CORE_TILES_HAS_SPI */
