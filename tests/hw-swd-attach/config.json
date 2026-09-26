@@ -1,0 +1,9 @@
+{
+  "core": "Core.ST.H5",
+  "clock": "max",
+  "bootloader": "rom",
+  "usb": {
+    "enabled": true
+  },
+  "pads": {}
+}

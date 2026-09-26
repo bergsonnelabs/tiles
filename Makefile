@@ -253,7 +253,7 @@ else ifeq ($(TILE),Core-ST-W5-b)
 else ifeq ($(TILE),Core-ST-H5-a)
   MCU_FAMILY  = stm32h5xx
   MCU_PART    = STM32H523xx
-  PROBE_RS_CHIP = STM32H523CE
+  PROBE_RS_CHIP = STM32H523HEYxT
   CPU         = cortex-m33
   FPU         = fpv5-sp-d16
   FLOAT_ABI   = hard
