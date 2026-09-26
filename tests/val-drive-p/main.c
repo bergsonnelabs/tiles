@@ -93,6 +93,10 @@ int main(void)
     (void)recovered;
 
     tile_drive_p_sleep(&piezo);
+    uint8_t woke = tile_drive_p_wake(&piezo);      /* v3.5: explicit wake */
+    (void)woke;
+    tile_drive_p_sleep(&piezo);
+    tile_drive_p_play_click(&piezo, 50);            /* v3.5: helpers auto-wake */
     tile_drive_p_reset(&piezo);
 
     /* ---- State checks ---- */

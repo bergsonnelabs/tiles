@@ -33,8 +33,8 @@
           "function": "TRIG",
           "direction": "input",
           "thresholds": {
-            "logic_low": "0.3 * V+",
-            "logic_high": "0.7 * V+"
+            "logic_low": "0.5 V",
+            "logic_high": "1.3 V"
           }
         }
       ]
@@ -49,13 +49,13 @@
       },
       "functions": [
         {
-          "note": "an internal pull-up resistor enables the output by default; connect to GND to disable",
+          "note": "100k pull-up to V+ on the tile (R2) enables the chip by default; connect to GND to disable",
           "type": "digital",
           "function": "EN",
           "direction": "input",
           "thresholds": {
-            "logic_low": "0.3 * V+",
-            "logic_high": "0.7 * V+"
+            "logic_low": "0.5 V",
+            "logic_high": "1.3 V"
           }
         }
       ]
@@ -172,7 +172,7 @@
       },
       "functions": [
         {
-          "note": "1.8-5.0V",
+          "note": "1.8-5.0V; feeds only the EN pull-up (R2, 100k). The DRV2605 runs from V_MOTOR",
           "type": "power",
           "function": "V+",
           "direction": "input"
@@ -377,7 +377,7 @@
       ]
     }
   ],
-  "updated_at": "2026-05-01T12:19:55.691Z",
+  "updated_at": "2026-09-26T02:58:17.000Z",
   "description": "The Drive.H tile is designed for driving linear-resonant actuators (LRAs) or eccentric rotating-mass motors (ERMs) using the Texas Instruments DRV2605 IC.  Haptic signals can be generated either from an internal effects library, streamed in real time over I2C, or input as a high-speed pulse-width modulation (PWM) signal.  Additionally, an optional hardware trigger can be used to play back pre-configured effects.  Separate logic and motor supply connections allows for digital interfacing with logic down to 1.8V.",
   "json_version": "0.5",
   "application_notes": []

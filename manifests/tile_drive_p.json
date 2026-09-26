@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3af6291",
+  "source": "tiles@f70bca2",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_p",
     "header": "tile_drive_p.h",
-    "version": "3.4.0"
+    "version": "3.5.0"
   },
   "handle": {
     "type": "tile_t",
@@ -163,6 +163,20 @@
       "description": "Enter low-power sleep mode.",
       "params": [],
       "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wake"
+      ],
+      "symbol": "tile_drive_p_wake",
+      "header": "tile_drive_p.h",
+      "category": "tile",
+      "description": "Wake the chip from SLEEP and restore the driver's configuration.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
       "receiver": "tile_t*"
     },
     {

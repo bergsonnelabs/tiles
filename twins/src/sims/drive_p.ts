@@ -8,13 +8,21 @@
 // and write `mode`, `amplitude`, `freq_hz`, `sleeping`, …; power / padOutputs
 // read those same fields, so the drive current follows the program.
 //
-// Behavior notes from the driver + datasheet:
-//   - set_mode() is READY-gated and there is no wake(): after sleep() only a
-//     fault recovery (check_and_recover) re-readies the driver
-//     (tile_drive_p.c:253-258, 354-360, 376-381).
+// Behavior notes from the driver (v3.5) + datasheet:
+//   - sleep() writes CONFIG DS=1; wake() runs the start-up sequence (dummy
+//     write, settle, rewrite CONFIG/PARCAP/SUP_RISE/COMM from the shadow,
+//     CHIP_ID check, BOS1921 §7.4.1-7.4.2) and leaves the tile in IDLE.
+//     set_mode(), the play / sense helpers and check_and_recover() wake a
+//     sleeping tile themselves, so nothing else is gated on sleep.
 //   - When the FIFO drains, the last sample stays on the output (BOS1921
-//     §6.x "the last FIFO entry will remain on the device output"), so a click
-//     leaves a small DC hold; with COMM.TOUT set the chip sleeps instead.
+//     §6.6). The click / sine / buzz / pulse-train helpers end at exactly 0 V,
+//     so they leave no hold, and they clear OE right after queuing: the chip
+//     plays out the FIFO, then idles (STATE IDLE). play_samples() keeps OE on
+//     (so calls chain) and holds the caller's last sample; with COMM.TOUT set
+//     the chip then sleeps once the FIFO has been empty 4 ms.
+//   - check_and_recover() resets in the §6.2.8 order and restores the full
+//     configuration (range, gain, retention, auto-sleep, UPI) — nothing
+//     reverts to chip defaults.
 //   - read() returns the COMM.RDADDR register: CHIP_ID after init, IC_STATUS
 //     after idle/play set_mode, SENSE_VAL after sense set_mode.
 import type { TileSim } from '../tileSim';
@@ -71,6 +79,8 @@ interface State {
 
   // ── driver / chip state ──
   mode: number; // drive_p_mode_t
+  output_on: number; // CONFIG.OE
+  stop_after_drain: number; // OE cleared behind the queued waveform
   sleeping: number; // tile->state == SLEEPING
   auto_slept: number; // chip asleep via COMM.TOUT after the FIFO drained
   return_reg: number; // COMM.RDADDR
@@ -96,9 +106,10 @@ interface State {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const isPlayMode = (m: number) =>
   m === MODE_PLAY_DIRECT || m === MODE_PLAY_FIFO || m === MODE_PLAY_RAM_SYNTH;
+const outputActive = (s: State) => s.output_on === 1 && isPlayMode(s.mode);
 const powered = (s: State) => !s.sleeping && !s.auto_slept && s.supply_mv >= UVLO_MV;
 
-// Q12 sine as the driver's quarter-wave LUT (tile_drive_p.c:481-506).
+// Q12 sine as the driver's quarter-wave LUT (tile_drive_p.c sine_q12).
 function sineQ12(phase: number): number {
   const q = (phase >> 14) & 3;
   const idx = (phase >> 8) & 0x3f;
@@ -115,7 +126,7 @@ const pctArg = (v: number | undefined) => Math.min(100, (v ?? 0) & 0xff);
 
 // Drive envelope magnitude 0..1 on OUT±.
 function driveStrength(s: State): number {
-  if (!powered(s) || !isPlayMode(s.mode) || s.fault_inject) return 0;
+  if (!powered(s) || !outputActive(s) || s.fault_inject) return 0;
   return clamp(s.amplitude / SAMPLE_FS, 0, 1);
 }
 
@@ -132,7 +143,7 @@ function senseRaw(s: State): number {
 function statusWord(s: State): number {
   if (s.supply_mv < UVLO_MV) return STATE_ERROR | UVLO_BIT;
   if (s.fault_inject) return STATE_ERROR | SC_BIT;
-  const running = powered(s) && isPlayMode(s.mode);
+  const running = powered(s) && outputActive(s);
   const fifoEmpty = s.playing_until_ms === 0 && s.play_ms === 0;
   return (running ? STATE_RUNNING : STATE_IDLE) | (fifoEmpty ? PLAYST_BIT : 0);
 }
@@ -143,13 +154,32 @@ function readReturn(s: State): number {
   return statusWord(s);
 }
 
-// set_mode() as the driver does it (tile_drive_p.c:253-308). READY-gated.
+// wake(): back to an awake, IDLE chip with the shadow configuration
+// reapplied and RDADDR on IC_STATUS (tile_drive_p_wake). Registers come back
+// from the driver's shadow either way, so retention changes nothing here.
+const wakeState = (): Partial<State> => ({
+  sleeping: 0,
+  auto_slept: 0,
+  mode: MODE_IDLE,
+  output_on: 0,
+  stop_after_drain: 0,
+  return_reg: REG_IC_STATUS,
+  amplitude: 0,
+  currently_playing: '',
+  play_ms: 0,
+  playing_until_ms: 0,
+});
+
+// set_mode() as the driver does it (tile_drive_p_set_mode): a sleeping tile
+// is woken first, then CONFIG / RDADDR for the mode.
 function setMode(s: State, mode: number): Partial<State> {
-  if (s.sleeping) return {};
   const m = mode >= MODE_IDLE && mode <= MODE_PLAY_RAM_SYNTH ? mode : MODE_IDLE;
   const sense = m === MODE_SENSE_FINE || m === MODE_SENSE_COARSE;
   return {
+    ...(s.sleeping ? wakeState() : {}),
     mode: m,
+    output_on: m === MODE_IDLE ? 0 : 1,
+    stop_after_drain: 0,
     auto_slept: 0,
     return_reg: sense ? REG_SENSE_VAL : REG_IC_STATUS,
     ...(m === MODE_SENSE_FINE ? { sense_gain: 1 } : {}),
@@ -168,10 +198,11 @@ function play(
   freq: number,
   ms: number,
   hold: number,
+  stopAfter: boolean,
 ): Partial<State> {
-  if (s.sleeping) return {};
   return {
     ...setMode(s, MODE_PLAY_FIFO),
+    stop_after_drain: stopAfter ? 1 : 0,
     amplitude: clamp(Math.abs(peak), 0, SAMPLE_FS),
     freq_hz: freq,
     hold_amplitude: clamp(Math.abs(hold), 0, SAMPLE_FS),
@@ -181,26 +212,30 @@ function play(
   };
 }
 
-// Half-sine click, 16 samples ≈ 2 ms (tile_drive_p.c:525-535): peak at i=8,
-// last sample (i=15) stays on the output. A lone click is one charge of the
-// piezo, not a tone, so its `freq_hz` is 0 (HV-hold only); a pulse train counts
-// its repetition rate.
+// Click (tile_drive_p_play_click): 2 × 0 V lead-in, then a half-sine over
+// i = 0..16 (2 ms) peaking at i = 8 and ending at exactly 0 V, so nothing
+// holds on the output afterwards. 19 samples at 8 ksps ≈ 2.4 ms. A lone click
+// is one charge of the piezo, not a tone, so its `freq_hz` is 0 (HV-hold
+// only); a pulse train counts its repetition rate.
+const CLICK_SAMPLES = 19;
+const CLICK_MS = CLICK_SAMPLES / 8;
 const clickPeak = (pct: number) => scale(sineQ12(8 * 2048), pct);
-const clickHold = (pct: number) => scale(sineQ12(15 * 2048), pct);
 
 const sim: TileSim<State> = {
   tile: 'Drive.P',
 
   // After tile_drive_p_init(): soft reset (RDADDR = CHIP_ID, IDLE), GAINS=1,
-  // GAIND=0, RET=0 (retain), TOUT=0, UPI=0 (tile_drive_p.c:148-183).
+  // GAIND=0, RET=0 (retain), TOUT=0, UPI=0 (tile_drive_p_init_at).
   defaultState: {
     sense_mv: 0,
     touch_detected: 0,
     fault_inject: 0,
     supply_mv: 3700,
-    load_nf: 260, // init tunes PARCAP for a 260 nF piezo (tile_drive_p.c:174)
+    load_nf: 260, // init tunes PARCAP for a 260 nF piezo (tile_drive_p_init_at)
 
     mode: MODE_IDLE,
+    output_on: 0,
+    stop_after_drain: 0,
     sleeping: 0,
     auto_slept: 0,
     return_reg: REG_CHIP_ID,
@@ -296,6 +331,8 @@ const sim: TileSim<State> = {
     tile_drive_p_init: () => ({
       nextState: {
         mode: MODE_IDLE,
+        output_on: 0,
+        stop_after_drain: 0,
         sleeping: 0,
         auto_slept: 0,
         return_reg: REG_CHIP_ID,
@@ -310,42 +347,34 @@ const sim: TileSim<State> = {
         playing_until_ms: 0,
       },
     }),
-    // CONFIG DS=1 (tile_drive_p.c:354-360). Not gated.
+    // CONFIG DS=1, OE=0 (tile_drive_p_sleep). Not gated.
     tile_drive_p_sleep: () => ({
       nextState: {
         sleeping: 1,
         mode: MODE_IDLE,
+        output_on: 0,
+        stop_after_drain: 0,
         amplitude: 0,
         currently_playing: '',
         play_ms: 0,
         playing_until_ms: 0,
       },
     }),
-    // Error STATE or any fault bit → reset + READY + set_mode(restore)
-    // (tile_drive_p.c:362-384). The reset restores the shadow defaults.
+    // Start-up sequence from SLEEP; 1 = CHIP_ID answered (tile_drive_p_wake).
+    tile_drive_p_wake: () => ({ scalar: 1, nextState: wakeState() }),
+    // Wakes a sleeping tile, then: error STATE or any fault bit → §6.2.8
+    // reset (OE=0, wait for IDLE, RST) + the full configuration rewritten
+    // from the shadow + set_mode(restore) (tile_drive_p_check_and_recover).
+    // Range, gain, retention, auto-sleep and UPI all survive.
     tile_drive_p_check_and_recover: ({ state, args }) => {
       const status = statusWord(state);
       const needs = (status & 0x0300) === STATE_ERROR || (status & 0x00fc) !== 0;
-      if (!needs) return { scalar: 0 };
-      const reset: State = {
-        ...state,
-        sleeping: 0,
-        output_range: 0,
-        sense_gain: 1,
-        sleep_retention: 1,
-        auto_sleep: 0,
-        upi: 0,
-      };
+      if (!needs) return state.sleeping ? { scalar: 0, nextState: wakeState() } : { scalar: 0 };
+      const reset: State = { ...state, ...wakeState() } as State;
       return {
         scalar: 1,
         nextState: {
-          sleeping: 0,
-          output_range: 0,
-          sense_gain: 1,
-          sleep_retention: 1,
-          auto_sleep: 0,
-          upi: 0,
-          amplitude: 0,
+          ...wakeState(),
           ...setMode(reset, (args[0] ?? 0) & 0xff),
         },
       };
@@ -379,14 +408,14 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // Up to 8 WFS words to REFERENCE (tile_drive_p.c:342-352); RAM synth not modeled.
+    // Up to 8 WFS words to REFERENCE (tile_drive_p_wfs_write); RAM synth not modeled.
     tile_drive_p_wfs_write: ({ bufferIn }) => ({
       nextState: { last_wfs_count: Math.min(8, (bufferIn?.words ?? []).length) },
     }),
 
     // ── config setters ──
     // GAIND / GAINS land with an IDLE CONFIG write when READY, which clears OE
-    // (tile_drive_p.c:390-419) — a play mode stops.
+    // (set_output_range / set_sense_gain) — a play mode stops.
     tile_drive_p_set_output_range: ({ state, args }) => ({
       nextState: {
         output_range: args[0] === 1 ? 1 : 0,
@@ -402,9 +431,13 @@ const sim: TileSim<State> = {
     tile_drive_p_set_sleep_retention: ({ args }) => ({
       nextState: { sleep_retention: args[0] ? 1 : 0 },
     }),
-    // COMM rewrite points RDADDR at IC_STATUS (tile_drive_p.c:438-456).
-    tile_drive_p_set_auto_sleep: ({ args }) => ({
-      nextState: { auto_sleep: args[0] ? 1 : 0, return_reg: REG_IC_STATUS },
+    // COMM rewrite points RDADDR at IC_STATUS when awake; while asleep only
+    // the shadow changes and wake() applies it (tile_drive_p_set_auto_sleep).
+    tile_drive_p_set_auto_sleep: ({ state, args }) => ({
+      nextState: {
+        auto_sleep: args[0] ? 1 : 0,
+        ...(state.sleeping ? {} : { return_reg: REG_IC_STATUS }),
+      },
     }),
     tile_drive_p_set_upi: ({ args }) => ({ nextState: { upi: args[0] ? 1 : 0 } }),
 
@@ -412,17 +445,16 @@ const sim: TileSim<State> = {
     tile_drive_p_play_click: ({ state, args }) => {
       const pct = pctArg(args[0]);
       return {
-        nextState: play(state, `click @ ${pct}%`, clickPeak(pct), 0, 2, clickHold(pct)),
+        nextState: play(state, `click @ ${pct}%`, clickPeak(pct), 0, CLICK_MS, 0, true),
       };
     },
-    // FIFO sine at 8 ksps for `ms` (tile_drive_p.c:537-566); no-op on 0 Hz / 0 ms.
+    // FIFO sine at 8 ksps for `ms`, last 2 ms fading to exactly 0 V
+    // (tile_drive_p_play_sine); no-op on 0 Hz / 0 ms.
     tile_drive_p_play_sine: ({ state, args }) => {
       const freq = (args[0] ?? 0) & 0xffff;
       const pct = pctArg(args[1]);
       const ms = (args[2] ?? 0) & 0xffff;
       if (freq === 0 || ms === 0) return {};
-      const step = Math.floor((freq * 65536) / 8000);
-      const last = scale(sineQ12(((ms * 8 - 1) * step) & 0xffff), pct);
       return {
         nextState: play(
           state,
@@ -430,19 +462,18 @@ const sim: TileSim<State> = {
           scale(2046, pct),
           freq,
           ms,
-          last,
+          0,
+          true,
         ),
       };
     },
-    // play_sine at 150 Hz (tile_drive_p.c:568-572).
+    // play_sine at 150 Hz (tile_drive_p_play_buzz).
     tile_drive_p_play_buzz: ({ state, args }) => {
       const pct = pctArg(args[0]);
       const ms = (args[1] ?? 0) & 0xffff;
       if (ms === 0) return {};
-      const step = Math.floor((150 * 65536) / 8000);
-      const last = scale(sineQ12(((ms * 8 - 1) * step) & 0xffff), pct);
       return {
-        nextState: play(state, `buzz @ ${pct}% / ${ms} ms`, scale(2046, pct), 150, ms, last),
+        nextState: play(state, `buzz @ ${pct}% / ${ms} ms`, scale(2046, pct), 150, ms, 0, true),
       };
     },
     tile_drive_p_play_pulse_train: ({ state, args }) => {
@@ -455,14 +486,15 @@ const sim: TileSim<State> = {
           state,
           `pulse train ${count}× @ ${pct}%, ${gap} ms gap`,
           clickPeak(pct),
-          count > 1 ? Math.round(1000 / (2 + gap)) : 0,
-          count * 2 + (count - 1) * gap,
-          clickHold(pct),
+          count > 1 ? Math.round(1000 / (CLICK_MS + gap)) : 0,
+          count * CLICK_MS + (count - 1) * gap,
+          0,
+          true,
         ),
       };
     },
     // set_mode(SENSE_FINE) + read_sense, |raw·7.6 mV| ≥ threshold
-    // (tile_drive_p.c:585-596).
+    // (tile_drive_p_is_touched).
     tile_drive_p_is_touched: ({ state, args }) => {
       const threshold = (args[0] ?? 0) & 0xffff;
       const next = { ...state, ...setMode(state, MODE_SENSE_FINE) };
@@ -477,7 +509,7 @@ const sim: TileSim<State> = {
       };
     },
     // Polls is_touched every 1 ms up to timeout_ms, then clicks
-    // (tile_drive_p.c:598-612). Collapsed to one look at the present state.
+    // (tile_drive_p_play_on_touch). Collapsed to one look at the present state.
     tile_drive_p_play_on_touch: ({ state, args }) => {
       const pct = pctArg(args[0]);
       const threshold = (args[1] ?? 0) & 0xffff;
@@ -498,8 +530,9 @@ const sim: TileSim<State> = {
           `click @ ${pct}% (on touch)`,
           clickPeak(pct),
           0,
-          2,
-          clickHold(pct),
+          CLICK_MS,
+          0,
+          true,
         ),
       };
     },
@@ -512,7 +545,15 @@ const sim: TileSim<State> = {
       const peak = samples.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
       return {
         nextState: {
-          ...play(state, `samples ×${count}`, peak, 0, Math.ceil(count / 8), samples[count - 1]),
+          ...play(
+            state,
+            `samples ×${count}`,
+            peak,
+            0,
+            Math.ceil(count / 8),
+            samples[count - 1],
+            false,
+          ),
           last_samples_count: count,
         },
       };
@@ -542,13 +583,14 @@ const sim: TileSim<State> = {
     tile_drive_p_set_sense_gain: 'canonical', // GAINS, clears OE
     tile_drive_p_write_fifo: 'canonical', // REFERENCE; last sample holds
     tile_drive_p_is_touched: 'canonical', // 7.6 mV/LSB threshold compare
-    tile_drive_p_play_click: 'canonical', // driver's 16-sample half-sine, 100 % = 1743
-    tile_drive_p_play_sine: 'canonical', // driver's Q12 phase accumulator
+    tile_drive_p_play_click: 'canonical', // driver's 0 V-framed half-sine, 100 % = 1743
+    tile_drive_p_play_sine: 'canonical', // driver's Q12 phase, ends at 0 V
     tile_drive_p_play_buzz: 'canonical',
     tile_drive_p_play_pulse_train: 'inferred',
     tile_drive_p_play_on_touch: 'inferred', // polling loop collapsed to one look
-    tile_drive_p_check_and_recover: 'inferred',
+    tile_drive_p_check_and_recover: 'inferred', // reset + full config restore; timing not modeled
     tile_drive_p_sleep: 'inferred',
+    tile_drive_p_wake: 'inferred', // outcome only; RET=1 register loss is restored by the driver
     tile_drive_p_set_sleep_retention: 'inferred',
     tile_drive_p_set_auto_sleep: 'inferred',
     tile_drive_p_set_upi: 'inferred',
@@ -559,14 +601,29 @@ const sim: TileSim<State> = {
   },
 
   // Playback end: the FIFO drains and the last sample holds on the output
-  // (freq 0 = DC), or with COMM.TOUT the chip sleeps.
+  // (freq 0 = DC; 0 for the driver's own waveforms), or with COMM.TOUT the
+  // chip sleeps.
   deriveState: (state, { t }) => {
     if (state.play_ms > 0 && state.playing_until_ms === 0) {
       return { playing_until_ms: t + state.play_ms, play_ms: 0 };
     }
     if (state.playing_until_ms !== 0 && t >= state.playing_until_ms) {
+      // OE cleared behind the waveform: the chip idles once the FIFO drains.
+      if (state.stop_after_drain) {
+        return {
+          playing_until_ms: 0,
+          currently_playing: '',
+          freq_hz: 0,
+          amplitude: 0,
+          output_on: 0,
+          stop_after_drain: 0,
+        };
+      }
+      // TOUT needs OE=1 in Direct / FIFO mode (§6.2.16).
       const tout =
-        state.auto_sleep && (state.mode === MODE_PLAY_FIFO || state.mode === MODE_PLAY_DIRECT);
+        state.auto_sleep &&
+        state.output_on === 1 &&
+        (state.mode === MODE_PLAY_FIFO || state.mode === MODE_PLAY_DIRECT);
       return {
         playing_until_ms: 0,
         currently_playing: '',

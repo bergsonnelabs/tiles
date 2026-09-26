@@ -58,9 +58,17 @@
  *     retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual
  *     BOM, or cap the drive amplitude.
  *
- *   - play_samples() RETURNS WHEN THE FIFO IS FILLED, NOT DRAINED — the waveform
- *     keeps playing after it returns. Account for that in teardown / discharge
- *     timing (don't switch to SENSE or read status assuming playback is done).
+ *   - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to
+ *     1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.
+ *     Account for that in teardown / discharge timing (don't switch to SENSE or
+ *     read status assuming playback is done). Streaming paces on FIFO_SPACE
+ *     and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)
+ *     bus — at 100 kHz two bytes per sample top out near 5.5 ksps.
+ *
+ *   - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on
+ *     the output (datasheet §6.6). The click / sine / buzz / pulse-train
+ *     helpers end at exactly 0 V; play_samples() plays the caller's buffer
+ *     as-is, so make its last sample 0.
  *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
@@ -89,7 +97,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_DRIVE_P_VERSION_MAJOR  3
-#define TILE_DRIVE_P_VERSION_MINOR  4
+#define TILE_DRIVE_P_VERSION_MINOR  5
 #define TILE_DRIVE_P_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -137,6 +145,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 #define BOS1921_REG_SUP_RISE        0x07  /**< Supply rise time */
 #define BOS1921_REG_COMM            0x0B  /**< Communication / return register select */
 #define BOS1921_REG_IC_STATUS       0x10  /**< IC status register */
+#define BOS1921_REG_FIFO_STATE      0x11  /**< FIFO state: ERROR / FULL / EMPTY / FIFO_SPACE */
 #define BOS1921_REG_SENSE_VAL       0x18  /**< Sensed piezo voltage */
 #define BOS1921_REG_CHIP_ID         0x1E  /**< Chip identification */
 
@@ -164,10 +173,22 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /** @brief  Fault bits in IC_STATUS (bits 7:2, excluding FULL and PLAYST). */
 #define BOS_STATUS_FAULT_MASK       0x00FC
 
+/** @brief  FIFO_STATE register fields (see datasheet §6.10.14). */
+#define BOS_FIFO_STATE_ERROR_BIT    (1u << 12)  /**< 1=device in ERROR state (OVV/OVT/IDAC/UVLO/SC) */
+#define BOS_FIFO_STATE_FULL_BIT     (1u << 11)  /**< 1=FIFO full */
+#define BOS_FIFO_STATE_EMPTY_BIT    (1u << 10)  /**< 1=FIFO empty (same as PLAYST) */
+#define BOS_FIFO_STATE_SPACE_MASK   0x03FFu     /**< FIFO_SPACE[9:0]; 0 with EMPTY=1 means 1024 free */
+
+/** @brief  FIFO depth in samples (chip default; the driver never changes it). */
+#define BOS1921_FIFO_DEPTH          1024
+
 /** @brief  CONFIG register bit fields (see datasheet §6.10.6). */
 #define BOS_CONFIG_GAINS_BIT        (1u << 12)  /**< 0=54.5 mV LSB, 1=7.6 mV LSB (default 1) */
 #define BOS_CONFIG_GAIND_BIT        (1u << 11)  /**< 0=±95 V output, 1=±13.28 V output (default 0) */
 #define BOS_CONFIG_RET_BIT          (1u << 8)   /**< 1=clear RAM/regs in SLEEP, 0=retain (default 0) */
+#define BOS_CONFIG_RST_BIT          (1u << 6)   /**< 1=software reset (self-clears) */
+#define BOS_CONFIG_OE_BIT           (1u << 4)   /**< 1=output (playback or sensing) enabled */
+#define BOS_CONFIG_DS_BIT           (1u << 3)   /**< power mode while OE=0: 1=SLEEP, 0=IDLE */
 
 /** @brief  COMM register bit fields (see datasheet §6.10.12). */
 #define BOS_COMM_TOUT_BIT           (1u << 5)   /**< 1=auto-sleep after 4 ms idle in Direct/FIFO */
@@ -325,6 +346,13 @@ uint8_t tile_drive_p_reassign_address(tiles_pal_t* hal, uint8_t cur_addr,
 /**
  * @brief  Perform a software reset.
  *
+ * Follows the datasheet's safe order (§6.2.8): output to 0 V (Direct / FIFO
+ * modes) and OE = 0, wait for IC_STATUS.STATE to leave RUN (bounded at
+ * 150 ms: a full FIFO keeps playing 128 ms after OE = 0), then RST. The
+ * chip and the driver's shadow return to power-on defaults (the I2C address
+ * is kept) and the tile goes to NONE: re-run init() afterwards. To reset and
+ * keep your configuration, use @ref tile_drive_p_check_and_recover.
+ *
  * @param  tile  Pointer to tile handle
  */
 void tile_drive_p_reset(tile_t* tile);
@@ -399,16 +427,45 @@ void tile_drive_p_wfs_write(tile_t* tile, const uint16_t* words, uint16_t count)
  * @brief  Enter low-power sleep mode.
  * @studio expose category=tile name=sleep section=lifecycle
  *
- * @note  There is no wake() yet: after sleep() set_mode() refuses
- *        (tile not READY). Re-run init() to use the tile again; with
- *        retention off (RET = 1) the chip also loses PARCAP / SUP_RISE.
- *
+ * Writes CONFIG with DS = 1 and OE = 0 (datasheet §6.2.6): the output stops
+ * and the chip drops to SLEEP — ~2.4 µA with retention, ~0.6 µA without
+ * (see @ref tile_drive_p_set_sleep_retention). Any I2C traffic wakes the
+ * chip, so leave the bus alone until @ref tile_drive_p_wake; set_mode() and
+ * the play / sense helpers call wake() for you.
  */
 void tile_drive_p_sleep(tile_t* tile);
 
 /**
+ * @brief  Wake the chip from SLEEP and restore the driver's configuration.
+ * @studio expose category=tile name=wake returns=bool section=lifecycle
+ *
+ * Follows the datasheet start-up sequence (§7.4.1 steps 3-6, §7.4.2): a
+ * dummy write wakes the chip (its data is ignored, §6.2.6), a 1 ms settle
+ * covers the 50 µs SLEEP→IDLE time, then CONFIG (DS = 0, OE = 0, GAINS /
+ * GAIND / RET), PARCAP (with UPI), SUP_RISE and COMM (TOUT) are rewritten
+ * from the driver's shadow, and CHIP_ID is read back. Rewriting everything
+ * covers both retention settings: with retention off (RET = 1) the chip loses
+ * its registers in SLEEP; its I2C address survives either way (§6.10.8).
+ * RAM contents (RAM-playback / synthesis waveforms) are not restored — re-load
+ * them after a no-retention sleep. The tile returns to IDLE mode.
+ *
+ * Also use it after a COMM.TOUT auto-sleep (@ref tile_drive_p_set_auto_sleep),
+ * which leaves the tile READY but the chip asleep. Harmless on an awake chip.
+ *
+ * @return 1 if the chip answered with the expected CHIP_ID (tile READY),
+ *         0 otherwise (tile ERROR, or the tile was never initialized)
+ */
+uint8_t tile_drive_p_wake(tile_t* tile);
+
+/**
  * @brief  Check status and recover from error/fault states.
  * @studio expose category=tile name=check_and_recover returns=bool section=advanced
+ *
+ * If IC_STATUS shows STATE = ERROR or any fault bit, resets the chip in the
+ * §6.2.8 order (see @ref tile_drive_p_reset; blocks up to ~150 ms while a
+ * FIFO drains), then rewrites the full configuration — init's tuned PARCAP
+ * (with UPI), SUP_RISE, output range, sense gain, sleep retention and
+ * auto-sleep — and re-enters restore_mode. A sleeping tile is woken first.
  *
  * @param  restore_mode  Mode to re-enter after recovery
  * @return 1 if recovery was performed, 0 if device was healthy
@@ -457,8 +514,9 @@ void tile_drive_p_set_sense_gain(tile_t* tile, drive_p_sense_gain_t gain);
  *
  * Default is retain (~2.4 µA quiescent) so that RAM contents and
  * register configuration survive a sleep cycle. Disabling retention
- * (~0.6 µA) is useful for ultra-low-power applications that re-init
- * on every wake anyway. Set this before calling sleep().
+ * (~0.6 µA) is useful for ultra-low-power applications; wake() rewrites
+ * the driver's register configuration either way, but RAM contents are
+ * lost. Set this before calling sleep().
  *
  * @param  retain  1 = retain (default), 0 = clear on sleep
  */
@@ -476,7 +534,10 @@ void tile_drive_p_set_sleep_retention(tile_t* tile, uint8_t retain);
  *
  * @note  After a timeout-triggered sleep, PLAY_SRATE is reset to
  *        0x7 (8 ksps) — re-set the sample rate before the next
- *        playback if you were using a faster rate.
+ *        playback if you were using a faster rate. The driver's tile
+ *        state stays READY; the first I2C write after the timeout only
+ *        wakes the chip and is discarded, so call @ref tile_drive_p_wake
+ *        before the next command.
  *
  * @param  enabled  1 = auto-sleep on idle, 0 = stay awake
  */
@@ -510,12 +571,17 @@ void tile_drive_p_set_upi(tile_t* tile, uint8_t enabled);
  *
  * @studio expose category=tile name=play_click section=runtime
  *
- * Streams a half-sine pulse through the FIFO at 8 ksps. Intensity
+ * Streams a 2 ms half-sine pulse through the FIFO at 8 ksps in one
+ * burst, framed by 0 V samples: two before it (discharges residual
+ * piezo charge, §6.2.18) and the pulse itself ends at exactly 0 V, so
+ * the output rests at 0 V when the FIFO drains (§6.6). Intensity
  * scales the peak output amplitude in the configured voltage range
  * (default ±95 V; see @ref tile_drive_p_set_output_range to switch
  * to ±13.28 V for low-voltage piezos). Returns when the FIFO has
  * been written; the chip continues playing the click after the
- * call returns.
+ * call returns. The output is switched off (OE = 0) right after the
+ * last sample is queued; the chip finishes the FIFO first (§6.6), then
+ * idles. The next play / set_mode call turns it back on.
  *
  * @param  intensity_pct  [0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)
  */
@@ -528,9 +594,15 @@ void tile_drive_p_play_click(tile_t* tile, uint8_t intensity_pct);
  *
  * Generates and streams sine samples at 8 ksps. Frequency is
  * software-quantised to the sample rate (max useful ~3 kHz). The
- * call blocks until the FIFO is filled; for streams longer than
- * the 1024-sample FIFO depth (~128 ms at 8 ksps) the call refills
- * as the chip drains.
+ * last 2 ms fade linearly to exactly 0 V, so the output never parks
+ * at a DC level (§6.6). Streaming paces on FIFO_STATE.FIFO_SPACE and
+ * writes 32-sample bursts: the call returns once the last sample is
+ * queued, i.e. it blocks for about (ms − 128) ms on long tones and
+ * the chip plays out the final ≤ 128 ms after it returns. Gapless
+ * output needs a ≥ 400 kHz bus. Stops early if the chip reports ERROR
+ * or stops draining for 20 ms. Like play_click(), turns the output off
+ * (OE = 0) after queuing the last sample; the chip idles once the FIFO
+ * has drained.
  *
  * @param  freq_hz        [1..4000] Sine frequency in Hz (50–3000 useful range)
  * @param  intensity_pct  [0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)
@@ -560,7 +632,9 @@ void tile_drive_p_play_buzz(tile_t* tile, uint8_t intensity_pct, uint16_t ms);
  * @studio expose category=tile name=play_pulse_train section=runtime
  *
  * The classic "tick-tick-tick" pattern. Composes @ref
- * tile_drive_p_play_click with `core_delay_ms` between clicks.
+ * tile_drive_p_play_click with `core_delay_ms` between clicks. The
+ * output stays on between clicks and goes off (OE = 0) once, after the
+ * last click is queued.
  *
  * @param  intensity_pct  [0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)
  * @param  count          [1..255] Number of clicks
@@ -614,7 +688,13 @@ uint8_t tile_drive_p_play_on_touch(tile_t* tile, uint8_t intensity_pct,
  * `count` samples to REFERENCE[11:0] (signed 12-bit, two's
  * complement), 8 ksps. Values beyond ±BOS1921_REFERENCE_MAX (±1743,
  * the ±95 V rated output) are clamped. Start and end the waveform at
- * 0: the last sample stays on the output when the FIFO drains. Use
+ * 0: the last sample stays on the output when the FIFO drains, and
+ * the driver does not append one (so back-to-back calls can stream a
+ * long waveform in pieces). Paced on FIFO_SPACE with 32-sample burst
+ * writes; returns once the last sample is queued (up to 128 ms of it
+ * still playing). Stops early if the chip reports ERROR or stops
+ * draining for 20 ms. Leaves the output on (OE = 1) so calls chain;
+ * call set_mode(DRIVE_P_MODE_IDLE) when done to switch it off. Use
  * this for arbitrary waveforms that don't fit the click / sine /
  * buzz / pulse-train idioms — e.g., recorded waveforms or
  * DSP-generated patterns.
