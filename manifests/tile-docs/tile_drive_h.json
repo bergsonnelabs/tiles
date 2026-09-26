@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@afe442f",
+  "source": "tiles@f70bca2",
   "file": "tile_drive_h.h",
   "brief": "LRA/ERM haptic driver for the Drive.H tile (rev a).",
   "description": "Embeds the TI DRV2605 (DEVICE_ID 3 — the non-L part), a haptic\ndriver for LRA (Linear Resonant Actuator) and ERM actuators with\na built-in waveform library of 123 effects. The actuator is\nexternal, connected via the tile's OUT+ / OUT- pads; V_MOTOR\naccepts 2.5-5.5 V.\n\nThe chip regulates output amplitude itself: the supply rail only\nsets headroom. Full-scale drive level comes from RATED_VOLTAGE /\nOD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the\nvoltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply\n(VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's\nminimum load is 8 Ω at VDD = 5.2 V.\n\nV+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).\nPower V+ from a logic rail, or drive pad 3 high from a Core pin:\nwith neither, EN floats, the chip may stay in shutdown, and init()\nfails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ\n(33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The\ntile has no I2C pull-ups.\n\nKey specifications:\n  - Output:       full-bridge, amplitude regulated per config\n  - Waveform lib: 123 haptic effects (6 libraries)\n  - Smart-loop:   automatic resonance tracking for LRA (closed loop)\n  - Modes:        Internal trigger, RTP, PWM, audio-to-vibe\n\nDatasheet: https://www.bergsonne.io/tiles/drive/h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv2605.pdf\n\n\n@studio tile label=Drive.H icon=≋\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"OTP waveform burning\"\n  The DRV2605 can burn custom waveforms into one-time-programmable\n  memory. This is implemented in firmware (tile_drive_h_program_otp())\n  but intentionally NOT exposed to Studio: it permanently and\n  irreversibly modifies the chip. Driver-deferred by policy, not a\n  hardware gap — call it from C if you really need it.\n\n@studio unsupported severity=niche category=\"Minor control bits\"\n  Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),\n  SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /\n  analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,\n  LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and\n  MODE.DEV_RESET have no setter. Reachable only by editing the\n  driver; none is hardware-gated.\n\n@studio unsupported severity=niche category=\"Hardware EN control\"\n  Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a\n  100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the\n  STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core\n  GPIO. With EN low the chip still ACKs its address but ignores\n  reads and writes (SLOS825E §7.4.1.3), so init fails on the\n  device-ID check; registers are kept.",
@@ -37,7 +37,7 @@
     },
     {
       "name": "TILE_DRIVE_H_VERSION_MINOR",
-      "value": "3",
+      "value": "4",
       "description": "",
       "section": ""
     },
@@ -57,6 +57,12 @@
       "name": "DRV2605L_STATUS_DEFAULT",
       "value": "0x60",
       "description": "Expected default STATUS register value (DEVICE_ID = 3).",
+      "section": ""
+    },
+    {
+      "name": "DRV2605L_CONTROL2_DEFAULT",
+      "value": "0xF5",
+      "description": "",
       "section": ""
     },
     {
@@ -138,24 +144,6 @@
       "section": ""
     },
     {
-      "name": "DRIVE_H_TRIG_INTERNAL",
-      "value": "0",
-      "description": "",
-      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
-    },
-    {
-      "name": "DRIVE_H_TRIG_EDGE",
-      "value": "1",
-      "description": "",
-      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
-    },
-    {
-      "name": "DRIVE_H_TRIG_LEVEL",
-      "value": "2",
-      "description": "",
-      "section": "* Internal trigger — waveforms fired via I2C GO bit (default)."
-    },
-    {
       "name": "DRV2605L_SEQ_MAX",
       "value": "8",
       "description": "",
@@ -163,6 +151,156 @@
     }
   ],
   "enums": [
+    {
+      "name": "drive_h_trigger_t",
+      "brief": "",
+      "description": "Waveform sequencer trigger source (MODE[2:0] = 0, 1, 2).\nEdge: a rising edge on IN/TRIG (pad 2) fires the sequencer; a second\nrising edge while GO is high cancels playback; pulse width >= 1 µs.\nLevel: GO follows the pad (high = playing, falling edge = cancel).\nThe names and values are those of the pre-4.4 #defines.",
+      "members": [
+        {
+          "name": "DRIVE_H_TRIG_INTERNAL",
+          "value": "0",
+          "description": "Internal: fired over I2C (the GO bit)"
+        },
+        {
+          "name": "DRIVE_H_TRIG_EDGE",
+          "value": "1",
+          "description": "Rising edge on the TRIG pad"
+        },
+        {
+          "name": "DRIVE_H_TRIG_LEVEL",
+          "value": "2",
+          "description": "Level on the TRIG pad"
+        }
+      ]
+    },
+    {
+      "name": "drive_h_brake_t",
+      "brief": "",
+      "description": "Braking gain relative to driving gain (FEEDBACK_CTRL FB_BRAKE_FACTOR[6:4],\nSLOS825E Table 23). Larger ratios stop the actuator faster but are less\nstable. Closed loop only. Reset and init() value: 4x.",
+      "members": [
+        {
+          "name": "DRIVE_H_BRAKE_1X",
+          "value": "0",
+          "description": "1x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_2X",
+          "value": "1",
+          "description": "2x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_3X",
+          "value": "2",
+          "description": "3x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_4X",
+          "value": "3",
+          "description": "4x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_6X",
+          "value": "4",
+          "description": "6x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_8X",
+          "value": "5",
+          "description": "8x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_16X",
+          "value": "6",
+          "description": "16x"
+        },
+        {
+          "name": "DRIVE_H_BRAKE_OFF",
+          "value": "7",
+          "description": "Braking off"
+        }
+      ]
+    },
+    {
+      "name": "drive_h_loop_gain_t",
+      "brief": "",
+      "description": "Closed-loop gain (FEEDBACK_CTRL LOOP_GAIN[3:2], SLOS825E Table 23): how\nfast the loop makes back-EMF follow the input. Higher settles faster\nand is less stable. Reset and init() value: Medium.",
+      "members": [
+        {
+          "name": "DRIVE_H_LOOP_GAIN_LOW",
+          "value": "0",
+          "description": "Low"
+        },
+        {
+          "name": "DRIVE_H_LOOP_GAIN_MEDIUM",
+          "value": "1",
+          "description": "Medium"
+        },
+        {
+          "name": "DRIVE_H_LOOP_GAIN_HIGH",
+          "value": "2",
+          "description": "High"
+        },
+        {
+          "name": "DRIVE_H_LOOP_GAIN_VERY_HIGH",
+          "value": "3",
+          "description": "Very high"
+        }
+      ]
+    },
+    {
+      "name": "drive_h_atv_peak_t",
+      "brief": "Audio-to-vibe peak-detection time (ATV_CTRL ATH_PEAK_TIME[3:2]). Reset: 20 ms.",
+      "description": "",
+      "members": [
+        {
+          "name": "DRIVE_H_ATV_PEAK_10MS",
+          "value": "0",
+          "description": "10 ms"
+        },
+        {
+          "name": "DRIVE_H_ATV_PEAK_20MS",
+          "value": "1",
+          "description": "20 ms"
+        },
+        {
+          "name": "DRIVE_H_ATV_PEAK_30MS",
+          "value": "2",
+          "description": "30 ms"
+        },
+        {
+          "name": "DRIVE_H_ATV_PEAK_40MS",
+          "value": "3",
+          "description": "40 ms"
+        }
+      ]
+    },
+    {
+      "name": "drive_h_atv_filter_t",
+      "brief": "Audio-to-vibe low-pass filter (ATV_CTRL ATH_FILTER[1:0]). Reset: 125 Hz.",
+      "description": "",
+      "members": [
+        {
+          "name": "DRIVE_H_ATV_LPF_100HZ",
+          "value": "0",
+          "description": "100 Hz"
+        },
+        {
+          "name": "DRIVE_H_ATV_LPF_125HZ",
+          "value": "1",
+          "description": "125 Hz"
+        },
+        {
+          "name": "DRIVE_H_ATV_LPF_150HZ",
+          "value": "2",
+          "description": "150 Hz"
+        },
+        {
+          "name": "DRIVE_H_ATV_LPF_200HZ",
+          "value": "3",
+          "description": "200 Hz"
+        }
+      ]
+    },
     {
       "name": "drive_h_library_t",
       "brief": "ROM waveform library, which also sets the actuator type (ERM vs LRA).",
@@ -278,7 +416,7 @@
         "Blocks for ~500 ms during init. Call once at startup."
       ],
       "brief": "Initialize the DRV2605 haptic driver.",
-      "description": "Verifies the device ID, exits standby, and configures the\nactuator drive mode. Pass cfg=NULL for defaults (LRA closed-loop,\nlibrary 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C: see drive_h_cfg_t).",
+      "description": "Verifies the device ID, exits standby, and configures the\nactuator drive mode. Pass cfg=NULL for defaults (LRA closed-loop,\nlibrary 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C: see drive_h_cfg_t).\nAlso writes the settings Studio treats as known at power-on, since\nthe chip keeps its registers across an MCU reset: FEEDBACK_CTRL\n(brake 4x, loop gain Medium), CONTROL2 to its reset value 0xF5\n(SAMPLE_TIME 300 µs, bidirectional input), DRIVE_TIME for 238 Hz,\nand the open/closed-loop bit for BOTH actuator types, so a later\nset_library() keeps the loop mode.",
       "name": "tile_drive_h_init"
     },
     {
@@ -343,11 +481,11 @@
       "params": [
         {
           "name": "slot",
-          "description": "Slot index 0..7"
+          "description": "[0..7] Slot index"
         },
         {
           "name": "delay_steps",
-          "description": "Wait length in 10 ms steps (0 = no wait, 0x7F = 1.27 s)"
+          "description": "[0..127] Wait length in 10 ms steps (0 = no wait, 127 = 1.27 s)"
         }
       ],
       "notes": [],
@@ -357,18 +495,18 @@
       "name": "tile_drive_h_set_sequence_wait"
     },
     {
-      "signature": "void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode)",
+      "signature": "void tile_drive_h_set_trigger(tile_t* tile, drive_h_trigger_t mode)",
       "params": [
         {
           "name": "mode",
-          "description": "[0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),"
+          "description": "Trigger source (drive_h_trigger_t)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Set the trigger mode.",
-      "description": "Selects how the waveform sequencer is triggered:\n  - DRIVE_H_TRIG_INTERNAL (default): I2C GO bit, used by play()\n    and play_sequence().\n  - DRIVE_H_TRIG_EDGE: a rising edge on the IN/TRIG pin sets\n    GO. A second rising edge while playing cancels. Pre-load\n    effects with tile_drive_h_load_sequence() before entering\n    this mode.\n  - DRIVE_H_TRIG_LEVEL: GO follows the IN/TRIG pin level.\n    High = playing, low = idle. Falling edge cancels.\n\n              DRIVE_H_TRIG_LEVEL (2)",
+      "description": "Selects how the waveform sequencer is triggered:\n  - DRIVE_H_TRIG_INTERNAL (default): I2C GO bit, used by play()\n    and play_sequence().\n  - DRIVE_H_TRIG_EDGE: a rising edge on the IN/TRIG pin sets\n    GO. A second rising edge while playing cancels. Pre-load\n    effects with tile_drive_h_load_sequence() before entering\n    this mode.\n  - DRIVE_H_TRIG_LEVEL: GO follows the IN/TRIG pin level.\n    High = playing, low = idle. Falling edge cancels.\n\nNot a Studio setting: rtp_stop(), pwm_input_stop(), audio_stop(),\ndiagnose() and calibrate() all return MODE to internal trigger.",
       "name": "tile_drive_h_set_trigger"
     },
     {
@@ -411,26 +549,56 @@
       "params": [
         {
           "name": "rated_voltage",
-          "description": "RATED_VOLTAGE byte (0 = no change)"
+          "description": "[0..255] RATED_VOLTAGE byte (0 = no change)"
         },
         {
           "name": "od_clamp",
-          "description": "OD_CLAMP byte (0 = no change)"
+          "description": "[0..255] OD_CLAMP byte (0 = no change)"
         },
         {
           "name": "fb_brake",
-          "description": "Feedback brake factor 0..7 (0xFF = no change)"
+          "description": "[0..7] Feedback brake factor (drive_h_brake_t codes; 0xFF from C = no change)"
         },
         {
           "name": "loop_gain",
-          "description": "Loop gain 0..3 (0xFF = no change)"
+          "description": "[0..3] Loop gain (drive_h_loop_gain_t codes; 0xFF from C = no change)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "brief": "Tune the actuator drive parameters.",
-      "description": "Writes the four registers that the auto-calibration engine and\nsmart-loop architecture consume:\n  - rated_voltage (0x16): full-scale RMS drive level (closed-loop ref).\n  - od_clamp      (0x17): peak overdrive ceiling (also open-loop ref).\n  - fb_brake      (0x1A bits 6:4): feedback brake factor (0=1× .. 6=16×, 7=off).\n  - loop_gain     (0x1A bits 3:2): closed-loop gain (0=Low .. 3=Very high).\n\nPass 0 for rated_voltage / od_clamp to leave that register untouched.\nPass 0xFF for fb_brake / loop_gain to leave them untouched. Run\ntile_drive_h_calibrate() afterwards to update A_CAL_COMP / A_CAL_BEMF.",
+      "description": "Writes the four registers that the auto-calibration engine and\nsmart-loop architecture consume:\n  - rated_voltage (0x16): full-scale RMS drive level (closed-loop ref).\n  - od_clamp      (0x17): peak overdrive ceiling (also open-loop ref).\n  - fb_brake      (0x1A bits 6:4): feedback brake factor (0=1× .. 6=16×, 7=off).\n  - loop_gain     (0x1A bits 3:2): closed-loop gain (0=Low .. 3=Very high).\n\nPass 0 for rated_voltage / od_clamp to leave that register untouched.\nFrom C, pass 0xFF for fb_brake / loop_gain to leave them untouched\n(Studio bounds them to their fields). Run tile_drive_h_calibrate()\nafterwards to update A_CAL_COMP / A_CAL_BEMF.\n\nRegister-level escape hatch. For settings prefer\ntile_drive_h_set_actuator_voltage() (millivolts),\ntile_drive_h_set_brake_factor() and tile_drive_h_set_loop_gain().",
       "name": "tile_drive_h_set_actuator_params"
+    },
+    {
+      "signature": "void tile_drive_h_set_brake_factor(tile_t* tile, drive_h_brake_t factor)",
+      "params": [
+        {
+          "name": "factor",
+          "description": "Braking gain (drive_h_brake_t)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the closed-loop braking strength.",
+      "description": "Writes FEEDBACK_CTRL FB_BRAKE_FACTOR[6:4]: the feedback gain while\nbraking, relative to the gain while driving. More braking stops the\nactuator faster (crisper clicks) at the cost of loop stability; the\ndatasheet default (4x) suits most actuators. Only used in closed loop.\n\nThe datasheet asks for this to be set before auto-calibration.\ntile_drive_h_calibrate() itself runs at 3x / Medium (TI's recommended\ncalibration values) and restores this setting afterwards.",
+      "name": "tile_drive_h_set_brake_factor"
+    },
+    {
+      "signature": "void tile_drive_h_set_loop_gain(tile_t* tile, drive_h_loop_gain_t gain)",
+      "params": [
+        {
+          "name": "gain",
+          "description": "Loop gain (drive_h_loop_gain_t)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Set the closed-loop gain.",
+      "description": "Writes FEEDBACK_CTRL LOOP_GAIN[3:2]: how fast the loop drives the\nback-EMF (the actuator's speed) to the requested level. Higher gain\nsettles faster and is less stable; Medium (the datasheet default)\nsuits most actuators. Only used in closed loop. Like the brake\nfactor, set it before calibrating.",
+      "name": "tile_drive_h_set_loop_gain"
     },
     {
       "signature": "void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed)",
@@ -488,21 +656,21 @@
       "params": [
         {
           "name": "sample_time",
-          "description": "Sample time 0..3 (0=150µs, 3=300µs; 0xFF = no change)"
+          "description": "[0..3] Sample time (0 = 150 µs, 1 = 200, 2 = 250, 3 = 300 µs; 0xFF from C = no change)"
         },
         {
           "name": "blanking_time",
-          "description": "Blanking time 0..3 (0xFF = no change)"
+          "description": "[0..3] Blanking time code (0xFF from C = no change)"
         },
         {
           "name": "idiss_time",
-          "description": "Current-dissipation time 0..3 (0xFF = no change)"
+          "description": "[0..3] Current-dissipation time code (0xFF from C = no change)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "brief": "Tune the LRA auto-resonance tracker.",
-      "description": "Writes Control2 (0x1C) bits for sample / blanking / current-\ndissipation timing. Default values (3 / 1 / 1) work for most\ncoin-type LRAs at 175–235 Hz. Tune only if calibration fails to\nconverge or the actuator runs at the edges of the 125–300 Hz\nwindow.\n\nPass 0xFF for any field to leave that register slice untouched.",
+      "description": "Writes Control2 (0x1C) bits for sample / blanking / current-\ndissipation timing. Default values (3 / 1 / 1) work for most\ncoin-type LRAs at 175–235 Hz. Tune only if calibration fails to\nconverge or the actuator runs at the edges of the 125–300 Hz\nwindow.\n\ninit() writes the reset values (3 / 1 / 1). From C, pass 0xFF for any\nfield to leave that register slice untouched (Studio bounds each to\nits 2-bit field). SAMPLE_TIME also feeds the LRA voltage maths in\ntile_drive_h_set_actuator_voltage().",
       "name": "tile_drive_h_set_resonance_params"
     },
     {
@@ -510,19 +678,19 @@
       "params": [
         {
           "name": "overdrive",
-          "description": "Overdrive Time Offset (0x0D, signed × 5 ms)"
+          "description": "[-128..127] Overdrive Time Offset (0x0D, signed × 5 ms)"
         },
         {
           "name": "sustain_pos",
-          "description": "Sustain-Time Positive Offset (0x0E, signed × 5 ms)"
+          "description": "[-128..127] Sustain-Time Positive Offset (0x0E, signed × 5 ms)"
         },
         {
           "name": "sustain_neg",
-          "description": "Sustain-Time Negative Offset (0x0F, signed × 5 ms)"
+          "description": "[-128..127] Sustain-Time Negative Offset (0x0F, signed × 5 ms)"
         },
         {
           "name": "brake",
-          "description": "Brake Time Offset (0x10, signed × 5 ms)"
+          "description": "[-128..127] Brake Time Offset (0x10, signed × 5 ms)"
         }
       ],
       "notes": [],
@@ -561,11 +729,11 @@
       "params": [
         {
           "name": "unsigned_",
-          "description": "1 = unsigned data format, 0 = signed (default)"
+          "description": "[0..1] 1 = unsigned data format, 0 = signed (default)"
         },
         {
           "name": "bidir",
-          "description": "1 = bidirectional input (default), 0 = unidirectional"
+          "description": "[0..1] 1 = bidirectional input (default), 0 = unidirectional"
         }
       ],
       "notes": [],
@@ -629,34 +797,78 @@
       "params": [
         {
           "name": "peak_time",
-          "description": "ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)"
+          "description": "[0..255] ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)"
         },
         {
           "name": "filter",
-          "description": "ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)"
+          "description": "[0..255] ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)"
         },
         {
           "name": "min_input",
-          "description": "Minimum input gate (0xFF = no change)"
+          "description": "[0..255] Minimum input gate (0xFF = no change)"
         },
         {
           "name": "max_input",
-          "description": "Full-scale input level (0xFF = no change)"
+          "description": "[0..255] Full-scale input level (0xFF = no change)"
         },
         {
           "name": "min_drive",
-          "description": "Minimum output drive once active (0xFF = no change)"
+          "description": "[0..255] Minimum output drive once active (0xFF = no change)"
         },
         {
           "name": "max_drive",
-          "description": "Full-scale output drive (0xFF = no change)"
+          "description": "[0..255] Full-scale output drive (0xFF = no change)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "brief": "Tune the audio-to-vibe envelope detector.",
-      "description": "Configures the four ATV control registers:\n  - ATV_CTRL  (0x11): peak-detect time (0=10ms..3=40ms) and\n    low-pass filter cutoff (0=100Hz..3=200Hz).\n  - ATV_MIN_INPUT (0x12): minimum input level below which the\n    envelope is gated (output silent). raw × 1.8/255 V.\n  - ATV_MAX_INPUT (0x13): full-scale input level. raw × 1.8/255 V.\n  - ATV_MIN_DRIVE (0x14): minimum output drive once unmuted.\n    raw / 255 × 100 %.\n  - ATV_MAX_DRIVE (0x15): maximum output drive at full input.\n    raw / 255 × 100 %.\n\nPass 0xFF for any field to leave it untouched.",
+      "description": "Configures the four ATV control registers:\n  - ATV_CTRL  (0x11): peak-detect time (0=10ms..3=40ms) and\n    low-pass filter cutoff (0=100Hz..3=200Hz).\n  - ATV_MIN_INPUT (0x12): minimum input level below which the\n    envelope is gated (output silent). raw × 1.8/255 V.\n  - ATV_MAX_INPUT (0x13): full-scale input level. raw × 1.8/255 V.\n  - ATV_MIN_DRIVE (0x14): minimum output drive once unmuted.\n    raw / 255 × 100 %.\n  - ATV_MAX_DRIVE (0x15): maximum output drive at full input.\n    raw / 255 × 100 %.\n\nPass 0xFF for any field to leave it untouched. That makes 0xFF, the\nreset value of ATV_MAX_INPUT and ATV_MAX_DRIVE, unreachable once\nchanged: use tile_drive_h_set_audio_envelope() and\ntile_drive_h_set_audio_levels() instead, which have no sentinel.",
       "name": "tile_drive_h_set_audio_params"
+    },
+    {
+      "signature": "void tile_drive_h_set_audio_envelope(tile_t* tile, drive_h_atv_peak_t peak_time, drive_h_atv_filter_t filter)",
+      "params": [
+        {
+          "name": "peak_time",
+          "description": "Peak-detection time (drive_h_atv_peak_t)"
+        },
+        {
+          "name": "filter",
+          "description": "Low-pass filter cutoff (drive_h_atv_filter_t)"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Set the audio-to-vibe envelope detector timing.",
+      "description": "Writes ATV_CTRL (0x11): peak-detection time and low-pass cutoff.\nReset values: 20 ms, 125 Hz.",
+      "name": "tile_drive_h_set_audio_envelope"
+    },
+    {
+      "signature": "void tile_drive_h_set_audio_levels(tile_t* tile, uint8_t min_input, uint8_t max_input, uint8_t min_drive, uint8_t max_drive)",
+      "params": [
+        {
+          "name": "min_input",
+          "description": "[0..255] Input level below which the output stays silent"
+        },
+        {
+          "name": "max_input",
+          "description": "[0..255] Input level that gives full drive"
+        },
+        {
+          "name": "min_drive",
+          "description": "[0..255] Output drive at the minimum input"
+        },
+        {
+          "name": "max_drive",
+          "description": "[0..255] Output drive at the full-scale input"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "brief": "Set the audio-to-vibe input window and output drive range.",
+      "description": "Writes ATV_MIN_INPUT..ATV_MAX_DRIVE (0x12-0x15). Every value is\nwritten as given (no sentinel). Input levels are raw × 1.8 V / 255;\ndrive levels raw / 255 × full scale. Reset values: 0x19 / 0xFF /\n0x19 / 0xFF.",
+      "name": "tile_drive_h_set_audio_levels"
     },
     {
       "signature": "void tile_drive_h_audio_stop(tile_t* tile)",
@@ -823,7 +1035,7 @@
     }
   ],
   "source_file": "tile_drive_h.h",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "tile_family": "Drive",
   "tile_name": "H",
   "display_name": "Drive.H",
@@ -858,6 +1070,40 @@
       ],
       "unit": "V",
       "default": 2230
+    },
+    {
+      "label": "Brake strength",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_brake_factor",
+      "param": "factor",
+      "kind": "choice",
+      "choices": [
+        "1x",
+        "2x",
+        "3x",
+        "4x",
+        "6x",
+        "8x",
+        "16x",
+        "Braking off"
+      ],
+      "default": "4x"
+    },
+    {
+      "label": "Loop gain",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_loop_gain",
+      "param": "gain",
+      "kind": "choice",
+      "choices": [
+        "Low",
+        "Medium",
+        "High",
+        "Very high"
+      ],
+      "default": "Medium"
     },
     {
       "label": "Closed-loop drive",

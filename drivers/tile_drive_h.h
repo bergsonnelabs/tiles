@@ -81,7 +81,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_DRIVE_H_VERSION_MAJOR  4
-#define TILE_DRIVE_H_VERSION_MINOR  3
+#define TILE_DRIVE_H_VERSION_MINOR  4
 #define TILE_DRIVE_H_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -143,6 +143,11 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /** @brief  Expected default STATUS register value (DEVICE_ID = 3). */
 #define DRV2605L_STATUS_DEFAULT     0x60
 
+/** @brief  CONTROL2 reset value (SLOS825E Table 25): BIDIR_INPUT=1,
+ *          BRAKE_STABILIZER=1, SAMPLE_TIME=3 (300 µs), BLANKING_TIME=1,
+ *          IDISS_TIME=1. init() writes it so these start known. */
+#define DRV2605L_CONTROL2_DEFAULT   0xF5
+
 /* -------------------------------------------------------------- */
 /* Status register bit masks                                       */
 /* -------------------------------------------------------------- */
@@ -170,15 +175,71 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 /* Trigger mode selection                                          */
 /* -------------------------------------------------------------- */
 
-/** Internal trigger — waveforms fired via I2C GO bit (default). */
-#define DRIVE_H_TRIG_INTERNAL  0
-/** Edge trigger — rising edge on IN/TRIG pin fires the sequencer.
- *  A second rising edge while GO is high cancels playback.
- *  Pulse width must be >= 1 µs. */
-#define DRIVE_H_TRIG_EDGE      1
-/** Level trigger — GO bit follows IN/TRIG pin level.
- *  High = playing, falling edge = cancel. */
-#define DRIVE_H_TRIG_LEVEL     2
+/**
+ * Waveform sequencer trigger source (MODE[2:0] = 0, 1, 2).
+ *
+ * Edge: a rising edge on IN/TRIG (pad 2) fires the sequencer; a second
+ * rising edge while GO is high cancels playback; pulse width >= 1 µs.
+ * Level: GO follows the pad (high = playing, falling edge = cancel).
+ * The names and values are those of the pre-4.4 #defines.
+ */
+typedef enum {
+    DRIVE_H_TRIG_INTERNAL = 0,  /**< Internal: fired over I2C (the GO bit) */
+    DRIVE_H_TRIG_EDGE     = 1,  /**< Rising edge on the TRIG pad */
+    DRIVE_H_TRIG_LEVEL    = 2,  /**< Level on the TRIG pad */
+} drive_h_trigger_t;
+
+/* -------------------------------------------------------------- */
+/* Closed-loop tuning                                              */
+/* -------------------------------------------------------------- */
+
+/**
+ * Braking gain relative to driving gain (FEEDBACK_CTRL FB_BRAKE_FACTOR[6:4],
+ * SLOS825E Table 23). Larger ratios stop the actuator faster but are less
+ * stable. Closed loop only. Reset and init() value: 4x.
+ */
+typedef enum {
+    DRIVE_H_BRAKE_1X  = 0,  /**< 1x */
+    DRIVE_H_BRAKE_2X  = 1,  /**< 2x */
+    DRIVE_H_BRAKE_3X  = 2,  /**< 3x */
+    DRIVE_H_BRAKE_4X  = 3,  /**< 4x */
+    DRIVE_H_BRAKE_6X  = 4,  /**< 6x */
+    DRIVE_H_BRAKE_8X  = 5,  /**< 8x */
+    DRIVE_H_BRAKE_16X = 6,  /**< 16x */
+    DRIVE_H_BRAKE_OFF = 7,  /**< Braking off */
+} drive_h_brake_t;
+
+/**
+ * Closed-loop gain (FEEDBACK_CTRL LOOP_GAIN[3:2], SLOS825E Table 23): how
+ * fast the loop makes back-EMF follow the input. Higher settles faster
+ * and is less stable. Reset and init() value: Medium.
+ */
+typedef enum {
+    DRIVE_H_LOOP_GAIN_LOW       = 0,  /**< Low */
+    DRIVE_H_LOOP_GAIN_MEDIUM    = 1,  /**< Medium */
+    DRIVE_H_LOOP_GAIN_HIGH      = 2,  /**< High */
+    DRIVE_H_LOOP_GAIN_VERY_HIGH = 3,  /**< Very high */
+} drive_h_loop_gain_t;
+
+/* -------------------------------------------------------------- */
+/* Audio-to-vibe envelope                                          */
+/* -------------------------------------------------------------- */
+
+/** Audio-to-vibe peak-detection time (ATV_CTRL ATH_PEAK_TIME[3:2]). Reset: 20 ms. */
+typedef enum {
+    DRIVE_H_ATV_PEAK_10MS = 0,  /**< 10 ms */
+    DRIVE_H_ATV_PEAK_20MS = 1,  /**< 20 ms */
+    DRIVE_H_ATV_PEAK_30MS = 2,  /**< 30 ms */
+    DRIVE_H_ATV_PEAK_40MS = 3,  /**< 40 ms */
+} drive_h_atv_peak_t;
+
+/** Audio-to-vibe low-pass filter (ATV_CTRL ATH_FILTER[1:0]). Reset: 125 Hz. */
+typedef enum {
+    DRIVE_H_ATV_LPF_100HZ = 0,  /**< 100 Hz */
+    DRIVE_H_ATV_LPF_125HZ = 1,  /**< 125 Hz */
+    DRIVE_H_ATV_LPF_150HZ = 2,  /**< 150 Hz */
+    DRIVE_H_ATV_LPF_200HZ = 3,  /**< 200 Hz */
+} drive_h_atv_filter_t;
 
 /* -------------------------------------------------------------- */
 /* Sequence limits                                                 */
@@ -259,6 +320,12 @@ typedef struct {
  * Verifies the device ID, exits standby, and configures the
  * actuator drive mode. Pass cfg=NULL for defaults (LRA closed-loop,
  * library 6, RATED_VOLTAGE 0x56 / OD_CLAMP 0x8C: see drive_h_cfg_t).
+ * Also writes the settings Studio treats as known at power-on, since
+ * the chip keeps its registers across an MCU reset: FEEDBACK_CTRL
+ * (brake 4x, loop gain Medium), CONTROL2 to its reset value 0xF5
+ * (SAMPLE_TIME 300 µs, bidirectional input), DRIVE_TIME for 238 Hz,
+ * and the open/closed-loop bit for BOTH actuator types, so a later
+ * set_library() keeps the loop mode.
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0 = default, see mapping table)
@@ -329,8 +396,8 @@ void tile_drive_h_load_sequence(tile_t* tile, const uint8_t *effects,
  * Slot is silently ignored if >= 8; delay_steps is clipped to 0x7F.
  *
  * @studio expose category=tile name=set_sequence_wait
- * @param  slot         Slot index 0..7
- * @param  delay_steps  Wait length in 10 ms steps (0 = no wait, 0x7F = 1.27 s)
+ * @param  slot         [0..7] Slot index
+ * @param  delay_steps  [0..127] Wait length in 10 ms steps (0 = no wait, 127 = 1.27 s)
  */
 void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot,
                                     uint8_t delay_steps);
@@ -348,11 +415,13 @@ void tile_drive_h_set_sequence_wait(tile_t* tile, uint8_t slot,
  *   - DRIVE_H_TRIG_LEVEL: GO follows the IN/TRIG pin level.
  *     High = playing, low = idle. Falling edge cancels.
  *
+ * Not a Studio setting: rtp_stop(), pwm_input_stop(), audio_stop(),
+ * diagnose() and calibrate() all return MODE to internal trigger.
+ *
  * @studio expose category=tile name=set_trigger section=runtime
- * @param  mode  [0..2] One of DRIVE_H_TRIG_INTERNAL (0), DRIVE_H_TRIG_EDGE (1),
- *               DRIVE_H_TRIG_LEVEL (2)
+ * @param  mode  Trigger source (drive_h_trigger_t)
  */
-void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode);
+void tile_drive_h_set_trigger(tile_t* tile, drive_h_trigger_t mode);
 
 /**
  * @brief  Check whether an effect or sequence is still playing.
@@ -403,20 +472,58 @@ void tile_drive_h_set_library(tile_t* tile, drive_h_library_t library);
  *   - loop_gain     (0x1A bits 3:2): closed-loop gain (0=Low .. 3=Very high).
  *
  * Pass 0 for rated_voltage / od_clamp to leave that register untouched.
- * Pass 0xFF for fb_brake / loop_gain to leave them untouched. Run
- * tile_drive_h_calibrate() afterwards to update A_CAL_COMP / A_CAL_BEMF.
+ * From C, pass 0xFF for fb_brake / loop_gain to leave them untouched
+ * (Studio bounds them to their fields). Run tile_drive_h_calibrate()
+ * afterwards to update A_CAL_COMP / A_CAL_BEMF.
+ *
+ * Register-level escape hatch. For settings prefer
+ * tile_drive_h_set_actuator_voltage() (millivolts),
+ * tile_drive_h_set_brake_factor() and tile_drive_h_set_loop_gain().
  *
  * @studio expose category=tile name=set_actuator_params
- * @param  rated_voltage  RATED_VOLTAGE byte (0 = no change)
- * @param  od_clamp       OD_CLAMP byte (0 = no change)
- * @param  fb_brake       Feedback brake factor 0..7 (0xFF = no change)
- * @param  loop_gain      Loop gain 0..3 (0xFF = no change)
+ * @param  rated_voltage  [0..255] RATED_VOLTAGE byte (0 = no change)
+ * @param  od_clamp       [0..255] OD_CLAMP byte (0 = no change)
+ * @param  fb_brake       [0..7] Feedback brake factor (drive_h_brake_t codes; 0xFF from C = no change)
+ * @param  loop_gain      [0..3] Loop gain (drive_h_loop_gain_t codes; 0xFF from C = no change)
  */
 void tile_drive_h_set_actuator_params(tile_t* tile,
                                       uint8_t rated_voltage,
                                       uint8_t od_clamp,
                                       uint8_t fb_brake,
                                       uint8_t loop_gain);
+
+/**
+ * @brief  Set the closed-loop braking strength.
+ *
+ * Writes FEEDBACK_CTRL FB_BRAKE_FACTOR[6:4]: the feedback gain while
+ * braking, relative to the gain while driving. More braking stops the
+ * actuator faster (crisper clicks) at the cost of loop stability; the
+ * datasheet default (4x) suits most actuators. Only used in closed loop.
+ *
+ * The datasheet asks for this to be set before auto-calibration.
+ * tile_drive_h_calibrate() itself runs at 3x / Medium (TI's recommended
+ * calibration values) and restores this setting afterwards.
+ *
+ * @studio expose category=tile name=set_brake_factor section=config
+ * @studio control factor label="Brake strength" tier=advanced default=DRIVE_H_BRAKE_4X when="set_loop_mode.closed == 1"
+ * @param  factor  Braking gain (drive_h_brake_t)
+ */
+void tile_drive_h_set_brake_factor(tile_t* tile, drive_h_brake_t factor);
+
+/**
+ * @brief  Set the closed-loop gain.
+ *
+ * Writes FEEDBACK_CTRL LOOP_GAIN[3:2]: how fast the loop drives the
+ * back-EMF (the actuator's speed) to the requested level. Higher gain
+ * settles faster and is less stable; Medium (the datasheet default)
+ * suits most actuators. Only used in closed loop. Like the brake
+ * factor, set it before calibrating.
+ *
+ * @studio expose category=tile name=set_loop_gain section=config
+ * @studio control gain label="Loop gain" tier=advanced default=DRIVE_H_LOOP_GAIN_MEDIUM when="set_loop_mode.closed == 1"
+ * @param  gain  Loop gain (drive_h_loop_gain_t)
+ */
+void tile_drive_h_set_loop_gain(tile_t* tile, drive_h_loop_gain_t gain);
 
 /**
  * @brief  Switch between open-loop and closed-loop drive at runtime.
@@ -469,7 +576,7 @@ void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed);
  * at init's 238 Hz DRIVE_TIME.
  *
  * @studio expose category=tile name=set_actuator_voltage section=config
- * @studio control rated_mv label="Actuator rated voltage" tier=basic default=2230 scale=0.001 unit=V
+ * @studio control rated_mv label="Actuator rated voltage" tier=basic default=2230 scale=0.001 unit=V when="set_loop_mode.closed == 1"
  * @studio control overdrive_mv label="Overdrive clamp" tier=advanced default=2700 scale=0.001 unit=V
  * @param  rated_mv      [300..3600] Rated drive level in mV
  * @param  overdrive_mv  [300..5000] Overdrive clamp in mV
@@ -488,7 +595,7 @@ void tile_drive_h_set_actuator_voltage(tile_t* tile, uint16_t rated_mv,
  * tile_drive_h_get_resonance_hz() while driving in closed loop.
  *
  * @studio expose category=tile name=set_resonance_hz section=config
- * @studio control hz label="LRA resonance" tier=advanced default=238 unit=Hz
+ * @studio control hz label="LRA resonance" tier=advanced default=238 unit=Hz when="set_library.library == DRIVE_H_LIB_LRA"
  * @param  hz    [125..300] LRA resonant frequency in Hz
  */
 void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz);
@@ -502,12 +609,15 @@ void tile_drive_h_set_resonance_hz(tile_t* tile, uint16_t hz);
  * converge or the actuator runs at the edges of the 125–300 Hz
  * window.
  *
- * Pass 0xFF for any field to leave that register slice untouched.
+ * init() writes the reset values (3 / 1 / 1). From C, pass 0xFF for any
+ * field to leave that register slice untouched (Studio bounds each to
+ * its 2-bit field). SAMPLE_TIME also feeds the LRA voltage maths in
+ * tile_drive_h_set_actuator_voltage().
  *
  * @studio expose category=tile name=set_resonance_params
- * @param  sample_time    Sample time 0..3 (0=150µs, 3=300µs; 0xFF = no change)
- * @param  blanking_time  Blanking time 0..3 (0xFF = no change)
- * @param  idiss_time     Current-dissipation time 0..3 (0xFF = no change)
+ * @param  sample_time    [0..3] Sample time (0 = 150 µs, 1 = 200, 2 = 250, 3 = 300 µs; 0xFF from C = no change)
+ * @param  blanking_time  [0..3] Blanking time code (0xFF from C = no change)
+ * @param  idiss_time     [0..3] Current-dissipation time code (0xFF from C = no change)
  */
 void tile_drive_h_set_resonance_params(tile_t* tile,
                                        uint8_t sample_time,
@@ -527,10 +637,10 @@ void tile_drive_h_set_resonance_params(tile_t* tile,
  * mode generates them automatically from back-EMF feedback.
  *
  * @studio expose category=tile name=set_waveform_timing
- * @param  overdrive     Overdrive Time Offset (0x0D, signed × 5 ms)
- * @param  sustain_pos   Sustain-Time Positive Offset (0x0E, signed × 5 ms)
- * @param  sustain_neg   Sustain-Time Negative Offset (0x0F, signed × 5 ms)
- * @param  brake         Brake Time Offset (0x10, signed × 5 ms)
+ * @param  overdrive     [-128..127] Overdrive Time Offset (0x0D, signed × 5 ms)
+ * @param  sustain_pos   [-128..127] Sustain-Time Positive Offset (0x0E, signed × 5 ms)
+ * @param  sustain_neg   [-128..127] Sustain-Time Negative Offset (0x0F, signed × 5 ms)
+ * @param  brake         [-128..127] Brake Time Offset (0x10, signed × 5 ms)
  */
 void tile_drive_h_set_waveform_timing(tile_t* tile,
                                       int8_t overdrive,
@@ -574,8 +684,8 @@ void tile_drive_h_rtp_write(tile_t* tile, uint8_t amplitude);
  * to the same convention as the format flag.
  *
  * @studio expose category=tile name=set_rtp_format
- * @param  unsigned_   1 = unsigned data format, 0 = signed (default)
- * @param  bidir       1 = bidirectional input (default), 0 = unidirectional
+ * @param  unsigned_   [0..1] 1 = unsigned data format, 0 = signed (default)
+ * @param  bidir       [0..1] 1 = bidirectional input (default), 0 = unidirectional
  */
 void tile_drive_h_set_rtp_format(tile_t* tile, uint8_t unsigned_, uint8_t bidir);
 
@@ -664,15 +774,18 @@ void tile_drive_h_audio_start(tile_t* tile);
  *   - ATV_MAX_DRIVE (0x15): maximum output drive at full input.
  *     raw / 255 × 100 %.
  *
- * Pass 0xFF for any field to leave it untouched.
+ * Pass 0xFF for any field to leave it untouched. That makes 0xFF, the
+ * reset value of ATV_MAX_INPUT and ATV_MAX_DRIVE, unreachable once
+ * changed: use tile_drive_h_set_audio_envelope() and
+ * tile_drive_h_set_audio_levels() instead, which have no sentinel.
  *
  * @studio expose category=tile name=set_audio_params
- * @param  peak_time    ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)
- * @param  filter       ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)
- * @param  min_input    Minimum input gate (0xFF = no change)
- * @param  max_input    Full-scale input level (0xFF = no change)
- * @param  min_drive    Minimum output drive once active (0xFF = no change)
- * @param  max_drive    Full-scale output drive (0xFF = no change)
+ * @param  peak_time    [0..255] ATH_PEAK_TIME 0..3 (10/20/30/40 ms; 0xFF = no change)
+ * @param  filter       [0..255] ATH_FILTER 0..3 (100/125/150/200 Hz; 0xFF = no change)
+ * @param  min_input    [0..255] Minimum input gate (0xFF = no change)
+ * @param  max_input    [0..255] Full-scale input level (0xFF = no change)
+ * @param  min_drive    [0..255] Minimum output drive once active (0xFF = no change)
+ * @param  max_drive    [0..255] Full-scale output drive (0xFF = no change)
  */
 void tile_drive_h_set_audio_params(tile_t* tile,
                                    uint8_t peak_time,
@@ -680,6 +793,37 @@ void tile_drive_h_set_audio_params(tile_t* tile,
                                    uint8_t min_input,
                                    uint8_t max_input,
                                    uint8_t min_drive,
+                                   uint8_t max_drive);
+
+/**
+ * @brief  Set the audio-to-vibe envelope detector timing.
+ *
+ * Writes ATV_CTRL (0x11): peak-detection time and low-pass cutoff.
+ * Reset values: 20 ms, 125 Hz.
+ *
+ * @studio expose category=tile name=set_audio_envelope
+ * @param  peak_time  Peak-detection time (drive_h_atv_peak_t)
+ * @param  filter     Low-pass filter cutoff (drive_h_atv_filter_t)
+ */
+void tile_drive_h_set_audio_envelope(tile_t* tile, drive_h_atv_peak_t peak_time,
+                                     drive_h_atv_filter_t filter);
+
+/**
+ * @brief  Set the audio-to-vibe input window and output drive range.
+ *
+ * Writes ATV_MIN_INPUT..ATV_MAX_DRIVE (0x12-0x15). Every value is
+ * written as given (no sentinel). Input levels are raw × 1.8 V / 255;
+ * drive levels raw / 255 × full scale. Reset values: 0x19 / 0xFF /
+ * 0x19 / 0xFF.
+ *
+ * @studio expose category=tile name=set_audio_levels
+ * @param  min_input  [0..255] Input level below which the output stays silent
+ * @param  max_input  [0..255] Input level that gives full drive
+ * @param  min_drive  [0..255] Output drive at the minimum input
+ * @param  max_drive  [0..255] Output drive at the full-scale input
+ */
+void tile_drive_h_set_audio_levels(tile_t* tile, uint8_t min_input,
+                                   uint8_t max_input, uint8_t min_drive,
                                    uint8_t max_drive);
 
 /**

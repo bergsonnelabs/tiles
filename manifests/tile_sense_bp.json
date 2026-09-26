@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6897677",
+  "source": "tiles@f70bca2",
   "tile": "Sense.BP",
   "palette": {
     "label": "Sense.BP",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_bp",
     "header": "tile_sense_bp.h",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -78,47 +78,115 @@
             {
               "name": "SENSE_BP_ODR_1HZ",
               "value": 1,
-              "label": "1 Hz"
+              "label": "1 Hz",
+              "quantity": 1
             },
             {
               "name": "SENSE_BP_ODR_4HZ",
               "value": 2,
-              "label": "4 Hz"
+              "label": "4 Hz",
+              "quantity": 4
             },
             {
               "name": "SENSE_BP_ODR_10HZ",
               "value": 3,
-              "label": "10 Hz"
+              "label": "10 Hz",
+              "quantity": 10
             },
             {
               "name": "SENSE_BP_ODR_25HZ",
               "value": 4,
-              "label": "25 Hz"
+              "label": "25 Hz",
+              "quantity": 25
             },
             {
               "name": "SENSE_BP_ODR_50HZ",
               "value": 5,
-              "label": "50 Hz"
+              "label": "50 Hz",
+              "quantity": 50
             },
             {
               "name": "SENSE_BP_ODR_75HZ",
               "value": 6,
-              "label": "75 Hz"
+              "label": "75 Hz",
+              "quantity": 75
             },
             {
               "name": "SENSE_BP_ODR_100HZ",
               "value": 7,
-              "label": "100 Hz"
+              "label": "100 Hz",
+              "quantity": 100
             },
             {
               "name": "SENSE_BP_ODR_200HZ",
               "value": 8,
-              "label": "200 Hz"
+              "label": "200 Hz",
+              "quantity": 200
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "odr",
+          "label": "Output data rate",
+          "tier": "basic",
+          "scope": "config",
+          "role": "sample_rate",
+          "default": 4,
+          "choices": [
+            {
+              "name": "SENSE_BP_ODR_1HZ",
+              "value": 1,
+              "label": "1 Hz",
+              "quantity": 1
+            },
+            {
+              "name": "SENSE_BP_ODR_4HZ",
+              "value": 2,
+              "label": "4 Hz",
+              "quantity": 4
+            },
+            {
+              "name": "SENSE_BP_ODR_10HZ",
+              "value": 3,
+              "label": "10 Hz",
+              "quantity": 10
+            },
+            {
+              "name": "SENSE_BP_ODR_25HZ",
+              "value": 4,
+              "label": "25 Hz",
+              "quantity": 25
+            },
+            {
+              "name": "SENSE_BP_ODR_50HZ",
+              "value": 5,
+              "label": "50 Hz",
+              "quantity": 50
+            },
+            {
+              "name": "SENSE_BP_ODR_75HZ",
+              "value": 6,
+              "label": "75 Hz",
+              "quantity": 75
+            },
+            {
+              "name": "SENSE_BP_ODR_100HZ",
+              "value": 7,
+              "label": "100 Hz",
+              "quantity": 100
+            },
+            {
+              "name": "SENSE_BP_ODR_200HZ",
+              "value": 8,
+              "label": "200 Hz",
+              "quantity": 200
+            }
+          ]
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -175,7 +243,96 @@
         }
       ],
       "returns": "void",
-      "receiver": "tile_t *"
+      "controls": [
+        {
+          "param": "avg",
+          "label": "Averaging",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t *",
+      "requires": [
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "value": "set_odr.odr"
+              },
+              {
+                "num": 25
+              }
+            ]
+          },
+          "message": "Averaging 512 samples limits the data rate to 25 Hz. Lower the data rate or the averaging.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_avg.avg"
+              },
+              {
+                "member": "SENSE_BP_AVG_512",
+                "num": 7
+              }
+            ]
+          }
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "value": "set_odr.odr"
+              },
+              {
+                "num": 75
+              }
+            ]
+          },
+          "message": "Averaging 128 samples limits the data rate to 75 Hz. Lower the data rate or the averaging.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_avg.avg"
+              },
+              {
+                "member": "SENSE_BP_AVG_128",
+                "num": 5
+              }
+            ]
+          }
+        },
+        {
+          "expr": {
+            "op": "<=",
+            "args": [
+              {
+                "value": "set_odr.odr"
+              },
+              {
+                "num": 100
+              }
+            ]
+          },
+          "message": "Averaging 64 samples limits the data rate to 100 Hz. Lower the data rate or the averaging.",
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_avg.avg"
+              },
+              {
+                "member": "SENSE_BP_AVG_64",
+                "num": 4
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "qname": [
@@ -206,6 +363,15 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "fs",
+          "label": "Pressure range",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -221,6 +387,10 @@
         {
           "name": "enable",
           "type": "int",
+          "range": [
+            0,
+            1
+          ],
           "description": "1 = enable, 0 = disable."
         },
         {
@@ -231,17 +401,59 @@
             {
               "name": "SENSE_BP_LPF_ODR_4",
               "value": 0,
-              "label": "Bandwidth = ODR/4"
+              "label": "Bandwidth = ODR/4",
+              "quantity": 4
             },
             {
               "name": "SENSE_BP_LPF_ODR_9",
               "value": 1,
-              "label": "Bandwidth = ODR/9"
+              "label": "Bandwidth = ODR/9",
+              "quantity": 9
             }
           ]
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "enable",
+          "label": "Low-pass filter",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 1
+        },
+        {
+          "param": "bw",
+          "label": "Low-pass filter bandwidth",
+          "tier": "advanced",
+          "scope": "config",
+          "show_unit": "Hz",
+          "default": 0,
+          "when": {
+            "op": "==",
+            "args": [
+              {
+                "ref": "set_lpf.enable"
+              },
+              {
+                "num": 1
+              }
+            ]
+          },
+          "show": {
+            "op": "/",
+            "args": [
+              {
+                "value": "set_odr.odr"
+              },
+              {
+                "value": "set_lpf.bw"
+              }
+            ]
+          }
+        }
+      ],
       "receiver": "tile_t *"
     },
     {
@@ -419,7 +631,11 @@
         {
           "name": "watermark",
           "type": "int",
-          "description": "Threshold level (0–127)."
+          "range": [
+            0,
+            127
+          ],
+          "description": "Threshold level."
         }
       ],
       "returns": "void",
@@ -505,7 +721,12 @@
         {
           "name": "ths_hpa",
           "type": "int",
-          "description": "Threshold in hPa (unsigned, applied symmetrically)."
+          "range": [
+            0,
+            2047
+          ],
+          "unit": "hPa",
+          "description": "Threshold (unsigned, applied symmetrically)."
         }
       ],
       "returns": "void",
@@ -524,6 +745,10 @@
         {
           "name": "cfg",
           "type": "int",
+          "range": [
+            0,
+            255
+          ],
           "description": "Raw INTERRUPT_CFG byte (use ILPS22QS_INTCFG_* masks)."
         }
       ],
@@ -623,6 +848,10 @@
         {
           "name": "offset",
           "type": "int",
+          "range": [
+            -32768,
+            32767
+          ],
           "description": "Raw offset value (two's complement)."
         }
       ],
@@ -656,7 +885,12 @@
         {
           "name": "sea_level_pa",
           "type": "int",
-          "description": "Reference pressure in pascals (e.g. 101325)."
+          "range": [
+            26000,
+            406000
+          ],
+          "unit": "Pa",
+          "description": "Reference pressure (e.g. 101325)."
         }
       ],
       "returns": "int32_t",
@@ -676,12 +910,22 @@
         {
           "name": "threshold_hpa",
           "type": "int",
-          "description": "Absolute deviation that triggers return (hPa)."
+          "range": [
+            1,
+            4060
+          ],
+          "unit": "hPa",
+          "description": "Absolute deviation that triggers return."
         },
         {
           "name": "timeout_ms",
           "type": "int",
-          "description": "Maximum wait in milliseconds."
+          "range": [
+            0,
+            600000
+          ],
+          "unit": "ms",
+          "description": "Maximum wait."
         }
       ],
       "returns": "uint8_t",

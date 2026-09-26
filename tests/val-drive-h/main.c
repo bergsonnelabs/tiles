@@ -112,6 +112,14 @@ int main(void)
     tile_drive_h_set_loop_mode(&haptic, 0);
     tile_drive_h_set_loop_mode(&haptic, 1);
 
+    tile_drive_h_set_brake_factor(&haptic, DRIVE_H_BRAKE_6X);
+    tile_drive_h_set_brake_factor(&haptic, DRIVE_H_BRAKE_OFF);
+    tile_drive_h_set_loop_gain(&haptic, DRIVE_H_LOOP_GAIN_HIGH);
+    tile_drive_h_set_loop_gain(&haptic, DRIVE_H_LOOP_GAIN_MEDIUM);
+
+    tile_drive_h_set_audio_envelope(&haptic, DRIVE_H_ATV_PEAK_20MS, DRIVE_H_ATV_LPF_125HZ);
+    tile_drive_h_set_audio_levels(&haptic, 0x19, 0xFF, 0x19, 0xFF); /* reset values */
+
     tile_drive_h_set_actuator_voltage(&haptic, 1800, 2500);
     tile_drive_h_set_actuator_voltage(&haptic, 0, 9999);    /* clamped */
 

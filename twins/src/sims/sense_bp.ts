@@ -319,9 +319,14 @@ const sim: TileSim<State> = {
     },
 
     // ── interrupt ──
-    tile_sense_bp_set_threshold_hpa: ({ args }) => ({
-      nextState: { int_threshold_hPa: num(args, 0, 0) & 0xffff },
-    }),
+    // THS_P = hPa × 16 (mode 1) / × 8 (mode 2), a 15-bit field the driver
+    // saturates at 0x7FFF (datasheet §9.2).
+    tile_sense_bp_set_threshold_hpa: ({ state, args }) => {
+      const k = state.fs_lsb_per_hpa === 2048 ? 8 : 16;
+      return {
+        nextState: { int_threshold_hPa: Math.min(0x7fff, (num(args, 0, 0) & 0xffff) * k) / k },
+      };
+    },
     tile_sense_bp_set_interrupt_cfg: ({ state, args }) => {
       const cfg = num(args, 0, 0) & 0xff;
       const next: Partial<State> = { int_cfg: cfg };

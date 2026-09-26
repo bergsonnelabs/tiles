@@ -154,7 +154,7 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     drv_write(tile, DRV2605L_REG_A_CAL_BEMF, 0x6D);
 
     /* Configure FEEDBACK_CTRL: ERM_LRA bit [7], brake factor, loop gain, BEMF gain */
-    uint8_t fb_ctrl = 0xB6;  /* LRA mode, default brake/loop/BEMF */
+    uint8_t fb_ctrl = 0xB6;  /* LRA; brake 4x (3), loop gain Medium (1), BEMF_GAIN 2 */
     if (library <= 5) {
         fb_ctrl = 0x36;      /* ERM mode (N_ERM_LRA = 0) */
     }
@@ -169,22 +169,21 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     ctrl1 = (ctrl1 & 0xE0) | 0x10;
     drv_write(tile, DRV2605L_REG_CONTROL1, ctrl1);
 
-    /* Configure CONTROL3: LRA_OPEN_LOOP [0], ERM_OPEN_LOOP [5] */
+    /* CONTROL2 to its reset value: SAMPLE_TIME (which the LRA voltage
+     * maths reads), BIDIR_INPUT and the tracker timing start known even
+     * if a previous session changed them. */
+    drv_write(tile, DRV2605L_REG_CONTROL2, DRV2605L_CONTROL2_DEFAULT);
+
+    /* Configure CONTROL3: LRA_OPEN_LOOP [0] and ERM_OPEN_LOOP [5] in
+     * lockstep, as set_loop_mode() does. Only the bit for the active
+     * actuator type takes effect; setting both means a later
+     * set_library() switch keeps the loop mode (ERM_OPEN_LOOP resets
+     * to 1, open loop). */
     uint8_t ctrl3 = drv_read(tile, DRV2605L_REG_CONTROL3);
-    if (library == 6) {
-        /* LRA mode */
-        if (closed_loop) {
-            ctrl3 &= ~0x01;  /* LRA_OPEN_LOOP = 0 (closed loop) */
-        } else {
-            ctrl3 |= 0x01;   /* LRA_OPEN_LOOP = 1 (open loop) */
-        }
+    if (closed_loop) {
+        ctrl3 &= ~0x21;  /* LRA_OPEN_LOOP = ERM_OPEN_LOOP = 0 (closed) */
     } else {
-        /* ERM mode */
-        if (closed_loop) {
-            ctrl3 &= ~0x20;  /* ERM_OPEN_LOOP = 0 (closed loop) */
-        } else {
-            ctrl3 |= 0x20;   /* ERM_OPEN_LOOP = 1 (open loop) */
-        }
+        ctrl3 |= 0x21;   /* both = 1 (open loop) */
     }
     drv_write(tile, DRV2605L_REG_CONTROL3, ctrl3);
 
@@ -258,7 +257,7 @@ void tile_drive_h_load_sequence(tile_t* tile, const uint8_t *effects,
     }
 }
 
-void tile_drive_h_set_trigger(tile_t* tile, uint8_t mode)
+void tile_drive_h_set_trigger(tile_t* tile, drive_h_trigger_t mode)
 {
     if (tile->state != TILE_STATE_READY) {
         TILE_ON_ERROR(tile, "set_trigger: not ready");
@@ -534,6 +533,34 @@ void tile_drive_h_set_actuator_params(tile_t* tile,
         }
         drv_write(tile, DRV2605L_REG_FEEDBACK_CTRL, fb);
     }
+}
+
+void tile_drive_h_set_brake_factor(tile_t* tile, drive_h_brake_t factor)
+{
+    if (tile->state != TILE_STATE_READY) {
+        TILE_ON_ERROR(tile, "set_brake_factor: not ready");
+        return;
+    }
+    if ((unsigned)factor > DRIVE_H_BRAKE_OFF) return;
+
+    /* FEEDBACK_CTRL bits 6:4; N_ERM_LRA, LOOP_GAIN, BEMF_GAIN preserved. */
+    uint8_t fb = drv_read(tile, DRV2605L_REG_FEEDBACK_CTRL);
+    fb = (uint8_t)((fb & ~0x70) | (((unsigned)factor & 0x07) << 4));
+    drv_write(tile, DRV2605L_REG_FEEDBACK_CTRL, fb);
+}
+
+void tile_drive_h_set_loop_gain(tile_t* tile, drive_h_loop_gain_t gain)
+{
+    if (tile->state != TILE_STATE_READY) {
+        TILE_ON_ERROR(tile, "set_loop_gain: not ready");
+        return;
+    }
+    if ((unsigned)gain > DRIVE_H_LOOP_GAIN_VERY_HIGH) return;
+
+    /* FEEDBACK_CTRL bits 3:2; the other fields preserved. */
+    uint8_t fb = drv_read(tile, DRV2605L_REG_FEEDBACK_CTRL);
+    fb = (uint8_t)((fb & ~0x0C) | (((unsigned)gain & 0x03) << 2));
+    drv_write(tile, DRV2605L_REG_FEEDBACK_CTRL, fb);
 }
 
 void tile_drive_h_set_loop_mode(tile_t* tile, uint8_t closed)
@@ -813,6 +840,34 @@ void tile_drive_h_set_audio_params(tile_t* tile,
     if (max_drive != 0xFF) {
         drv_write(tile, DRV2605L_REG_ATV_MAX_DRIVE, max_drive);
     }
+}
+
+void tile_drive_h_set_audio_envelope(tile_t* tile, drive_h_atv_peak_t peak_time,
+                                     drive_h_atv_filter_t filter)
+{
+    if (tile->state != TILE_STATE_READY) {
+        TILE_ON_ERROR(tile, "set_audio_envelope: not ready");
+        return;
+    }
+    /* ATV_CTRL: bits 3:2 ATH_PEAK_TIME, bits 1:0 ATH_FILTER, 7:4 reserved. */
+    uint8_t atv = drv_read(tile, DRV2605L_REG_ATV_CTRL);
+    atv = (uint8_t)((atv & ~0x0F) | (((unsigned)peak_time & 0x03) << 2)
+                    | ((unsigned)filter & 0x03));
+    drv_write(tile, DRV2605L_REG_ATV_CTRL, atv);
+}
+
+void tile_drive_h_set_audio_levels(tile_t* tile, uint8_t min_input,
+                                   uint8_t max_input, uint8_t min_drive,
+                                   uint8_t max_drive)
+{
+    if (tile->state != TILE_STATE_READY) {
+        TILE_ON_ERROR(tile, "set_audio_levels: not ready");
+        return;
+    }
+    drv_write(tile, DRV2605L_REG_ATV_MIN_INPUT, min_input);
+    drv_write(tile, DRV2605L_REG_ATV_MAX_INPUT, max_input);
+    drv_write(tile, DRV2605L_REG_ATV_MIN_DRIVE, min_drive);
+    drv_write(tile, DRV2605L_REG_ATV_MAX_DRIVE, max_drive);
 }
 
 void tile_drive_h_audio_stop(tile_t* tile)
