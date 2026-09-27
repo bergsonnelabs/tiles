@@ -162,16 +162,26 @@ static _i2c_pins_t _i2c_pins(I2C_TypeDef *instance)
         p = (const _i2c_pins_t){ GPIOA, 7, 4, GPIOB, 4, 4 };
     }
 #elif defined(STM32WBA55xx)
+    /* Core.ST.W5: I2C1 on pads 10/11 = PA15 (SCL) / PB3 (SDA), AF4
+     * (definitions/Core-ST-W5-b.json; STM32WBA5x DS AF table). This used to
+     * name PB2/PB1, which no pad carries. I2C3 is pads 4/5. */
     if (instance == I2C1) {
-        p = (const _i2c_pins_t){ GPIOB, 2, 4, GPIOB, 1, 4 };
+        p = (const _i2c_pins_t){ GPIOA, 15, 4, GPIOB, 3, 4 };
     } else if (instance == I2C3) {
         p = (const _i2c_pins_t){ GPIOA, 6, 4, GPIOA, 7, 4 };
     }
 #elif defined(STM32H523xx)
+    /* Core.ST.H5: I2C1 on pads 4/5 = PB8 (SCL) / PB7 (SDA), AF4; I2C3 on
+     * pads 2/3 = PA8 (SCL, AF4) / PB4 (SDA, AF9) (definitions/Core-ST-H5-a.json;
+     * DS14540 Tables 14-15). This used to name PB6 for I2C1, so a recovery
+     * bit-banged the wrong pin and left PB6 muxed as a second I2C1 SCL, which a
+     * serial update (a jump, not a reset) carried into the next image. */
     if (instance == I2C1) {
-        p = (const _i2c_pins_t){ GPIOB, 6, 4, GPIOB, 7, 4 };
+        p = (const _i2c_pins_t){ GPIOB, 8, 4, GPIOB, 7, 4 };
     } else if (instance == I2C2) {
         p = (const _i2c_pins_t){ GPIOB, 10, 4, GPIOB, 11, 4 };
+    } else if (instance == I2C3) {
+        p = (const _i2c_pins_t){ GPIOA, 8, 4, GPIOB, 4, 9 };
     }
 #elif defined(STM32L011xx)
     /* Core.ST.L0 routes I2C1 to pads 4/5 = PB6 (SCL) / PB7 (SDA), AF1
