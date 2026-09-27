@@ -24,6 +24,15 @@ extern hal_i2c_t {{ bus.handle }};
  * for unconfigured ids so callers can fail gracefully. */
 hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
 {% endif %}
+{% if i3c_buses %}
+
+#include "hal_i3c.h"
+
+/* ---- Auto-generated I3C handles (config.json "i3c": true on an I2C bus) ---- */
+{% for bus in i3c_buses %}
+extern hal_i3c_t {{ bus.handle }};   /* {{ bus.i2c_name }} pads, {{ bus.speed }} Hz SCL */
+{% endfor %}
+{% endif %}
 {% if spi_buses %}
 
 #include "hal_spi.h"
@@ -130,6 +139,8 @@ void studio_dispatch_core_usb(void);
 {% for bus in tile_pal_buses %}
 {% if bus.bus_type == "spi" %}
  *   tiles_pal_t *{{ bus.pal_handle }} = core_tiles_pal(&{{ bus.spi_handle }});
+{% elif bus.bus_type == "i3c" %}
+ *   tiles_pal_t *{{ bus.pal_handle }} = core_tiles_pal(&{{ bus.i3c_handle }});   // I3C
 {% else %}
  *   tiles_pal_t *{{ bus.pal_handle }} = core_tiles_pal(&{{ bus.i2c_handle }});
 {% endif %}

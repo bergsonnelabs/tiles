@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@044f8f3",
+  "source": "tiles@3bcb81b",
   "subsystems": [
     {
       "id": "adc",
@@ -216,6 +216,38 @@
           "brief": "No PEC, no Alert Response, no block read/write protocol framing. Not requested by any current tile.",
           "tier": 1,
           "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "i3c",
+      "name": "I3C — SDR controller (Core.ST.H5)",
+      "header": "core_i3c.h",
+      "category": "i3c",
+      "gaps": [
+        {
+          "title": "No HDR modes",
+          "brief": "The H5 I3C peripheral is SDR-only (RM0481 §49.2): no HDR-DDR, HDR-TSL/TSP or HDR-BT, although targets such as the ICM-42686-P offer DDR.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No legacy I2C targets on an I3C bus",
+          "brief": "The peripheral can send legacy I2C messages (MTYPE 0100), but this SDK does not expose them: coregen keeps a bus on I2C unless every tile on it speaks I3C, so a mixed bus never happens.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No DMA, hot-join or secondary controller",
+          "brief": "FIFOs are serviced by polling (the controller stalls SCL for up to ~100 µs while it waits, §49.16.21); hot-join requests are NACKed (HJACK 0) and controller-role requests are not acknowledged.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "Not in the DSL / Studio yet",
+          "brief": "Nothing here carries `@studio expose`, and Studio cannot request I3C for a bus yet; a hand-written config.json can (\"i3c\": true).",
+          "tier": 2,
+          "value": "M"
         }
       ]
     },

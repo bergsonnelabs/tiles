@@ -1,0 +1,30 @@
+{
+  "core": "Core.ST.H5",
+  "clock": "max",
+  "bootloader": "rom",
+  "usb": {
+    "enabled": true
+  },
+  "iwdg": {
+    "enabled": true,
+    "timeout_ms": 5000
+  },
+  "pads": {
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT"
+  },
+  "interfaces": {
+    "I2C1": {
+      "speed": 400000,
+      "i3c": true,
+      "i3c_speed": 12500000
+    }
+  },
+  "tiles": [
+    {
+      "tile": "Sense.I.6P6",
+      "bus": "I2C1",
+      "instance": 0
+    }
+  ]
+}

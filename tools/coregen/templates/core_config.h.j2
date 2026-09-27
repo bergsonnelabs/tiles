@@ -103,6 +103,13 @@
 {% endfor %}
 {% endif %}
 
+{% if i3c_buses %}
+/* ---- I3C buses (config.json "i3c": true on an I2C bus) ---- */
+{% for bus in i3c_buses %}
+#define {{ bus.name }}_SCL_HZ       {{ bus.speed }}UL   /* {{ bus.i2c_name }} pads run as {{ bus.name }} */
+{% endfor %}
+
+{% endif %}
 {% if usb_vid is not none or usb_pid is not none or usb_product or usb_manufacturer or usb_serial %}
 /* ---- USB identity ---- */
 /* Per-project overrides for the CDC/HID descriptors (config.json "usb").

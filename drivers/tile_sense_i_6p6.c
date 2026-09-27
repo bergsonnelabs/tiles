@@ -112,6 +112,47 @@ static void memzero(void *p, uint8_t n)
     while (n--) *b++ = 0;
 }
 
+/* I2C only: the datasheet's "I2C driver setting" (DS-000639 §12.3 table):
+ * I3C_SDR_EN = I3C_DDR_EN = 0 in INTF_CONFIG6 (bank 1), and I2C_SLEW_RATE =
+ * SPI_SLEW_RATE = 1 in DRIVE_CONFIG (bank 0). The chip comes out of reset with
+ * its I3C slave on (INTF_CONFIG6 0x5F), and in I3C mode AP_SCL / AP_SDA have
+ * no glitch filter (§12.3 note). Benched on Core.ST.H5, I2C1 open-drain with
+ * the MCU's ~40 kOhm pull-ups only (2026-09-27): with the reset setting 0-151
+ * of 200 WHO_AM_I reads came back right at 100/400 kHz, at every GPIO speed
+ * and at 248 or 16 MHz; with this setting, 200/200 at 100 kHz, 400 kHz and
+ * 1 MHz. Until it is written the bus may be exactly what fails, so each write
+ * is retried and read back. The other INTF_CONFIG6 bits keep their reset
+ * values: the chip has just been soft-reset, and the value written is the
+ * reset value with bits 1:0 cleared (a read-modify-write would copy a
+ * garbled read into the reserved bits). Returns 1 when both stuck. */
+static uint8_t icm_apply_i2c_setting(tile_t *tile)
+{
+    uint8_t intf6 = 0, drive = 0;
+    /* The pair of writes that has to land while the bus is still unreliable
+     * (reads fail far more often than writes there, so each pair is followed
+     * by one read-back and nothing else). Once INTF_CONFIG6 has landed the
+     * chip's glitch filter is on and the read-back is trustworthy. */
+    for (uint8_t attempt = 0; attempt < 24 && intf6 != ICM42686P_INTF_CONFIG6_I2C; attempt++) {
+        icm_set_bank(tile, ICM42686P_BANK_1);
+        icm_write(tile, ICM42686P_B1_INTF_CONFIG6, ICM42686P_INTF_CONFIG6_I2C);
+        intf6 = icm_read(tile, ICM42686P_B1_INTF_CONFIG6);
+    }
+    for (uint8_t attempt = 0; attempt < 4 && icm_read(tile, ICM42686P_REG_BANK_SEL) != ICM42686P_BANK_0; attempt++)
+        icm_set_bank(tile, ICM42686P_BANK_0);
+    if (icm_read(tile, ICM42686P_REG_BANK_SEL) != ICM42686P_BANK_0) intf6 = 0;
+    for (uint8_t attempt = 0; attempt < 4 && drive != ICM42686P_DRIVE_CONFIG_I2C; attempt++) {
+        icm_write(tile, ICM42686P_REG_DRIVE_CONFIG, ICM42686P_DRIVE_CONFIG_I2C);
+        drive = icm_read(tile, ICM42686P_REG_DRIVE_CONFIG);
+    }
+    return intf6 == ICM42686P_INTF_CONFIG6_I2C && drive == ICM42686P_DRIVE_CONFIG_I2C;
+}
+
+/* An I2C bus that is neither SPI nor I3C (the I3C bridge also sets I2C). */
+static uint8_t on_plain_i2c(const tiles_pal_t *hal)
+{
+    return !(hal->buses & (TILES_BUS_SPI | TILES_BUS_I3C));
+}
+
 /* ================================================================
  * Lifecycle
  * ================================================================ */
@@ -127,7 +168,11 @@ uint8_t tile_sense_i_6p6_find(tiles_pal_t *hal, uint8_t instance)
     }
     uint8_t addr = resolve_id(instance);
     if (!addr) return 0;
-    return hal->i2c_is_ready(hal->handle, addr) == 0;
+    /* A few tries: on an I2C bus the chip may not yet have its I2C setting
+     * (see icm_apply_i2c_setting), and a single probe can be lost. */
+    for (uint8_t attempt = 0; attempt < 3; attempt++)
+        if (hal->i2c_is_ready(hal->handle, addr) == 0) return 1;
+    return 0;
 }
 
 /** @brief Initialize the ICM-42686P. */
@@ -160,20 +205,49 @@ void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
         s->int2_pin = cfg->int2_pin;
     }
 
-    /* Probe bus */
+    /* Probe bus (a few tries: see tile_sense_i_6p6_find) */
     if (hal->buses & TILES_BUS_SPI) {
         /* SPI: no address probe — verified by WHO_AM_I below */
     } else {
-        if (hal->i2c_is_ready(hal->handle, tile->id) != 0) {
+        uint8_t found = 0;
+        for (uint8_t attempt = 0; attempt < 3 && !found; attempt++)
+            found = hal->i2c_is_ready(hal->handle, tile->id) == 0;
+        if (!found) {
             tile->state = TILE_STATE_ERROR;
             TILE_ON_ERROR(tile, "sense_i_6p6: device not found");
             return;
         }
     }
 
-    /* Soft reset */
-    icm_write(tile, ICM42686P_REG_DEVICE_CONFIG, 0x01);
+    /* Soft reset (on I2C, retried until acknowledged: see above) */
+    if (hal->buses & TILES_BUS_SPI) {
+        icm_write(tile, ICM42686P_REG_DEVICE_CONFIG, 0x01);
+    } else {
+        uint8_t rst = 0x01;
+        for (uint8_t attempt = 0; attempt < 3; attempt++)
+            if (hal->i2c_write(hal->handle, tile->id, ICM42686P_REG_DEVICE_CONFIG, &rst, 1) == 0) break;
+    }
     hal->delay_ms(10);  /* Datasheet: 1ms min; extra margin for SPI mode switch */
+
+    /* I2C: the datasheet's I2C driver setting, before anything else is read. */
+    uint8_t i2c_setting_ok = 1;
+    if (on_plain_i2c(hal)) {
+        i2c_setting_ok = icm_apply_i2c_setting(tile);
+        if (!i2c_setting_ok)
+            TILE_ON_ERROR(tile, "sense_i_6p6: I2C setting (INTF_CONFIG6 / DRIVE_CONFIG) did not stick");
+    }
+
+    /* I3C: the reset leaves pin 14 (SDA) on its fastest output slew,
+     * DRIVE_CONFIG SPI_SLEW_RATE = 5 (< 2 ns; reset value 0x05, DS-000639
+     * §14.2). The datasheet warns that a strong slew can put glitches on
+     * AP_SCL / AP_SDA, which have no glitch filter in I3C mode (§12.3 note).
+     * Benched on Core.ST.H5 (2026-09-27): every I3C read came back corrupt at 5
+     * and correct at 2-4 from 1 to 12.4 MHz. 3 (4-12 ns) sits in the middle.
+     * Written blind: reads are the thing that fails until it is set. (The
+     * reset also clears the dynamic address; the I3C bridge re-assigns it.) */
+    if (hal->buses & TILES_BUS_I3C) {
+        icm_write(tile, ICM42686P_REG_DRIVE_CONFIG, 0x03);
+    }
 
     /* Read WHO_AM_I — store in flags field for debug.
      * Expected 0x44 (ICM-42686-P) or 0x47 (ICM-42688-P).
@@ -189,8 +263,9 @@ void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
     /* Ensure bank 0 */
     icm_set_bank(tile, ICM42686P_BANK_0);
 
-    /* SPI output drive strength (datasheet section 12.3):
-     * SPI_SLEW_RATE must be set to 5 for SPI operation (default is 1 = I2C). */
+    /* SPI output drive strength (datasheet section 12.3): SPI_SLEW_RATE 5
+     * for SPI operation. That is also its reset value (DRIVE_CONFIG 0x05,
+     * §14.2); the write keeps it explicit. */
     if (hal->buses & TILES_BUS_SPI) {
         icm_modify(tile, ICM42686P_REG_DRIVE_CONFIG, 0x07, 0x05);
     }
@@ -226,7 +301,10 @@ void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
                              TILES_GPIO_EDGE_RISING, isr, NULL);
     }
 
-    tile->state = TILE_STATE_READY;
+    /* An I2C setting that never stuck leaves the chip in I3C mode, without
+     * its glitch filter: it answers, but not reliably. Configured anyway,
+     * reported as an error. */
+    tile->state = i2c_setting_ok ? TILE_STATE_READY : TILE_STATE_ERROR;
 }
 
 /* ================================================================

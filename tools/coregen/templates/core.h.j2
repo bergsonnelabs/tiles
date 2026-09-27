@@ -42,6 +42,9 @@
 {% if spi_buses %}
 #include "core_spi.h"
 {% endif %}
+{% if i3c_buses %}
+#include "core_i3c.h"
+{% endif %}
 {% if tiles_config %}
 #include "core_tiles.h"
 {% endif %}

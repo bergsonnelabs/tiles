@@ -83,6 +83,34 @@
       "status": "verified",
       "note": "Bench-verified 2026-09-26 on Core.ST.H5 (tests/hw-spi-loopback config-h5.json): GPDMA1 CH6/CH7 (REQSEL spi1 6/7, spi3 10/11, RM0481 Table 136), blocking and async with callback, 3.99 MB/s at 32 MHz SCK; SPI3 DMA with SCK on PB3 in tests/hw-h5-bringup."
     },
+    "i3c.controller": {
+      "status": "verified",
+      "note": "12.4 MHz SCL (kernel = PCLK1 248 MHz), open-drain low 1.03 us; 14-byte burst 470 kB/s, 64-byte 980 kB/s, 0 errors (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.daa": {
+      "status": "verified",
+      "note": "RSTDAA, ENTDAA (PID 046a00000000, BCR 0x27, DCR 0xa0), SETDASA 0x69 -> 0x09 (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.ccc": {
+      "status": "verified",
+      "note": "GETPID/BCR/DCR/STATUS/MRL, SETMRL 16 -> 64, ENEC/DISEC; a NACKed address reports I3C_NACK in 14 us, an empty bus (I3C2) NACKs in 38 us (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.private": {
+      "status": "verified",
+      "note": "register read/write and private read, 200/200 and 1 s bursts clean (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.ibi": {
+      "status": "verified",
+      "note": "ICM data-ready IBI (1-byte MDB): 100/s at 100 Hz ODR, 1005/s at 1 kHz ODR, with an accel read per IBI (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.tiles": {
+      "status": "verified",
+      "note": "tile_sense_i_6p6 unchanged over core_tiles_pal(&core_i3c1): init, WHO_AM_I, accel |a| 1001 mg; a lost dynamic address (soft reset, RSTDAA) re-assigned (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
+    "i3c.hdr": {
+      "status": "na",
+      "note": "The STM32H523 I3C peripheral is SDR-only (RM0481 §49.2)"
+    },
     "timer.tick": {
       "status": "verified",
       "note": "Vector table fixed, TIM6/TIM7 get their vectors. TIM1 1 kHz update: 1002 ticks over 1000 USB SOFs at 248 MHz (tests/hw-h5-bringup, 2026-09-26, BOOT0 low; after a BOOT0-high ROM leave GTZC1_TZSC blocks the TIM1 clock until a reset)"
@@ -126,6 +154,10 @@
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
+    "coregen.i3c": {
+      "status": "verified",
+      "note": "\"i3c\": true on I2C1; all-tiles rule and I2C fallback NOTE checked on L4, a Sense.BP bus and I2C3 -> I3C2 builds (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+    },
     "coregen.spi": {
       "status": "verified",
       "note": "config-h5.json in tests/hw-spi-loopback: pads 9/8/3 to AF5, pad 2 as a GPIO chip select, bench PASS 2026-09-26"

@@ -33,20 +33,22 @@ tile_t {{ tile.handle }};
 /* Iterable tile table — bringup iterates this config data instead of hand-coding
  * per-variant init, so a new hardware variant is a config change, not a code fork.
  * `bus` is the raw bus handle: same pointer == same bus (group by it), and
- * core_tiles_pal((core_i2c_t*)bus) yields the PAL. `readdress_gpio` is the Core
+ * core_tiles_pal((core_i2c_t*)bus) yields the PAL (core_spi_t* when
+ * bus_is_spi, core_i3c_t* when bus_is_i3c). `readdress_gpio` is the Core
  * pad wired to a tile's address-strap (Drive.P), or -1. */
 typedef struct {
     const char   *type;           /* tile type, e.g. "Drive.P" */
-    void         *bus;            /* &core_i2cN / &core_spiN */
+    void         *bus;            /* &core_i2cN / &core_spiN / &core_i3cN */
     unsigned char bus_is_spi;
     unsigned char instance;
     tile_t       *handle;
     signed char   readdress_gpio;
+    unsigned char bus_is_i3c;     /* 1: an I2C bus coregen runs as I3C (Core.ST.H5) */
 } core_tile_entry_t;
 
 const core_tile_entry_t core_tile_table[] = {
 {% for tile in tiles_config %}
-    { "{{ tile.type }}", &{{ tile.bus_handle }}, {{ tile.bus_is_spi }}, {{ tile.instance }}, &{{ tile.handle }}, {{ tile.readdress_gpio }} },
+    { "{{ tile.type }}", &{{ tile.bus_handle }}, {{ tile.bus_is_spi }}, {{ tile.instance }}, &{{ tile.handle }}, {{ tile.readdress_gpio }}, {{ tile.bus_is_i3c }} },
 {% endfor %}
 };
 const unsigned char core_tile_count = sizeof(core_tile_table) / sizeof(core_tile_table[0]);

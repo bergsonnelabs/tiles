@@ -125,6 +125,16 @@ LAYER_HEADERS = {
         "hal": ("hal_spi.h", None),
         "ll": ("ll_spi.h", None),
     },
+    "i3c": {
+        # Core.ST.H5 only. The LL header is a register map; only its clock /
+        # reset helpers are calls.
+        "hal": ("hal_i3c.h", None),
+        "ll": (
+            "ll_i3c.h",
+            ["ll_i3c_clk_enable_reset", "ll_i3c_clk_disable", "ll_i3c_set_kernel_clk",
+             "ll_i3c_hsi_hz"],
+        ),
+    },
     "timer": {
         "hal": ("hal_timer.h", None),
         "ll": ("ll_tim.h", None),
@@ -1612,7 +1622,7 @@ def main():
             "definition": ROOT / "definitions/Sense-I-6P6-a.json",
             "prefix": "tile_sense_i_6p6",
             "init": "tile_sense_i_6p6_init",
-            "version": "1.3.0",
+            "version": "1.4.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_adc_6.h",

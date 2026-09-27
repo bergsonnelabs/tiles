@@ -1,8 +1,12 @@
 /**
  * @file   tile_sense_i_6p6.h
  * @brief  Complete driver for the Sense.I.6P6 tile (ICM-42686-P).
- *         Supports both I2C and SPI bus access via tiles_pal_t.
- * @version 1.3.0
+ *         Supports I2C, I3C (Core.ST.H5) and SPI bus access via tiles_pal_t.
+ * @version 1.4.0
+ *
+ * 1.4.0: I3C (Core.ST.H5) through the core_tiles_pal I3C bridge; on I2C the
+ * datasheet's I2C driver setting (I3C slave off, so the chip's I2C glitch
+ * filter is on), which makes it reliable on weak pull-ups.
  *
  * 6-axis IMU with extended measurement range:
  *   - Accelerometer:  16-bit, ±2/4/8/16/32 G, up to 32 kHz ODR
@@ -20,6 +24,16 @@
  *   int16_t accel[3], gyro[3];
  *   tile_sense_i_6p6_get_raw_accels(&imu, accel);
  *   tile_sense_i_6p6_get_raw_gyros(&imu, gyro);
+ * @endcode
+ *
+ * On Core.ST.H5 the tile also runs over I3C: coregen emits core_i3c1 when
+ * config.json asks for it (config-json.md §7), and the bridge maps the
+ * driver's static address (0x69) to the tile's dynamic address.
+ *
+ * Quick start — I3C (Core.ST.H5):
+ * @code
+ *   tile_t imu;
+ *   tile_sense_i_6p6_init(core_tiles_pal(&core_i3c1), 0, &imu, NULL);
  * @endcode
  *
  * Quick start — SPI:
@@ -72,12 +86,14 @@
  *   the read_packet parser; toggling the bit alone breaks the existing
  *   16-bit parsing path. Deferred to a future driver pass.
  *
- * @studio unsupported severity=advanced category="I3C support"
- *   Ecosystem-gated. ICM-42686-P supports I3C SDR (up to 12.5 MHz
- *   with in-band interrupts and dynamic addressing) and the tile
- *   straps I3C on pads 3/4/5. The driver framework currently uses
- *   tiles_pal I²C calls only; closing requires a new bus abstraction
- *   in Studio. Defer to a multi-bus driver framework pass.
+ * @studio unsupported severity=niche category="I3C: HDR-DDR, IBI routing, Studio"
+ *   I3C SDR works on Core.ST.H5 (driver 1.4.0): core_tiles_pal(&core_i3c1)
+ *   runs this driver unchanged at up to 12.4 MHz, with dynamic addressing,
+ *   and in-band interrupts through core_i3c_ibi_enable() + ENEC. What is left:
+ *   HDR-DDR (the chip has it; the H5 I3C peripheral is SDR-only, so it is
+ *   hardware-gated on every Core); no driver call routes events to IBI
+ *   (write INT_SOURCE8/9 in bank 4 with write_reg); and Studio cannot put a
+ *   bus on I3C yet (config.json can: "i3c": true on the I2C bus).
  *
  * @studio unsupported severity=advanced category="APEX raise-to-wake / raise-to-sleep"
  *   Driver-deferred (true driver gap — hardware supports it). The APEX engine
@@ -108,7 +124,7 @@
  * ================================================================ */
 
 #define TILE_SENSE_I_6P6_VERSION_MAJOR  1
-#define TILE_SENSE_I_6P6_VERSION_MINOR  3
+#define TILE_SENSE_I_6P6_VERSION_MINOR  4
 #define TILE_SENSE_I_6P6_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -215,6 +231,10 @@ TILES_CHECK_VERSION(1, 0);
 #define ICM42686P_B1_TMSTVAL2           0x64
 #define ICM42686P_B1_INTF_CONFIG4       0x7A
 #define ICM42686P_B1_INTF_CONFIG5       0x7B
+#define ICM42686P_B1_INTF_CONFIG6       0x7C
+
+#define ICM42686P_INTF_CONFIG6_I2C      0x5C  /**< INTF_CONFIG6 on I2C (DS-000639 §12.3 "I2C driver setting"): reset value 0x5F with I3C_DDR_EN (bit 1) and I3C_SDR_EN (bit 0) cleared */
+#define ICM42686P_DRIVE_CONFIG_I2C      0x09  /**< DRIVE_CONFIG on I2C (§12.3): I2C_SLEW_RATE (bits 5:3) = 1, SPI_SLEW_RATE (bits 2:0) = 1 */
 
 /* ================================================================
  * Register map — Bank 2
@@ -582,7 +602,14 @@ uint8_t tile_sense_i_6p6_find(tiles_pal_t *hal, uint8_t instance);
  * Performs soft reset, verifies WHO_AM_I, configures sensor ranges
  * and ODR. Pass cfg=NULL for defaults (±8g, ±1000dps, 100Hz, polled).
  *
- * @note   Blocks for ~2 ms (reset). Call once at startup.
+ * Applies the datasheet's per-bus driver settings (DS-000639 §12.3): on I2C
+ * it turns the chip's I3C slave off (INTF_CONFIG6 SDR/DDR = 0, which brings
+ * back its I2C glitch filter) and sets both slew rates to 1, retrying until
+ * they read back. If they never stick the tile still gets configured, but its
+ * state is TILE_STATE_ERROR and on_error is called. On I3C it sets the SDA
+ * slew to 3 (4-12 ns); on SPI, SPI_SLEW_RATE 5.
+ *
+ * @note   Blocks for ~12 ms (reset). Call once at startup.
  */
 void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
                            tile_t *tile, const sense_i_6p6_cfg_t *cfg);

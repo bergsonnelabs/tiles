@@ -516,6 +516,21 @@ def validate_project_config(config, tile, pad_map, mcu=None):
                 errors.append(f"Pad {pad_num}: cannot use {assigned_func} on a non-GPIO pad")
             continue
 
+        # I3C is requested on an I2C bus ("interfaces": {"I2C1": {"i3c": true}}),
+        # never by pad function: coregen switches the bus to I3C only when every
+        # tile on it speaks I3C, and otherwise keeps the I2C bus the pads name.
+        if re.match(r'^I3C\d+\.', str(assigned_func)):
+            i2c_fn = next((f for f in pad_info["all_functions"]
+                           if re.match(r'^I2C\d+\.', f) and f.split('.')[-1] == str(assigned_func).split('.')[-1]),
+                          None)
+            hint = f"assign '{i2c_fn}' and add \"i3c\": true to {i2c_fn.split('.')[0]} in \"interfaces\"" \
+                if i2c_fn else "request I3C with \"i3c\": true on an I2C bus in \"interfaces\""
+            errors.append(
+                f"Pad {pad_num}: '{assigned_func}' can't be assigned directly. I3C runs on an "
+                f"I2C bus: {hint} (config-json.md §7)."
+            )
+            continue
+
         # Check if the assigned function exists on this pad
         if assigned_func not in pad_info["all_functions"]:
             available = [f for f in pad_info["all_functions"]
@@ -556,6 +571,20 @@ def validate_project_config(config, tile, pad_map, mcu=None):
                 f"Interface '{iface_name}': not found on this tile. "
                 f"Available: {', '.join(sorted(iface_names))}"
             )
+
+    # I3C request on an I2C bus: "i3c" is a bool, "i3c_speed" the push-pull SCL.
+    for iface_name, icfg in (config.get("interfaces", {}) or {}).items():
+        if not isinstance(icfg, dict) or ("i3c" not in icfg and "i3c_speed" not in icfg):
+            continue
+        if not re.match(r'^I2C\d+$', iface_name):
+            errors.append(f"Interface '{iface_name}': \"i3c\" applies to an I2C bus (I2C1, I2C3, ...)")
+            continue
+        if "i3c" in icfg and not isinstance(icfg["i3c"], bool):
+            errors.append(f"Interface '{iface_name}': \"i3c\" must be true or false, got {icfg['i3c']!r}")
+        sp = icfg.get("i3c_speed")
+        if sp is not None and (not isinstance(sp, int) or isinstance(sp, bool) or not I3C_MIN_SPEED <= sp <= I3C_MAX_SPEED):
+            errors.append(f"Interface '{iface_name}': \"i3c_speed\" {sp!r} must be an integer "
+                          f"{I3C_MIN_SPEED}-{I3C_MAX_SPEED} (Hz, push-pull SCL)")
 
     # Check that pin assignments are consistent with interface configs
     configured_ifaces = set(config.get("interfaces", {}).keys())
@@ -1764,13 +1793,142 @@ def build_spi_config(config, mcu, pad_map, clock_config=None):
     return spi_buses
 
 
+# ---- I3C on an I2C bus (Core.ST.H5) ----
+#
+# A project asks for I3C on an I2C bus: "interfaces": {"I2C1": {"i3c": true}}.
+# coregen honours it only when (1) the Core offers I3C on both of the bus's
+# pads (Core.ST.H5: pad 4 I3C1.CLK, pad 5 I3C1.DAT, AF3), (2) the MCU has an
+# I3C HAL (STM32H523), and (3) every tile on the bus speaks I3C on the pads it
+# uses for I2C, per its definition's pad functions (interface "I3C"). Anything
+# else keeps the whole bus on I2C, exactly as without the key, with a
+# one-line NOTE. Mixed I2C/I3C buses are not supported.
+
+I3C_MCUS = {"STM32H523xx"}
+I3C_DEFAULT_SPEED = 12500000
+I3C_MIN_SPEED = 100000
+I3C_MAX_SPEED = 12500000
+
+
+def _tile_definition(defs_dir, tile_type):
+    """The newest-revision definitions/<Family>-<Name>-<rev>.json for a tile
+    name such as "Sense.I.6P6", or None."""
+    stem = tile_type.replace(".", "-")
+    try:
+        names = sorted(n for n in os.listdir(defs_dir)
+                       if re.match(re.escape(stem) + r'-[a-z]+\.json$', n))
+    except OSError:
+        return None
+    if not names:
+        return None
+    with open(os.path.join(defs_dir, names[-1]), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _tile_speaks_i3c(defn):
+    """True when every pad that carries I2C.CLK / I2C.DAT on the tile also
+    offers I3C.CLK / I3C.DAT (interface "I3C")."""
+    found = {"CLK": False, "DAT": False}
+    for pad in defn.get("pads", []):
+        fns = pad.get("functions", [])
+        for sig in ("CLK", "DAT"):
+            if any(f.get("function") == f"I2C.{sig}" for f in fns):
+                if not any(f.get("interface") == "I3C" and f.get("function") == f"I3C.{sig}" for f in fns):
+                    return False
+                found[sig] = True
+    return found["CLK"] and found["DAT"]
+
+
+def resolve_i3c_buses(config, pad_map, mcu, defs_dir):
+    """Decide which requested I2C buses become I3C buses (see above).
+
+    Returns a list of dicts, one per bus switched to I3C:
+      {"i2c_name": "I2C1", "name": "I3C1", "num": 1, "handle": "core_i3c1",
+       "speed": Hz, "pads": {pad: I3C function}, "attach": [(addr, tile, instance)]}
+    NOTEs for requests that stay I2C go to stderr.
+    """
+    key = "pads" if "pads" in config or "pins" not in config else "pins"
+    pads = config.get(key, {}) or {}
+    pad_lookup = {p["number"]: p for p in pad_map}
+    out = []
+    for i2c_name, icfg in sorted((config.get("interfaces", {}) or {}).items()):
+        if not isinstance(icfg, dict) or icfg.get("i3c") is not True:
+            continue
+        bus_pads = {sig: next((n for n, f in pads.items() if f == f"{i2c_name}.{sig}"), None)
+                    for sig in ("CLK", "DAT")}
+
+        def stay(reason):
+            eprint(f"  NOTE: {i2c_name} asked for I3C (\"i3c\": true) but stays I2C: {reason}")
+
+        if not all(bus_pads.values()):
+            continue       # no pads for this bus: the usual "configured but no pins" warning covers it
+        if mcu["define"] not in I3C_MCUS:
+            stay(f"the {mcu['define'][:-2]} on this Core has no I3C")
+            continue
+        i3c_fns = {}
+        for sig, pad in bus_pads.items():
+            info = pad_lookup.get(pad, {})
+            fn = next((f for f in info.get("all_functions", []) if re.match(rf'^I3C\d+\.{sig}$', f)), None)
+            i3c_fns[sig] = fn
+        if not all(i3c_fns.values()) or i3c_fns["CLK"].split(".")[0] != i3c_fns["DAT"].split(".")[0]:
+            stay(f"pads {bus_pads['CLK']}/{bus_pads['DAT']} have no I3C function on this Core")
+            continue
+        blockers = []
+        attach = []
+        for t in config.get("tiles", []) or []:
+            if i2c_name not in (t.get("bus"), t.get("bus2")):
+                continue
+            ttype = _tile_type(t)
+            if is_dual_bus(t):
+                blockers.append(f"{ttype} uses two buses (core_tiles_pal2 needs I2C)")
+                continue
+            defn = _tile_definition(defs_dir, ttype)
+            if defn is None:
+                blockers.append(f"{ttype} has no definition to check")
+                continue
+            if not _tile_speaks_i3c(defn):
+                blockers.append(f"{ttype} has no I3C on its bus pads")
+                continue
+            addrs = (TILE_DRIVER_MAP.get(ttype) or {}).get("i2c_addrs") or []
+            inst = t.get("instance", 0)
+            if isinstance(inst, int) and 0 <= inst < len(addrs):
+                attach.append((addrs[inst], ttype, inst))
+        if blockers:
+            stay("; ".join(blockers))
+            continue
+        name = i3c_fns["CLK"].split(".")[0]
+        speed = icfg.get("i3c_speed", I3C_DEFAULT_SPEED)
+        out.append({
+            "i2c_name": i2c_name,
+            "name": name,
+            "num": int(name[3:]),
+            "handle": f"core_{name.lower()}",
+            "speed": speed,
+            "pads": {bus_pads["CLK"]: i3c_fns["CLK"], bus_pads["DAT"]: i3c_fns["DAT"]},
+            "attach": attach,
+        })
+        print(f"  {i2c_name} -> {name} (I3C SDR, {speed} Hz): every tile on the bus speaks I3C")
+    return out
+
+
+def apply_i3c_buses(config, i3c_buses):
+    """Swap the switched buses' pad functions from I2Cn.* to I3Cm.* (in memory)
+    so the pad init and bus builders see an I3C bus and no I2C one."""
+    key = "pads" if "pads" in config or "pins" not in config else "pins"
+    for bus in i3c_buses:
+        for pad, fn in bus["pads"].items():
+            config[key][pad] = fn
+
+
 # ---- Tile peripheral driver mapping ----
 
 TILE_DRIVER_MAP = {
     "Sense.CAM.P": {"header": "tile_sense_cam_p.h",  "source": "tile_sense_cam_p",  "prefix": "tile_sense_cam_p"},
     "Sense.I.9":   {"header": "tile_sense_i_9.h",    "source": "tile_sense_i_9",    "prefix": "tile_sense_i_9", "extra_sources": ["tile_sense_i_9_dmp3"]},
     "Sense.I.6P8": {"header": "tile_sense_i_6p8.h",  "source": "tile_sense_i_6p8",  "prefix": "tile_sense_i_6p8"},
-    "Sense.I.6P6": {"header": "tile_sense_i_6p6.h",  "source": "tile_sense_i_6p6",  "prefix": "tile_sense_i_6p6"},
+    # i2c_addrs: the driver's static address per instance (drivers/tile_sense_i_6p6.c
+    # id_table), which an I3C bus uses to assign the tile's dynamic address (SETDASA).
+    "Sense.I.6P6": {"header": "tile_sense_i_6p6.h",  "source": "tile_sense_i_6p6",  "prefix": "tile_sense_i_6p6",
+                    "i2c_addrs": [0x69, 0x68]},
     "Sense.ADC.6": {"header": "tile_sense_adc_6.h",  "source": "tile_sense_adc_6",  "prefix": "tile_sense_adc_6"},
     "Sense.I.6D":  {"header": "tile_sense_i_6d.h",   "source": "tile_sense_i_6d",   "prefix": "tile_sense_i_6d"},
     "Drive.P":     {"header": "tile_drive_p.h",      "source": "tile_drive_p",      "prefix": "tile_drive_p"},
@@ -1805,7 +1963,7 @@ def _pal2_expr(tile_entry):
     return f"core_tiles_pal2(&core_{i2c.lower()}, &core_{spi.lower()})"
 
 
-def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
+def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None, i3c_buses=None):
     """Build tile peripheral config from 'tiles' list in project config.
 
     For each declared tile, looks up driver info, validates the bus assignment,
@@ -1825,7 +1983,10 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
     # Build lookup of configured buses by name
     i2c_lookup = {bus["instance"]: bus for bus in i2c_buses}
     spi_lookup = {bus["instance"]: bus for bus in (spi_buses or [])}
-    all_bus_names = set(i2c_lookup) | set(spi_lookup)
+    # A tile keeps naming its I2C bus ("bus": "I2C1") when coregen runs that
+    # bus as I3C; it then gets the I3C handle and bridge.
+    i3c_lookup = {bus["i2c_name"]: bus for bus in (i3c_buses or [])}
+    all_bus_names = set(i2c_lookup) | set(spi_lookup) | set(i3c_lookup)
 
     tiles_config = []
     # Chip-select id per SPI tile (id(entry) -> id), for the init recipe.
@@ -1863,7 +2024,15 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
         # Track unique buses for HAL handle generation
         if bus_name not in seen_buses:
             pal_handle = f"core_pal_{bus_name.lower()}"
-            if is_spi:
+            if bus_name in i3c_lookup:
+                i3c_bus = i3c_lookup[bus_name]
+                seen_buses[bus_name] = {
+                    "bus_name": i3c_bus["name"],
+                    "pal_handle": f"core_pal_{i3c_bus['name'].lower()}",
+                    "i3c_handle": i3c_bus["handle"],
+                    "bus_type": "i3c",
+                }
+            elif is_spi:
                 spi_bus = spi_lookup[bus_name]
                 seen_buses[bus_name] = {
                     "bus_name": bus_name,
@@ -1901,8 +2070,10 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None):
             # core_tiles_pal(bus) at runtime and group by pointer), plus optional
             # per-tile aux the table carries verbatim (e.g. Drive.P readdress strap).
             "bus_handle": (seen_buses[bus_name].get("i2c_handle")
-                           or seen_buses[bus_name].get("spi_handle")),
+                           or seen_buses[bus_name].get("spi_handle")
+                           or seen_buses[bus_name].get("i3c_handle")),
             "bus_is_spi": 1 if seen_buses[bus_name]["bus_type"] == "spi" else 0,
+            "bus_is_i3c": 1 if seen_buses[bus_name]["bus_type"] == "i3c" else 0,
             "readdress_gpio": tile_entry.get("readdress_gpio", -1),
             # Dual-bus tile (bus + bus2): the PAL carries both buses, and the
             # driver's SPI chip select is its cs_id (e.g. Sense.CAM.P cfg.spi_cs).
@@ -2417,6 +2588,10 @@ def generate(tile_path, output_dir, config_path=None):
         # longer carries it (name + description are project identity, not
         # hardware configuration; see Studio X1a).
         ctx["project_name"] = os.path.basename(os.path.dirname(os.path.abspath(config_path)))
+        # I3C requests ("i3c": true on an I2C bus) are settled before the pad
+        # and bus builders run, so a switched bus reaches them as I3C only.
+        ctx["i3c_buses"] = resolve_i3c_buses(project, pad_map, mcu, os.path.dirname(os.path.abspath(tile_path)))
+        apply_i3c_buses(project, ctx["i3c_buses"])
         ctx["pad_config"] = build_pad_config(project, pad_map)
         ctx["clock_config"] = build_clock_config(project, tile, mcu)
         ctx["iface_config"] = project.get("interfaces", {})
@@ -2495,7 +2670,7 @@ def generate(tile_path, output_dir, config_path=None):
 
         # Build tile peripheral driver config
         tiles_config, tile_pal_buses, tile_driver_sources = build_tiles_config(
-            project, ctx["i2c_buses"], ctx["spi_buses"], pad_map
+            project, ctx["i2c_buses"], ctx["spi_buses"], pad_map, ctx["i3c_buses"]
         )
         ctx["tiles_config"] = tiles_config
         ctx["tile_pal_buses"] = tile_pal_buses

@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@044f8f3",
+  "source": "tiles@3bcb81b",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -33,6 +33,10 @@
     "i2c": {
       "label": "Core.I2C",
       "icon": "⇄"
+    },
+    "i3c": {
+      "label": "Core.I3C",
+      "icon": "⇶"
     },
     "led": {
       "label": "Core.LED",
