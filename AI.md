@@ -256,7 +256,7 @@ Four more host differences the Makefile handles, each with its own trap:
 
 #### Key Internal Functions
 
-The `build_*_config()` functions in `coregen.py` each parse one section of `config.json` and return a config dict consumed by Jinja2 templates: `build_pad_map/config` (GPIO port/pin/AF), `build_clock_config` (PLL solver, HSE enforcement), `build_i2c/spi/uart/i3c/timer_config` (peripheral setup), `build_tiles_config` (driver paths + bus handles), and `validate_project_config` (cross-section validation).
+The `build_*_config()` functions in `coregen.py` each parse one section of `config.json` and return a config dict consumed by Jinja2 templates: `build_pad_map/config` (GPIO port/pin/AF), `build_clock_config` (PLL solver, HSE enforcement), `build_i2c/spi/uart/timer_config` (peripheral setup), `resolve_i3c_buses` + `apply_i3c_buses` (switch an I2C bus asking `"i3c": true` to I3C when every tile on it speaks I3C, before the pad/bus builders run), `build_tiles_config` (driver paths + bus handles), and `validate_project_config` (cross-section validation).
 
 #### Editing coregen
 
@@ -305,7 +305,7 @@ Minimal shape:
 - Most mistakes (bad pad/function, unknown clock level, illegal I2C speed, bad SPI mode/prescaler, unknown tile, SPI tiles sharing a bus without their own `cs_pad`/`instance`, bad bootloader) make coregen **exit** — it's fail-fast.
 - coregen reads a **fixed allowlist** of keys; unknown/typo'd keys are silently ignored. In particular `ble`, `debug`, `isp`, `programming`, and any `timers`/`pwm`/`capture`/`iwdg` sections are **NOT read by coregen** and do nothing. (For the WBA radio, get HSE by picking an HSE-sourced `clock` level — there is no `ble` switch.)
 - Several SPI tiles can share a bus: each tile's `cs_pad` becomes an entry in a chip-select map keyed by its `instance` (the `cs` its driver passes as `tile->id`), and the tile bridge asserts only that pad. One CS pad on a bus stays the bus's own CS. A dual-bus tile (`bus` I2C + `bus2` SPI, e.g. Sense.CAM.P via `core_tiles_pal2`) is keyed by its `cs_id` instead, which the app passes as the driver's `cfg.spi_cs`. See config-json.md §9.
-- I3C interfaces are accepted but unimplemented — coregen emits a `/* I3C1: TODO */` comment, no build error. See `sdk/hal/hal_i3c.h`.
+- I3C (Core.ST.H5 only) is requested on an I2C bus: `"interfaces": {"I2C1": {"i3c": true, "i3c_speed": 12500000}}`. coregen runs the bus as I3C (pads AF3 push-pull, `core_i3c1`, RSTDAA + SETDASA per known tile in `core_init()`) only when the MCU has I3C, both pads offer it, and every tile's definition lists `I3C.CLK/DAT` on its I2C pads; otherwise the bus stays I2C with one NOTE line. Tiles keep `"bus": "I2C1"`. Assigning `I3Cn.*` in `pads` is an error. See config-json.md §7.
 
 ---
 
@@ -321,6 +321,7 @@ The `core_` layer provides platform-agnostic naming for application code. It is 
 | `core_gpio.h` | Single include for `core_pad_output/input/read/write/toggle()` + `core_pad_on_change()` (EXTI) |
 | `core_adc.h` | `core_adc_init()`, `core_adc_read()`, `core_adc_read_mv()`, DMA, temp sensor |
 | `core_i2c.h` | `core_i2c_setup()` with auto-timing, `core_i2c_write/read/probe/scan()` |
+| `core_i3c.h` | Core.ST.H5 only (`#error` elsewhere). I3C SDR controller over `hal_i3c`: `core_i3c_init(&h, I3C1, I3C_12M5)` (kernel = APB clock: 12.4 MHz SCL at max), `core_i3c_rstdaa/setdasa/entdaa()`, `core_i3c_attach(&h, static)` (SETDASA if needed, returns the dynamic address; never the static one), `core_i3c_get_pid/bcr/dcr/status()`, `core_i3c_enec/disec()`, `core_i3c_read/write/read_reg/write_reg()`, `core_i3c_ibi_enable/disable()` (callback from the EV IRQ). Polled, timeout-bounded; `I3C_OK/NACK/TIMEOUT/ERROR`. HAL: `hal_i3c.{h,c}` (frame engine over the C/TX/RX FIFOs, RM0481 ch. 49); LL: `ll_i3c.h` (register map, RCC). Bench: `tests/hw-i3c`. |
 | `core_watchdog.h` | `core_watchdog_start(ms)`, `core_watchdog_feed()`, `core_watchdog_caused_reset()`, `core_watchdog_running()`, `core_watchdog_sleep_chunk_ms()`. Timeout recorded in `core_watchdog.c` (compiled per project like `core_led.c`); `core_power.h` sleeps in fed chunks around it and `core_standby_for()` returns `HAL_ERROR` past half the timeout. On ROM-DFU builds `feed()` zeroes the brick-recovery strike count once after max(10 s, 2x timeout) of uptime. |
 | `core_nvm.h` | Persistent byte store, same API on every Core: `core_nvm_read/write(offset, buf, len)` (0 or negative `CORE_NVM_ERR_*`), `core_nvm_erase_all()`, `core_nvm_size()`, DSL `core_nvm_read_byte/write_byte()`. L0: 512 B data EEPROM. L4 / W5: 1 KB emulated in two flash pages (L4 0x0801F000, W5 0x080FA000; W5 page 127 above it is the BLE bond store): an append log with CRC'd records, compacted to the other page when full, power-loss safe, survives flash-serial / DFU / SWD reflashing (the linker scripts end the app below the pages, `__core_nvm_start`). A compaction erases a page: ~22 ms CPU stall on the L4. W5 with BLE schedules erases/writes through ST's flash manager (`sdk/ble/ble_flash.c`). H5: 1 KB in the flash high-cycle data area (bank 2 sectors 30-31, read at 0x09015000, 16-bit words, `ll_flash_edata.h`), switched on at first boot by `_core_nvm_h5_boot()` from `core_init()`. Backed by `core_nvm.c` (compiled per project; it also owns `NMI_Handler` on L4/W5 to survive ECC errors from torn writes; on the H5 it masks that NMI during its own reads and checks FLASH_ECCDETR instead). |
 | `core_usb.h` | `core_usb_init()`, `core_usb_write()`, `core_usb_printf`, includes `<stdio.h>` |
@@ -447,14 +448,16 @@ Enums: `HAL_ADC_RES_6/8/10/12BIT` (all families, plus `14BIT` on H5). Sampling: 
 
 **`tiles_pal.h`** — platform abstraction handle (`tiles_pal_t`):
 - Function pointers for I2C, SPI, QSPI, delay, error callback
-- Bus type flags: `TILES_BUS_I2C`, `TILES_BUS_SPI`, `TILES_BUS_QSPI`
+- Bus type flags: `TILES_BUS_I2C`, `TILES_BUS_SPI`, `TILES_BUS_QSPI`, `TILES_BUS_I3C` (set together with `TILES_BUS_I2C` on an I3C bus, for the drivers that need an I3C-specific step)
 
 **`sdk/core/core_tiles.h`** — Cores SDK bridge (wires bus handles to `tiles_pal_t`):
 ```c
-// Single function for both I2C and SPI (C11 _Generic dispatch):
+// Single function for I2C, SPI and (H5) I3C (C11 _Generic dispatch):
 tiles_pal_t *hal = core_tiles_pal(&core_i2c1);   // I2C bus
 tiles_pal_t *hal = core_tiles_pal(&core_spi1);   // SPI bus
+tiles_pal_t *hal = core_tiles_pal(&core_i3c1);   // I3C bus (Core.ST.H5)
 ```
+On an I3C bus the bridge maps each driver's static I2C address to the tile's dynamic address (SETDASA on first use), sends register access as I3C private transfers, probes presence with GETSTATUS, and re-assigns a dynamic address a tile loses on its own reset (NACK, then SETDASA again and one retry). I2C drivers run unchanged; Sense.I.6P6 (1.4.0) adds one I3C step (slower SDA slew after its soft reset).
 
 ### Tile Driver Conventions
 

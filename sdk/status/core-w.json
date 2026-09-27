@@ -92,6 +92,7 @@
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
+    "coregen.i3c": "na",
     "coregen.spi": "compile",
     "coregen.uart": "compile",
     "power.sleep": "verified",
@@ -178,6 +179,13 @@
     "spi.dma": {
       "status": "verified",
       "note": "Bench-verified 2026-09-26 on Core.ST.W5 (tests/hw-spi-loopback, SPI3 on pads 2/3/6/7 with a MOSI-MISO loopback) at medium, high and max clock: GPDMA1 CH6/CH7, blocking and async-with-callback, up to 3.88 MB/s at 32 MHz SCK. SPI1 not benched yet."
-    }
+    },
+    "i3c.controller": "na",
+    "i3c.daa": "na",
+    "i3c.ccc": "na",
+    "i3c.private": "na",
+    "i3c.ibi": "na",
+    "i3c.tiles": "na",
+    "i3c.hdr": "na"
   }
 }

@@ -22,6 +22,9 @@
 {% if i2c_buses %}
 #include "hal_i2c.h"
 {% endif %}
+{% if i3c_buses %}
+#include "core_i3c.h"
+{% endif %}
 {% if spi_buses %}
 #include "hal_spi.h"
 {% endif %}
@@ -79,6 +82,12 @@ hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus)
         default: return (hal_i2c_t *)0;
     }
 }
+{% endif %}
+{% if i3c_buses %}
+/* ---- I3C handles (config.json "i3c": true on an I2C bus) ---- */
+{% for bus in i3c_buses %}
+hal_i3c_t {{ bus.handle }};   /* {{ bus.i2c_name }} pads run as {{ bus.name }} */
+{% endfor %}
 {% endif %}
 {% if spi_buses %}
 /* ---- SPI handles ---- */
@@ -608,7 +617,12 @@ void core_pads_init(void)
 {% elif pin.af is not none %}
     /* Pad {{ pin.pad }}: P{{ pin.port }}{{ pin.pin }} → {{ pin.function }} (AF{{ pin.af }}) */
     ll_gpio_config_af(GPIO{{ pin.port }}, {{ pin.pin }}, {{ pin.af }},
-{% if "I2C" in pin.function or "I3C" in pin.function %}
+{% if "I3C" in pin.function %}
+{# I3C: push-pull, the controller drives SCL and the push-pull SDA phases and
+   enables its own SDA pull-up for the open-drain ones (RM0481 §49.16.3 CRINIT);
+   high speed = the DS14540 Table 107/108 I3C timing condition (OSPEEDR 10). #}
+                       LL_GPIO_OTYPE_PP, LL_GPIO_SPEED_HIGH, LL_GPIO_PULL_UP);
+{% elif "I2C" in pin.function %}
 {% set bus_name = pin.function.split('.')[0] %}
                        LL_GPIO_OTYPE_OD, LL_GPIO_SPEED_VHIGH, {{ "LL_GPIO_PULL_UP" if i2c_pullups.get(bus_name, true) else "LL_GPIO_PULL_NONE" }});
 {% else %}
@@ -664,6 +678,22 @@ void core_pads_init(void)
         hal_i2c_config_t _{{ bus.handle }}_cfg = { .timing = {{ bus.timing }}, .timeout_ms = 100 };
         hal_i2c_init(&{{ bus.handle }}, {{ bus.instance }}, &_{{ bus.handle }}_cfg);
     }
+{% endfor %}
+{% endif %}
+{% if i3c_buses %}
+
+    /* ---- I3C bus init (config.json "i3c": true) ----
+     * Controller at the requested SCL, then RSTDAA: tiles keep a dynamic
+     * address across a reflash (they stay powered). Each tile coregen knows
+     * the static address of gets its dynamic address now (SETDASA, 0x09 up);
+     * the tile bridge (core_tiles_pal) assigns any other on first use, and
+     * re-assigns one a tile loses on its own reset. */
+{% for bus in i3c_buses %}
+    core_i3c_init(&{{ bus.handle }}, {{ bus.name }}, {{ bus.speed }}UL);
+    (void)core_i3c_rstdaa(&{{ bus.handle }});
+{% for a in bus.attach %}
+    (void)core_i3c_attach(&{{ bus.handle }}, 0x{{ '%02X' | format(a[0]) }});   /* {{ a[1] }} instance {{ a[2] }} (static address) */
+{% endfor %}
 {% endfor %}
 {% endif %}
 {% if spi_buses %}

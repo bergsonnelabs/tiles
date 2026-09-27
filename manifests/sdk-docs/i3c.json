@@ -1,0 +1,993 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@3bcb81b",
+  "category": "i3c",
+  "label": "Core.I3C",
+  "icon": "⇶",
+  "header": "core_i3c.h",
+  "headers": {
+    "core": "core_i3c.h",
+    "hal": "hal_i3c.h",
+    "ll": "ll_i3c.h"
+  },
+  "functions": [
+    {
+      "name": "core_i3c_init",
+      "signature": "core_i3c_init(core_i3c_t * h, I3C_TypeDef * instance, uint32_t scl_hz)",
+      "returns": "hal_status_t",
+      "brief": "Bring an I3C instance up as bus controller at `scl_hz` (push-pull SCL). The kernel clock is the APB clock (rcc_pclk1 for I3C1, rcc_pclk3 for I3C2; both run at SYSCLK on the Cores), so the fastest SCL depends on the clock level: 12.4 MHz at \"max\" (248 MHz), 10.7 MHz at \"medium\" (64 MHz), 8 MHz at \"low\" (16 MHz). The open-drain phases get the longest low time the kernel can count, up to 2 µs. The pads must already be in their I3C alternate function, push-pull (coregen does this).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *",
+          "description": "Handle to fill."
+        },
+        {
+          "name": "instance",
+          "ctype": "I3C_TypeDef *",
+          "description": "I3C1 or I3C2."
+        },
+        {
+          "name": "scl_hz",
+          "ctype": "uint32_t",
+          "description": "Push-pull SCL in Hz, e.g. I3C_12M5."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_deinit",
+      "signature": "core_i3c_deinit(core_i3c_t * h)",
+      "returns": "void",
+      "brief": "Disable an I3C instance and stop its clock.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_rstdaa",
+      "signature": "core_i3c_rstdaa(core_i3c_t * h)",
+      "returns": "hal_status_t",
+      "brief": "Broadcast RSTDAA: every target on the bus forgets its dynamic address. Tiles keep their state across a reflash (they stay powered, and flash-serial on the H5 starts the new image without a reset), so run this before assigning addresses.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_setdasa",
+      "signature": "core_i3c_setdasa(core_i3c_t * h, uint8_t static_addr, uint8_t dyn_addr)",
+      "returns": "hal_status_t",
+      "brief": "SETDASA: give the target at I2C static address `static_addr` the dynamic address `dyn_addr` (0 = the first free one, 0x09 up). Never its static address: a target that loses its dynamic address answers the static one again as an I2C device, and the controller could not tell.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "static_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_entdaa",
+      "signature": "core_i3c_entdaa(core_i3c_t * h, uint8_t * found)",
+      "returns": "hal_status_t",
+      "brief": "ENTDAA: assign dynamic addresses to every target that has none, recording each one's PID, BCR and DCR in h->targets[].",
+      "params": [
+        {
+          "name": "found",
+          "ctype": "core_i3c_t *",
+          "description": "Gets the number of targets assigned (may be NULL)."
+        },
+        {
+          "name": "found",
+          "ctype": "uint8_t *",
+          "description": "Gets the number of targets assigned (may be NULL)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_attach",
+      "signature": "core_i3c_attach(core_i3c_t * h, uint8_t static_addr)",
+      "returns": "uint8_t",
+      "brief": "Dynamic address of the target known by its static address, giving it one with SETDASA first if it has none yet.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "static_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_get_pid",
+      "signature": "core_i3c_get_pid(core_i3c_t * h, uint8_t dyn_addr, uint8_t pid[6])",
+      "returns": "hal_status_t",
+      "brief": "GETPID: the target's 48-bit provisioned ID, MSB first (MIPI manufacturer ID in the top 15 bits).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "pid",
+          "ctype": "uint8_t[6]"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_get_bcr",
+      "signature": "core_i3c_get_bcr(core_i3c_t * h, uint8_t dyn_addr, uint8_t * bcr)",
+      "returns": "hal_status_t",
+      "brief": "GETBCR: bus characteristics (bit 1 IBI capable, bit 2 IBI payload).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "bcr",
+          "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_get_dcr",
+      "signature": "core_i3c_get_dcr(core_i3c_t * h, uint8_t dyn_addr, uint8_t * dcr)",
+      "returns": "hal_status_t",
+      "brief": "GETDCR: device characteristics (MIPI device-type code).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dcr",
+          "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_get_status",
+      "signature": "core_i3c_get_status(core_i3c_t * h, uint8_t dyn_addr, uint16_t * status)",
+      "returns": "hal_status_t",
+      "brief": "GETSTATUS (format 1): the target's 16-bit status word.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "status",
+          "ctype": "uint16_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_enec",
+      "signature": "core_i3c_enec(core_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
+      "returns": "hal_status_t",
+      "brief": "ENEC: let one target (or all, dyn_addr 0x7E) raise the given events (LL_I3C_EVT_INT for IBIs).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "events",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_disec",
+      "signature": "core_i3c_disec(core_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
+      "returns": "hal_status_t",
+      "brief": "DISEC: stop one target (or all, 0x7E) raising the given events.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "events",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_write",
+      "signature": "core_i3c_write(core_i3c_t * h, uint8_t dyn_addr, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Private write of `len` bytes (len >= 1) to a target.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_read",
+      "signature": "core_i3c_read(core_i3c_t * h, uint8_t dyn_addr, uint8_t * buf, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Private read of up to `len` bytes (len >= 1) from a target.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_write_reg",
+      "signature": "core_i3c_write_reg(core_i3c_t * h, uint8_t dyn_addr, uint16_t reg, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Write `len` bytes starting at register `reg` (8-bit, or 16-bit MSB first when > 0xFF), in one private write.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "reg",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_read_reg",
+      "signature": "core_i3c_read_reg(core_i3c_t * h, uint8_t dyn_addr, uint16_t reg, uint8_t * buf, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Read `len` bytes starting at register `reg`: a private write of the register address, a repeated start, a private read, in one frame.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "reg",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_ibi_enable",
+      "signature": "core_i3c_ibi_enable(core_i3c_t * h, uint8_t dyn_addr, hal_i3c_ibi_cb_t cb, void * ctx)",
+      "returns": "hal_status_t",
+      "brief": "Acknowledge IBIs from a target and call `cb` for each (interrupt context: keep it short). Then enable them on the target with core_i3c_enec(). The target also has to route an event to IBI in its own registers.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "cb",
+          "ctype": "hal_i3c_ibi_cb_t"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_i3c_ibi_disable",
+      "signature": "core_i3c_ibi_disable(core_i3c_t * h, uint8_t dyn_addr)",
+      "returns": "hal_status_t",
+      "brief": "Stop acknowledging IBIs from a target.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "core_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "hal_i3c_init",
+      "signature": "hal_i3c_init(hal_i3c_t * h, I3C_TypeDef * instance, const hal_i3c_config_t * cfg)",
+      "returns": "hal_status_t",
+      "brief": "Bring an I3C instance up as the bus controller. Enables and resets its clock, selects the kernel clock, programs TIMINGR0/1 and enables it. Returns HAL_ERROR if the kernel clock can't give at least 2x the SCL.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "instance",
+          "ctype": "I3C_TypeDef *"
+        },
+        {
+          "name": "cfg",
+          "ctype": "const hal_i3c_config_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_deinit",
+      "signature": "hal_i3c_deinit(hal_i3c_t * h)",
+      "returns": "void",
+      "brief": "Disable the peripheral, its interrupts and its clock.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_rstdaa",
+      "signature": "hal_i3c_rstdaa(hal_i3c_t * h)",
+      "returns": "hal_status_t",
+      "brief": "Broadcast RSTDAA: every target forgets its dynamic address. Clears the table.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_setdasa",
+      "signature": "hal_i3c_setdasa(hal_i3c_t * h, uint8_t static_addr, uint8_t dyn_addr)",
+      "returns": "hal_status_t",
+      "brief": "Direct SETDASA: give the target at I2C static address `static_addr` the dynamic address `dyn_addr` (0 = pick a free one; never the static address, which a target that loses its dynamic address answers again as an I2C device). A target already in the table keeps its dynamic address (this is how a lost address is re-assigned). Records it in the table. HAL_NACK: no target with that static address answered. HAL_ERROR: no free address, or dyn_addr == static_addr.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "static_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_entdaa",
+      "signature": "hal_i3c_entdaa(hal_i3c_t * h, uint8_t * found)",
+      "returns": "hal_status_t",
+      "brief": "Broadcast ENTDAA: assign dynamic addresses to every target that has none, recording each one's PID, BCR and DCR. `found` (may be NULL) gets the number assigned by this call. HAL_NACK: no target answered.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "found",
+          "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_target_by_dyn",
+      "signature": "hal_i3c_target_by_dyn(hal_i3c_t * h, uint8_t dyn_addr)",
+      "returns": "hal_i3c_target_t *",
+      "brief": "Table entry of the target at a dynamic address, or NULL.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_target_by_static",
+      "signature": "hal_i3c_target_by_static(hal_i3c_t * h, uint8_t static_addr)",
+      "returns": "hal_i3c_target_t *",
+      "brief": "Table entry of the target assigned from a static address (SETDASA), or NULL.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "static_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_ccc_broadcast",
+      "signature": "hal_i3c_ccc_broadcast(hal_i3c_t * h, uint8_t ccc, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Broadcast CCC (code < 0x80) with `len` data/defining bytes.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "ccc",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_ccc_write",
+      "signature": "hal_i3c_ccc_write(hal_i3c_t * h, uint8_t ccc, uint8_t dyn_addr, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Direct write CCC (code >= 0x80) to one target, `len` data bytes.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "ccc",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_ccc_read",
+      "signature": "hal_i3c_ccc_read(hal_i3c_t * h, uint8_t ccc, uint8_t dyn_addr, uint8_t * buf, uint16_t len, uint16_t * got)",
+      "returns": "hal_status_t",
+      "brief": "Direct read CCC (code >= 0x80) from one target: up to `len` bytes into buf. `got` (may be NULL) gets the count received (a target may send fewer).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "ccc",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "got",
+          "ctype": "uint16_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_get_pid",
+      "signature": "hal_i3c_get_pid(hal_i3c_t * h, uint8_t dyn_addr, uint8_t pid[6])",
+      "returns": "hal_status_t",
+      "brief": "GETPID (6 bytes, MSB first).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "pid",
+          "ctype": "uint8_t[6]"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_get_bcr",
+      "signature": "hal_i3c_get_bcr(hal_i3c_t * h, uint8_t dyn_addr, uint8_t * bcr)",
+      "returns": "hal_status_t",
+      "brief": "GETBCR.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "bcr",
+          "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_get_dcr",
+      "signature": "hal_i3c_get_dcr(hal_i3c_t * h, uint8_t dyn_addr, uint8_t * dcr)",
+      "returns": "hal_status_t",
+      "brief": "GETDCR.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "dcr",
+          "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_get_status",
+      "signature": "hal_i3c_get_status(hal_i3c_t * h, uint8_t dyn_addr, uint16_t * status)",
+      "returns": "hal_status_t",
+      "brief": "GETSTATUS (format 1, 16-bit status, MSB first on the wire).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "status",
+          "ctype": "uint16_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_enec",
+      "signature": "hal_i3c_enec(hal_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
+      "returns": "hal_status_t",
+      "brief": "ENEC to one target (dyn_addr), or to all (dyn_addr = 0x7E). events: LL_I3C_EVT_*.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "events",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_disec",
+      "signature": "hal_i3c_disec(hal_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
+      "returns": "hal_status_t",
+      "brief": "DISEC to one target, or to all (0x7E).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "events",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_write",
+      "signature": "hal_i3c_write(hal_i3c_t * h, uint8_t dyn_addr, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Private write of `len` bytes (len >= 1).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_read",
+      "signature": "hal_i3c_read(hal_i3c_t * h, uint8_t dyn_addr, uint8_t * buf, uint16_t len, uint16_t * got)",
+      "returns": "hal_status_t",
+      "brief": "Private read of up to `len` bytes (len >= 1). `got` (may be NULL) = bytes received.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "got",
+          "ctype": "uint16_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_write_reg",
+      "signature": "hal_i3c_write_reg(hal_i3c_t * h, uint8_t dyn_addr, uint16_t reg, const uint8_t * data, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Register write: one private write of the register address (1 byte, or 2 MSB-first when reg > 0xFF) followed by `len` data bytes.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "reg",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "data",
+          "ctype": "const uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_read_reg",
+      "signature": "hal_i3c_read_reg(hal_i3c_t * h, uint8_t dyn_addr, uint16_t reg, uint8_t * buf, uint16_t len)",
+      "returns": "hal_status_t",
+      "brief": "Register read: a private write of the register address, a repeated start, then a private read of `len` bytes, in one frame.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "reg",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "buf",
+          "ctype": "uint8_t *"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_ibi_enable",
+      "signature": "hal_i3c_ibi_enable(hal_i3c_t * h, uint8_t dyn_addr, hal_i3c_ibi_cb_t cb, void * ctx)",
+      "returns": "hal_status_t",
+      "brief": "Acknowledge IBIs from `dyn_addr` and deliver them to `cb` (ISR context). Uses one of the 4 I3C_DEVRx slots; the payload flag comes from the target's BCR[2] (GETBCR if not known yet). Also enables the EV interrupt. Does NOT send ENEC: call hal_i3c_enec() once the target is ready to interrupt.",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        },
+        {
+          "name": "cb",
+          "ctype": "hal_i3c_ibi_cb_t"
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_ibi_disable",
+      "signature": "hal_i3c_ibi_disable(hal_i3c_t * h, uint8_t dyn_addr)",
+      "returns": "hal_status_t",
+      "brief": "Stop acknowledging IBIs from `dyn_addr` (they are NACKed).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        },
+        {
+          "name": "dyn_addr",
+          "ctype": "uint8_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "hal_i3c_irq",
+      "signature": "hal_i3c_irq(hal_i3c_t * h)",
+      "returns": "void",
+      "brief": "Service the I3C interrupt (the SDK installs the vectors; only for custom tables).",
+      "params": [
+        {
+          "name": "h",
+          "ctype": "hal_i3c_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "hal"
+    },
+    {
+      "name": "ll_i3c_clk_enable_reset",
+      "signature": "ll_i3c_clk_enable_reset(I3C_TypeDef * i3c)",
+      "returns": "void",
+      "brief": "Enable the bus clock of an I3C instance and pulse its RCC reset.",
+      "params": [
+        {
+          "name": "i3c",
+          "ctype": "I3C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i3c_clk_disable",
+      "signature": "ll_i3c_clk_disable(I3C_TypeDef * i3c)",
+      "returns": "void",
+      "brief": "Stop the bus clock of an I3C instance.",
+      "params": [
+        {
+          "name": "i3c",
+          "ctype": "I3C_TypeDef *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i3c_set_kernel_clk",
+      "signature": "ll_i3c_set_kernel_clk(I3C_TypeDef * i3c, uint32_t sel)",
+      "returns": "void",
+      "brief": "Select the kernel clock of an I3C instance (LL_I3C_KER_*).",
+      "params": [
+        {
+          "name": "i3c",
+          "ctype": "I3C_TypeDef *"
+        },
+        {
+          "name": "sel",
+          "ctype": "uint32_t"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_i3c_hsi_hz",
+      "signature": "ll_i3c_hsi_hz(void)",
+      "returns": "uint32_t",
+      "brief": "hsi_ker_ck in Hz: the 64 MHz HSI through RCC_CR.HSIDIV[4:3] (/1 /2 /4 /8, §11.8.1).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    }
+  ]
+}

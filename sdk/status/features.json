@@ -230,6 +230,53 @@
       ]
     },
     {
+      "id": "i3c",
+      "name": "I3C",
+      "features": [
+        {
+          "id": "i3c.controller",
+          "layer": "Core",
+          "name": "SDR controller",
+          "desc": "I3C controller role, SDR up to 12.5 MHz push-pull SCL. Polled transfers with timeouts; only the STM32H5 has the peripheral."
+        },
+        {
+          "id": "i3c.daa",
+          "layer": "Core",
+          "name": "dynamic addressing",
+          "desc": "RSTDAA, SETDASA (static to dynamic address) and ENTDAA (assigns every target, reading its PID, BCR and DCR)."
+        },
+        {
+          "id": "i3c.ccc",
+          "layer": "Core",
+          "name": "CCCs",
+          "desc": "Broadcast and direct common command codes: GETPID, GETBCR, GETDCR, GETSTATUS, GETMRL, SETMRL, ENEC, DISEC and raw ones."
+        },
+        {
+          "id": "i3c.private",
+          "layer": "Core",
+          "name": "private read / write",
+          "desc": "I3C SDR private transfers, plus register read/write in one frame for register-mapped devices."
+        },
+        {
+          "id": "i3c.ibi",
+          "layer": "Core",
+          "name": "in-band interrupts (IBI)",
+          "desc": "Targets interrupt over SDA instead of an INT pin: the controller acknowledges IBIs from up to 4 targets and calls back with the payload."
+        },
+        {
+          "id": "i3c.tiles",
+          "layer": "Core",
+          "name": "tile drivers over I3C",
+          "desc": "core_tiles_pal(&core_i3c1): I2C tile drivers run unchanged; the bridge maps each driver's static address to its dynamic address and re-assigns one a tile loses."
+        },
+        {
+          "id": "i3c.hdr",
+          "name": "HDR modes (DDR)",
+          "desc": "High data rate modes; the STM32H5 I3C peripheral is SDR-only."
+        }
+      ]
+    },
+    {
       "id": "timers",
       "name": "Timers",
       "features": [
@@ -400,6 +447,12 @@
           "layer": "Core",
           "name": "analog pad init",
           "desc": "Sets ADC-assigned pads to analog input mode (MODER=11) to prevent digital noise on ADC inputs."
+        },
+        {
+          "id": "coregen.i3c",
+          "layer": "Core",
+          "name": "I3C auto-init",
+          "desc": "\"i3c\": true on an I2C bus runs it as I3C when every tile on it speaks I3C: pads, controller, RSTDAA and each tile's dynamic address in core_init()."
         },
         {
           "id": "coregen.spi",

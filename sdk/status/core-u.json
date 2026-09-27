@@ -102,6 +102,7 @@
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
+    "coregen.i3c": "na",
     "coregen.spi": {
       "status": "verified",
       "note": "SPIn.CLK/MOSI/MISO/CS pads + interfaces.SPIn {mode, prescaler, bit_order, cs_polarity}: the CS pad is attached to core_spiN and starts deasserted (fixed 2026-09-26; it used to come up low and stay unmanaged). tests/hw-spi-loopback, 2026-09-26"
@@ -202,6 +203,13 @@
     "spi.dma": {
       "status": "verified",
       "note": "DMA1 CH2/CH3: core_spi_exchange_dma (blocking) and core_spi_xfer_dma (callback) + core_spi_dma_wait, bounded. tests/hw-spi-loopback, 2026-09-26: 1-4096 B intact, 4.96 MB/s at 40 MHz SCK (polled: 1.77 MB/s)"
-    }
+    },
+    "i3c.controller": "na",
+    "i3c.daa": "na",
+    "i3c.ccc": "na",
+    "i3c.private": "na",
+    "i3c.ibi": "na",
+    "i3c.tiles": "na",
+    "i3c.hdr": "na"
   }
 }

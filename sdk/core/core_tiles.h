@@ -11,6 +11,11 @@
  *
  *   tiles_pal_t *hal = core_tiles_pal2(&core_i2c1, &core_spi1);
  *
+ * On Core.ST.H5 it also takes an I3C bus, and I2C tile drivers run over it
+ * unchanged (see "I3C adapters" below):
+ *
+ *   tiles_pal_t *hal = core_tiles_pal(&core_i3c1);   // I3C bus (H5)
+ *
  * The correct bus type is resolved at compile time via C11 _Generic.
  * Passing the wrong type is a compile error.
  *
@@ -34,6 +39,11 @@
 #if !defined(STM32L011xx)
 #define _CORE_TILES_HAS_SPI 1
 #include "core_spi.h"
+#endif
+/* I3C exists only on the H523 (Core.ST.H5). */
+#if defined(STM32H523xx)
+#define _CORE_TILES_HAS_I3C 1
+#include "core_i3c.h"
 #endif
 #include "core_pad.h"
 #include "tiles_pal.h"
@@ -129,6 +139,103 @@ static inline int _ct_spi_transfer(void *h, uint8_t cs,
 
 #endif /* _CORE_TILES_HAS_SPI */
 
+/* ---- Internal: I3C adapters (Core.ST.H5) ----
+ * Tile drivers speak I2C: every call carries the static 7-bit address from
+ * the driver's instance table. On an I3C bus that address is only used once,
+ * to hand the target its dynamic address (SETDASA, from 0x09 up; never the
+ * static address itself). Every transfer then goes to the dynamic address as
+ * an I3C SDR private message:
+ *   i2c_read / i2c_write        -> register read / write (16-bit reg MSB first)
+ *   i2c_read_raw / i2c_write_raw -> private read / write
+ *   i2c_is_ready                -> GETSTATUS, a CCC every I3C target answers
+ * Targets not assigned yet (coregen assigns the tiles it knows at init) are
+ * assigned on first use. A target that NACKs its dynamic address has usually
+ * lost it: a device reset clears it (the ICM-42686-P does, on its soft reset;
+ * benched 2026-09-27), and it then answers only its static address, as an
+ * I2C device. The adapter repeats SETDASA with the same dynamic address and
+ * retries the transfer once. */
+#ifdef _CORE_TILES_HAS_I3C
+
+static inline uint8_t _ct_i3c_da(core_i3c_t *bus, uint8_t addr)
+{
+    return core_i3c_attach(bus, addr);
+}
+
+static inline int _ct_i3c_reattach(core_i3c_t *bus, uint8_t addr)
+{
+    hal_i3c_target_t *t = hal_i3c_target_by_static(bus, addr);
+    return t && hal_i3c_setdasa(bus, addr, t->dyn_addr) == HAL_OK;
+}
+
+static inline int _ct_i3c_read(void *h, uint8_t addr, uint16_t reg,
+                               uint8_t *data, uint16_t len)
+{
+    core_i3c_t *bus = (core_i3c_t *)h;
+    uint8_t da = _ct_i3c_da(bus, addr);
+    if (!da) return -1;
+    hal_status_t s = hal_i3c_read_reg(bus, da, reg, data, len);
+    if (s == HAL_NACK && _ct_i3c_reattach(bus, addr))
+        s = hal_i3c_read_reg(bus, da, reg, data, len);
+    return s == HAL_OK ? 0 : -1;
+}
+
+static inline int _ct_i3c_write(void *h, uint8_t addr, uint16_t reg,
+                                const uint8_t *data, uint16_t len)
+{
+    core_i3c_t *bus = (core_i3c_t *)h;
+    uint8_t da = _ct_i3c_da(bus, addr);
+    if (!da) return -1;
+    hal_status_t s = hal_i3c_write_reg(bus, da, reg, data, len);
+    if (s == HAL_NACK && _ct_i3c_reattach(bus, addr))
+        s = hal_i3c_write_reg(bus, da, reg, data, len);
+    return s == HAL_OK ? 0 : -1;
+}
+
+/* Presence only: the target acknowledged its address. A GETSTATUS it cut
+ * short (CE0, SER.PERR with CODERR 0) still counts, since before its driver
+ * has configured it a target may not return clean read data yet (the
+ * ICM-42686-P at its reset SDA slew, see tile_sense_i_6p6.c). */
+static inline int _ct_i3c_ready(void *h, uint8_t addr)
+{
+    core_i3c_t *bus = (core_i3c_t *)h;
+    uint8_t da = _ct_i3c_da(bus, addr);
+    if (!da) return -1;
+    uint16_t st;
+    hal_status_t s = hal_i3c_get_status(bus, da, &st);
+    if (s == HAL_NACK && _ct_i3c_reattach(bus, addr))
+        s = hal_i3c_get_status(bus, da, &st);
+    if (s == HAL_ERROR && (bus->last_ser & LL_I3C_SER_PERR) &&
+        (bus->last_ser & LL_I3C_SER_CODERR_MASK) == 0)
+        s = HAL_OK;
+    return s == HAL_OK ? 0 : -1;
+}
+
+static inline int _ct_i3c_write_raw(void *h, uint8_t addr,
+                                    const uint8_t *data, uint16_t len)
+{
+    core_i3c_t *bus = (core_i3c_t *)h;
+    uint8_t da = _ct_i3c_da(bus, addr);
+    if (!da) return -1;
+    hal_status_t s = hal_i3c_write(bus, da, data, len);
+    if (s == HAL_NACK && _ct_i3c_reattach(bus, addr))
+        s = hal_i3c_write(bus, da, data, len);
+    return s == HAL_OK ? 0 : -1;
+}
+
+static inline int _ct_i3c_read_raw(void *h, uint8_t addr,
+                                   uint8_t *data, uint16_t len)
+{
+    core_i3c_t *bus = (core_i3c_t *)h;
+    uint8_t da = _ct_i3c_da(bus, addr);
+    if (!da) return -1;
+    hal_status_t s = hal_i3c_read(bus, da, data, len, 0);
+    if (s == HAL_NACK && _ct_i3c_reattach(bus, addr))
+        s = hal_i3c_read(bus, da, data, len, 0);
+    return s == HAL_OK ? 0 : -1;
+}
+
+#endif /* _CORE_TILES_HAS_I3C */
+
 /* ---- Internal: shared adapters ---- */
 
 static inline int _ct_gpio_irq_enable(void *h, uint8_t pin, uint8_t edge,
@@ -177,6 +284,40 @@ static inline tiles_pal_t *_core_tiles_pal_i2c(core_i2c_t *bus)
     hals[i].handle          = bus;
     return &hals[i];
 }
+
+#ifdef _CORE_TILES_HAS_I3C
+/* An I3C bus looks like an I2C bus to the driver (TILES_BUS_I2C, so the
+ * I2C code paths run), flagged TILES_BUS_I3C for the drivers that need an
+ * I3C-specific step (Sense.I.6P6 slows its SDA output slew). */
+static inline tiles_pal_t *_core_tiles_pal_i3c(core_i3c_t *bus)
+{
+    enum { CT_MAX = 4 };
+    static tiles_pal_t hals[CT_MAX];
+    static void *keys[CT_MAX];
+    static uint8_t count = 0;
+
+    for (uint8_t i = 0; i < count; i++)
+        if (keys[i] == bus)
+            return &hals[i];
+
+    if (count >= CT_MAX)
+        return &hals[0];
+
+    uint8_t i = count++;
+    keys[i] = bus;
+    hals[i].i2c_read        = _ct_i3c_read;
+    hals[i].i2c_write       = _ct_i3c_write;
+    hals[i].i2c_is_ready    = _ct_i3c_ready;
+    hals[i].i2c_write_raw   = _ct_i3c_write_raw;
+    hals[i].i2c_read_raw    = _ct_i3c_read_raw;
+    hals[i].gpio_irq_enable = _ct_gpio_irq_enable;
+    hals[i].gpio_irq_disable = _ct_gpio_irq_disable;
+    hals[i].delay_ms        = ll_delay_ms;
+    hals[i].buses           = TILES_BUS_I2C | TILES_BUS_I3C;
+    hals[i].handle          = bus;
+    return &hals[i];
+}
+#endif /* _CORE_TILES_HAS_I3C */
 
 #ifdef _CORE_TILES_HAS_SPI
 static inline tiles_pal_t *_core_tiles_pal_spi(core_spi_t *bus)
@@ -283,16 +424,23 @@ static inline tiles_pal_t *core_tiles_pal2(core_i2c_t *i2c, core_spi_t *spi)
 /**
  * Get a tiles_pal_t* for any Cores SDK bus handle.
  *
- * Accepts either a core_i2c_t* or core_spi_t* — the correct bus type
- * is resolved at compile time. Each unique bus pointer gets its own
- * cached slot (up to 4 per bus type).
+ * Accepts a core_i2c_t*, a core_spi_t* or (Core.ST.H5) a core_i3c_t* — the
+ * correct bus type is resolved at compile time. Each unique bus pointer gets
+ * its own cached slot (up to 4 per bus type).
  *
  * @code
  *   tiles_pal_t *hal = core_tiles_pal(&core_i2c1);   // I2C
  *   tiles_pal_t *hal = core_tiles_pal(&core_spi1);   // SPI
+ *   tiles_pal_t *hal = core_tiles_pal(&core_i3c1);   // I3C (H5)
  * @endcode
  */
-#ifdef _CORE_TILES_HAS_SPI
+#if defined(_CORE_TILES_HAS_I3C)
+#define core_tiles_pal(bus) _Generic((bus), \
+    core_i2c_t*: _core_tiles_pal_i2c,      \
+    core_spi_t*: _core_tiles_pal_spi,      \
+    core_i3c_t*: _core_tiles_pal_i3c       \
+)(bus)
+#elif defined(_CORE_TILES_HAS_SPI)
 #define core_tiles_pal(bus) _Generic((bus), \
     core_i2c_t*: _core_tiles_pal_i2c,      \
     core_spi_t*: _core_tiles_pal_spi       \

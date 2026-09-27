@@ -29,6 +29,9 @@
 {% if spi_buses %}
 #define CORE_HAS_SPI_BUSES   1
 {% endif %}
+{% if i3c_buses %}
+#define CORE_HAS_I3C_BUSES   1
+{% endif %}
 {% if usart_buses %}
 #define CORE_HAS_SERIAL_BUSES 1
 {% endif %}

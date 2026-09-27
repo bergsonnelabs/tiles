@@ -241,6 +241,10 @@ Notes:
   `core_adc1` handle regardless of which ADC peripheral a pad belongs to.
 - **All pads a bus needs must be present.** An `I2C1` bus needs both `I2C1.CLK`
   and `I2C1.DAT` assigned before it's usable.
+- **I3C functions (`I3C1.CLK`, …) are not assigned here.** A Core definition
+  lists them (Core.ST.H5), but I3C is requested on the I2C bus that shares the
+  pads, with `"i3c": true` in `interfaces` (§7); assigning one directly is an
+  error that says so.
 
 > `pins` is a legacy alias for `pads` (coregen reads `pads` first, falling back
 > to `pins`). Use `pads` in new files.
@@ -293,6 +297,59 @@ coregen drives the control pins high in `core_pads_init()`. An unknown name, or
 a control pin that is also assigned as a pad, is an error. With I2C at 400 kHz
 or more on a pad whose on-tile pull-up is available but not enabled, coregen
 prints a WARNING (the MCU's internal ~40 kΩ pull-up is too weak for that).
+
+### I3C on an I2C bus (Core.ST.H5)
+
+```json
+"pads":  { "4": "I2C1.CLK", "5": "I2C1.DAT" },
+"interfaces": {
+  "I2C1": { "speed": 400000, "i3c": true, "i3c_speed": 12500000 }
+},
+"tiles": [ { "tile": "Sense.I.6P6", "bus": "I2C1", "instance": 0 } ]
+```
+
+| Field       | Type | Default    | Meaning                                              |
+|-------------|------|------------|------------------------------------------------------|
+| `i3c`       | bool | `false`    | run this I2C bus as I3C (SDR) when it can            |
+| `i3c_speed` | int  | `12500000` | push-pull SCL in Hz, 100000-12500000                 |
+
+The project still describes an I2C bus; `"i3c": true` asks coregen to run it as
+I3C instead. coregen does so only when **all** of these hold, and otherwise
+keeps the whole bus on I2C, exactly as without the key, with one NOTE line
+saying why:
+
+- the MCU has I3C (Core.ST.H5 only: the STM32H523);
+- both of the bus's pads offer I3C on this Core (pad 4 `I3C1.CLK` + pad 5
+  `I3C1.DAT`, or pad 2 `I3C2.CLK` + pad 3 `I3C2.DAT`);
+- **every tile on the bus speaks I3C**: its definition lists `I3C.CLK` /
+  `I3C.DAT` (interface `"I3C"`) on the pads it uses for `I2C.CLK` / `I2C.DAT`.
+  A dual-bus tile (`bus2`) on it, or a tile with no definition, keeps it I2C.
+  Mixed I2C/I3C buses are not supported.
+
+```
+NOTE: I2C1 asked for I3C ("i3c": true) but stays I2C: Sense.BP has no I3C on its bus pads
+```
+
+When the bus switches, coregen:
+
+- configures the pads for the I3C function (AF3 on pads 4/5), push-pull, high
+  speed, pull-up (the controller also switches its own SDA pull-up in for the
+  open-drain phases);
+- emits `core_i3c1` (a `core_i3c_t`, `sdk/core/core_i3c.h`) instead of
+  `core_i2c1`, and `I3C1_SCL_HZ` in `core_config.h`;
+- in `core_init()`: brings the controller up, sends RSTDAA (tiles keep a
+  dynamic address across a reflash) and gives each tile whose static address
+  coregen knows (`i2c_addrs` in `TILE_DRIVER_MAP`) its dynamic address with
+  SETDASA. Dynamic addresses come from 0x09 up, never a static address;
+- attaches the tiles through `core_tiles_pal(&core_i3c1)`. Tile drivers run
+  unchanged: the bridge maps each driver's static address to its dynamic
+  address, assigns any tile not yet assigned on first use, and re-assigns a
+  tile that loses its address on its own reset.
+
+The SCL you get depends on the clock level (the I3C kernel clock is the APB
+clock, at least 2x SCL): 12.4 MHz at `max`, 10.7 MHz at `medium`, 8 MHz at
+`low`. A tile keeps `"bus": "I2C1"` in `tiles`; there is no separate I3C bus
+name to reference.
 
 ### SPI
 
@@ -658,6 +715,8 @@ bad config won't silently generate wrong code. Things that **exit**:
 - an `interfaces` key (in cross-checks) that doesn't match the core JSON
 - an unknown `clock` level
 - I2C `speed` not in the allowed set, or kernel clock too low for it
+- an I3C function assigned in `pads`, a non-bool `i3c`, or an `i3c_speed`
+  outside 100000-12500000 (§7)
 - SPI `mode`/`prescaler` out of range
 - an unknown tile name, a tile on an unconfigured bus, or an SPI tile whose
   `cs_pad` doesn't resolve or is another function's pad
@@ -670,6 +729,7 @@ Things that only **warn** (non-fatal):
 - the resolved `core` name not exactly matching the tile JSON passed (NOTE)
 - an `interfaces` entry with no backing pads
 - a bootloader/USB request on a non-USB-capable core
+- `"i3c": true` on a bus coregen keeps on I2C (NOTE, with the reason; §7)
 
 Things that are **silent** (no message):
 
