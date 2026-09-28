@@ -94,3 +94,74 @@ jobs:
           gh pr create --fill \
             --title "chore(definitions): sync from canonical product DB" \
             --body "Automated drift sync from the product DB via \`tools/sync_definitions.py\`, with the derived manifests regenerated in the same change. Review the definition changes before merging — renames/deletes here ripple into coregen aliases, the Makefile, manifests, and the web mirrors. Pure \`source:\` stamp churn is dropped; once merged, notify-web-on-manifests re-vendors the manifests into the web repo."
+
+  # The public KiCad library (bergsonnelabs/bergsonne-kicad): regenerate its
+  # symbols from the DB's production + beta tiles and open an auto-merging PR
+  # there when they changed. A separate job, so a KiCad problem never blocks
+  # the definitions sync above. It works from the DB's current definitions,
+  # not tiles main, because the DB is canonical. Footprints are hand-drawn in
+  # that repo and never touched here; its `library-ok` check (KiCad loads
+  # both, pins match pads) gates the merge.
+  kicad-library:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.TILES_SYNC_APP_ID }}
+          private-key: ${{ secrets.TILES_SYNC_APP_PRIVATE_KEY }}
+          owner: bergsonnelabs
+          repositories: bergsonne-kicad
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: bergsonnelabs/bergsonne-kicad
+          token: ${{ steps.app-token.outputs.token }}
+          path: kicad
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install mysql-connector-python
+
+      # Status stays out of the (public) definition files; the generator gets
+      # it from this side file.
+      - name: DB → definitions/ + tile statuses
+        env:
+          TILES_DB_PASSWORD: ${{ secrets.TILES_DB_PASSWORD }}
+        run: python3 tools/sync_definitions.py --apply --statuses-out "$RUNNER_TEMP/statuses.json"
+
+      - name: Generate the symbol library
+        run: |
+          python3 tools/gen_kicad_lib.py \
+            --statuses "$RUNNER_TEMP/statuses.json" --include production,beta \
+            --footprints "kicad/Bergsonne Tiles.pretty" \
+            --out "kicad/Bergsonne Tiles.kicad_sym"
+
+      - name: Open an auto-merging PR if the symbols changed
+        working-directory: kicad
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if git diff --quiet; then
+            echo "Symbols already match the DB — nothing to sync."
+            exit 0
+          fi
+          # One reused branch, as above: an unmerged sync updates itself.
+          branch="auto/sync-symbols"
+          git config user.name  "tiles-sync[bot]"
+          git config user.email "tiles-sync@users.noreply.github.com"
+          git fetch origin "$branch" || true
+          git checkout -B "$branch"
+          git commit -am "Regenerate tile symbols from the product DB (tiles@${GITHUB_SHA::7})"
+          git push -u --force-with-lease origin "$branch"
+          existing="$(gh pr list --head "$branch" --state open --json number -q '.[0].number')"
+          if [ -z "$existing" ]; then
+            gh pr create --base main --head "$branch" \
+              --title "Regenerate tile symbols from the product DB" \
+              --body "Automated by tiles' \`sync-definitions\` workflow (\`tools/gen_kicad_lib.py\`, production + beta tiles). Merges itself once \`library-ok\` passes."
+          fi
+          gh pr merge "$branch" --auto --merge

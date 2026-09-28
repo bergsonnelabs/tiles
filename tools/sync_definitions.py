@@ -28,6 +28,11 @@ Usage:
     TILES_DB_PASSWORD=… python3 tools/sync_definitions.py            # dry-run
     TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --apply
     TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --only Core-ST-L4-b.json
+    TILES_DB_PASSWORD=… python3 tools/sync_definitions.py --statuses-out s.json
+
+--statuses-out also writes {definition filename: status} (production, beta,
+alpha, dark, ...) for tools/gen_kicad_lib.py. Status stays out of the
+definition files themselves: they are public, and a tile's status is not.
 """
 
 from __future__ import annotations
@@ -75,6 +80,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Mirror the product DB into definitions/.")
     ap.add_argument("--apply", action="store_true", help="write changes (default: dry-run)")
     ap.add_argument("--only", help="restrict to a single filename, e.g. Core-ST-L4-b.json")
+    ap.add_argument("--statuses-out", type=Path,
+                    help="also write {definition filename: status} as JSON to this path")
     args = ap.parse_args()
 
     if not DB["password"]:
@@ -89,9 +96,10 @@ def main() -> int:
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT f.name AS family, t.name, t.rev, t.json
+        SELECT f.name AS family, t.name, t.rev, t.json, s.status
         FROM tiles t
         JOIN tile_families f ON t.tile_family_id = f.id
+        LEFT JOIN tile_statuses s ON s.id = t.tile_status_id
         ORDER BY f.name, t.name, t.rev
         """
     )
@@ -101,13 +109,15 @@ def main() -> int:
 
     counts = {"create": 0, "update": 0, "identical": 0, "delete": 0, "skip_empty": 0}
     db_files: set[str] = set()
+    statuses: dict[str, str | None] = {}
 
-    for family, name, rev, raw in rows:
+    for family, name, rev, raw, status in rows:
         fname = tile_filename(family, name, rev)
         if not raw or not str(raw).strip():
             counts["skip_empty"] += 1
             continue  # placeholder DB row with no JSON — not a real definition
         db_files.add(fname)
+        statuses[fname] = status
         if args.only and fname != args.only:
             continue
 
@@ -141,6 +151,11 @@ def main() -> int:
                 if args.apply:
                     path.unlink()
                 counts["delete"] += 1
+
+    if args.statuses_out:
+        args.statuses_out.write_text(json.dumps(statuses, indent=2, sort_keys=True) + "\n",
+                                     encoding="utf-8")
+        print(f"  wrote {len(statuses)} statuses to {args.statuses_out}")
 
     print(
         f"\n{'APPLIED' if args.apply else 'DRY-RUN'}: "
