@@ -56,6 +56,8 @@ jobs:
             'tools/build_fingerprint.py'
             'tools/test_build_fingerprint.py'
             'tools/test_coreprobe_power.py'
+            'tools/gen_kicad_lib.py'
+            'tools/test_gen_kicad_lib.py'
             '.github/workflows/studio-manifest.yml'
           )
 
@@ -117,6 +119,8 @@ jobs:
       # host has no way to set a fixed level-shifter voltage.
       - name: CoreProbe power rules
         run: cd tools && python3 test_coreprobe_power.py
+      - name: KiCad symbol layout
+        run: python3 tools/test_gen_kicad_lib.py
       - name: Manifests in sync with headers
         run: python3 tools/gen_studio_manifest.py --check
       - name: Status taxonomy consistency
