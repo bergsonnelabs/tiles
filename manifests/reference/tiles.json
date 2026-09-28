@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@6af026f",
+  "source": "tiles@509fb58",
   "tiles": [
     {
       "family": "Sense",
@@ -1799,7 +1799,7 @@
     },
     {
       "family": "Drive",
-      "name": "S.L",
+      "name": "S.M",
       "rev": "a",
       "headline": "stepper-motor driver",
       "i2c": [],
