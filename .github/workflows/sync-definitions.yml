@@ -1,7 +1,8 @@
 name: sync-definitions
 
-# Mirror the canonical product DB into definitions/, regenerate the derived
-# manifests, and open a PR whenever either has drifted — so a DB rename/edit can
+# Mirror the canonical product DB's PUBLIC tiles (production, beta, obsolete)
+# into definitions/, regenerate the derived manifests, and open a PR whenever
+# either has drifted — so a DB rename/edit can
 # never silently go stale in git, and the manifests the Studio palette / docs
 # site vendor land in the SAME change as the definitions that drove them (the
 # studio-manifest CI gate then passes on the PR instead of going red).
@@ -101,10 +102,15 @@ jobs:
   # tiles-internal. Pushed straight to each repo's main, one commit per changed
   # repo, as the bot. A separate job, so a private-repo problem never blocks
   # the public sync PR above; but a dark tile without its repo turns the run
-  # red, after the other repos have been pushed. (The public mirror above still
-  # writes every tile for now.)
+  # red, after the other repos have been pushed. (The public mirror above
+  # writes only public tiles, and removes any that stopped being public.)
+  # When it pushed anything, it starts the bundle workflow, so the change
+  # reaches Studio now rather than on the next tiles commit.
   private-definitions:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # gh workflow run bundle.yml (a dispatch may start a run)
     steps:
       # Owner-scoped with no `repositories:`, so the token covers every repo
       # tile-json-sync is installed on: the overlays that exist today and any
@@ -151,8 +157,10 @@ jobs:
           [ "$code" = 0 ] || [ "$code" = 3 ]
 
       - name: Push each changed repo to main
+        id: push
         run: |
           set -euo pipefail
+          pushed=false
           for dir in "$RUNNER_TEMP"/private/*/; do
             [ -d "$dir" ] || continue
             repo="$(basename "$dir")"
@@ -166,7 +174,19 @@ jobs:
               commit --quiet -m "chore(definitions): sync from canonical product DB (tiles@${GITHUB_SHA::7})"
             git -C "$dir" push --quiet origin HEAD:main
             echo "$repo: pushed $(git -C "$dir" rev-parse --short HEAD)"
+            pushed=true
           done
+          echo "pushed=$pushed" >> "$GITHUB_OUTPUT"
+
+      # The bundle id includes each overlay's commit, so this publishes a new
+      # bundle at the current tiles commit. GITHUB_TOKEN may start a
+      # workflow_dispatch run (unlike a push); bundle.yml's concurrency group
+      # queues it behind any publish already running.
+      - name: Publish a new bundle
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run bundle.yml --repo "$GITHUB_REPOSITORY" --ref main
 
       - name: Fail on tiles with no private repo
         if: steps.mirror.outputs.code == '3'

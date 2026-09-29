@@ -22,12 +22,21 @@
  * trail it by an unmerged sync PR. Only definitions are read from overlays
  * so far; their drivers/ and twins/src/sims/ are not.
  *
- *   node scripts/build-bundle.mjs --out <dir> [--sha <sha>] [--fingerprint <fp>]
+ * The bundle's id (index `sha`, and the `<id>/` it is published under) names
+ * everything that went in: sha1 of `tiles@<tiles commit>` and each overlay's
+ * `<repo>@<commit>`, sorted, one per line. So a private definition change
+ * makes a new bundle at the same tiles commit, and the site, which caches
+ * `<id>/…` for good, sees it. The id is 40 hex like a commit sha, but it is
+ * not one: the tiles commit is `tilesSha`, the overlay commits `overlays`.
+ * An overlay must be a git checkout (its HEAD is part of the id).
+ *
+ *   node scripts/build-bundle.mjs --out <dir> [--sha <tiles sha>] [--fingerprint <fp>]
  *                                 [--overlay <dir> …]
  */
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 
@@ -45,6 +54,20 @@ const FINGERPRINT = arg('fingerprint') ?? '';
 const OVERLAYS = process.argv.flatMap((a, i) =>
   a === '--overlay' && process.argv[i + 1] ? [resolve(process.argv[i + 1])] : [],
 );
+
+// ── bundle id: the tiles commit plus each overlay's commit ───────────────────
+const overlays = OVERLAYS.map((dir) => {
+  let commit;
+  try {
+    commit = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    throw new Error(`--overlay ${dir}: not a git checkout (its commit is part of the bundle id)`);
+  }
+  return `${basename(dir)}@${commit}`;
+}).sort();
+const ID = createHash('sha1')
+  .update([`tiles@${SHA}`, ...overlays].join('\n'))
+  .digest('hex');
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -155,7 +178,9 @@ write(
 const index = {
   schema: 1,
   contract,
-  sha: SHA,
+  sha: ID,
+  tilesSha: SHA,
+  overlays,
   fingerprint: FINGERPRINT,
   generatedAt: new Date().toISOString(),
   core: 'core.json',
@@ -165,5 +190,5 @@ const index = {
 };
 writeFileSync(join(OUT, 'index.json'), json(index));
 console.log(
-  `bundle: ${Object.keys(tiles).length} tiles, ${Object.keys(files).length} files, contract ${contract} → ${OUT}`,
+  `bundle ${ID}: ${Object.keys(tiles).length} tiles, ${Object.keys(files).length} files, contract ${contract} → ${OUT}`,
 );

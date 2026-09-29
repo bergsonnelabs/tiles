@@ -3,15 +3,17 @@
 sync_definitions.py — One-way sync: canonical product DB → definitions/.
 
 The product DB (the TileEditor app writes to it) is the single source of
-truth for tile definitions. This script mirrors every tile's JSON into
-`definitions/<stem>.json`, where the stem is derived from the DB columns:
+truth for tile definitions. This script mirrors every public tile's JSON
+(status production, beta or obsolete) into `definitions/<stem>.json`, where
+the stem is derived from the DB columns:
 
     tile_families.name  +  tiles.name  +  tiles.rev
     "Core"              +  "ST.L4"     +  "b"        -> Core-ST-L4-b.json
 
-It is a *faithful mirror*: it writes/updates every non-empty tile AND
-deletes any `definitions/*.json` that no longer corresponds to a DB row.
-(The previous archived sync only ever created/updated, never deleted —
+It is a *faithful mirror*: it writes/updates every non-empty public tile
+AND deletes any `definitions/*.json` that no longer corresponds to a public
+DB row, so a tile whose status leaves production/beta/obsolete leaves the
+public repo in the same sync. (The previous archived sync only ever created/updated, never deleted —
 which is why stems that were renamed in the DB lingered in git for so
 long afterward.)
 
@@ -34,7 +36,7 @@ Usage:
 alpha, dark, ...) for tools/gen_kicad_lib.py. Status stays out of the
 definition files themselves: they are public, and a tile's status is not.
 
-Private repos. Tiles that are not public (by DB status) also go to private
+Private repos. Tiles that are not public (by DB status) go only to private
 repos, which share one overlay layout (definitions/, drivers/,
 twins/src/sims/; only definitions/ is written here):
 
@@ -54,8 +56,7 @@ tile-*) is a faithful mirror of its own tiles: a definition that no longer
 routes there (status changed, tile deleted) is removed, even when nothing
 routes there any more. A dark tile whose repo has no checkout under DIR is
 published nowhere and the run exits 3, after mirroring everything else, so
-the caller can still push the other repos and then fail. The public mirror
-is unchanged by any of this (it still writes every tile, for now).
+the caller can still push the other repos and then fail.
 """
 
 from __future__ import annotations
@@ -223,11 +224,12 @@ def main() -> int:
         if not raw or not str(raw).strip():
             counts["skip_empty"] += 1
             continue  # placeholder DB row with no JSON — not a real definition
-        db_files.add(fname)
         statuses[fname] = status
         repo = private_repo(family, name, status)
         if repo:
             routed.setdefault(repo, {})[fname] = None
+        else:
+            db_files.add(fname)  # only public tiles belong in public definitions/
         if args.only and fname != args.only:
             continue
 
@@ -239,8 +241,8 @@ def main() -> int:
         text = json.dumps(db_obj, indent=2, ensure_ascii=False) + "\n"
         if repo:
             routed[repo][fname] = text
-        if args.private_only:
-            continue
+        if args.private_only or repo:
+            continue  # a non-public tile never touches public definitions/
         path = DEFINITIONS_DIR / fname
 
         if path.exists():
@@ -257,7 +259,8 @@ def main() -> int:
                 path.write_text(text, encoding="utf-8")
             counts["create"] += 1
 
-    # Faithful mirror: delete any definition file with no corresponding DB row.
+    # Faithful mirror: delete any definition file with no public DB row (a
+    # deleted tile, or one whose status isn't public).
     if not args.only and not args.private_only:
         for path in sorted(DEFINITIONS_DIR.glob("*.json")):
             if path.name not in db_files:
