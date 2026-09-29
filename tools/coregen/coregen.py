@@ -1809,18 +1809,45 @@ I3C_MIN_SPEED = 100000
 I3C_MAX_SPEED = 12500000
 
 
-def _tile_definition(defs_dir, tile_type):
-    """The newest-revision definitions/<Family>-<Name>-<rev>.json for a tile
-    name such as "Sense.I.6P6", or None."""
+def definition_dirs(tile_path=None):
+    """Where tile definitions are looked up, in order: this SDK's public
+    definitions/, the directory of the Core's own definition, then
+    definitions/ in each private overlay checkout named in TILES_OVERLAY
+    (space-separated; the Makefile exports it). Only public tiles are in this
+    repo; the others live in the private repos (tiles-internal, tiles-alpha,
+    tile-*)."""
+    dirs = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "definitions")]
+    if tile_path:
+        dirs.append(os.path.dirname(os.path.abspath(tile_path)))
+    for o in os.environ.get("TILES_OVERLAY", "").split():
+        dirs.append(os.path.join(os.path.expanduser(o), "definitions"))
+    out = []
+    for d in dirs:
+        d = os.path.normpath(d)
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def _tile_definition(defs_dirs, tile_type):
+    """The newest-revision <Family>-<Name>-<rev>.json for a tile name such as
+    "Sense.I.6P6", across `defs_dirs` (a directory or a list; the first one
+    holding a given file wins), or None."""
+    if isinstance(defs_dirs, str):
+        defs_dirs = [defs_dirs]
     stem = tile_type.replace(".", "-")
-    try:
-        names = sorted(n for n in os.listdir(defs_dir)
-                       if re.match(re.escape(stem) + r'-[a-z]+\.json$', n))
-    except OSError:
+    found = {}
+    for d in defs_dirs:
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for n in names:
+            if re.match(re.escape(stem) + r'-[a-z]+\.json$', n):
+                found.setdefault(n, os.path.join(d, n))
+    if not found:
         return None
-    if not names:
-        return None
-    with open(os.path.join(defs_dir, names[-1]), encoding="utf-8") as f:
+    with open(found[sorted(found)[-1]], encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -1838,7 +1865,7 @@ def _tile_speaks_i3c(defn):
     return found["CLK"] and found["DAT"]
 
 
-def resolve_i3c_buses(config, pad_map, mcu, defs_dir):
+def resolve_i3c_buses(config, pad_map, mcu, defs_dirs):
     """Decide which requested I2C buses become I3C buses (see above).
 
     Returns a list of dicts, one per bus switched to I3C:
@@ -1881,7 +1908,7 @@ def resolve_i3c_buses(config, pad_map, mcu, defs_dir):
             if is_dual_bus(t):
                 blockers.append(f"{ttype} uses two buses (core_tiles_pal2 needs I2C)")
                 continue
-            defn = _tile_definition(defs_dir, ttype)
+            defn = _tile_definition(defs_dirs, ttype)
             if defn is None:
                 blockers.append(f"{ttype} has no definition to check")
                 continue
@@ -2590,7 +2617,7 @@ def generate(tile_path, output_dir, config_path=None):
         ctx["project_name"] = os.path.basename(os.path.dirname(os.path.abspath(config_path)))
         # I3C requests ("i3c": true on an I2C bus) are settled before the pad
         # and bus builders run, so a switched bus reaches them as I3C only.
-        ctx["i3c_buses"] = resolve_i3c_buses(project, pad_map, mcu, os.path.dirname(os.path.abspath(tile_path)))
+        ctx["i3c_buses"] = resolve_i3c_buses(project, pad_map, mcu, definition_dirs(tile_path))
         apply_i3c_buses(project, ctx["i3c_buses"])
         ctx["pad_config"] = build_pad_config(project, pad_map)
         ctx["clock_config"] = build_clock_config(project, tile, mcu)

@@ -74,7 +74,7 @@ cores/
 │       └── core-h.json         # Core.ST.H5 (STM32H523) feature statuses
 ├── tiles.h                     # Tile framework entry point — include this
 ├── tiles_pal.h                 # Platform abstraction interface
-├── definitions/                # Tile JSON definitions (canonical source)
+├── definitions/                # Tile JSON definitions, public tiles only (DB mirror)
 ├── drivers/                    # Tile peripheral drivers (tile_*.h/c)
 │   └── _template/              # Driver scaffolding (tile_template.{h,c})
 ├── hal/                        # Tile PAL adapters (Arduino / ESP-IDF / STM32)
@@ -581,7 +581,7 @@ int main(void) {
 3. **Platform-agnostic tile drivers.** Drivers must compile on Arduino/ESP-IDF/Zephyr. No STM32 types in `tile_*.h`.
 4. **config.json is the source of truth.** Never hand-edit generated files inside `coregen:begin/coregen:end` markers.
 5. **CS lines are per-tile, not per-bus.** Each tile on an SPI bus gets its own GPIO CS line.
-6. **`definitions/` is canonical.** Tile JSON lives there (synced from GitHub). Do not duplicate.
+6. **`definitions/` is canonical.** Tile JSON lives there (synced from the product DB). Do not duplicate. It holds public tiles only (production, beta, obsolete); the rest live in private overlay repos, and a non-public Core builds with `make TILES_OVERLAY=/abs/path/to/tiles-internal` (space-separated for several; the Makefile and coregen search public `definitions/` first).
 7. **`sdk/status/` is the source of truth for SDK implementation status.** Update `features.json` when adding a feature row, and the relevant `core-*.json` when implementation status changes.
 
 ---

@@ -7,17 +7,16 @@ name: bundle
 # which hands each viewer only the tiles they may see, so a driver, twin or
 # docs change reaches Studio without a web deploy.
 #
-# Bundles are committed as `<sha>/…`, with `latest.json` pointing at the
-# newest, and only the last 30 kept (git history holds the rest;
-# twins/scripts/publish-bundle.sh). Two destinations for now:
-#   - private-bundle: bergsonnelabs/tiles-bundles, branch main, built from
-#     public definitions PLUS the private overlay repos (tiles-alpha,
-#     tiles-internal, tile-*). This is where Studio reads from.
-#   - bundle: this repo's `bundles` branch, from public definitions only, as
-#     before. Goes away once non-public tiles have left this repo.
-# A private definition change reaches tiles-bundles on the next tiles commit.
-# (Not by re-running this: a bundle is keyed by the tiles sha, and the site
-# caches `<sha>/…` for good, so a republish under the same sha would go unseen.)
+# It goes to main of the private repo bergsonnelabs/tiles-bundles, built from
+# public definitions PLUS the private overlay repos (tiles-alpha,
+# tiles-internal, tile-*), and nowhere public: it carries every tile. Bundles
+# are committed as `<id>/…`, with `latest.json` pointing at the newest, and
+# only the last 30 kept (git history holds the rest;
+# twins/scripts/publish-bundle.sh). The id names the tiles commit plus each
+# overlay's commit (build-bundle.mjs), so a private definition change makes a
+# new bundle at the same tiles commit: sync-definitions dispatches this
+# workflow whenever it pushed to a private repo. (The site caches `<id>/…`
+# for good; a republish under an unchanged id is skipped.)
 #
 # Then the build server: if this commit's fingerprint differs from the one the
 # build server reports, what it compiles has changed, so web is asked to re-pin
@@ -27,11 +26,15 @@ name: bundle
 on:
   push:
     branches: [main]
+  # Also started by sync-definitions (private-definitions job) after it
+  # pushed a private definition change.
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
+# One publish at a time on tiles-bundles; a push and a dispatch landing
+# together queue instead of racing on latest.json.
 concurrency:
   group: bundle
   cancel-in-progress: false
@@ -41,34 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       fingerprint: ${{ steps.fp.outputs.fingerprint }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: twins/package-lock.json
-      - name: Build fingerprint
-        id: fp
-        run: echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Build the bundle
-        working-directory: twins
-        run: |
-          npm ci
-          npm run bundle -- --out "$RUNNER_TEMP/bundle" --sha "$GITHUB_SHA" \
-            --fingerprint "${{ steps.fp.outputs.fingerprint }}"
-      - name: Publish to the bundles branch
-        run: |
-          twins/scripts/publish-bundle.sh "$RUNNER_TEMP/bundle" \
-            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
-            bundles "$GITHUB_SHA" "${{ steps.fp.outputs.fingerprint }}" \
-            'github-actions[bot]' '41898282+github-actions[bot]@users.noreply.github.com'
-
-  # The same bundle plus the private repos' definitions, to the private
-  # tiles-bundles repo. Its own job so a private-repo problem can't hold up the
-  # public bundle or the build server check.
-  private-bundle:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -88,17 +63,17 @@ jobs:
         id: fp
         run: echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD)" >> "$GITHUB_OUTPUT"
       - name: Clone the private overlays
-        id: overlays
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: tools/clone_private_repos.sh "$RUNNER_TEMP/overlays"
+      # Non-public tiles' manifests take their bus addresses from their
+      # definitions, which only the overlays have; regenerate so the bundle
+      # carries the current ones (the committed copies can trail the DB).
+      # This checkout only: nothing is committed.
+      - name: Refresh manifests from the overlays
         run: |
-          set -euo pipefail
-          tools/clone_private_repos.sh "$RUNNER_TEMP/overlays"
-          # Which overlay commits went in, for the commit message.
-          revs="$(for d in "$RUNNER_TEMP"/overlays/*/; do
-            [ -d "$d" ] && echo "$(basename "$d")@$(git -C "$d" rev-parse --short HEAD)"
-          done | paste -sd, -)"
-          echo "revs=$revs" >> "$GITHUB_OUTPUT"
+          TILES_OVERLAY="$(ls -d "$RUNNER_TEMP"/overlays/*/ 2>/dev/null | tr '\n' ' ')" \
+            python3 tools/gen_studio_manifest.py > /dev/null
       - name: Build the bundle (public + private definitions)
         working-directory: twins
         run: |
@@ -113,9 +88,7 @@ jobs:
         run: |
           twins/scripts/publish-bundle.sh "$RUNNER_TEMP/bundle" \
             "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/bergsonnelabs/tiles-bundles.git" \
-            main "$GITHUB_SHA" "${{ steps.fp.outputs.fingerprint }}" \
-            'tiles-sync[bot]' 'tiles-sync@users.noreply.github.com' \
-            "[${{ steps.overlays.outputs.revs }}]"
+            main 'tiles-sync[bot]' 'tiles-sync@users.noreply.github.com'
 
   builder:
     needs: bundle

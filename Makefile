@@ -133,6 +133,16 @@ endif
 TILE    ?= Core.ST.L4.2
 PROJECT ?= blink
 
+# Private overlays: checkouts of the private tiles repos (tiles-internal,
+# tiles-alpha, tile-<family>-<name>), space-separated. Only public tiles'
+# definitions are in this repo; a non-public Core, or a project using
+# non-public tiles, builds from an overlay's definitions/<stem>.json. Public definitions/
+# is searched first. Exported so coregen looks up tile definitions the same
+# way. The public Cores need none.
+#   make TILE=<Core> TILES_OVERLAY="/abs/tiles-internal /abs/tiles-alpha"
+TILES_OVERLAY ?=
+export TILES_OVERLAY
+
 # ---- Public Core name aliases ----
 # The public names (Core.ST.<family>[.<n>], matching each board's silkscreen)
 # resolve onto the canonical, DB-synced definition stems. Either form is
@@ -205,8 +215,19 @@ GDB     = $(PREFIX)gdb
 
 # Coregen
 COREGEN      = $(PYTHON) "$(SDK_DIR)tools/coregen/coregen.py"
-TILE_JSON    = $(SDK_DIR)definitions/$(TILE).json
+TILE_JSON    = $(firstword $(wildcard $(SDK_DIR)definitions/$(TILE).json \
+                 $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/definitions/$(TILE).json)))
 CONFIG_JSON ?= $(PROJECT_DIR)/config.json
+
+# No definition anywhere: say so now, not as "No rule to make target".
+ifeq ($(TILE_JSON),)
+  ifeq (,$(filter clean distclean doctor,$(MAKECMDGOALS)))
+    $(error No definition for TILE=$(TILE): definitions/$(TILE).json is not in \
+this SDK$(if $(strip $(TILES_OVERLAY)), or in TILES_OVERLAY ($(strip $(TILES_OVERLAY))),). \
+Only public tiles are here; a non-public Core builds from a checkout of its \
+private repo: make TILE=$(TILE) TILES_OVERLAY=/path/to/tiles-internal)
+  endif
+endif
 GEN_DIR      ?= $(PROJECT_DIR)/coregen
 
 # Space/backslash-safe existence test for config.json. $(wildcard) treats its

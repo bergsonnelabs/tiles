@@ -26,6 +26,7 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -1491,6 +1492,29 @@ def load_bus_addresses(def_path):
     return out
 
 
+def find_definition(def_path):
+    """A tile's definition: the public file if it exists, else the same file
+    name under definitions/ in each private overlay checkout named in
+    TILES_OVERLAY (space-separated), or None when neither has it. Only public
+    tiles' definitions are in this repo; a non-public tile's driver still is,
+    so its manifest is generated here without one (see `bus_addresses`)."""
+    if def_path is None or Path(def_path).exists():
+        return def_path
+    for o in os.environ.get("TILES_OVERLAY", "").split():
+        cand = Path(o).expanduser() / "definitions" / Path(def_path).name
+        if cand.exists():
+            return cand
+    return None
+
+
+def committed_bus_addresses(manifest_path):
+    """`bus_addresses` from a tile manifest as committed, or {}."""
+    try:
+        return json.loads(Path(manifest_path).read_text()).get("bus_addresses") or {}
+    except (OSError, ValueError):
+        return {}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
@@ -1786,10 +1810,24 @@ def main():
         # has no definition file or none of its interfaces declare
         # addresses — the frontend treats that as "one fixed address,
         # no user choice".
-        bus_addrs = load_bus_addresses(t.get("definition"))
+        #
+        # A non-public tile's definition is not in this repo, only in its
+        # private repo: with that checkout in TILES_OVERLAY its addresses are
+        # read from there (the bundle workflow does this, so Studio gets them
+        # fresh); without it they are kept as committed, so the public
+        # `--check` still passes and the manifest doesn't lose them.
+        out_path = TILE_OUT_DIR / f"{t['path'].stem}.json"
+        def_path = find_definition(t.get("definition"))
+        if def_path is None and t.get("definition") is not None:
+            bus_addrs = committed_bus_addresses(out_path)
+            print(f"note: {Path(t['definition']).name} is not public and no "
+                  f"TILES_OVERLAY has it; keeping {out_path.name}'s committed "
+                  f"bus_addresses", file=sys.stderr)
+        else:
+            bus_addrs = load_bus_addresses(def_path)
         if bus_addrs:
             manifest["bus_addresses"] = bus_addrs
-        targets.append((TILE_OUT_DIR / f"{t['path'].stem}.json", manifest))
+        targets.append((out_path, manifest))
 
     if VIBE_ERRORS:
         # Authoring errors in `@studio control` / `@studio require`. These never

@@ -50,10 +50,14 @@ the state. CI runs it on every PR that touches `twins/`, `manifests/` or
 Every commit on `main` is published as a bundle (`npm run bundle`,
 `.github/workflows/bundle.yml`): each tile's manifest, docs, definitions and
 compiled twin (one ES module per tile), with an index carrying
-`CONTRACT_VERSION` and the build fingerprint. It goes to the `bundles` branch
-(`<sha>/…`, `latest.json`), and Studio loads it at runtime through the site,
-which hands each viewer only the tiles they may see. A twin change reaches
-Studio without a web deploy.
+`CONTRACT_VERSION` and the build fingerprint. It is built with the private
+overlay repos' definitions (`--overlay`) and goes only to the private repo
+bergsonnelabs/tiles-bundles (`<id>/…`, `latest.json`). The id is a sha1 of the
+tiles commit and each overlay's commit (`tilesSha` and `overlays` in the
+index), so a private definition change makes a new bundle too; the
+definitions sync dispatches the workflow when it pushed one. Studio loads the
+bundle at runtime through the site, which hands each viewer only the tiles
+they may see. A twin change reaches Studio without a web deploy.
 
 The same workflow compares the commit's build fingerprint
 (`tools/build_fingerprint.py`: what the build server compiles, ignoring
