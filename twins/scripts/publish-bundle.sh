@@ -11,17 +11,20 @@
 # it (a README), since pruning only looks at directories.
 set -euo pipefail
 
-bundle="$1" url="$2" branch="$3" sha="$4" fp="$5" name="$6" email="$7" suffix="${8:-}"
+bundle="$(cd "$1" && pwd)" url="$2" branch="$3" sha="$4" fp="$5" name="$6" email="$7" suffix="${8:-}"
 dest="$(mktemp -d)"
 
-if git ls-remote --exit-code --heads "$url" "$branch" >/dev/null; then
-  git clone --quiet --depth 1 --branch "$branch" "$url" "$dest"
-else
-  git init --quiet "$dest"
-  git -C "$dest" checkout --quiet --orphan "$branch"
-  git -C "$dest" remote add origin "$url"
-fi
+# Work from the temp dir, not the caller's checkout: actions/checkout leaves
+# the workflow token in that repo's config as an auth header, which overrides
+# the token in $url and can't see another repo ("Repository not found").
 cd "$dest"
+if git ls-remote --exit-code --heads "$url" "$branch" >/dev/null; then
+  git clone --quiet --depth 1 --branch "$branch" "$url" .
+else
+  git init --quiet
+  git checkout --quiet --orphan "$branch"
+  git remote add origin "$url"
+fi
 rm -rf "$sha"
 cp -R "$bundle" "$sha"
 jq -n --arg sha "$sha" --arg fp "$fp" \
