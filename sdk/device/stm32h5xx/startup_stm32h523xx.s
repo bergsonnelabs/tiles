@@ -27,9 +27,10 @@
     .type Reset_Handler, %function
 Reset_Handler:
     /* Start as if from a reset even when entered by a jump. The ST ROM
-       bootloader's DFU "leave" and the serial-update flasher both jump here
-       without resetting the chip, and would otherwise leave their own
-       vector table, masked interrupts, NVIC enables and SysTick behind. */
+       bootloader's DFU "leave" and the serial-update flasher (when BOOT0 is
+       high) both jump here without resetting the chip, and would otherwise
+       leave their own vector table, masked interrupts, NVIC enables and
+       SysTick behind. */
     cpsid i
     movs r0, #0
     msr control, r0                 /* thread mode on MSP, privileged */
@@ -54,6 +55,71 @@ Reset_Handler:
     str r2, [r1], #4
     subs r3, r3, #1
     bne .Lnvic_clr
+
+    /* Peripherals and pins back to their reset state. After a jump the old
+       image's GPIO modes and alternate functions, running timers, DMA and
+       EXTI lines are all still live (bench 2026-09-27: an I2C1 SCL mux on
+       PB6 survived a reflash). For each RCC reset register (RM0481
+       §11.8.19-25) pulse the reset of every peripheral the H523 has, then
+       clear the same bits in its clock-enable register (RSTR + 0x28,
+       §11.8.26-32; the bit positions match), as a reset leaves them.
+       Left alone: the flash interface, SRAM and RAMCFG, PWR, SBS, GTZC
+       (TZSC1), the ICACHE, RCC's own clock tree, and the backup domain (RTC,
+       TAMP and its registers, BKPSRAM: none of them has a bit here, and
+       BDRST is never touched). The IWDG and WWDG have no reset bit here,
+       so a watchdog the old image started keeps running. After a reset everything here
+       is already in its reset state, so on a normal boot this changes
+       nothing. A peripheral
+       the ROM bootloader left secured (hal_dfu_started_by_rom) ignores
+       non-secure writes to its clock enable until the next reset, and
+       presumably to its reset bit too (not benched with BOOT0 high). */
+    ldr r0, =.Lrcc_rst_table
+    ldr r1, =0x44020C00             /* RCC */
+    movs r2, #7
+.Lrcc_rst:
+    ldr r3, [r0], #4                /* RSTR offset */
+    ldr r12, [r0], #4               /* peripheral mask */
+    add r3, r3, r1
+    ldr r4, [r3]
+    orr r4, r4, r12
+    str r4, [r3]                    /* hold in reset */
+    bic r4, r4, r12
+    str r4, [r3]                    /* release */
+    ldr r4, [r3, #0x28]
+    bic r4, r4, r12
+    str r4, [r3, #0x28]             /* clock off */
+    subs r2, r2, #1
+    bne .Lrcc_rst
+
+    /* EXTI has no RCC reset (RM0481 §18.6): write back the reset values of
+       the trigger, port-select and mask registers, then clear whatever is
+       pending by writing back what reads as set. The security, privilege
+       and lock registers are left as they are. */
+    ldr r0, =0x44022000             /* EXTI */
+    movs r1, #0
+    str r1, [r0, #0x00]             /* RTSR1 */
+    str r1, [r0, #0x04]             /* FTSR1 */
+    str r1, [r0, #0x20]             /* RTSR2 */
+    str r1, [r0, #0x24]             /* FTSR2 */
+    str r1, [r0, #0x60]             /* EXTICR1..4 */
+    str r1, [r0, #0x64]
+    str r1, [r0, #0x68]
+    str r1, [r0, #0x6C]
+    str r1, [r0, #0x84]             /* EMR1 */
+    str r1, [r0, #0x94]             /* EMR2 */
+    ldr r1, =0xFFFE0000
+    str r1, [r0, #0x80]             /* IMR1 reset value (§18.6.20) */
+    ldr r1, =0x07DBBFFF
+    str r1, [r0, #0x90]             /* IMR2 reset value (§18.6.22) */
+    ldr r1, [r0, #0x0C]
+    str r1, [r0, #0x0C]             /* RPR1 */
+    ldr r1, [r0, #0x10]
+    str r1, [r0, #0x10]             /* FPR1 */
+    ldr r1, [r0, #0x2C]
+    str r1, [r0, #0x2C]             /* RPR2 */
+    ldr r1, [r0, #0x30]
+    str r1, [r0, #0x30]             /* FPR2 */
+
     dsb
     isb
     cpsie i
@@ -99,6 +165,23 @@ Reset_Handler:
     /* If main() returns, loop forever */
 .Lhang:
     b .Lhang
+
+    /* Reset_Handler's peripheral resets: { RSTR offset, mask } for every
+       peripheral the STM32H523 has (RM0481 §11.8.19-25; the H523 subset per
+       CMSIS stm32h523xx.h; each ENR bit sits at the same position, checked
+       against the same header). Excluded on purpose: AHB1 RAMCFGRST (bit 17,
+       SRAM configuration) and TZSC1RST (bit 24, in CMSIS but not in the RM's
+       AHB1RSTR). */
+    .align 2
+.Lrcc_rst_table:
+    .word 0x060, 0x00001003         /* AHB1: GPDMA1, GPDMA2, CRC */
+    .word 0x064, 0x000E1CFF         /* AHB2: GPIOA-H, ADC, DAC1, DCMI/PSSI, HASH, RNG, PKA */
+    .word 0x06C, 0x00110800         /* AHB4: SDMMC1, FMC, OCTOSPI1 */
+    .word 0x074, 0x13FEC07F         /* APB1L: TIM2-7, TIM12, SPI2/3, USART2/3, UART4/5,
+                                       I2C1/2, I3C1, CRS, USART6, CEC */
+    .word 0x078, 0x00800228         /* APB1H: DTS, LPTIM2, FDCAN, UCPD1 */
+    .word 0x07C, 0x01097800         /* APB2: TIM1, SPI1, TIM8, USART1, TIM15, SPI4, USB */
+    .word 0x080, 0x00100AC0         /* APB3: LPUART1, I2C3, I3C2, LPTIM1, VREFBUF */
 
     .size Reset_Handler, .-Reset_Handler
 

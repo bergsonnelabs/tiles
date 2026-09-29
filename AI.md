@@ -105,11 +105,18 @@ cores/
   scale, and the flash wait states + WRHIGHFREQ per RM0481 Table 45. "low" is
   HSI/4 = 16 MHz (USB needs APB2 >= 12 MHz), not CSI. The ICACHE is on;
   `ll_flash.h` turns it off around every erase/program (`ll_icache_*`).
-- Starts without a reset: the ST ROM's DFU `leave` and the serial-update
-  flasher jump to 0x08000000. The startup code resets VTOR, NVIC, SysTick,
-  MPU and CONTROL first. After a ROM `leave`, GTZC1_TZSC keeps many
-  peripherals (TIM1-8, CRS, ADC, I2C2, ...) secured until the next reset, so
-  their clocks can't be enabled (`hal_dfu_started_by_rom()`). With BOOT0
+- May start without a reset: the ST ROM's DFU `leave` jumps to 0x08000000,
+  and so does the serial-update flasher unless the last reset booted user
+  flash (BOOT0 low: GTZC1_TZSC clear and SBS HDPL1), when it resets instead.
+  The startup code resets VTOR, NVIC, SysTick, MPU and CONTROL first, then
+  pulses the RCC reset of every peripheral (GPIO, DMA, timers, serial, USB,
+  ADC, ...), clears their clock enables and writes EXTI back to reset values.
+  Flash, SRAM, PWR, SBS, GTZC, the clock tree and the backup domain are left
+  alone, and a running IWDG / WWDG can't be reset. After a ROM `leave`,
+  GTZC1_TZSC keeps many peripherals (TIM1-8, CRS, ADC, I2C2, ...) secured
+  until the next reset, so their clocks can't be enabled
+  (`hal_dfu_started_by_rom()`; their RCC resets are presumably ignored too,
+  not benched). With BOOT0
   strapped high that is the only way the app runs; with BOOT0 low it starts
   from a reset and everything is available.
 - No empty-flash check: BOOT0 high always boots the ROM bootloader (the

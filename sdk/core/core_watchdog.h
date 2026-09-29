@@ -190,9 +190,10 @@ static inline void core_watchdog_debug_freeze(void)
     SET_BITS(REG32(0xE0042008UL), (1UL << 12));
 #elif defined(STM32WBA55xx)
     /* RM0493 43.12.7: DBGMCU @ 0xE0044000, DBGMCU_APB1LFZR at offset 0x08.
-     * The RM documents only the debugger base, so software access was verified
-     * on hardware: firmware writes bit 12 and reads it back, and a 6 s halt
-     * under the CoreProbe with a 2 s IWDG no longer resets the part. */
+     * The CPU reaches DBGMCU at that same address (§43.12.1, Table 425), except
+     * while a debugger is connected to AP0, when a CPU access bus-faults.
+     * Verified on hardware: firmware writes bit 12 and reads it back, and a
+     * 6 s halt under the CoreProbe with a 2 s IWDG no longer resets the part. */
     SET_BITS(REG32(0xE0044008UL), (1UL << 12));
 #elif defined(STM32H523xx)
     /* RM0481 59.12.4: DBGMCU is at 0xE00E4000 for the DEBUGGER and 0x44024000

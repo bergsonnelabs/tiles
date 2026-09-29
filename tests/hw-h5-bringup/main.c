@@ -36,11 +36,18 @@
  *            "NW <hex off> <hex val>" / "NR <hex off>" / "NE" to write, read
  *            and erase the store
  *
+ *   CARRY    peripheral and pin state found at main() entry that a reset
+ *            would have cleared: PB6's mode / AF, TIM2, EXTI line 5, GPDMA1
+ *            channel 7, the RCC clock enables, and SBS_HDPLSR (0x51 = HDPL1,
+ *            a BOOT0-low boot; RM0481 Table 130). "Z" leaves exactly that state
+ *            behind for the next image to find (serial-update carry-over test)
+ *
  * Other commands (one per line): "L" re-measures the clock levels, "T" / "A"
  * / "P" / "S" / "I" run one check, "M <hex addr> [n]" / "W <hex addr> <hex val>"
  * peek and poke, "E <text>" echoes, "Q" drops off the bus to test the 15 s
  * no-USB safety net, "X" resets (with BOOT0 high: into the ST ROM
- * bootloader), "V" says hello.
+ * bootloader), "Z" dirties PB6 / TIM2 / EXTI5 / GPDMA1 CH7 (see CARRY),
+ * "D" runs ll_itm_init() and reads back what it set, "V" says hello.
  */
 
 #include "core.h"
@@ -58,6 +65,7 @@
 #include "hal_fault.h"
 #include "core_nvm.h"
 #include "ll_flash_edata.h"
+#include "ll_itm.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -67,6 +75,7 @@
 #define RCCR(o)   REG32(RCC_BASE + (o))
 
 static uint32_t g_entry[13];
+static uint32_t g_carry[14];
 
 /* Fault record, kept across the reset a fault ends in (hal_fault reboots into
  * the ROM bootloader on a ROM-DFU build; SRAM is not erased on reset with this
@@ -102,6 +111,82 @@ static void capture_entry(void)
     g_entry[10] = REG32(0x40030400UL);        /* ICACHE_CR */
     g_entry[11] = hal_dfu_started_by_rom();
     __asm volatile ("mrs %0, ipsr" : "=r" (g_entry[12]));   /* 0 = thread mode */
+
+    /* What "Z" leaves behind. The clock enables are recorded as found, then
+     * each clock is turned on just for the read (a peripheral with its clock
+     * off reads 0) and put back. */
+    uint32_t ahb1 = RCCR(0x88), ahb2 = RCCR(0x8C), apb1l = RCCR(0x9C), apb3 = RCCR(0xA8);
+    g_carry[8]  = ahb1;
+    g_carry[9]  = ahb2;
+    g_carry[10] = apb1l;
+    g_carry[11] = RCCR(0xA4);                                                /* APB2ENR */
+    g_carry[12] = apb3;
+    RCCR(0x88) = ahb1 | 1UL;                            /* GPDMA1EN */
+    RCCR(0x8C) = ahb2 | (1UL << 1);                     /* GPIOBEN */
+    RCCR(0x9C) = apb1l | 1UL;                           /* TIM2EN */
+    RCCR(0xA8) = apb3 | (1UL << 1);                     /* SBSEN */
+    (void)RCCR(0xA8);
+    g_carry[0]  = REG32(0x42020400UL);                                       /* GPIOB_MODER */
+    g_carry[1]  = REG32(0x42020420UL);                                       /* GPIOB_AFRL */
+    g_carry[2]  = REG32(0x40000000UL);                                       /* TIM2_CR1 */
+    g_carry[3]  = REG32(0x40000024UL);                                       /* TIM2_CNT */
+    g_carry[4]  = REG32(0x44022080UL);                                       /* EXTI_IMR1 */
+    g_carry[5]  = REG32(0x44022000UL);                                       /* EXTI_RTSR1 */
+    g_carry[6]  = REG32(0x44022064UL);                                       /* EXTI_EXTICR2 */
+    g_carry[7]  = REG32(0x400203E4UL);                                       /* GPDMA1_C7CR */
+    g_carry[13] = REG32(0x44000414UL) & 0xFFUL;                              /* SBS_HDPLSR */
+    RCCR(0x88) = ahb1;
+    RCCR(0x8C) = ahb2;
+    RCCR(0x9C) = apb1l;
+    RCCR(0xA8) = apb3;
+}
+
+/* "Z": leave state behind that only a reset clears, for the next image's
+ * CARRY line: PB6 as I2C1 SCL (AF4, open drain; I2C1 itself stays off, so the
+ * pin floats), TIM2 free-running, EXTI line 5 on port B (rising edge, unmasked;
+ * its NVIC line stays off), and GPDMA1 channel 7 armed on SPI1_RX (request 6,
+ * RM0481 Table 90), which never comes because SPI1 is off. */
+static void dirty(void)
+{
+    SET_BITS(RCCR(0x8C), 1UL << 1);                     /* GPIOBEN */
+    SET_BITS(RCCR(0x9C), 1UL << 0);                     /* TIM2EN */
+    SET_BITS(RCCR(0x88), 1UL << 0);                     /* GPDMA1EN */
+    (void)RCCR(0x88);
+    MOD_BITS(REG32(0x42020420UL), 0xFUL << 24, 4UL << 24);   /* AFRL6 = AF4 */
+    SET_BITS(REG32(0x42020404UL), 1UL << 6);                  /* OTYPER6 open drain */
+    MOD_BITS(REG32(0x42020400UL), 3UL << 12, 2UL << 12);     /* MODER6 = AF */
+    REG32(0x40000028UL) = 0;                                  /* TIM2_PSC */
+    REG32(0x4000002CUL) = 0xFFFFFFFFUL;                       /* TIM2_ARR */
+    REG32(0x40000000UL) = 1UL;                                /* TIM2_CR1.CEN */
+    MOD_BITS(REG32(0x44022064UL), 0xFFUL << 8, 1UL << 8);    /* EXTICR2 line 5 = PB5 */
+    SET_BITS(REG32(0x44022000UL), 1UL << 5);                  /* RTSR1 */
+    SET_BITS(REG32(0x44022080UL), 1UL << 5);                  /* IMR1 */
+    REG32(0x40020410UL) = 0;                                  /* C7TR1: bytes, fixed */
+    REG32(0x40020414UL) = 6UL;                                /* C7TR2: REQSEL SPI1_RX */
+    REG32(0x40020418UL) = 4UL;                                /* C7BR1: 4 bytes */
+    REG32(0x4002041CUL) = 0x40013030UL;                       /* C7SAR: SPI1_RXDR */
+    REG32(0x40020420UL) = 0x20040000UL;                       /* C7DAR: unused SRAM */
+    REG32(0x400203E4UL) = 1UL;                                /* C7CR.EN */
+    core_usb_printf("DIRTY GPIOB_MODER=0x%08lx AFRL=0x%08lx TIM2_CR1=0x%08lx EXTI_IMR1=0x%08lx "
+                    "RTSR1=0x%08lx EXTICR2=0x%08lx C7CR=0x%08lx\n",
+                    (unsigned long)REG32(0x42020400UL), (unsigned long)REG32(0x42020420UL),
+                    (unsigned long)REG32(0x40000000UL), (unsigned long)REG32(0x44022080UL),
+                    (unsigned long)REG32(0x44022000UL), (unsigned long)REG32(0x44022064UL),
+                    (unsigned long)REG32(0x400203E4UL));
+}
+
+/* "D": ll_itm_init() and what it set. The H5 has TRACESWO on PB3 (a ball no
+ * pad uses), so this checks registers, not SWO output. ITM and TPIU writes
+ * need DEMCR.TRCENA, which a debugger sets; without one they read back 0. */
+static void check_itm(void)
+{
+    ll_itm_init(SYSCLK_HZ, 2000000UL);
+    core_usb_printf("ITM DBGMCU_CR=0x%08lx (0x44024004) CTI@0xE0042004=0x%08lx DEMCR=0x%08lx "
+                    "TCR=0x%08lx TER=0x%08lx ACPR=0x%08lx SPPR=0x%08lx FFCR=0x%08lx\n",
+                    (unsigned long)REG32(0x44024004UL), (unsigned long)REG32(0xE0042004UL),
+                    (unsigned long)REG32(0xE000EDFCUL), (unsigned long)REG32(0xE0000E80UL),
+                    (unsigned long)REG32(0xE0000E00UL), (unsigned long)REG32(0xE0040010UL),
+                    (unsigned long)REG32(0xE00400F0UL), (unsigned long)REG32(0xE0040304UL));
 }
 
 static void cyc_init(void)
@@ -459,6 +544,16 @@ static void report_short(void)
                     (unsigned long)g_entry[7], (unsigned long)g_entry[8], (unsigned long)g_entry[9],
                     (unsigned long)g_entry[10], (unsigned long)g_entry[11],
                     (unsigned long)g_entry[12]);
+    core_usb_printf("CARRY GPIOB_MODER=0x%08lx AFRL=0x%08lx TIM2_CR1=0x%08lx CNT=0x%08lx "
+                    "EXTI_IMR1=0x%08lx RTSR1=0x%08lx EXTICR2=0x%08lx GPDMA1_C7CR=0x%08lx\n",
+                    (unsigned long)g_carry[0], (unsigned long)g_carry[1], (unsigned long)g_carry[2],
+                    (unsigned long)g_carry[3], (unsigned long)g_carry[4], (unsigned long)g_carry[5],
+                    (unsigned long)g_carry[6], (unsigned long)g_carry[7]);
+    core_usb_printf("CARRY AHB1ENR=0x%08lx AHB2ENR=0x%08lx APB1LENR=0x%08lx APB2ENR=0x%08lx "
+                    "APB3ENR=0x%08lx HDPL=0x%02lx\n",
+                    (unsigned long)g_carry[8], (unsigned long)g_carry[9], (unsigned long)g_carry[10],
+                    (unsigned long)g_carry[11], (unsigned long)g_carry[12],
+                    (unsigned long)g_carry[13]);
     core_usb_printf("RCC CR=0x%08lx CFGR1=0x%08lx CFGR2=0x%08lx PLL1CFGR=0x%08lx PLL1DIVR=0x%08lx\n",
                     (unsigned long)RCCR(0x00), (unsigned long)RCCR(0x1C), (unsigned long)RCCR(0x20),
                     (unsigned long)RCCR(0x28), (unsigned long)RCCR(0x34));
@@ -589,6 +684,8 @@ int main(void)
             case 'M': peek(line + 1); break;
             case 'W': poke(line + 1); break;
             case 'V': core_usb_printf("HELLO hw-h5-bringup\n"); break;
+            case 'Z': dirty(); break;
+            case 'D': check_itm(); break;
             case 'Q':           /* test the safety net: drop off the bus, lose the address */
                 USB_BCDR &= ~USB_BCDR_DPPU_DPD;
                 USB_DADDR = 0;
