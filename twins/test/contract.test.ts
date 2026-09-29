@@ -7,11 +7,22 @@
  * manifest — the drift they guard against already shipped once: `power()`
  * reading `accel_pm` while the firmware wrote `power_accel`.
  */
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { twins } from '../src/index';
+import { twins as publicTwins } from '../src/index';
+import type { AnyTileSim } from '../src/index';
 import type { SimCallResult, SimState, TileSim } from '../src/tileSim';
+
+/** Private overlay checkouts (TILES_OVERLAY, space-separated, as for `make`):
+ * their twins (`twins/src/sims/`) and manifests (`manifests/`) are held to the
+ * same contract as the public ones. Unset, only public twins are checked. */
+const OVERLAYS = (process.env.TILES_OVERLAY ?? '')
+  .split(/\s+/)
+  .filter(Boolean)
+  .map((d) => resolve(d));
+const overlaySimDirs = OVERLAYS.map((o) => join(o, 'twins', 'src', 'sims')).filter(existsSync);
 
 /** The slice of a driver manifest (`manifests/tile_*.json`, generated from the
  * driver header) these checks read. */
@@ -27,14 +38,48 @@ interface Manifest {
   hosts: ManifestHost[];
 }
 
-const MANIFEST_DIR = join(__dirname, '..', '..', 'manifests');
+const MANIFEST_DIRS = [
+  join(__dirname, '..', '..', 'manifests'),
+  ...OVERLAYS.map((o) => join(o, 'manifests')).filter(existsSync),
+];
 const manifests = new Map<string, Manifest>(
-  readdirSync(MANIFEST_DIR)
-    .filter((f) => /^tile_.*\.json$/.test(f))
-    .map((f) => JSON.parse(readFileSync(join(MANIFEST_DIR, f), 'utf8')) as Manifest)
-    .map((m) => [m.tile, m]),
+  MANIFEST_DIRS.flatMap((dir) =>
+    readdirSync(dir)
+      .filter((f) => /^tile_.*\.json$/.test(f))
+      .map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as Manifest)
+      .map((m) => [m.tile, m] as const),
+  ),
 );
 const tileManifestFor = (tile: string) => manifests.get(tile);
+
+/** Overlay twins, keyed by their own tile name, as the bundle builder finds them. */
+const overlayTwins: Record<string, AnyTileSim> = {};
+for (const dir of overlaySimDirs) {
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.ts'))) {
+    const twin = (await import(pathToFileURL(join(dir, f)).href)).default as AnyTileSim;
+    overlayTwins[twin?.tile ?? f] = twin;
+  }
+}
+const twins: Record<string, AnyTileSim> = { ...publicTwins, ...overlayTwins };
+
+describe.skipIf(OVERLAYS.length === 0)('overlay twins', () => {
+  it('each overlay with a sims directory has twins', () => {
+    for (const dir of overlaySimDirs)
+      expect(readdirSync(dir).filter((n) => n.endsWith('.ts')).length).toBeGreaterThan(0);
+  });
+  for (const [tile, twin] of Object.entries(overlayTwins)) {
+    // An overlay twin may shadow a public one (while a tile's code moves to its
+    // private repo, both have it): the overlay's copy is the one checked, and
+    // the one the bundle ships.
+    it(`${tile} has a default export with its tile name`, () => {
+      expect(twin?.tile).toBe(tile);
+    });
+    it(`${tile} has its driver's manifest in the overlay`, () => {
+      if (Object.keys(twin?.hostCalls ?? {}).length === 0) return;
+      expect(manifests.get(tile), `no manifests/tile_*.json for ${tile}`).toBeDefined();
+    });
+  }
+});
 
 /** The twins with a driver (host calls): what the simulator runs. */
 const tileSimRegistry = Object.fromEntries(
@@ -211,7 +256,10 @@ describe('every driver twin', () => {
 describe('every twin file stands alone', () => {
   // The portal runs twin SOURCE with no module loader, and a runtime bundle
   // ships each twin as one file: a twin may import types only.
-  const dirs = ['sims', 'generics'].map((d) => join(__dirname, '..', 'src', d));
+  const dirs = [
+    ...['sims', 'generics'].map((d) => join(__dirname, '..', 'src', d)),
+    ...overlaySimDirs,
+  ];
   for (const dir of dirs) {
     for (const f of readdirSync(dir).filter((n) => n.endsWith('.ts'))) {
       it(f, () => {

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """What the build fingerprint ignores, and what it must not."""
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from build_fingerprint import normalize  # noqa: E402
+from build_fingerprint import fingerprint, normalize  # noqa: E402
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class CTests(unittest.TestCase):
@@ -44,6 +48,56 @@ class JsonAndPythonTests(unittest.TestCase):
         a = b'x = "a#b"  # note\n'
         self.assertEqual(normalize('m.py', a), b'x = "a#b"')
         self.assertNotEqual(normalize('m.py', a), normalize('m.py', b'x = "a#c"\n'))
+
+
+class OverlayTests(unittest.TestCase):
+    """--overlay: a private checkout's drivers/ and definitions/ count, at its
+    HEAD, independent of overlay order and directory names."""
+
+    def setUp(self):
+        self._cwd = os.getcwd()
+        os.chdir(ROOT)
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def tearDown(self):
+        os.chdir(self._cwd)
+
+    def repo(self, name, files):
+        d = os.path.join(self._tmp.name, name)
+        os.makedirs(d, exist_ok=True)
+        self.commit(d, files)
+        return d
+
+    def commit(self, d, files):
+        for rel, text in files.items():
+            os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
+            with open(os.path.join(d, rel), 'w') as f:
+                f.write(text)
+        git = lambda *a: subprocess.run(['git', '-C', d, *a], check=True, capture_output=True)
+        if not os.path.isdir(os.path.join(d, '.git')):
+            git('init', '-q')
+        git('add', '-A')
+        git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'x', '--allow-empty')
+
+    def test_overlays(self):
+        a = self.repo('a', {'drivers/tile_x.c': 'int x;\n', 'drivers/drivers.json': '{}',
+                            'README.md': 'a\n'})
+        b = self.repo('b', {'definitions/X-a.json': '{"name": "X"}'})
+        plain = fingerprint('HEAD')
+        both = fingerprint('HEAD', [a, b])
+        self.assertNotEqual(plain, both)
+        self.assertEqual(fingerprint('HEAD', []), plain)
+        self.assertEqual(fingerprint('HEAD', [b, a]), both)          # order
+        c = self.repo('renamed', {'drivers/tile_x.c': 'int x;\n', 'drivers/drivers.json': '{}'})
+        self.assertEqual(fingerprint('HEAD', [c, b]), both)          # names, docs
+        with open(os.path.join(a, 'drivers', 'tile_x.c'), 'w') as f:
+            f.write('int y;\n')
+        self.assertEqual(fingerprint('HEAD', [a, b]), both)          # working tree
+        self.commit(a, {'drivers/tile_x.c': 'int x; /* note */\n'})
+        self.assertEqual(fingerprint('HEAD', [a, b]), both)          # comments
+        self.commit(a, {'drivers/tile_x.c': 'int z;\n'})
+        self.assertNotEqual(fingerprint('HEAD', [a, b]), both)       # code
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "tsc --noEmit && vitest run",
+    "check:overlay": "node scripts/check-overlay.mjs",
     "bundle": "node scripts/build-bundle.mjs"
   },
   "devDependencies": {

@@ -12,9 +12,14 @@ The website used to read this data from a MySQL table populated out-of-band;
 this makes it a committed, reviewable, CI-checked snapshot instead — same model
 as the SDK docs. Add a driver to ACTIVE_TILES to publish it.
 
+A private overlay checkout's drivers (declared in its drivers/drivers.json)
+are published from that repo instead: --overlay DIR writes (or checks)
+DIR/manifests/tile-docs/ for them and touches nothing public.
+
 Usage:
     python3 tools/gen_tile_docs.py            # write manifests/tile-docs/*.json
     python3 tools/gen_tile_docs.py --check    # fail if they're out of sync
+    python3 tools/gen_tile_docs.py --overlay DIR [--check]
 """
 
 import argparse
@@ -72,10 +77,10 @@ ACTIVE_TILES = [
 ]
 
 
-def source_commit():
+def source_commit(cwd=ROOT):
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL
+            ["git", "rev-parse", "--short", "HEAD"], cwd=cwd, stderr=subprocess.DEVNULL
         ).decode().strip()
     except Exception:
         return "unknown"
@@ -88,17 +93,28 @@ def serialize(data):
 def strip_source(s):
     # The provenance sha tracks the commit, not the content — ignore it when
     # diffing so --check flags only real drift (same trick as gen_studio_manifest).
-    return re.sub(r'"source": "tiles@[^"]*"', '"source": "tiles@<sha>"', s)
+    return re.sub(r'"source": "[\w.-]+@[^"]*"', '"source": "<repo>@<sha>"', s)
 
 
-def build(stem, commit):
-    path = DRIVERS_DIR / f"{stem}.h"
+def overlay_stems(overlay):
+    """Header stems of the drivers a private overlay checkout declares in
+    drivers/drivers.json (see coregen's overlay_driver_map)."""
+    path = overlay / "drivers" / "drivers.json"
+    try:
+        drivers = json.loads(path.read_text()).get("drivers") or {}
+    except (OSError, ValueError) as e:
+        sys.exit(f"error: {path}: {e}")
+    return sorted(Path(d["header"]).stem for d in drivers.values())
+
+
+def build(stem, commit, drivers_dir=DRIVERS_DIR, repo="tiles"):
+    path = drivers_dir / f"{stem}.h"
     if not path.exists():
         print(f"warn: {path.name} not found — skipping", file=sys.stderr)
         return None
     doc = parse_header(str(path))
     # Provenance + schema, mirroring the SDK-docs manifests.
-    out = {"schema": "tile-docs/v1", "source": f"tiles@{commit}"}
+    out = {"schema": "tile-docs/v1", "source": f"{repo}@{commit}"}
     out.update(doc)
     out.update(vibe_settings(path))
     return out
@@ -165,15 +181,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
                     help="exit non-zero if manifests on disk are out of sync")
+    ap.add_argument("--overlay", metavar="DIR", type=Path,
+                    help="a private overlay checkout: its own drivers' docs, into "
+                         "DIR/manifests/tile-docs/, and nothing public")
     args = ap.parse_args()
-    commit = source_commit()
 
-    targets = []
-    for stem in ACTIVE_TILES:
-        doc = build(stem, commit)
-        if doc is None:
-            continue
-        targets.append((OUT_DIR / f"{stem}.json", doc))
+    out_dir, base = OUT_DIR, ROOT
+    if args.overlay:
+        overlay = args.overlay.expanduser().resolve()
+        out_dir, base = overlay / "manifests" / "tile-docs", overlay
+        # Parse the public headers first (and discard them) so the enum types
+        # they declare are known exactly as when these drivers lived here.
+        for stem in ACTIVE_TILES:
+            vibe_settings(DRIVERS_DIR / f"{stem}.h")
+        commit = source_commit(overlay)
+        builds = [(stem, build(stem, commit, overlay / "drivers", overlay.name))
+                  for stem in overlay_stems(overlay)]
+    else:
+        commit = source_commit()
+        builds = [(stem, build(stem, commit)) for stem in ACTIVE_TILES]
+
+    targets = [(out_dir / f"{stem}.json", doc) for stem, doc in builds if doc is not None]
 
     if args.check:
         drift = []
@@ -184,7 +212,7 @@ def main():
                 drift.append(path)
         # Also flag stray files (a driver removed from ACTIVE_TILES).
         wanted = {p for p, _ in targets}
-        for existing in OUT_DIR.glob("*.json") if OUT_DIR.exists() else []:
+        for existing in out_dir.glob("*.json") if out_dir.exists() else []:
             if existing not in wanted:
                 drift.append(existing)
         if drift:
@@ -194,11 +222,11 @@ def main():
         print(f"tile-docs up to date ({len(targets)} drivers)")
         return
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     for path, data in targets:
         path.write_text(serialize(data))
         n = len(data.get("functions", []))
-        print(f"wrote {path.relative_to(ROOT)}  ({n} functions)")
+        print(f"wrote {path.relative_to(base)}  ({n} functions)")
 
 
 if __name__ == "__main__":

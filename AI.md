@@ -588,7 +588,7 @@ int main(void) {
 3. **Platform-agnostic tile drivers.** Drivers must compile on Arduino/ESP-IDF/Zephyr. No STM32 types in `tile_*.h`.
 4. **config.json is the source of truth.** Never hand-edit generated files inside `coregen:begin/coregen:end` markers.
 5. **CS lines are per-tile, not per-bus.** Each tile on an SPI bus gets its own GPIO CS line.
-6. **`definitions/` is canonical.** Tile JSON lives there (synced from the product DB). Do not duplicate. It holds public tiles only (production, beta, obsolete); the rest live in private overlay repos, and a non-public Core builds with `make TILES_OVERLAY=/abs/path/to/tiles-internal` (space-separated for several; the Makefile and coregen search public `definitions/` first).
+6. **`definitions/` is canonical.** Tile JSON lives there (synced from the product DB). Do not duplicate. It holds public tiles only (production, beta, obsolete); the rest live in private overlay repos, and a non-public Core builds with `make TILES_OVERLAY=/abs/path/to/tiles-internal` (space-separated for several; the Makefile and coregen search public `definitions/` first). The same goes for drivers: `drivers/` holds public tiles' drivers only. A non-public tile's driver, twin and manifests live in its private repo (`drivers/`, `twins/src/sims/`, `manifests/`), which declares its drivers in `drivers/drivers.json` (coregen merges those over `TILE_DRIVER_MAP` when the repo is in `TILES_OVERLAY`), and whose manifests are generated with `gen_studio_manifest.py --overlay <repo>` / `gen_tile_docs.py --overlay <repo>`.
 7. **`sdk/status/` is the source of truth for SDK implementation status.** Update `features.json` when adding a feature row, and the relevant `core-*.json` when implementation status changes.
 
 ---

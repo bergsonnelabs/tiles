@@ -22,6 +22,9 @@ Example:
 Usage:
   tools/gen_studio_manifest.py          # write manifests
   tools/gen_studio_manifest.py --check  # verify manifests match headers
+  tools/gen_studio_manifest.py --overlay DIR [--check]
+      # the tile manifests of the drivers a private overlay checkout declares
+      # (DIR/drivers/drivers.json), into DIR/manifests/ instead
 """
 
 import argparse
@@ -1493,11 +1496,9 @@ def load_bus_addresses(def_path):
 
 
 def find_definition(def_path):
-    """A tile's definition: the public file if it exists, else the same file
-    name under definitions/ in each private overlay checkout named in
-    TILES_OVERLAY (space-separated), or None when neither has it. Only public
-    tiles' definitions are in this repo; a non-public tile's driver still is,
-    so its manifest is generated here without one (see `bus_addresses`)."""
+    """A tile's definition: the file if it exists, else the same file name
+    under definitions/ in each private overlay checkout named in TILES_OVERLAY
+    (space-separated), or None when none has it (see `bus_addresses`)."""
     if def_path is None or Path(def_path).exists():
         return def_path
     for o in os.environ.get("TILES_OVERLAY", "").split():
@@ -1505,6 +1506,37 @@ def find_definition(def_path):
         if cand.exists():
             return cand
     return None
+
+
+def overlay_tile_sources(overlay):
+    """`tile_sources` entries for the drivers a private overlay checkout
+    declares in drivers/drivers.json (see coregen's overlay_driver_map)."""
+    path = overlay / "drivers" / "drivers.json"
+    try:
+        drivers = json.loads(path.read_text()).get("drivers") or {}
+    except (OSError, ValueError) as e:
+        sys.exit(f"error: {path}: {e}")
+    return [
+        {
+            "path": overlay / "drivers" / d["header"],
+            "definition": overlay / "definitions" / d["definition"] if d.get("definition") else None,
+            "prefix": d["prefix"],
+            "init": d["init"],
+            "version": d["version"],
+        }
+        for _tile, d in sorted(drivers.items())
+    ]
+
+
+def repo_commit(path):
+    """Short HEAD of the git checkout at `path`, or "unknown"."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=path, stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 
 def committed_bus_addresses(manifest_path):
@@ -1519,6 +1551,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
                     help="exit non-zero if manifests on disk are out of sync")
+    ap.add_argument("--overlay", metavar="DIR", type=Path,
+                    help="a private overlay checkout: generate (or --check) the tile "
+                         "manifests of the drivers its drivers/drivers.json declares, "
+                         "into DIR/manifests/, and nothing public")
     args = ap.parse_args()
 
     commit = source_commit()
@@ -1762,6 +1798,18 @@ def main():
         },
     ]
 
+    # An overlay's own drivers. The public tile headers are still parsed first
+    # (and discarded) so the enum types they declare are known exactly as they
+    # were when these drivers lived here.
+    tile_out_dir, source = TILE_OUT_DIR, f"tiles@{commit}"
+    if args.overlay:
+        overlay = args.overlay.expanduser().resolve()
+        for t in tile_sources:
+            parse_header(t["path"], scope="tile")
+        tile_sources = overlay_tile_sources(overlay)
+        tile_out_dir = overlay / "manifests"
+        source = f"{overlay.name}@{repo_commit(overlay)}"
+
     targets = [(CORE_OUT_DIR / "core.json", core_manifest)]
 
     # Per-category SDK docs JSONs — one file per `@studio category`.
@@ -1778,6 +1826,9 @@ def main():
         "subsystems": gap_subsystems,
     }))
 
+    if args.overlay:
+        targets = []
+
     for t in tile_sources:
         hosts, sections, _docs, events = parse_header(t["path"], scope="tile")
         if len(sections) != 1:
@@ -1791,7 +1842,7 @@ def main():
         }
         manifest = {
             "schema": "studio-manifest/v1",
-            "source": f"tiles@{commit}",
+            "source": source,
             "tile": palette["label"],
             "palette": palette,
             "driver": {
@@ -1816,7 +1867,7 @@ def main():
         # read from there (the bundle workflow does this, so Studio gets them
         # fresh); without it they are kept as committed, so the public
         # `--check` still passes and the manifest doesn't lose them.
-        out_path = TILE_OUT_DIR / f"{t['path'].stem}.json"
+        out_path = tile_out_dir / f"{t['path'].stem}.json"
         def_path = find_definition(t.get("definition"))
         if def_path is None and t.get("definition") is not None:
             bus_addrs = committed_bus_addresses(out_path)
@@ -1843,7 +1894,7 @@ def main():
         # both sides so --check flags only *structural* drift — a header edited
         # without regenerating its manifest.
         def strip_source(s):
-            return re.sub(r'"source": "tiles@[^"]*"', '"source": "tiles@<sha>"', s)
+            return re.sub(r'"source": "[\w.-]+@[^"]*"', '"source": "<repo>@<sha>"', s)
 
         drift = []
         for path, data in targets:
@@ -1869,7 +1920,7 @@ def main():
             summary = f"{n} gaps in {len(data['subsystems'])} headers"
         else:
             summary = f"{len(data.get('functions', []))} functions"
-        print(f"wrote {path.relative_to(ROOT)}  ({summary})")
+        print(f"wrote {path.relative_to(tile_out_dir.parent if args.overlay else ROOT)}  ({summary})")
 
 
 if __name__ == "__main__":

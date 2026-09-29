@@ -135,10 +135,11 @@ PROJECT ?= blink
 
 # Private overlays: checkouts of the private tiles repos (tiles-internal,
 # tiles-alpha, tile-<family>-<name>), space-separated. Only public tiles'
-# definitions are in this repo; a non-public Core, or a project using
-# non-public tiles, builds from an overlay's definitions/<stem>.json. Public definitions/
-# is searched first. Exported so coregen looks up tile definitions the same
-# way. The public Cores need none.
+# definitions and drivers are in this repo; a non-public Core, or a project
+# using non-public tiles, builds from an overlay's definitions/<stem>.json and
+# the drivers it declares in drivers/drivers.json. Public definitions/ is
+# searched first. Exported so coregen looks up tile definitions and drivers
+# the same way. The public Cores and tiles need none.
 #   make TILE=<Core> TILES_OVERLAY="/abs/tiles-internal /abs/tiles-alpha"
 TILES_OVERLAY ?=
 export TILES_OVERLAY
@@ -438,10 +439,17 @@ ifeq ($(TILES_ENABLED),1)
   ifeq (,$(filter clean distclean,$(MAKECMDGOALS)))
     include $(GEN_DIR)/core_drivers.mk
   endif
+  # Overlay drivers' headers first: an overlay's driver wins over a public
+  # one of the same name, as in coregen's driver map.
+  CFLAGS += $(foreach d,$(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/drivers)),-I"$(d)")
   CFLAGS += -I"$(SDK_DIR)" -I"$(SDK_DIR)drivers" -I"$(SDK_DIR)hal"
   TILES_SOURCES =
   ifdef TILES_DRIVERS
     TILES_SOURCES += $(foreach drv,$(TILES_DRIVERS),$(SDK_DIR)drivers/$(drv).c)
+  endif
+  # Drivers from TILES_OVERLAY checkouts, by path (coregen writes them).
+  ifdef TILES_OVERLAY_DRIVERS
+    TILES_SOURCES += $(addsuffix .c,$(TILES_OVERLAY_DRIVERS))
   endif
 endif
 
@@ -601,7 +609,13 @@ endif
 
 # core_drivers.mk is an included makefile — it must have its own recipe so
 # GNU Make detects it was remade and restarts (picking up TILES_DRIVERS).
-$(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(SDK_DIR)tools/coregen/coregen.py $(SDK_DIR)tools/coregen/templates/*.j2
+# Also remade when TILES_OVERLAY differs from the one it was generated with
+# (TILES_OVERLAY_GEN, written by coregen), since it names overlay drivers by path.
+COREGEN_OVERLAY_CHANGED := $(if $(filter 1,$(TILES_ENABLED)),$(if $(filter-out $(TILES_OVERLAY_GEN),$(TILES_OVERLAY))$(filter-out $(TILES_OVERLAY),$(TILES_OVERLAY_GEN)),FORCE_COREGEN))
+.PHONY: FORCE_COREGEN
+$(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(SDK_DIR)tools/coregen/coregen.py $(SDK_DIR)tools/coregen/templates/*.j2 \
+                           $(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/drivers/drivers.json)) \
+                           $(COREGEN_OVERLAY_CHANGED)
 	@mkdir -p "$(GEN_DIR)"
 	@echo "  GEN   $(TILE)"
 	$(Q)$(COREGEN) "$(TILE_JSON)" "$(GEN_DIR)" $(COREGEN_FLAGS) $(COREGEN_QUIET)
@@ -707,6 +721,15 @@ $(BUILD_DIR)/tiles/%.o: $(SDK_DIR)drivers/%.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $(notdir $<)"
 	$(Q)$(CC) $(CFLAGS) -c "$<" -o $@
+
+# One rule per overlay drivers/ directory that core_drivers.mk names.
+define TILES_OVERLAY_DRIVER_RULE
+$$(BUILD_DIR)/tiles/%.o: $(1)%.c $$(GEN_HEADERS)
+	$$(Q)mkdir -p $$(dir $$@)
+	$$(LOG) "  CC    $$(notdir $$<)"
+	$$(Q)$$(CC) $$(CFLAGS) -c "$$<" -o $$@
+endef
+$(foreach d,$(sort $(dir $(TILES_OVERLAY_DRIVERS))),$(eval $(call TILES_OVERLAY_DRIVER_RULE,$(d))))
 endif
 
 # BLE sources (relaxed warnings — vendor headers are noisy)

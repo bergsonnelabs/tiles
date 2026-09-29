@@ -18,11 +18,22 @@ changes, because a project may start calling it.
 
   python3 tools/build_fingerprint.py            # HEAD
   python3 tools/build_fingerprint.py REF [REF…] # several commits
+  python3 tools/build_fingerprint.py [REF] --overlay DIR [--overlay DIR …]
+
+With --overlay (checkouts of the private overlay repos a build uses through
+TILES_OVERLAY), the fingerprint also covers what the build reads from each:
+drivers/ (with drivers.json) and definitions/, at the overlay's HEAD (its git
+tree, not the working tree). Each overlay is hashed on its own, the digests
+are sorted and combined with the tiles fingerprint, so the value doesn't
+depend on the overlays' order or directory names; with none it is the plain
+tiles fingerprint.
 """
 import ast
+import functools
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -112,33 +123,60 @@ def normalize(path: str, src: bytes) -> bytes:
     return src
 
 
-def _git(*args: str) -> str:
-    return subprocess.run(['git', *args], check=True, capture_output=True, text=True).stdout
+# What a build reads from a private overlay checkout (TILES_OVERLAY): its
+# drivers (and drivers/drivers.json) and its definitions (non-public Cores;
+# coregen reads tile definitions too).
+OVERLAY_INPUTS = re.compile(r'^(drivers/|definitions/)')
 
 
-def fingerprint(ref: str = 'HEAD') -> str:
+def _git(*args: str, cwd=None) -> str:
+    return subprocess.run(['git', *args], check=True, capture_output=True, text=True,
+                          cwd=cwd).stdout
+
+
+def _tree_digest(ref: str, inputs, skip, cwd=None) -> bytes:
     h = hashlib.sha256()
     entries = []
-    for line in _git('ls-tree', '-r', ref).splitlines():
+    for line in _git('ls-tree', '-r', ref, cwd=cwd).splitlines():
         meta, path = line.split('\t', 1)
         _, kind, obj = meta.split()
-        if INPUTS.match(path) and not SKIP.search(path):
+        if inputs.match(path) and not (skip and skip.search(path)):
             entries.append((path, kind, obj))
     for path, kind, obj in sorted(entries):
         if kind == 'commit':  # a submodule: its pinned commit IS the input
             digest = obj.encode()
         else:
-            src = subprocess.run(['git', 'cat-file', 'blob', obj],
+            src = subprocess.run(['git', 'cat-file', 'blob', obj], cwd=cwd,
                                  capture_output=True, check=True).stdout
             digest = hashlib.sha256(normalize(path, src)).digest()
         h.update(path.encode() + b'\0' + digest)
+    return h.digest()
+
+
+@functools.lru_cache(maxsize=None)
+def _tiles_digest(commit: str, cwd: str) -> str:
+    return _tree_digest(commit, INPUTS, SKIP, cwd=cwd).hex()
+
+
+def fingerprint(ref: str = 'HEAD', overlays=()) -> str:
+    tiles = _tiles_digest(_git('rev-parse', ref).strip(), os.getcwd())
+    if not overlays:
+        return tiles[:16]
+    h = hashlib.sha256(tiles[:16].encode())
+    for d in sorted(_tree_digest('HEAD', OVERLAY_INPUTS, SKIP, cwd=o) for o in overlays):
+        h.update(b'\0' + d)
     return h.hexdigest()[:16]
 
 
 if __name__ == '__main__':
-    refs = sys.argv[1:] or ['HEAD']
+    args = sys.argv[1:]
+    overlays = [args[i + 1] for i, a in enumerate(args) if a == '--overlay' and i + 1 < len(args)]
+    refs = [a for i, a in enumerate(args)
+            if a != '--overlay' and (i == 0 or args[i - 1] != '--overlay')] or ['HEAD']
     if len(refs) == 1:
-        print(fingerprint(refs[0]))
+        print(fingerprint(refs[0], overlays))
+    elif overlays:
+        sys.exit('build_fingerprint: --overlay takes one tiles REF')
     else:
         for ref in refs:
             print(ref, fingerprint(ref))
