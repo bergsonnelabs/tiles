@@ -45,13 +45,20 @@ the driver declares, pad keys are pad numbers, and every field a call writes or
 the state. CI runs it on every PR that touches `twins/`, `manifests/` or
 `drivers/` (`.github/workflows/twins.yml`).
 
+A tile that is not public keeps its twin in its private overlay repo
+(`twins/src/sims/`, importing its types as `../tileSim` like the ones here),
+not in the registry. `npm run check:overlay -- <overlay checkout> …` holds
+those twins and the overlay's manifests to the same typecheck and contract;
+each private repo's CI runs it.
+
 ## The bundle
 
 Every commit on `main` is published as a bundle (`npm run bundle`,
 `.github/workflows/bundle.yml`): each tile's manifest, docs, definitions and
 compiled twin (one ES module per tile), with an index carrying
 `CONTRACT_VERSION` and the build fingerprint. It is built with the private
-overlay repos' definitions (`--overlay`) and goes only to the private repo
+overlay repos (`--overlay`: their definitions, and the twins, manifests and
+tile-docs of the drivers that live only there) and goes only to the private repo
 bergsonnelabs/tiles-bundles (`<id>/…`, `latest.json`). The id is a sha1 of the
 tiles commit and each overlay's commit (`tilesSha` and `overlays` in the
 index), so a private definition change makes a new bundle too; the

@@ -1915,7 +1915,7 @@ def resolve_i3c_buses(config, pad_map, mcu, defs_dirs):
             if not _tile_speaks_i3c(defn):
                 blockers.append(f"{ttype} has no I3C on its bus pads")
                 continue
-            addrs = (TILE_DRIVER_MAP.get(ttype) or {}).get("i2c_addrs") or []
+            addrs = (tile_driver_map().get(ttype) or {}).get("i2c_addrs") or []
             inst = t.get("instance", 0)
             if isinstance(inst, int) and 0 <= inst < len(addrs):
                 attach.append((addrs[inst], ttype, inst))
@@ -1947,6 +1947,11 @@ def apply_i3c_buses(config, i3c_buses):
 
 
 # ---- Tile peripheral driver mapping ----
+#
+# Public tiles' drivers, in drivers/ here. A tile that is not public has its
+# driver in its private overlay repo (tiles-internal, tiles-alpha,
+# tile-<family>-<name>), which declares it in drivers/drivers.json with the
+# same fields; see overlay_driver_map().
 
 TILE_DRIVER_MAP = {
     "Sense.CAM.P": {"header": "tile_sense_cam_p.h",  "source": "tile_sense_cam_p",  "prefix": "tile_sense_cam_p"},
@@ -1976,6 +1981,47 @@ TILE_DRIVER_MAP = {
     "Sense.M.3G":  {"header": "tile_sense_m_3g.h", "source": "tile_sense_m_3g", "prefix": "tile_sense_m_3g"},
     "Sense.HR":    {"header": "tile_sense_hr.h",   "source": "tile_sense_hr",   "prefix": "tile_sense_hr"},
 }
+
+
+# Where an overlay checkout declares its drivers, relative to its root.
+OVERLAY_DRIVERS_FILE = os.path.join("drivers", "drivers.json")
+
+
+def overlay_driver_map():
+    """Drivers declared by the private overlay checkouts named in TILES_OVERLAY
+    (space-separated; the Makefile exports it), as TILE_DRIVER_MAP entries.
+
+    Each overlay's drivers/drivers.json is
+      {"schema": "tiles-overlay-drivers/v1",
+       "drivers": {"<Tile>": {"header", "source", "prefix", [extra_sources],
+                              [i2c_addrs], "init", "version", "definition"}}}
+    with the TILE_DRIVER_MAP fields plus what the manifest generators read
+    (init, version, definition). Each entry gets "dir": the overlay's drivers/
+    directory, where its header and sources are. Later overlays win."""
+    out = {}
+    for o in os.environ.get("TILES_OVERLAY", "").split():
+        root = os.path.expanduser(o)
+        path = os.path.join(root, OVERLAY_DRIVERS_FILE)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                drivers = json.load(f).get("drivers") or {}
+        except (OSError, ValueError, AttributeError) as e:
+            eprint(f"  ERROR: {path}: not a drivers file ({e})")
+            sys.exit(1)
+        for tile, entry in drivers.items():
+            missing = [k for k in ("header", "source", "prefix") if not entry.get(k)]
+            if missing:
+                eprint(f"  ERROR: {path}: {tile} has no {', '.join(missing)}")
+                sys.exit(1)
+            out[tile] = {**entry, "dir": os.path.normpath(os.path.join(root, "drivers"))}
+    return out
+
+
+def tile_driver_map():
+    """TILE_DRIVER_MAP with the TILES_OVERLAY drivers merged over it."""
+    return {**TILE_DRIVER_MAP, **overlay_driver_map()}
 
 
 def _pal2_expr(tile_entry):
@@ -2015,6 +2061,7 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None, i3c_buse
     i3c_lookup = {bus["i2c_name"]: bus for bus in (i3c_buses or [])}
     all_bus_names = set(i2c_lookup) | set(spi_lookup) | set(i3c_lookup)
 
+    driver_map = tile_driver_map()
     tiles_config = []
     # Chip-select id per SPI tile (id(entry) -> id), for the init recipe.
     cs_ids = {}
@@ -2030,10 +2077,15 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None, i3c_buse
         instance = tile_entry.get("instance", 0)
 
         # Look up driver info
-        driver = TILE_DRIVER_MAP.get(tile_type)
+        driver = driver_map.get(tile_type)
         if driver is None:
+            overlays = " ".join(os.environ.get("TILES_OVERLAY", "").split())
             eprint(f"  ERROR: Unknown tile '{tile_type}'. "
-                  f"Known tiles: {', '.join(sorted(TILE_DRIVER_MAP.keys()))}")
+                  f"Known tiles: {', '.join(sorted(driver_map.keys()))}. "
+                  f"Only public tiles' drivers are in this SDK; a tile that is not "
+                  f"public has its driver in its private repo: build with "
+                  f"TILES_OVERLAY=/path/to/<that repo's checkout>"
+                  + (f" (searched: {overlays})" if overlays else ""))
             sys.exit(1)
 
         # Validate bus exists in project config
@@ -2092,6 +2144,9 @@ def build_tiles_config(config, i2c_buses, spi_buses=None, pad_map=None, i3c_buse
             "header": driver["header"],
             "source": driver["source"],
             "prefix": driver["prefix"],
+            # An overlay driver's drivers/ directory (None for a public one):
+            # core_drivers.mk names its sources by path.
+            "driver_dir": driver.get("dir"),
             "pal_handle": seen_buses[bus_name]["pal_handle"],
             # For the iterable tile table: the bus HANDLE (so the consumer can
             # core_tiles_pal(bus) at runtime and group by pointer), plus optional
@@ -2750,7 +2805,20 @@ def generate(tile_path, output_dir, config_path=None):
         mk_path = os.path.join(output_dir, "core_drivers.mk")
         with open(mk_path, "w", encoding="utf-8") as f:
             f.write("# AUTO-GENERATED by coregen — do not edit\n")
-            f.write("TILES_DRIVERS = " + " ".join(ctx["tile_driver_sources"]) + "\n")
+            # Overlay drivers by path (without .c), public ones by name.
+            overlay = {}
+            for tc in ctx.get("tiles_config") or []:
+                if tc.get("driver_dir"):
+                    extras = tile_driver_map()[tc["type"]].get("extra_sources", [])
+                    for name in [tc["source"], *extras]:
+                        overlay[name] = os.path.join(tc["driver_dir"], name).replace(os.sep, "/")
+            public = [n for n in ctx["tile_driver_sources"] if n not in overlay]
+            # The TILES_OVERLAY this was generated with: the Makefile
+            # regenerates when it changes, so no stale overlay path survives.
+            f.write("TILES_OVERLAY_GEN = " + " ".join(os.environ.get("TILES_OVERLAY", "").split()) + "\n")
+            f.write("TILES_DRIVERS = " + " ".join(public) + "\n")
+            if overlay:
+                f.write("TILES_OVERLAY_DRIVERS = " + " ".join(overlay[n] for n in sorted(overlay)) + "\n")
         print(f"  core_drivers.mk")
 
     # Per-project WAMR natives: wraps the Tier 2 functions whose adapters

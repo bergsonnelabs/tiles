@@ -8,9 +8,10 @@ name: bundle
 # docs change reaches Studio without a web deploy.
 #
 # It goes to main of the private repo bergsonnelabs/tiles-bundles, built from
-# public definitions PLUS the private overlay repos (tiles-alpha,
-# tiles-internal, tile-*), and nowhere public: it carries every tile. Bundles
-# are committed as `<id>/…`, with `latest.json` pointing at the newest, and
+# the public tiles PLUS the private overlay repos (tiles-alpha,
+# tiles-internal, tile-*: their definitions, and the drivers' manifests, docs
+# and twins that live only there), and nowhere public: it carries every tile.
+# Bundles are committed as `<id>/…`, with `latest.json` pointing at the newest, and
 # only the last 30 kept (git history holds the rest;
 # twins/scripts/publish-bundle.sh). The id names the tiles commit plus each
 # overlay's commit (build-bundle.mjs), so a private definition change makes a
@@ -59,22 +60,40 @@ jobs:
           app-id: ${{ secrets.TILES_SYNC_APP_ID }}
           private-key: ${{ secrets.TILES_SYNC_APP_PRIVATE_KEY }}
           owner: bergsonnelabs
-      - name: Build fingerprint
-        id: fp
-        run: echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD)" >> "$GITHUB_OUTPUT"
+      # This is a public repo: its logs are public. No step here prints a
+      # private repo's name, file list or content.
       - name: Clone the private overlays
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: tools/clone_private_repos.sh "$RUNNER_TEMP/overlays"
-      # Non-public tiles' manifests take their bus addresses from their
-      # definitions, which only the overlays have; regenerate so the bundle
-      # carries the current ones (the committed copies can trail the DB).
-      # This checkout only: nothing is committed.
-      - name: Refresh manifests from the overlays
+      # What the build server compiles: this commit plus every overlay's
+      # drivers/ and definitions/ (it builds with them in TILES_OVERLAY; web's
+      # vendor script computes the same value from the same overlays).
+      - name: Build fingerprint (tiles + overlays)
+        id: fp
         run: |
+          overlays=()
+          for d in "$RUNNER_TEMP"/overlays/*/; do
+            [ -d "$d" ] && overlays+=(--overlay "$d")
+          done
+          echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD "${overlays[@]}")" >> "$GITHUB_OUTPUT"
+      # Manifests take their bus addresses from their tile's definition, and a
+      # non-public tile's definition is only in its overlay, which the DB sync
+      # pushes straight to; regenerate so the bundle carries the current ones
+      # (the committed copies can trail the DB). Nothing is committed.
+      - name: Refresh the manifests from the overlays
+        run: |
+          # Public drivers whose tile's definition is private read its bus
+          # addresses from the overlays.
           TILES_OVERLAY="$(ls -d "$RUNNER_TEMP"/overlays/*/ 2>/dev/null | tr '\n' ' ')" \
-            python3 tools/gen_studio_manifest.py > /dev/null
-      - name: Build the bundle (public + private definitions)
+            python3 tools/gen_studio_manifest.py > /dev/null 2>&1 \
+            || { echo "::error::manifests failed to regenerate"; exit 1; }
+          for d in "$RUNNER_TEMP"/overlays/*/; do
+            [ -f "$d/drivers/drivers.json" ] || continue
+            python3 tools/gen_studio_manifest.py --overlay "$d" > /dev/null 2>&1 \
+              || { echo "::error::an overlay's manifests failed to regenerate"; exit 1; }
+          done
+      - name: Build the bundle (public + private tiles)
         working-directory: twins
         run: |
           npm ci
@@ -82,7 +101,8 @@ jobs:
           for d in "$RUNNER_TEMP"/overlays/*/; do
             [ -d "$d" ] && overlays+=(--overlay "$d")
           done
-          npm run bundle -- --out "$RUNNER_TEMP/bundle" --sha "$GITHUB_SHA" \
+          # -s: npm would otherwise echo the command line, overlay paths included.
+          npm run -s bundle -- --out "$RUNNER_TEMP/bundle" --sha "$GITHUB_SHA" \
             --fingerprint "${{ steps.fp.outputs.fingerprint }}" "${overlays[@]}"
       - name: Publish to tiles-bundles
         run: |

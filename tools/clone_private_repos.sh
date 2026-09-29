@@ -12,6 +12,9 @@
 # --private-repos-out). A needed repo that doesn't exist, or that the app isn't
 # installed on, is reported and skipped: the sync then finds no checkout for it,
 # publishes its tiles nowhere and exits 3. Never a public fallback.
+#
+# It runs in public tiles' Actions, whose logs are public: it prints counts,
+# never a private repo's name.
 set -euo pipefail
 
 root="$1"
@@ -25,12 +28,18 @@ all="$(gh api --paginate /installation/repositories -q '.repositories[].name')"
 installed="$(grep -E "$pattern" <<<"$all" || true)"
 wanted="$(printf '%s\n' $installed $( [ -n "$needed" ] && cat "$needed" ) | sort -u)"
 
+cloned=0 missing=0
 for repo in $wanted; do
   if ! grep -qxF "$repo" <<<"$installed"; then
-    echo "::error::$owner/$repo is missing, or tile-json-sync isn't installed on it; its tiles are published nowhere"
+    missing=$((missing + 1))
     continue
   fi
   git clone --quiet --depth 1 \
-    "https://x-access-token:${GH_TOKEN}@github.com/$owner/$repo.git" "$root/$repo"
-  echo "cloned $repo@$(git -C "$root/$repo" rev-parse --short HEAD)"
+    "https://x-access-token:${GH_TOKEN}@github.com/$owner/$repo.git" "$root/$repo" 2>/dev/null \
+    || { echo "::error::cloning a private overlay repo failed"; exit 1; }
+  cloned=$((cloned + 1))
 done
+echo "cloned $cloned private overlay repos"
+if [ "$missing" -gt 0 ]; then
+  echo "::error::$missing needed private repo(s) missing, or tile-json-sync isn't installed on them; their tiles are published nowhere"
+fi

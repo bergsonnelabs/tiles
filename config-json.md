@@ -519,8 +519,10 @@ tile_sense_cam_p_init(core_tiles_pal2(&core_i2c1, &core_spi3), 0, &cam, &cfg);
   and the `spi_cs` to pass.
 
 The set of valid `tile` names is the `TILE_DRIVER_MAP` dict in
-`tools/coregen/coregen.py` (~line 1148) — check there for the current list
-(Sense.*, Drive.*, Power.*, Display.RGBW, Store.O.128, …).
+`tools/coregen/coregen.py` — check there for the current list
+(Sense.*, Drive.*, Power.*, Display.RGBW, Store.O.128, …) — plus the drivers
+each private overlay in `TILES_OVERLAY` declares in its `drivers/drivers.json`
+(a tile that is not public has its driver there, not in this SDK).
 
 ---
 

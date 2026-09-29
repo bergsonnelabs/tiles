@@ -16,11 +16,13 @@
  * see (a dark tile's files never leave the server for anyone else).
  *
  * `--overlay <dir>` (repeatable) adds a checkout of a private tiles repo
- * (tiles-alpha, tiles-internal, tile-<family>-<name>): its definitions/*.json
- * join the public ones, and win where both have the same file, since the
- * private repos are synced straight from the DB and public definitions/ can
- * trail it by an unmerged sync PR. Only definitions are read from overlays
- * so far; their drivers/ and twins/src/sims/ are not.
+ * (tiles-alpha, tiles-internal, tile-<family>-<name>), laid out like this one:
+ * its definitions/*.json, twins/src/sims/*.ts, manifests/tile_*.json and
+ * manifests/tile-docs/*.json join the public ones. A non-public tile's
+ * driver, twin and manifests live only there. Overlays are read after the
+ * public tree, so an overlay's copy wins where both have one (definitions:
+ * the private repos are synced straight from the DB and public definitions/
+ * can trail it by an unmerged sync PR).
  *
  * The bundle's id (index `sha`, and the `<id>/` it is published under) names
  * everything that went in: sha1 of `tiles@<tiles commit>` and each overlay's
@@ -109,12 +111,28 @@ if (!Number.isInteger(contract)) throw new Error('CONTRACT_VERSION not found in 
 const tiles = {};
 const entry = (tile) => (tiles[tile] ??= { files: {} });
 
+/** `rel` under the public tree, then under each overlay: the dirs that exist. */
+const roots = (...rel) =>
+  [TILES, ...OVERLAYS].map((root) => join(root, ...rel)).filter((dir) => existsSync(dir));
+const filesIn = (dir, re) =>
+  readdirSync(dir)
+    .filter((n) => re.test(n))
+    .map((n) => join(dir, n));
+
 const scratch = join(OUT, '.scratch');
 mkdirSync(scratch, { recursive: true });
-for (const f of readdirSync(join(TWINS, 'src', 'sims')).filter((n) => n.endsWith('.ts'))) {
-  const code = await compile({ entryPoints: [join(TWINS, 'src', 'sims', f)] });
+for (const [n, path] of roots('twins', 'src', 'sims')
+  .flatMap((dir) => filesIn(dir, /\.ts$/))
+  .entries()) {
+  const f = basename(path);
+  // Relative to its own twins/ (the module's leading path comment), so an
+  // overlay twin compiles the same wherever its checkout is.
+  const code = await compile({
+    entryPoints: [path],
+    absWorkingDir: resolve(dirname(path), '..', '..'),
+  });
   // Load it once to learn which tile it is (the module's `tile` field).
-  const probe = join(scratch, f.replace(/\.ts$/, '.mjs'));
+  const probe = join(scratch, `${n}-${f.replace(/\.ts$/, '.mjs')}`);
   writeFileSync(probe, code);
   const twin = (await import(pathToFileURL(probe).href)).default;
   if (!twin?.tile) throw new Error(`${f}: no default export with a 'tile'`);
@@ -124,15 +142,15 @@ for (const f of readdirSync(join(TWINS, 'src', 'sims')).filter((n) => n.endsWith
 }
 rmSync(scratch, { recursive: true, force: true });
 
-for (const f of readdirSync(join(TILES, 'manifests')).filter((n) => /^tile_.*\.json$/.test(n))) {
-  const m = readJson(join(TILES, 'manifests', f));
+for (const p of roots('manifests').flatMap((dir) => filesIn(dir, /^tile_.*\.json$/))) {
+  const m = readJson(p);
   const rel = `tiles/${m.tile}/manifest.json`;
   write(rel, json(m));
   entry(m.tile).files.manifest = rel;
 }
 
-for (const f of readdirSync(join(TILES, 'manifests', 'tile-docs')).filter((n) => n.endsWith('.json'))) {
-  const d = readJson(join(TILES, 'manifests', 'tile-docs', f));
+for (const p of roots('manifests', 'tile-docs').flatMap((dir) => filesIn(dir, /\.json$/))) {
+  const d = readJson(p);
   const tile = d.display_name ?? `${d.tile_family}.${d.tile_name}`;
   const rel = `tiles/${tile}/docs.json`;
   write(rel, json(d));
@@ -140,15 +158,7 @@ for (const f of readdirSync(join(TILES, 'manifests', 'tile-docs')).filter((n) =>
 }
 
 // Public first, then each overlay, so an overlay's copy of a revision wins.
-const defDirs = [join(TILES, 'definitions'), ...OVERLAYS.map((o) => join(o, 'definitions'))];
-const defPaths = defDirs.flatMap((dir) =>
-  existsSync(dir)
-    ? readdirSync(dir)
-        .filter((n) => n.endsWith('.json'))
-        .map((n) => join(dir, n))
-    : [],
-);
-for (const p of defPaths) {
+for (const p of roots('definitions').flatMap((dir) => filesIn(dir, /\.json$/))) {
   const { twin: _twin, ...def } = readJson(p);
   if (!def.family || !def.name || !def.rev) continue;
   const tile = `${def.family}.${def.name}`;
