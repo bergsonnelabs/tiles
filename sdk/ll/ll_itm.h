@@ -36,8 +36,25 @@
 #define TPIU_SPPR           REG32(TPIU_BASE + 0x0F0UL) /* Selected pin protocol */
 #define TPIU_FFCR           REG32(TPIU_BASE + 0x304UL) /* Formatter and flush */
 
-#define DBGMCU_BASE         0xE0042000UL
-#define DBGMCU_CR           REG32(DBGMCU_BASE + 0x04UL)
+/* The trace-pin enable in DBGMCU differs per Core, and so does DBGMCU's
+ * address: 0xE0042000 is DBGMCU only on the Cortex-M4 (L4); on both M33 parts
+ * it is the CoreSight CTI block.
+ *   L4  (RM0394 §47.16.3): DBGMCU_CR at 0xE0042004, TRACE_IOEN = bit 5,
+ *       TRACE_MODE[7:6] = 00 (asynchronous, TRACESWO).
+ *   H5  (RM0481 §59.12.4): DBGMCU_CR at 0x44024004 (the software base; the
+ *       debugger sees it at 0xE00E4004). TRACE_IOEN = bit 4, TRACE_EN = bit 5
+ *       (trace port clock), TRACE_MODE[7:6] = 00 asynchronous. ST's own SWO
+ *       setup for the H5 writes 0x30 (both bits).
+ *   W5  (RM0493 §43.12.7): DBGMCU_SCR has no trace bits (bit 0 reserved, 1
+ *       DBG_STOP, 2 DBG_STANDBY), and PB3 is JTDO/TRACESWO from reset
+ *       (§43.2.2, §14.4.1), so there is nothing to enable. */
+#if defined(STM32L422xx)
+  #define LL_ITM_DBGMCU_CR    REG32(0xE0042004UL)
+  #define LL_ITM_TRACE_BITS   (1UL << 5)                  /* TRACE_IOEN */
+#elif defined(STM32H523xx)
+  #define LL_ITM_DBGMCU_CR    REG32(0x44024004UL)
+  #define LL_ITM_TRACE_BITS   ((1UL << 4) | (1UL << 5))   /* TRACE_IOEN | TRACE_EN */
+#endif
 
 /* ============================================================
  * Initialization
@@ -57,8 +74,10 @@
  */
 static inline void ll_itm_init(uint32_t sysclk_hz, uint32_t swo_baud)
 {
-    /* Enable trace output in DBGMCU */
-    SET_BITS(DBGMCU_CR, (1UL << 5));  /* TRACE_IOEN */
+    /* Enable trace output in DBGMCU (TRACE_MODE stays 00: asynchronous) */
+#ifdef LL_ITM_DBGMCU_CR
+    SET_BITS(LL_ITM_DBGMCU_CR, LL_ITM_TRACE_BITS);
+#endif
 
     /* Unlock ITM */
     ITM_LAR = 0xC5ACCE55UL;
@@ -66,7 +85,7 @@ static inline void ll_itm_init(uint32_t sysclk_hz, uint32_t swo_baud)
     /* Configure TPIU */
     TPIU_ACPR = (sysclk_hz / swo_baud) - 1;  /* Async clock prescaler */
     TPIU_SPPR = 2;                             /* NRZ (UART-like) protocol */
-    TPIU_FFCR = 0x100;                        /* Continuous formatting */
+    TPIU_FFCR = 0x100;                        /* ENFCONT = 0: formatter bypassed (ITM only) */
 
     /* Enable ITM */
     ITM_TCR = (1UL << 0)    /* ITMENA: enable ITM */
@@ -95,6 +114,13 @@ static inline void ll_itm_init_default(uint32_t sysclk_hz)
  */
 static inline void ll_itm_putc(char c)
 {
+    /* Skip the byte unless the trace block is on (DEMCR.TRCENA, set by a
+     * debugger or by core_timing's DWT setup) and ITM and port 0 are enabled,
+     * as CMSIS ITM_SendChar does. Otherwise STIM0 never reports ready and
+     * debug prints hang a Core with no probe attached (seen on the H5,
+     * 2026-09-29: STIM0 read 0x2 with TRCENA clear). */
+    if (!(REG32(0xE000EDFCUL) & (1UL << 24)) || !(ITM_TCR & 1UL) || !(ITM_TER & 1UL))
+        return;
     /* Wait for stimulus port 0 to be ready (bit 0 of STIM0) */
     while (!(ITM_STIM0 & 1))
         ;

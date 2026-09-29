@@ -76,9 +76,9 @@
 #define SU_ERR_STATE            9u    /* frame not valid in this state */
 
 /* The top of flash kept for core_nvm (its last two 2 KB pages on the L4,
- * sdk/core/core_nvm.h; two 8 KB sectors on the H5, where core_nvm is still to
- * come). The flasher refuses an image that would reach it (SU_ERR_SIZE) and so
- * never erases it. */
+ * sdk/core/core_nvm.h; on the H5 the last two 8 KB sectors, which core_nvm
+ * switches to the flash high-cycle data area). The flasher refuses an image
+ * that would reach it (SU_ERR_SIZE) and so never erases it. */
 #define SU_NVM_RESERVED         4096u
 #define SU_NVM_RESERVED_H5      16384u
 

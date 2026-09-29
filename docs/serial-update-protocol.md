@@ -159,18 +159,42 @@ If option bytes force main-flash boot (`nSWBOOT0 = 0, nBOOT0 = 1`) the empty
 check is off, and an interrupted update leaves a Core that needs BOOT0 held to
 recover. Cores ship with factory option bytes; nothing in the SDK changes them.
 
-### The H5 boot rule — and why its flasher never resets
+### The H5 boot rule — and when its flasher resets
 
 The STM32H523 has **no empty-flash check** (RM0481 §4.1, Table 23): BOOT0 low
 always boots `NSBOOTADD` (0x08000000), BOOT0 high always boots the ROM
-bootloader. So:
+bootloader. BOOT0 is a dedicated input with no GPIO or status bit
+(DS14540 Figure 4, Table 13: type I, no alternate functions), so the
+flasher reads what the last reset left instead
+(`reset_boots_flash()` in `flasher_h5.c`):
 
-- To start an image the H5 flasher does not reset (with BOOT0 high that would
-  land in the ROM): it detaches from the host, resets the USB peripheral
-  (`RCC_APB2RSTR.USBRST`), and jumps to the image's reset vector, as the ROM's
-  own DFU `leave` does. The SDK's H5 startup (`Reset_Handler`) sets VTOR,
-  clears the NVIC and SysTick, and the clock and USB setup start from any
-  state, so an image starts the same way from a reset, the ROM or the flasher.
+- **BOOT0 was low**: `GTZC1_TZSC_SECCFGR1..3` are all zero (the ROM's DFU
+  `leave` leaves them securing peripherals, and only a reset clears them,
+  §5.4.6) and `SBS_HDPLSR` reads HDPL1, 0x51 (a user-flash boot; the ROM
+  runs at HDPL0, §14.3.5 Table 130, §14.5.2). The flasher detaches and
+  **resets**, so the new image starts from a real system reset: every
+  register outside the backup domain back to its reset value (§11.3.2;
+  whether a running IWDG stops too is not checked on the H5).
+- **Otherwise** (a reset would land in the ROM): it detaches, resets the USB
+  peripheral (`RCC_APB2RSTR.USBRST`), and jumps to the image's reset vector,
+  as the ROM's own DFU `leave` does. The SDK's H5 startup (`Reset_Handler`)
+  sets VTOR, clears the NVIC, SysTick and the MPU, then pulses the RCC reset
+  of every peripheral the H523 has and clears its clock enable
+  (§11.8.19-32: GPIO A-H, GPDMA1/2, timers, SPI/I2C/I3C/U(S)ARTs, USB, ADC,
+  DAC, ...) and writes EXTI back to its reset values (§18.6). It leaves the
+  flash interface, SRAM and RAMCFG, PWR, SBS, GTZC, the ICACHE, the clock
+  tree and the backup domain (RTC, TAMP, backup registers) alone. What a
+  jump can't clear: a running IWDG or WWDG (no reset bit; the new image must
+  feed them or it resets, into the ROM with BOOT0 high), PWR settings, and
+  the peripherals the ROM secured (their RCC enable bits ignore non-secure
+  writes until the next reset, and their reset bits presumably do too; not
+  benched with BOOT0 high). The clock and USB setup start from any
+  state, so an image starts the same way from a reset, the ROM or the
+  flasher.
+- The check can be wrong one way: BOOT0 moved since the last reset, or an
+  image started by a debugger with BOOT0 high. Then the reset lands in the
+  ROM bootloader with the new image complete; `dfu-util -a 0 -s
+  0x08000000:leave` or a BOOT0-low reset starts it.
 - **An interrupted update after page 0 is erased leaves an H5 that needs
   BOOT0 held high to recover** (the ROM bootloader, then `make flash-dfu`).
   With BOOT0 low it boots the erased vector table. Keep BOOT0 reachable on
@@ -254,5 +278,36 @@ STM32CubeProgrammer's driver installed, Linux.
 | 336 KB image (crosses into flash bank 2) | 2.1 s transfer; the new image's checksum of its 300 KB table matched |
 | host tests (`make -C sdk/serial_update test`) | L4 and H5 geometries: power cut after every frame, a failed program at every call |
 
-Not yet run on the H5: an interrupted update and its BOOT0 recovery, a Windows
-host.
+Carry-over fix (2026-09-29, same board, BOOT0 low, `tests/hw-h5-bringup`: "Z"
+leaves PB6 in AF4 (I2C1 SCL), TIM2 running, EXTI line 5 on PB5 unmasked and
+GPDMA1 channel 7 armed; the next image's CARRY line reads them at `main()`):
+
+| path | PB6 / TIM2 / EXTI5 at the new image's `main()` |
+|-|-|
+| before (jump, old startup) | AF4, CR1=1 and counting, IMR1/RTSR1 bit 5 set, EXTICR2=PB5; clock enables carried |
+| jump + new `Reset_Handler` (old flasher) | all at reset values, clocks off (RSR=0, PLL still on: it was a jump) |
+| new flasher, BOOT0 low | a real reset (RSR SFTRSTF), all at reset values; 5 round trips, USB up each time |
+
+GPDMA1 CH7 read 0 in every case: the app's handoff already resets GPDMA1/2
+(§6a).
+
+BOOT0 high (2026-09-29, same board, power-cycled into the ROM, image started
+with `dfu-util … :leave`):
+- **`started_by_rom=1`, SBS_HDPLSR = 0x51.** The ROM raises HDPL to 1 before
+  its leave, so HDPL alone can't tell the two boots apart. The flasher's
+  decision rests on GTZC SECCFGR, and HDPL only backs it up.
+- **The new flasher took the jump path:** the image came back on USB, with no
+  ROM DFU device and no replug, and RSR = 0.
+- **What the new `Reset_Handler` cleaned:**
+  - TIM2, EXTI and GPDMA1 CH7 came back at their reset values.
+  - GPIOB did not: PB6 was still in AF4, and PB0-PB7 kept the ROM's setup
+    (PB4/PB5 AF9, PB7 AF3).
+  - TIM2 never started under "Z" either, since TIM2's clock is blocked after a
+    ROM leave.
+- **Takeaway:** peripherals and pins that the ROM's security setup (GTZC)
+  covers stay as the ROM left them until a real reset, which with BOOT0 high
+  never comes. BOOT0 high is for bring-up and recovery; power-cycle with BOOT0
+  low for a clean start.
+
+Not yet run on the H5: an interrupted update and its BOOT0 recovery, and a
+Windows host.

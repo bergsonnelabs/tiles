@@ -22,7 +22,10 @@
       "status": "na",
       "note": "No USB, so no ROM DFU path to park in"
     },
-    "system.swo": "compile",
+    "system.swo": {
+      "status": "compile",
+      "note": "ll_itm_init leaves DBGMCU alone on the WBA: DBGMCU_SCR has no trace bits (RM0493 §43.12.7) and PB3 is TRACESWO from reset. It used to write 0xE0042004, the CTI block"
+    },
     "system.wamr": "compile",
     "clocks.hsi": {
       "status": "verified",

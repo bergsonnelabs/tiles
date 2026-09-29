@@ -26,7 +26,10 @@
       "status": "compile",
       "note": "Strike words at the top of SRAM (hal_dfu.h); the escalation itself is not bench-run. The ROM entry it ends in works (conn.dfu, BOOT0 low)"
     },
-    "system.swo": "compile",
+    "system.swo": {
+      "status": "compile",
+      "note": "ll_itm_init sets DBGMCU_CR TRACE_IOEN | TRACE_EN (0x30) at the software base 0x44024004 (read back on the bench, 2026-09-29). SWO output not checked: TRACESWO is PB3, which no Core.ST.H5 pad reaches"
+    },
     "system.wamr": {
       "status": "compile",
       "note": "examples/h1-wasm-blink builds with WAMR_ENABLED=1"
@@ -215,7 +218,7 @@
     },
     "conn.serial_update": {
       "status": "verified",
-      "note": "make flash-serial (flasher_h5.c): 5 in a row hands-free with BOOT0 high (28 KB in 0.2-0.5 s), a 336 KB image across both banks, and 3 in a row with BOOT0 low, 2026-09-26. An interrupted update needs BOOT0 high to recover"
+      "note": "make flash-serial (flasher_h5.c): 5 in a row hands-free with BOOT0 high (28 KB in 0.2-0.5 s), a 336 KB image across both banks, and 3 in a row with BOOT0 low, 2026-09-26. The new image starts clean: with BOOT0 low the flasher resets into it, otherwise it jumps and the startup resets every peripheral, GPIO and EXTI (tests/hw-h5-bringup Z: PB6 AF4, TIM2, EXTI5 cleared on both paths, 5 round trips, 2026-09-29). An interrupted update needs BOOT0 high to recover"
     },
     "conn.swd": "none",
     "conn.ble": "na",

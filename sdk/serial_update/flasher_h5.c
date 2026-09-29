@@ -18,11 +18,14 @@
  *     so a "page" is a sector and a DATA frame carries 8 KB.
  *   - Leaving: the H5 has no empty-flash check (RM0481 §4.1: BOOT0 low always
  *     boots NSBOOTADD, 0x08000000), and with BOOT0 high any reset lands in the
- *     ROM bootloader. So the flasher never resets to start an image: it
- *     detaches from the host, resets the USB peripheral and jumps to the
- *     image's reset vector, which starts it as the ST ROM's DFU "leave" does.
- *     Only a fault resets (with page 0 erased, a BOOT0-low Core then needs
- *     BOOT0 to recover: docs/serial-update-protocol.md §5).
+ *     ROM bootloader. BOOT0 has no GPIO or status bit, but the last reset
+ *     left two marks of which way it went (reset_boots_flash()). If it booted
+ *     user flash, the flasher detaches and resets, so the new image starts
+ *     from a real reset. Otherwise it detaches, resets the USB peripheral and
+ *     jumps to the image's reset vector, as the ST ROM's DFU "leave" does,
+ *     and the image's Reset_Handler puts the peripherals it can back to their
+ *     reset state. A fault always resets (with page 0 erased, a BOOT0-low Core
+ *     then needs BOOT0 to recover: docs/serial-update-protocol.md §5).
  *
  * Built -ffreestanding and linked -nostdlib (see Makefile): nothing here may
  * call into the flash being rewritten.
@@ -44,6 +47,13 @@
 #define DBGMCU_IDCODE       REG32(0x44024000UL)          /* §59.12.4, software base; DEV_ID 0x478 */
 #define FLASHSIZE_KB        (*(volatile uint16_t *)0x08FFF80CUL)  /* §60.2, 16-bit read */
 #define RCC_APB2RSTR        REG32(RCC_BASE + 0x7CUL)     /* §11.8.24, USBRST = bit 24 */
+#define RCC_AHB1ENR         REG32(RCC_BASE + 0x88UL)     /* §11.8.26, TZSC1EN = bit 24 */
+#define RCC_APB3ENR         REG32(RCC_BASE + 0xA8UL)     /* §11.8.32, SBSEN = bit 1 */
+#define GTZC1_TZSC_SECCFGR1 REG32(0x40032410UL)          /* §5.6.2-4, SECCFGR1..3 */
+#define GTZC1_TZSC_SECCFGR2 REG32(0x40032414UL)
+#define GTZC1_TZSC_SECCFGR3 REG32(0x40032418UL)
+#define SBS_HDPLSR          REG32(0x44000414UL)          /* §14.5.2 */
+#define SBS_HDPL1           0x51u                        /* HDPL1: a user-flash boot */
 
 #define SU_FLASH_START      0x08000000UL
 #define SU_SRAM_START       0x20000000UL
@@ -519,17 +529,51 @@ static int op_program(uint32_t addr, const uint8_t *buf, uint32_t len)
     return 0;
 }
 
-/* Start the image at 0x08000000 in place (the H5 can't reset into it with
- * BOOT0 high, see the top of this file): detach, give the USB peripheral back
- * in its reset state (RCC_APB2RSTR.USBRST, which also drops the DP pull-up),
- * lock the flash, and jump to the image's reset vector with its stack. The
- * image's Reset_Handler sets VTOR and clears the NVIC, and its clock setup
- * works from whatever state it finds. */
+/* 1 when the last reset booted user flash, so another reset starts the image
+ * at 0x08000000: BOOT0 was low then (RM0481 §4.1, Table 23). Two marks, both
+ * cleared only by a reset:
+ *   - GTZC1_TZSC_SECCFGR1..3 all zero. With BOOT0 high every reset enters the
+ *     ROM bootloader, and its DFU "leave" starts the image with these still
+ *     securing peripherals (bench 2026-09-26: 0xC335827F / 0x12009500 /
+ *     0x05BFE006; hal_dfu_started_by_rom()). Their reset value is 0 (§5.4.6).
+ *   - SBS_HDPLSR = HDPL1 (0x51). SBS starts a user-flash boot at HDPL1 and ST
+ *     code (the ROM) at HDPL0 (§14.3.5 Table 130, §14.5.2). Bench, BOOT0 low:
+ *     0x51. Whether the ROM raises it before a "leave" is not known, so this
+ *     only backs up the first mark.
+ * Either register reads 0 with its bus clock off, so both clocks are turned
+ * on for the read and put back after. If BOOT0 was moved since the last
+ * reset, or a debugger started the image with BOOT0 high, this is wrong the
+ * other way: the reset lands in the ROM, with the new image complete. */
+static int reset_boots_flash(void)
+{
+    uint32_t ahb1 = RCC_AHB1ENR, apb3 = RCC_APB3ENR;
+    RCC_AHB1ENR = ahb1 | (1UL << 24);
+    RCC_APB3ENR = apb3 | (1UL << 1);
+    (void)RCC_APB3ENR;
+    uint32_t tz   = GTZC1_TZSC_SECCFGR1 | GTZC1_TZSC_SECCFGR2 | GTZC1_TZSC_SECCFGR3;
+    uint32_t hdpl = SBS_HDPLSR & 0xFFu;
+    RCC_AHB1ENR = ahb1;
+    RCC_APB3ENR = apb3;
+    return tz == 0 && hdpl == SBS_HDPL1;
+}
+
+/* Start the image at 0x08000000. Detach first (the host sees a clean
+ * disconnect), then:
+ *   - BOOT0 low (reset_boots_flash): a system reset, which returns every
+ *     register outside the backup domain to its reset value (RM0481 §11.3.2).
+ *     (core_init.c.j2 says a running IWDG survives a system reset; not
+ *     checked on the H5.)
+ *   - otherwise (a reset would land in the ROM): give the USB peripheral back
+ *     in its reset state (RCC_APB2RSTR.USBRST), lock the flash, and jump to
+ *     the image's reset vector with its stack. The image's Reset_Handler sets
+ *     VTOR, clears the NVIC and resets the peripherals, GPIO and EXTI; its
+ *     clock setup works from whatever state it finds. */
 static void start_image(void) __attribute__((noreturn));
 static void start_image(void)
 {
     USB_BCDR &= ~USB_BCDR_DPPU_DPD;          /* the host sees a clean detach */
     busy_wait(2000000);                      /* ~80-300 ms, SYSCLK 250-64 MHz */
+    if (reset_boots_flash()) sys_reset();
     RCC_APB2RSTR |= (1UL << 24);
     RCC_APB2RSTR &= ~(1UL << 24);
     ll_flash_lock();
