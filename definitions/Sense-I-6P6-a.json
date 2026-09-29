@@ -604,7 +604,7 @@
     }
   ],
   "updated_at": "2026-05-01T12:19:55.595Z",
-  "description": "The Sense.I.6P is a precision 6-DOF inertial measurement unit based on the extended-range TDK Invensense ICM-42686P.  The 16-bit accelerometer full-scale range can be set to +/- 2g, 4g, 8g, 16g, or 32g with an output data rate of up between 1.5Hz and 32kHz, while the 16-bit gyro range can be set to +/- 15.6, 31.5, 62.5, 125, 250, 500, 1000, 2000, or 4000 degrees per second with an output data rate of 12.5Hz and 32kHz.  The sensor includes a user-programmable filters, on-board motion functions (pedometer, tilt, tap, raise, etc.), and a 2kB FIFO.  This IMU is functionally very similar to the Sense.I.6P8, which has lower gyro noise and better temperature stability but with lower max ranges of 16g and 2000 degrees per second.",
+  "description": "The Sense.I.6P6 is a precision 6-DOF inertial measurement unit based on the extended-range TDK Invensense ICM-42686P.  The 16-bit accelerometer full-scale range can be set to +/- 2g, 4g, 8g, 16g, or 32g with an output data rate of up between 1.5Hz and 32kHz, while the 16-bit gyro range can be set to +/- 15.6, 31.5, 62.5, 125, 250, 500, 1000, 2000, or 4000 degrees per second with an output data rate of 12.5Hz and 32kHz.  The sensor includes a user-programmable filters, on-board motion functions (pedometer, tilt, tap, raise, etc.), and a 2kB FIFO.",
   "json_version": "0.15",
   "application_notes": [
     {
