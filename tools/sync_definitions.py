@@ -43,7 +43,7 @@ twins/src/sims/; only definitions/ is written here):
     production, beta, obsolete               -> public tiles only
     alpha                                    -> bergsonnelabs/tiles-alpha
     dark                                     -> bergsonnelabs/tile-<family>-<name>
-                                                (Sense.ADC.6 -> tile-sense-adc-6)
+                                                (Sense.X.1 -> tile-sense-x-1)
     design, concept, prototype, abandoned,
     no status, or any status not listed here -> bergsonnelabs/tiles-internal
 

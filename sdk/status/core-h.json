@@ -159,7 +159,7 @@
     "coregen.analog": "verified",
     "coregen.i3c": {
       "status": "verified",
-      "note": "\"i3c\": true on I2C1; all-tiles rule and I2C fallback NOTE checked on L4, a Sense.BP bus and I2C3 -> I3C2 builds (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
+      "note": "\"i3c\": true on I2C1; all-tiles rule and I2C fallback NOTE checked on L4, a bus with a non-I3C tile and I2C3 -> I3C2 builds (tests/hw-i3c, 2026-09-27, Core.ST.H5 + Sense.I.6P6 on a breadboard)"
     },
     "coregen.spi": {
       "status": "verified",

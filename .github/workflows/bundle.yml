@@ -77,17 +77,12 @@ jobs:
             [ -d "$d" ] && overlays+=(--overlay "$d")
           done
           echo "fingerprint=$(python3 tools/build_fingerprint.py HEAD "${overlays[@]}")" >> "$GITHUB_OUTPUT"
-      # Manifests take their bus addresses from their tile's definition, and a
-      # non-public tile's definition is only in its overlay, which the DB sync
-      # pushes straight to; regenerate so the bundle carries the current ones
+      # An overlay's drivers' manifests take their bus addresses from its
+      # definitions, which the DB sync pushes straight to its main; regenerate
+      # them in each overlay checkout so the bundle carries the current ones
       # (the committed copies can trail the DB). Nothing is committed.
-      - name: Refresh the manifests from the overlays
+      - name: Refresh the overlays' manifests
         run: |
-          # Public drivers whose tile's definition is private read its bus
-          # addresses from the overlays.
-          TILES_OVERLAY="$(ls -d "$RUNNER_TEMP"/overlays/*/ 2>/dev/null | tr '\n' ' ')" \
-            python3 tools/gen_studio_manifest.py > /dev/null 2>&1 \
-            || { echo "::error::manifests failed to regenerate"; exit 1; }
           for d in "$RUNNER_TEMP"/overlays/*/; do
             [ -f "$d/drivers/drivers.json" ] || continue
             python3 tools/gen_studio_manifest.py --overlay "$d" > /dev/null 2>&1 \

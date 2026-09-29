@@ -1961,7 +1961,6 @@ TILE_DRIVER_MAP = {
     # id_table), which an I3C bus uses to assign the tile's dynamic address (SETDASA).
     "Sense.I.6P6": {"header": "tile_sense_i_6p6.h",  "source": "tile_sense_i_6p6",  "prefix": "tile_sense_i_6p6",
                     "i2c_addrs": [0x69, 0x68]},
-    "Sense.ADC.6": {"header": "tile_sense_adc_6.h",  "source": "tile_sense_adc_6",  "prefix": "tile_sense_adc_6"},
     "Sense.I.6D":  {"header": "tile_sense_i_6d.h",   "source": "tile_sense_i_6d",   "prefix": "tile_sense_i_6d"},
     "Drive.P":     {"header": "tile_drive_p.h",      "source": "tile_drive_p",      "prefix": "tile_drive_p"},
     "Drive.H":     {"header": "tile_drive_h.h",      "source": "tile_drive_h",      "prefix": "tile_drive_h"},
@@ -1974,10 +1973,7 @@ TILE_DRIVER_MAP = {
     "Store.O.128": {"header": "tile_store_o_128.h",   "source": "tile_store_o_128",   "prefix": "tile_store_o_128"},
     "Sense.T.C":   {"header": "tile_sense_t_c.h",  "source": "tile_sense_t_c",  "prefix": "tile_sense_t_c"},
     "Sense.MIC":   {"header": "tile_sense_mic.h",  "source": "tile_sense_mic",  "prefix": "tile_sense_mic"},
-    "Sense.BP":    {"header": "tile_sense_bp.h",  "source": "tile_sense_bp",  "prefix": "tile_sense_bp"},
     "Sense.TOF":   {"header": "tile_sense_tof.h", "source": "tile_sense_tof", "prefix": "tile_sense_tof"},
-    "Sense.ACP":   {"header": "tile_sense_acp.h", "source": "tile_sense_acp", "prefix": "tile_sense_acp"},
-    "Sense.CAP":   {"header": "tile_sense_cap.h", "source": "tile_sense_cap", "prefix": "tile_sense_cap"},
     "Sense.M.3G":  {"header": "tile_sense_m_3g.h", "source": "tile_sense_m_3g", "prefix": "tile_sense_m_3g"},
     "Sense.HR":    {"header": "tile_sense_hr.h",   "source": "tile_sense_hr",   "prefix": "tile_sense_hr"},
 }

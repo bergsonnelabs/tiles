@@ -10,8 +10,8 @@
  *   PASS: magic 0xEE9D0C0D, verdict 0x600D600D, pass 0x3F.
  *
  * Only the scratch half of the EEPROM is touched (offsets 0x100-0x1FF): the
- * low bytes hold application settings (firmware/sense-adc-6 keeps its I2C
- * address at 0-3 and its acquisition settings at 4-8). core_nvm_erase_all()
+ * low bytes hold application settings (tile firmware on an L0 keeps its I2C
+ * address and acquisition settings there). core_nvm_erase_all()
  * is deliberately not called, because it would clear them.
  *
  *   T1 range     out-of-range reads / writes (incl. a wrapping offset) return

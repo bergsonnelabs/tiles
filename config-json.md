@@ -327,7 +327,7 @@ saying why:
   Mixed I2C/I3C buses are not supported.
 
 ```
-NOTE: I2C1 asked for I3C ("i3c": true) but stays I2C: Sense.BP has no I3C on its bus pads
+NOTE: I2C1 asked for I3C ("i3c": true) but stays I2C: Sense.TOF has no I3C on its bus pads
 ```
 
 When the bus switches, coregen:

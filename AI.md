@@ -604,7 +604,6 @@ int main(void) {
 - [ ] Check `TILE_DRIVER_MAP` in `tools/coregen/coregen.py` (entry exists?)
 - [ ] Choose a reference driver to follow:
   - **Sensor (I2C, simple):** `tile_sense_mic.h/c` — config struct, calibration, data reads
-  - **Sensor (I2C, full):** `tile_sense_bp.h/c` — ODR/AVG/FS config, FIFO, one-shot, threshold interrupts, autozero/autorefp, offset calibration
   - **Sensor (I2C+SPI):** `tile_sense_i_6p6.h/c` — dual-bus dispatch, interrupt callbacks
   - **Actuator:** `tile_drive_p.h/c` — modes, FIFO, status monitoring
   - **Audio/multi-IC:** `tile_drive_a_2.h/c` — DAC+amp, safe startup sequence

@@ -987,7 +987,7 @@ uint16_t tile_sense_i_6p6_fifo_read_packets(tile_t *tile,
  *
  * The caller's array length is the int-cap (N packets × 8 ints), not
  * the packet count — `cap_ints / 8` packets are attempted. Mirrors
- * the cap-mode array-OUT convention used by Sense.BP read_fifo_batch.
+ * the cap-mode array-OUT convention (`cap_param`) other FIFO drivers use.
  *
  * @studio expose category=tile name=fifo_read_packets returns=int section=fifo
  * @studio out_buffer out type=int32_t cap_param=cap_ints
