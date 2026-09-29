@@ -15,10 +15,18 @@
  * One directory per tile so the site can hand a viewer only the tiles they may
  * see (a dark tile's files never leave the server for anyone else).
  *
+ * `--overlay <dir>` (repeatable) adds a checkout of a private tiles repo
+ * (tiles-alpha, tiles-internal, tile-<family>-<name>): its definitions/*.json
+ * join the public ones, and win where both have the same file, since the
+ * private repos are synced straight from the DB and public definitions/ can
+ * trail it by an unmerged sync PR. Only definitions are read from overlays
+ * so far; their drivers/ and twins/src/sims/ are not.
+ *
  *   node scripts/build-bundle.mjs --out <dir> [--sha <sha>] [--fingerprint <fp>]
+ *                                 [--overlay <dir> …]
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
@@ -34,6 +42,9 @@ const arg = (name) => {
 const OUT = resolve(arg('out') ?? join(TWINS, 'dist', 'bundle'));
 const SHA = arg('sha') ?? '';
 const FINGERPRINT = arg('fingerprint') ?? '';
+const OVERLAYS = process.argv.flatMap((a, i) =>
+  a === '--overlay' && process.argv[i + 1] ? [resolve(process.argv[i + 1])] : [],
+);
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true });
@@ -105,8 +116,17 @@ for (const f of readdirSync(join(TILES, 'manifests', 'tile-docs')).filter((n) =>
   entry(tile).files.docs = rel;
 }
 
-for (const f of readdirSync(join(TILES, 'definitions')).filter((n) => n.endsWith('.json'))) {
-  const { twin: _twin, ...def } = readJson(join(TILES, 'definitions', f));
+// Public first, then each overlay, so an overlay's copy of a revision wins.
+const defDirs = [join(TILES, 'definitions'), ...OVERLAYS.map((o) => join(o, 'definitions'))];
+const defPaths = defDirs.flatMap((dir) =>
+  existsSync(dir)
+    ? readdirSync(dir)
+        .filter((n) => n.endsWith('.json'))
+        .map((n) => join(dir, n))
+    : [],
+);
+for (const p of defPaths) {
+  const { twin: _twin, ...def } = readJson(p);
   if (!def.family || !def.name || !def.rev) continue;
   const tile = `${def.family}.${def.name}`;
   const rel = `tiles/${tile}/def-${def.rev}.json`;

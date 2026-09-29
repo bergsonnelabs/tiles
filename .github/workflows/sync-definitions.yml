@@ -95,6 +95,85 @@ jobs:
             --title "chore(definitions): sync from canonical product DB" \
             --body "Automated drift sync from the product DB via \`tools/sync_definitions.py\`, with the derived manifests regenerated in the same change. Review the definition changes before merging — renames/deletes here ripple into coregen aliases, the Makefile, manifests, and the web mirrors. Pure \`source:\` stamp churn is dropped; once merged, notify-web-on-manifests re-vendors the manifests into the web repo."
 
+  # Non-public tiles into the private overlay repos, routed by DB status
+  # (tools/sync_definitions.py, "Private repos"): alpha -> tiles-alpha, dark ->
+  # tile-<family>-<name>, design/concept/prototype/abandoned/none ->
+  # tiles-internal. Pushed straight to each repo's main, one commit per changed
+  # repo, as the bot. A separate job, so a private-repo problem never blocks
+  # the public sync PR above; but a dark tile without its repo turns the run
+  # red, after the other repos have been pushed. (The public mirror above still
+  # writes every tile for now.)
+  private-definitions:
+    runs-on: ubuntu-latest
+    steps:
+      # Owner-scoped with no `repositories:`, so the token covers every repo
+      # tile-json-sync is installed on: the overlays that exist today and any
+      # tile-* repo created for a newly dark tile.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.TILES_SYNC_APP_ID }}
+          private-key: ${{ secrets.TILES_SYNC_APP_PRIVATE_KEY }}
+          owner: bergsonnelabs
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install mysql-connector-python
+
+      - name: Which private repos the DB needs
+        env:
+          TILES_DB_PASSWORD: ${{ secrets.TILES_DB_PASSWORD }}
+        run: |
+          python3 tools/sync_definitions.py --private-only \
+            --private-repos-out "$RUNNER_TEMP/private-repos.txt"
+          cat "$RUNNER_TEMP/private-repos.txt"
+
+      - name: Clone them
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: tools/clone_private_repos.sh "$RUNNER_TEMP/private" "$RUNNER_TEMP/private-repos.txt"
+
+      # Exit 3 = a tile's repo had no checkout (published nowhere). Carry on
+      # to push the rest, and fail at the end.
+      - name: Mirror non-public tiles into them
+        id: mirror
+        env:
+          TILES_DB_PASSWORD: ${{ secrets.TILES_DB_PASSWORD }}
+        run: |
+          set +e
+          python3 tools/sync_definitions.py --apply --private-only --private-root "$RUNNER_TEMP/private"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          [ "$code" = 0 ] || [ "$code" = 3 ]
+
+      - name: Push each changed repo to main
+        run: |
+          set -euo pipefail
+          for dir in "$RUNNER_TEMP"/private/*/; do
+            [ -d "$dir" ] || continue
+            repo="$(basename "$dir")"
+            git -C "$dir" add -A
+            if git -C "$dir" diff --cached --quiet; then
+              echo "$repo: already matches the DB."
+              continue
+            fi
+            git -C "$dir" -c user.name="tiles-sync[bot]" \
+              -c user.email="tiles-sync@users.noreply.github.com" \
+              commit --quiet -m "chore(definitions): sync from canonical product DB (tiles@${GITHUB_SHA::7})"
+            git -C "$dir" push --quiet origin HEAD:main
+            echo "$repo: pushed $(git -C "$dir" rev-parse --short HEAD)"
+          done
+
+      - name: Fail on tiles with no private repo
+        if: steps.mirror.outputs.code == '3'
+        run: |
+          echo "::error::A non-public tile has no private repo to go to, so it was published nowhere. See 'Mirror non-public tiles into them'; for a dark tile, create bergsonnelabs/tile-<family>-<name> and install tile-json-sync on it."
+          exit 1
+
   # The public KiCad library (bergsonnelabs/bergsonne-kicad): regenerate its
   # symbols from the DB's production + beta tiles and open an auto-merging PR
   # there when they changed. A separate job, so a KiCad problem never blocks
