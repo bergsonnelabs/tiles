@@ -1685,13 +1685,6 @@ def main():
             "version": "1.4.0",
         },
         {
-            "path": ROOT / "drivers/tile_sense_adc_6.h",
-            "definition": ROOT / "definitions/Sense-ADC-6-a.json",
-            "prefix": "tile_sense_adc_6",
-            "init": "tile_sense_adc_6_init",
-            "version": "1.1.0",
-        },
-        {
             "path": ROOT / "drivers/tile_drive_h.h",
             "definition": ROOT / "definitions/Drive-H-a.json",
             "prefix": "tile_drive_h",
@@ -1727,13 +1720,6 @@ def main():
             "version": "1.4.0",
         },
         {
-            "path": ROOT / "drivers/tile_sense_cap.h",
-            "definition": ROOT / "definitions/Sense-CAP-a.json",
-            "prefix": "tile_sense_cap",
-            "init": "tile_sense_cap_init",
-            "version": "1.0.0",
-        },
-        {
             "path": ROOT / "drivers/tile_drive_a_2.h",
             "definition": ROOT / "definitions/Drive-A-2-a.json",
             "prefix": "tile_drive_a_2",
@@ -1760,20 +1746,6 @@ def main():
             "prefix": "tile_power_l_1n",
             "init": "tile_power_l_1n_init",
             "version": "1.2.0",
-        },
-        {
-            "path": ROOT / "drivers/tile_sense_acp.h",
-            "definition": ROOT / "definitions/Sense-ACP-b.json",
-            "prefix": "tile_sense_acp",
-            "init": "tile_sense_acp_init",
-            "version": "1.0.0",
-        },
-        {
-            "path": ROOT / "drivers/tile_sense_bp.h",
-            "definition": ROOT / "definitions/Sense-BP-a.json",
-            "prefix": "tile_sense_bp",
-            "init": "tile_sense_bp_init",
-            "version": "1.3.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_tof.h",
@@ -1862,11 +1834,9 @@ def main():
         # addresses — the frontend treats that as "one fixed address,
         # no user choice".
         #
-        # A non-public tile's definition is not in this repo, only in its
-        # private repo: with that checkout in TILES_OVERLAY its addresses are
-        # read from there (the bundle workflow does this, so Studio gets them
-        # fresh); without it they are kept as committed, so the public
-        # `--check` still passes and the manifest doesn't lose them.
+        # A definition that is missing (not in the checkout, nor in any
+        # TILES_OVERLAY) keeps the committed addresses, so `--check` still
+        # passes and the manifest doesn't lose them.
         out_path = tile_out_dir / f"{t['path'].stem}.json"
         def_path = find_definition(t.get("definition"))
         if def_path is None and t.get("definition") is not None:

@@ -30,7 +30,7 @@ writes; it is deliberately not added to the public definition files.
 Usage:
     python3 tools/gen_kicad_lib.py --statuses s.json --include production,beta \\
         --footprints "<lib>/Bergsonne Tiles.pretty" --out "<lib>/Bergsonne Tiles.kicad_sym"
-    python3 tools/gen_kicad_lib.py --tiles Sense-CAP-a.json --out private.kicad_sym
+    python3 tools/gen_kicad_lib.py --tiles <Family>-<Name>-a.json --out private.kicad_sym
 """
 
 from __future__ import annotations
