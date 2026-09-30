@@ -3,7 +3,10 @@ name: bundle
 # Publish the tiles bundle for every commit on main: each tile's manifest, docs,
 # definitions and compiled twin, with an index carrying the twin contract
 # version and the build fingerprint (twins/scripts/build-bundle.mjs,
-# tools/build_fingerprint.py). Studio loads it at runtime through the site,
+# tools/build_fingerprint.py). Also each revision's KiCad symbol block
+# (tools/gen_kicad_lib.py --symbols-dir, run by build-bundle.mjs with the
+# runner's python3) and an overlay driver's sources, from which the site
+# builds a signed-in viewer's downloads of the tiles they may see. Studio loads it at runtime through the site,
 # which hands each viewer only the tiles they may see, so a driver, twin or
 # docs change reaches Studio without a web deploy.
 #

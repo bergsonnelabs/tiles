@@ -27,10 +27,18 @@ library). Status lives only in the product DB, so it comes in as a JSON map
 `{definition filename: status}` that `sync_definitions.py --statuses-out`
 writes; it is deliberately not added to the public definition files.
 
+`--symbols-dir` writes each tile revision's symbol block on its own instead,
+as `<dir>/<Family.Name>/symbol-<rev>.kicad_sym`, for every definition with
+pads in the `--definitions` dirs (a later dir's copy of a revision wins, as in
+twins/scripts/build-bundle.mjs, which ships them in the Studio bundle). A block
+is exactly what `library()` puts between its header and the closing paren, so
+blocks concatenated inside that header make a library.
+
 Usage:
     python3 tools/gen_kicad_lib.py --statuses s.json --include production,beta \\
         --footprints "<lib>/Bergsonne Tiles.pretty" --out "<lib>/Bergsonne Tiles.kicad_sym"
     python3 tools/gen_kicad_lib.py --tiles <Family>-<Name>-a.json --out private.kicad_sym
+    python3 tools/gen_kicad_lib.py --symbols-dir <dir> --definitions definitions <overlay>/definitions ...
 """
 
 from __future__ import annotations
@@ -232,18 +240,45 @@ def symbol(d: dict) -> str:
     )
 
 
+LIB_HEADER = ('(kicad_symbol_lib\n\t(version 20241209)\n\t(generator "bergsonne_gen_kicad_lib")\n'
+              '\t(generator_version "9.0")\n')
+
+
 def library(defs: list[dict]) -> str:
     syms = [symbol(d) for d in sorted(defs, key=symbol_name)]
-    return ('(kicad_symbol_lib\n\t(version 20241209)\n\t(generator "bergsonne_gen_kicad_lib")\n'
-            '\t(generator_version "9.0")\n' + "\n".join(syms) + "\n)\n")
+    return LIB_HEADER + "\n".join(syms) + "\n)\n"
+
+
+def write_symbol_blocks(dirs: list[Path], out: Path) -> int:
+    """One `<out>/<Family.Name>/symbol-<rev>.kicad_sym` per tile revision with
+    pads, from every definition in `dirs` (later dirs win). Each file is the
+    block plus a newline, so LIB_HEADER + the files + ")\\n" is a library."""
+    defs: dict[tuple[str, str], dict] = {}
+    for d in dirs:
+        for path in sorted(Path(d).glob("*.json")):
+            x = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(x, dict) and x.get("family") and x.get("name") and x.get("rev"):
+                defs[(f"{x['family']}.{x['name']}", x["rev"])] = x
+    n = 0
+    for (tile, rev), x in sorted(defs.items()):
+        if not x.get("pads"):
+            continue
+        dest = out / tile / f"symbol-{rev}.kicad_sym"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(symbol(x) + "\n", encoding="utf-8")
+        n += 1
+    return n
 
 
 # ---- CLI ------------------------------------------------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate the tiles KiCad symbol library.")
-    ap.add_argument("--out", required=True, help="the .kicad_sym to write")
-    ap.add_argument("--definitions", type=Path, default=DEFINITIONS_DIR)
+    ap.add_argument("--out", help="the .kicad_sym to write")
+    ap.add_argument("--definitions", type=Path, nargs="+", default=[DEFINITIONS_DIR],
+                    help="definition dirs; a later dir's file of the same name wins")
+    ap.add_argument("--symbols-dir", type=Path,
+                    help="write one symbol block per tile revision here instead of a library")
     ap.add_argument("--statuses", type=Path, help="JSON {definition filename: status}")
     ap.add_argument("--include", default="production,beta", help="statuses to include (with --statuses)")
     ap.add_argument("--tiles", nargs="+", help="explicit definition filenames instead of --statuses")
@@ -251,6 +286,14 @@ def main() -> int:
                     help="footprint library (.pretty); tiles whose package is missing there are skipped")
     args = ap.parse_args()
 
+    if args.symbols_dir:
+        if args.out or args.statuses or args.tiles or args.footprints:
+            ap.error("--symbols-dir takes only --definitions")
+        n = write_symbol_blocks(args.definitions, args.symbols_dir)
+        print(f"wrote {n} symbol blocks to {args.symbols_dir}")
+        return 0
+    if not args.out:
+        ap.error("--out is required (or give --symbols-dir)")
     if bool(args.statuses) == bool(args.tiles):
         ap.error("give exactly one of --statuses or --tiles")
     if args.tiles:
@@ -266,7 +309,8 @@ def main() -> int:
 
     defs, skipped = [], []
     for fname in wanted:
-        path = args.definitions / fname
+        path = next((p for p in (d / fname for d in reversed(args.definitions)) if p.exists()),
+                    args.definitions[-1] / fname)
         if not path.exists():
             skipped.append(f"{fname}: no definition file")
             continue

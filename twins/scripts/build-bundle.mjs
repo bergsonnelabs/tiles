@@ -11,6 +11,17 @@
  *   tiles/<Tile>/docs.json      the driver's parsed header      (manifests/tile-docs/*.json)
  *   tiles/<Tile>/twin.js        the twin, compiled to one ES module (default export)
  *   tiles/<Tile>/def-<rev>.json each revision's definition       (definitions/*.json, minus `twin`)
+ *   tiles/<Tile>/symbol-<rev>.kicad_sym  each revision's KiCad symbol block, for a
+ *                               definition with pads (tools/gen_kicad_lib.py --symbols-dir)
+ *   tiles/<Tile>/driver/*       an overlay driver's header and sources, byte for byte
+ *   tiles/<Tile>/driver.json    its drivers/drivers.json entry, as a one-tile drivers file
+ *
+ * In index.json each tile's `files` names these by bundle path: `twin`,
+ * `manifest`, `docs`, `definitions` and `symbols` ({rev: path}), `driver`
+ * ([path]) and `driverEntry`. The site builds a viewer's
+ * downloads (driver sources, a KiCad library) from the last three: a symbol
+ * block is what gen_kicad_lib's library() puts inside its header, so blocks
+ * concatenated inside that header and a closing paren make a library.
  *
  * One directory per tile so the site can hand a viewer only the tiles they may
  * see (a dark tile's files never leave the server for anyone else).
@@ -35,7 +46,7 @@
  *   node scripts/build-bundle.mjs --out <dir> [--sha <tiles sha>] [--fingerprint <fp>]
  *                                 [--overlay <dir> …]
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -165,6 +176,70 @@ for (const p of roots('definitions').flatMap((dir) => filesIn(dir, /\.json$/))) 
   const rel = `tiles/${tile}/def-${def.rev}.json`;
   write(rel, json(def));
   (entry(tile).files.definitions ??= {})[def.rev] = rel;
+}
+
+// Each revision's KiCad symbol block, from the same definitions (overlay last,
+// so it wins). One Python run for all of them. Its output stays in the
+// scratch dir: this runs in public Actions logs, and tile names are private.
+const symbols = join(OUT, '.symbols');
+const gen = spawnSync(
+  process.env.PYTHON ?? 'python3',
+  [
+    join(TILES, 'tools', 'gen_kicad_lib.py'),
+    '--symbols-dir',
+    symbols,
+    '--definitions',
+    ...roots('definitions'),
+  ],
+  { encoding: 'utf8' },
+);
+if (gen.status !== 0) {
+  if (!process.env.GITHUB_ACTIONS) process.stderr.write(gen.stderr ?? String(gen.error ?? ''));
+  throw new Error('tools/gen_kicad_lib.py --symbols-dir failed (output withheld in Actions)');
+}
+for (const tile of existsSync(symbols) ? readdirSync(symbols).sort() : []) {
+  for (const f of filesIn(join(symbols, tile), /^symbol-.+\.kicad_sym$/)) {
+    const name = basename(f);
+    const rel = `tiles/${tile}/${name}`;
+    write(rel, readFileSync(f));
+    (entry(tile).files.symbols ??= {})[/^symbol-(.+)\.kicad_sym$/.exec(name)[1]] = rel;
+  }
+}
+rmSync(symbols, { recursive: true, force: true });
+
+// An overlay driver's sources, for the site to hand a viewer who may see the
+// tile: the files its drivers/drivers.json entry names (header, source + .c,
+// each extra source, + .c unless it names its extension), and the entry.
+// A later overlay's entry for the same tile wins, as in coregen.
+const drivers = {};
+for (const [n, root] of OVERLAYS.entries()) {
+  const path = join(root, 'drivers', 'drivers.json');
+  if (!existsSync(path)) continue;
+  for (const [tile, spec] of Object.entries(readJson(path).drivers ?? {})) {
+    const names = [
+      spec.header,
+      `${spec.source}.c`,
+      ...(spec.extra_sources ?? []).map((x) => (/\.[ch]$/.test(x) ? x : `${x}.c`)),
+    ];
+    // Overlay by number, not name: the error lands in public logs.
+    for (const f of names) {
+      if (!f || f !== basename(f) || !existsSync(join(root, 'drivers', f))) {
+        throw new Error(`overlay #${n + 1}: drivers.json names a driver file not in its drivers/`);
+      }
+    }
+    drivers[tile] = { dir: join(root, 'drivers'), spec, names: [...new Set(names)] };
+  }
+}
+for (const [tile, { dir, spec, names }] of Object.entries(drivers)) {
+  const files = entry(tile).files;
+  files.driver = names.map((f) => {
+    const rel = `tiles/${tile}/driver/${f}`;
+    write(rel, readFileSync(join(dir, f)));
+    return rel;
+  });
+  const rel = `tiles/${tile}/driver.json`;
+  write(rel, json({ schema: 'tiles-overlay-drivers/v1', drivers: { [tile]: spec } }));
+  files.driverEntry = rel;
 }
 
 // ── shared: the Core catalog and the passive parts ───────────────────────────
