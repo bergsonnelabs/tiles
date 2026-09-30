@@ -3,12 +3,15 @@
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
-from gen_kicad_lib import DEFINITIONS_DIR, compact, layout, library, symbol, symbol_name  # noqa: E402
+from gen_kicad_lib import (DEFINITIONS_DIR, LIB_HEADER, compact, layout, library, symbol,  # noqa: E402
+                           symbol_name)
 
 
 def fn(name, typ="digital", direction=""):
@@ -105,6 +108,36 @@ class Kicad(unittest.TestCase):
         self.assertIn('(property "Footprint" "Bergsonne Tiles:T44-10"', s)
         self.assertEqual(re.findall(r'\(property "([^"]+)"', s),
                          ["Reference", "Value", "Footprint", "Datasheet", "Description", "ki_keywords"])
+
+
+class SymbolsDir(unittest.TestCase):
+    """--symbols-dir: one block per tile revision with pads, a later dir wins,
+    and the blocks inside the library header make the same library."""
+
+    def test_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pub, ovl, out = Path(tmp, "pub"), Path(tmp, "ovl"), Path(tmp, "out")
+            pub.mkdir(), ovl.mkdir()
+            old = dict(DRIVE, pads=DRIVE["pads"][:2], power=[])
+            padless = dict(DRIVE, name="Y", pads=[], power=[])
+            for d, name, x in [(pub, "Drive-X-a.json", old), (ovl, "Drive-X-a.json", DRIVE),
+                               (pub, "Power-X-b.json", CHARGER), (ovl, "Drive-Y-a.json", padless)]:
+                (d / name).write_text(json.dumps(x), encoding="utf-8")
+            script = Path(__file__).with_name("gen_kicad_lib.py")
+            subprocess.run([sys.executable, str(script), "--symbols-dir", str(out),
+                            "--definitions", str(pub), str(ovl)], check=True, capture_output=True)
+            files = sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.is_file())
+            self.assertEqual(files, ["Drive.X/symbol-a.kicad_sym", "Power.X/symbol-b.kicad_sym"])
+            blocks = [(out / f).read_text(encoding="utf-8") for f in files]
+            self.assertEqual(blocks[0], symbol(DRIVE) + "\n")  # the overlay's copy
+            self.assertTrue(blocks[0].startswith('\t(symbol "Drive.X"\n'))
+            self.assertIn('(symbol "Power.X-b"', blocks[1])
+            self.assertEqual(LIB_HEADER + "".join(blocks) + ")\n", library([DRIVE, CHARGER]))
+
+    def test_needs_no_out(self):
+        r = subprocess.run([sys.executable, str(Path(__file__).with_name("gen_kicad_lib.py")),
+                            "--symbols-dir", "x", "--out", "y.kicad_sym"], capture_output=True)
+        self.assertEqual(r.returncode, 2)
 
 
 class EveryDefinition(unittest.TestCase):
