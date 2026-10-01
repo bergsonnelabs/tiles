@@ -1,0 +1,28 @@
+{
+  "core": "Core.ST.L4",
+  "clock": "max",
+  "bootloader": "rom",
+  "pads": {
+    "3": "GPIO.OUT",
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT"
+  },
+  "gpio": {
+    "3": {
+      "output_type": "open-drain",
+      "default": "high"
+    }
+  },
+  "interfaces": {
+    "I2C1": {
+      "speed": 400000
+    }
+  },
+  "tiles": [
+    {
+      "tile": "Sense.CAP",
+      "bus": "I2C1",
+      "instance": 0
+    }
+  ]
+}

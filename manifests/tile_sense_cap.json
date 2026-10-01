@@ -1,0 +1,1799 @@
+{
+  "schema": "studio-manifest/v1",
+  "source": "tiles@58298c3",
+  "tile": "Sense.CAP",
+  "palette": {
+    "label": "Sense.CAP",
+    "icon": "⬚"
+  },
+  "driver": {
+    "prefix": "tile_sense_cap",
+    "header": "tile_sense_cap.h",
+    "version": "1.0.0"
+  },
+  "handle": {
+    "type": "tile_t",
+    "init": "tile_sense_cap_init"
+  },
+  "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "set_layout"
+      ],
+      "symbol": "tile_sense_cap_set_layout",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Choose the electrode layout (non-blocking).",
+      "params": [
+        {
+          "name": "layout",
+          "type": "int",
+          "description": "Preset (init: NONE)",
+          "choices": [
+            {
+              "name": "SENSE_CAP_LAYOUT_NONE",
+              "value": 0,
+              "label": "No surface: nothing sensed"
+            },
+            {
+              "name": "SENSE_CAP_LAYOUT_GRID_2X3",
+              "value": 1,
+              "label": "2x3 trackpad (bench-tuned)"
+            },
+            {
+              "name": "SENSE_CAP_LAYOUT_BUTTONS_2X3",
+              "value": 2,
+              "label": "2x3 as six buttons"
+            },
+            {
+              "name": "SENSE_CAP_LAYOUT_SLIDER_1X3",
+              "value": 3,
+              "label": "3-segment slider on RX3"
+            },
+            {
+              "name": "SENSE_CAP_LAYOUT_SLIDER_1X4",
+              "value": 4,
+              "label": "4-segment slider, RX6 as Tx"
+            }
+          ]
+        }
+      ],
+      "returns": "sense_cap_result_t",
+      "controls": [
+        {
+          "param": "layout",
+          "label": "Surface layout",
+          "tier": "basic",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "surface_poll"
+      ],
+      "symbol": "tile_sense_cap_surface_poll",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Advance the baseline / surface job: registers, then ATI steps.",
+      "params": [],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_surface_ready"
+      ],
+      "symbol": "tile_sense_cap_is_surface_ready",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Is the tile ready: no job pending, baseline applied, surface tuned?",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "ati_start"
+      ],
+      "symbol": "tile_sense_cap_ati_start",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Queue auto-tuning (ATI) and return at once.",
+      "params": [
+        {
+          "name": "target",
+          "type": "int",
+          "description": "Trackpad, ALP or both",
+          "choices": [
+            {
+              "name": "SENSE_CAP_ATI_TRACKPAD",
+              "value": 1,
+              "label": "Trackpad channels"
+            },
+            {
+              "name": "SENSE_CAP_ATI_ALP",
+              "value": 2,
+              "label": "ALP wake channel (runs in LP1)"
+            },
+            {
+              "name": "SENSE_CAP_ATI_BOTH",
+              "value": 3,
+              "label": "Trackpad, then ALP"
+            }
+          ]
+        }
+      ],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "ati_poll"
+      ],
+      "symbol": "tile_sense_cap_ati_poll",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Advance an ATI started with ati_start().",
+      "params": [],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "hw_reset"
+      ],
+      "symbol": "tile_sense_cap_hw_reset",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Hardware-reset the chip through tile pad 3 (MCLR).",
+      "params": [],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reset"
+      ],
+      "symbol": "tile_sense_cap_reset",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Software-reset the chip (System Control SW Reset, §9.3.2).",
+      "params": [],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_version_major"
+      ],
+      "symbol": "tile_sense_cap_get_version_major",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Firmware major version (cached at init).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_version_minor"
+      ],
+      "symbol": "tile_sense_cap_get_version_minor",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Firmware minor version (cached at init).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_settings_version"
+      ],
+      "symbol": "tile_sense_cap_get_settings_version",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Settings-version label of a GUI-programmed part (register 0x74).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_sense_cap_process",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Read the trackpad data and update state (non-blocking).",
+      "params": [],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_event"
+      ],
+      "symbol": "tile_sense_cap_on_event",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Register or change the event callback.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?sense_cap_event_cb_t",
+          "description": "Callback (NULL to disable)"
+        },
+        {
+          "name": "ctx",
+          "type": "?void *",
+          "description": "User context passed to the callback"
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_touch_events"
+      ],
+      "symbol": "tile_sense_cap_get_touch_events",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Read and clear the accumulated touch-event bits.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "was_tapped"
+      ],
+      "symbol": "tile_sense_cap_was_tapped",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Did a tap (single or double) complete since the last check?",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_zone"
+      ],
+      "symbol": "tile_sense_cap_get_zone",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Which channel (zone) is under the first finger?",
+      "params": [],
+      "returns": "int8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "zone_at"
+      ],
+      "symbol": "tile_sense_cap_zone_at",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Which channel (zone) is nearest a position?",
+      "params": [
+        {
+          "name": "x",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "X position in the configured resolution"
+        },
+        {
+          "name": "y",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "Y position in the configured resolution"
+        }
+      ],
+      "returns": "int8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_x_pct"
+      ],
+      "symbol": "tile_sense_cap_get_x_pct",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "First finger's X as a percentage of the X range.",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_y_pct"
+      ],
+      "symbol": "tile_sense_cap_get_y_pct",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "First finger's Y as a percentage of the Y range.",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "wait_for_touch"
+      ],
+      "symbol": "tile_sense_cap_wait_for_touch",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Block until a finger touches the surface.",
+      "params": [
+        {
+          "name": "timeout_ms",
+          "type": "int",
+          "range": [
+            0,
+            600000
+          ],
+          "unit": "ms",
+          "description": "Maximum wait"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_info_flags"
+      ],
+      "symbol": "tile_sense_cap_get_info_flags",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Cached Info Flags word (Table A.2).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_gestures"
+      ],
+      "symbol": "tile_sense_cap_get_gestures",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Cached chip gesture bits (Table A.3).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_num_fingers"
+      ],
+      "symbol": "tile_sense_cap_get_num_fingers",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Number of fingers on the trackpad (0, 1 or 2).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_finger_x"
+      ],
+      "symbol": "tile_sense_cap_get_finger_x",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Absolute X of a finger (§7.2.3).",
+      "params": [
+        {
+          "name": "finger",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "Finger slot"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_finger_y"
+      ],
+      "symbol": "tile_sense_cap_get_finger_y",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Absolute Y of a finger (§7.2.3).",
+      "params": [
+        {
+          "name": "finger",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "Finger slot"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_finger_strength"
+      ],
+      "symbol": "tile_sense_cap_get_finger_strength",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Touch strength of a finger: the sum of its deltas (§7.2.4).",
+      "params": [
+        {
+          "name": "finger",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "Finger slot"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_finger_area"
+      ],
+      "symbol": "tile_sense_cap_get_finger_area",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Contact area of a finger, in channels (§7.2.5).",
+      "params": [
+        {
+          "name": "finger",
+          "type": "int",
+          "range": [
+            0,
+            1
+          ],
+          "description": "Finger slot"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_relative_x"
+      ],
+      "symbol": "tile_sense_cap_get_relative_x",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Relative X movement since the previous report (§7.2.2).",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_relative_y"
+      ],
+      "symbol": "tile_sense_cap_get_relative_y",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Relative Y movement since the previous report (§7.2.2).",
+      "params": [],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_touch_status"
+      ],
+      "symbol": "tile_sense_cap_get_touch_status",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Per-channel touch status CH0..CH31 (Table A.4), live read.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_touched"
+      ],
+      "symbol": "tile_sense_cap_is_touched",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Does one channel report touch? (live read)",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "description": "Channel number"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_num_channels"
+      ],
+      "symbol": "tile_sense_cap_get_num_channels",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Number of channels in the applied surface.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_channel_count"
+      ],
+      "symbol": "tile_sense_cap_get_channel_count",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "One channel's raw count (extended map 0xE000, live read).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "description": "Channel number"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_channel_delta"
+      ],
+      "symbol": "tile_sense_cap_get_channel_delta",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "One channel's signed delta, count minus reference (§5.3.4).",
+      "params": [
+        {
+          "name": "channel",
+          "type": "int",
+          "range": [
+            0,
+            5
+          ],
+          "description": "Channel number"
+        }
+      ],
+      "returns": "int16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_channel_counts"
+      ],
+      "symbol": "tile_sense_cap_read_channel_counts",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Read the first n channel counts in one transaction.",
+      "params": [
+        {
+          "name": "counts",
+          "type": "int[]",
+          "description": "Out: n counts"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "c_out_buffer": {
+        "name": "counts",
+        "type": "uint16_t",
+        "cap_param": "n"
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_channel_deltas"
+      ],
+      "symbol": "tile_sense_cap_read_channel_deltas",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Read the first n signed channel deltas in one transaction.",
+      "params": [
+        {
+          "name": "deltas",
+          "type": "int[]",
+          "description": "Out: n deltas (count - reference, §5.3.4)"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "c_out_buffer": {
+        "name": "deltas",
+        "type": "int16_t",
+        "cap_param": "n"
+      },
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "is_alp_active"
+      ],
+      "symbol": "tile_sense_cap_is_alp_active",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Does the ALP channel report presence? (cached Info Flags)",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_alp_count"
+      ],
+      "symbol": "tile_sense_cap_get_alp_count",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Raw ALP count (register 0x23, live read).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_alp_lta"
+      ],
+      "symbol": "tile_sense_cap_get_alp_lta",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "ALP long-term average (register 0x24, live read).",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_mode"
+      ],
+      "symbol": "tile_sense_cap_get_mode",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Current charging mode (cached Info Flags).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "has_ati_error"
+      ],
+      "symbol": "tile_sense_cap_has_ati_error",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Did the last ATI fail?",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_sensitivity"
+      ],
+      "symbol": "tile_sense_cap_set_sensitivity",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Touch sensitivity relative to the surface's tuned multipliers.",
+      "params": [
+        {
+          "name": "level",
+          "type": "int",
+          "description": "Sensitivity level",
+          "choices": [
+            {
+              "name": "SENSE_CAP_SENS_LOWEST",
+              "value": 0,
+              "label": "Firm touches only (multipliers x2)"
+            },
+            {
+              "name": "SENSE_CAP_SENS_LOW",
+              "value": 1,
+              "label": "Less sensitive (x1.5)"
+            },
+            {
+              "name": "SENSE_CAP_SENS_NORMAL",
+              "value": 2,
+              "label": "As tuned for the surface"
+            },
+            {
+              "name": "SENSE_CAP_SENS_HIGH",
+              "value": 3,
+              "label": "More sensitive (x0.75)"
+            },
+            {
+              "name": "SENSE_CAP_SENS_HIGHEST",
+              "value": 4,
+              "label": "Light touches (x0.5)"
+            }
+          ]
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "level",
+          "label": "Touch sensitivity",
+          "tier": "basic",
+          "scope": "config",
+          "default": 2
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_touch_multipliers"
+      ],
+      "symbol": "tile_sense_cap_set_touch_multipliers",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Set the touch set/clear multipliers directly (§5.5.1).",
+      "params": [
+        {
+          "name": "set_mult",
+          "type": "int",
+          "range": [
+            1,
+            255
+          ],
+          "description": "Touch-set multiplier"
+        },
+        {
+          "name": "clear_mult",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Touch-clear multiplier (clamped to <= set)"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "set_mult",
+          "label": "Touch-set multiplier",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 8
+        },
+        {
+          "param": "clear_mult",
+          "label": "Touch-clear multiplier",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 5
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_power_profile"
+      ],
+      "symbol": "tile_sense_cap_set_power_profile",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Choose a report-rate / timeout bundle for the power modes.",
+      "params": [
+        {
+          "name": "profile",
+          "type": "int",
+          "description": "Profile",
+          "choices": [
+            {
+              "name": "SENSE_CAP_POWER_ALWAYS_ACTIVE",
+              "value": 0,
+              "label": "Always active (10 ms in every mode)"
+            },
+            {
+              "name": "SENSE_CAP_POWER_RESPONSIVE",
+              "value": 1,
+              "label": "Responsive"
+            },
+            {
+              "name": "SENSE_CAP_POWER_BALANCED",
+              "value": 2,
+              "label": "Balanced"
+            },
+            {
+              "name": "SENSE_CAP_POWER_LOW_POWER",
+              "value": 3,
+              "label": "Low power"
+            }
+          ]
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "profile",
+          "label": "Power profile",
+          "tier": "basic",
+          "scope": "config",
+          "default": 1
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_power_mode"
+      ],
+      "symbol": "tile_sense_cap_set_power_mode",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Automatic power modes, or hold one mode (manual control, §6.3).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "AUTO (init) or a forced mode",
+          "choices": [
+            {
+              "name": "SENSE_CAP_POWER_AUTO",
+              "value": 0,
+              "label": "Chip switches modes itself"
+            },
+            {
+              "name": "SENSE_CAP_POWER_FORCE_ACTIVE",
+              "value": 1,
+              "label": "Held in Active (manual control)"
+            },
+            {
+              "name": "SENSE_CAP_POWER_FORCE_LP1",
+              "value": 2,
+              "label": "Held in LP1: ALP only"
+            },
+            {
+              "name": "SENSE_CAP_POWER_FORCE_LP2",
+              "value": 3,
+              "label": "Held in LP2: ALP only"
+            }
+          ]
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_active_rate"
+      ],
+      "symbol": "tile_sense_cap_set_active_rate",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Active-mode report period.",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            10,
+            1000
+          ],
+          "unit": "ms",
+          "description": "Report period in Active mode"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Active report period",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 10
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_idle_timeout"
+      ],
+      "symbol": "tile_sense_cap_set_idle_timeout",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Time in Idle before dropping to LP1 (used while ALP wake is on).",
+      "params": [
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            0,
+            3600
+          ],
+          "unit": "s",
+          "description": "Idle timeout"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "seconds",
+          "label": "Idle time before low power",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 20
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_report_rate"
+      ],
+      "symbol": "tile_sense_cap_set_report_rate",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Report period of one charging mode (§6.1).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Which mode's period",
+          "choices": [
+            {
+              "name": "SENSE_CAP_MODE_ACTIVE",
+              "value": 0,
+              "label": "Active"
+            },
+            {
+              "name": "SENSE_CAP_MODE_IDLE_TOUCH",
+              "value": 1,
+              "label": "Idle-touch"
+            },
+            {
+              "name": "SENSE_CAP_MODE_IDLE",
+              "value": 2,
+              "label": "Idle"
+            },
+            {
+              "name": "SENSE_CAP_MODE_LP1",
+              "value": 3,
+              "label": "Low power 1"
+            },
+            {
+              "name": "SENSE_CAP_MODE_LP2",
+              "value": 4,
+              "label": "Low power 2"
+            }
+          ]
+        },
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            1,
+            65535
+          ],
+          "unit": "ms",
+          "description": "Report period"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_mode_timeout"
+      ],
+      "symbol": "tile_sense_cap_set_mode_timeout",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Timeout before the chip steps down from a mode (§6.2).",
+      "params": [
+        {
+          "name": "mode",
+          "type": "int",
+          "description": "Active, Idle-touch, Idle or LP1",
+          "choices": [
+            {
+              "name": "SENSE_CAP_MODE_ACTIVE",
+              "value": 0,
+              "label": "Active"
+            },
+            {
+              "name": "SENSE_CAP_MODE_IDLE_TOUCH",
+              "value": 1,
+              "label": "Idle-touch"
+            },
+            {
+              "name": "SENSE_CAP_MODE_IDLE",
+              "value": 2,
+              "label": "Idle"
+            },
+            {
+              "name": "SENSE_CAP_MODE_LP1",
+              "value": 3,
+              "label": "Low power 1"
+            },
+            {
+              "name": "SENSE_CAP_MODE_LP2",
+              "value": 4,
+              "label": "Low power 2"
+            }
+          ]
+        },
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "unit": "s",
+          "description": "Timeout, 0 = never"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_alp_wake"
+      ],
+      "symbol": "tile_sense_cap_set_alp_wake",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Allow the chip to sleep in LP1/LP2 and wake on the ALP channel.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = allow ALP wake"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "enable",
+          "label": "Wake on proximity",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_alp_threshold"
+      ],
+      "symbol": "tile_sense_cap_set_alp_threshold",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "ALP output threshold (§5.5.2).",
+      "params": [
+        {
+          "name": "threshold",
+          "type": "int",
+          "range": [
+            1,
+            1000
+          ],
+          "description": "Delta counts"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "threshold",
+          "label": "Proximity wake threshold",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 20
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_flip_x"
+      ],
+      "symbol": "tile_sense_cap_set_flip_x",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Mirror X relative to the layout (§7.7).",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = mirror"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "enable",
+          "label": "Mirror X",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_flip_y"
+      ],
+      "symbol": "tile_sense_cap_set_flip_y",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Mirror Y relative to the layout (§7.7).",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = mirror"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "enable",
+          "label": "Mirror Y",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_switch_xy"
+      ],
+      "symbol": "tile_sense_cap_set_switch_xy",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Swap the X and Y axes relative to the layout (§7.7).",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = swap"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "enable",
+          "label": "Swap X and Y",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_resolution"
+      ],
+      "symbol": "tile_sense_cap_set_resolution",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "XY output range (§7.4).",
+      "params": [
+        {
+          "name": "x_res",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "X range, 0 = automatic"
+        },
+        {
+          "name": "y_res",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "Y range, 0 = automatic"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "x_res",
+          "label": "X resolution",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        },
+        {
+          "param": "y_res",
+          "label": "Y resolution",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_tap_time"
+      ],
+      "symbol": "tile_sense_cap_set_tap_time",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Maximum tap duration (§8.1).",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            50,
+            2000
+          ],
+          "unit": "ms",
+          "description": "Maximum tap duration"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Tap time",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 300
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_hold_time"
+      ],
+      "symbol": "tile_sense_cap_set_hold_time",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Press-and-hold time, counted after the tap time (§8.2).",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            0,
+            5000
+          ],
+          "unit": "ms",
+          "description": "Hold time after the tap time"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "ms",
+          "label": "Hold time",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 300
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_swipe_time"
+      ],
+      "symbol": "tile_sense_cap_set_swipe_time",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Maximum swipe duration for the chip gesture engine (§8.3).",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            50,
+            2000
+          ],
+          "unit": "ms",
+          "description": "Swipe must cover its distance within this"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_swipe_distance"
+      ],
+      "symbol": "tile_sense_cap_set_swipe_distance",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Minimum swipe travel (§8.3), both axes.",
+      "params": [
+        {
+          "name": "px",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "Pixels in the configured resolution, 0 = automatic"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "px",
+          "label": "Swipe distance",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_swipe_angle"
+      ],
+      "symbol": "tile_sense_cap_set_swipe_angle",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Maximum swipe angle from its axis (§8.3).",
+      "params": [
+        {
+          "name": "degrees",
+          "type": "int",
+          "range": [
+            1,
+            75
+          ],
+          "unit": "deg",
+          "description": "Largest angle from the X or Y axis"
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "degrees",
+          "label": "Swipe angle",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 45
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_gesture_source"
+      ],
+      "symbol": "tile_sense_cap_set_gesture_source",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Choose the gesture engine.",
+      "params": [
+        {
+          "name": "source",
+          "type": "int",
+          "description": "Gesture engine",
+          "choices": [
+            {
+              "name": "SENSE_CAP_GESTURES_DRIVER",
+              "value": 0,
+              "label": "Driver recognizers"
+            },
+            {
+              "name": "SENSE_CAP_GESTURES_CHIP",
+              "value": 1,
+              "label": "Chip gesture engine"
+            }
+          ]
+        }
+      ],
+      "returns": "uint8_t",
+      "controls": [
+        {
+          "param": "source",
+          "label": "Gesture engine",
+          "tier": "advanced",
+          "scope": "config",
+          "default": 0
+        }
+      ],
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "enable_gestures"
+      ],
+      "symbol": "tile_sense_cap_enable_gestures",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Which gestures fire (either engine).",
+      "params": [
+        {
+          "name": "mask",
+          "type": "int",
+          "range": [
+            0,
+            63
+          ],
+          "description": "OR of SENSE_CAP_GESTURE_* bits (init: all)"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_max_touches"
+      ],
+      "symbol": "tile_sense_cap_set_max_touches",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Maximum simultaneous fingers (§7.3).",
+      "params": [
+        {
+          "name": "fingers",
+          "type": "int",
+          "range": [
+            1,
+            2
+          ],
+          "description": "Fingers tracked"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_reference_update"
+      ],
+      "symbol": "tile_sense_cap_set_reference_update",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Reference update interval (§5.4.1).",
+      "params": [
+        {
+          "name": "seconds",
+          "type": "int",
+          "range": [
+            0,
+            60
+          ],
+          "unit": "s",
+          "description": "Update interval"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_i2c_timeout"
+      ],
+      "symbol": "tile_sense_cap_set_i2c_timeout",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Unserviced-window timeout (§11.6).",
+      "params": [
+        {
+          "name": "ms",
+          "type": "int",
+          "range": [
+            2,
+            1000
+          ],
+          "unit": "ms",
+          "description": "Window timeout"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_watchdog"
+      ],
+      "symbol": "tile_sense_cap_set_watchdog",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Enable or disable the chip's watchdog (§10.2). Init: enabled.",
+      "params": [
+        {
+          "name": "enable",
+          "type": "int",
+          "description": "1 = enable"
+        }
+      ],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "reseed"
+      ],
+      "symbol": "tile_sense_cap_reseed",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Reseed the trackpad references and the ALP LTA (§5.4.3).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "bool",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_reg"
+      ],
+      "symbol": "tile_sense_cap_read_reg",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Read a raw 16-bit register (waits for a window).",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Register address"
+        }
+      ],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    },
+    {
+      "qname": [
+        "$slot",
+        "write_reg"
+      ],
+      "symbol": "tile_sense_cap_write_reg",
+      "header": "tile_sense_cap.h",
+      "category": "tile",
+      "description": "Write a raw 16-bit register, guarded and verified.",
+      "params": [
+        {
+          "name": "reg",
+          "type": "int",
+          "range": [
+            0,
+            255
+          ],
+          "description": "Register address"
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "range": [
+            0,
+            65535
+          ],
+          "description": "Value"
+        }
+      ],
+      "returns": "sense_cap_result_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t *"
+    }
+  ],
+  "events": [
+    {
+      "name": "touch_down",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_TOUCH_DOWN"
+    },
+    {
+      "name": "touch_up",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_TOUCH_UP"
+    },
+    {
+      "name": "tap",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_TAP"
+    },
+    {
+      "name": "double_tap",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_DOUBLE_TAP"
+    },
+    {
+      "name": "long_press",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_LONG_PRESS"
+    },
+    {
+      "name": "swipe",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_SWIPE"
+    },
+    {
+      "name": "drag",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_DRAG"
+    },
+    {
+      "name": "reset",
+      "payload": [],
+      "mask": "SENSE_CAP_EV_RESET"
+    }
+  ],
+  "bus_addresses": {
+    "I2C": [
+      {
+        "address": "0x56",
+        "is_default": true
+      }
+    ]
+  }
+}

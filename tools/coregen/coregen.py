@@ -1974,6 +1974,7 @@ TILE_DRIVER_MAP = {
     "Sense.T.C":   {"header": "tile_sense_t_c.h",  "source": "tile_sense_t_c",  "prefix": "tile_sense_t_c"},
     "Sense.MIC":   {"header": "tile_sense_mic.h",  "source": "tile_sense_mic",  "prefix": "tile_sense_mic"},
     "Sense.TOF":   {"header": "tile_sense_tof.h", "source": "tile_sense_tof", "prefix": "tile_sense_tof"},
+    "Sense.CAP":   {"header": "tile_sense_cap.h", "source": "tile_sense_cap", "prefix": "tile_sense_cap"},
     "Sense.M.3G":  {"header": "tile_sense_m_3g.h", "source": "tile_sense_m_3g", "prefix": "tile_sense_m_3g"},
     "Sense.HR":    {"header": "tile_sense_hr.h",   "source": "tile_sense_hr",   "prefix": "tile_sense_hr"},
 }
