@@ -20,6 +20,7 @@ import senseTof from './sims/sense_tof';
 import senseTC from './sims/sense_t_c';
 import senseM3G from './sims/sense_m_3g';
 import senseMic from './sims/sense_mic';
+import senseCap from './sims/sense_cap';
 import coreL4 from './sims/core_st_l4';
 import coreW5 from './sims/core_st_w5';
 import powerL1N from './sims/power_l_1n';
@@ -74,6 +75,7 @@ export const twins: Record<string, AnyTileSim> = {
   'Sense.T.C': senseTC,
   'Sense.M.3G': senseM3G,
   'Sense.MIC': senseMic,
+  'Sense.CAP': senseCap,
   'Core.ST.L4': coreL4,
   // Pre-2026-09 name of the same board (not the Core.ST.L4.2), kept so a
   // project saved under it still finds its twin.

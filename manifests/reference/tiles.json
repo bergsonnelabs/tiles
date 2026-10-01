@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@b868f1d",
+  "source": "tiles@b17f793",
   "tiles": [
     {
       "family": "Sense",
@@ -78,6 +78,91 @@
           "default": {
             "name": "SPI.MOSI",
             "type": "digital"
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
+      "family": "Sense",
+      "name": "CAP",
+      "rev": "a",
+      "headline": "capacitive touch controller",
+      "i2c": [
+        {
+          "name": "I2C",
+          "default": "0x56",
+          "alt": []
+        }
+      ],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "RX3",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "/MCLR",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "TX11",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "TX9/TX10",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "TX8",
+            "type": "analog"
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "RX6",
+            "type": "analog"
           },
           "alt": []
         },
