@@ -404,6 +404,118 @@ typedef enum {
             ["SENSE_Y_MODE_LP", "SENSE_Y_MODE_LN"],
         )
 
+    def test_hazard_resolves_members_to_values(self):
+        hosts, errors = self._hosts(
+            [self.ODR + ' hazard="too slow (6.25 Hz)" hazard_values=SENSE_Y_ODR_6HZ']
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            hosts[0]["controls"][0]["hazard"],
+            {"reason": "too slow (6.25 Hz)", "values": [0x0C]},
+        )
+        # no hazard= → no key
+        hosts, errors = self._hosts([self.ODR])
+        self.assertEqual(errors, [])
+        self.assertNotIn("hazard", hosts[0]["controls"][0])
+
+    def test_hazard_on_an_allow_narrowed_enum(self):
+        hosts, errors = self._hosts(
+            [self.ODR],
+            mode_tags=['@studio control mode label="Power mode" tier=advanced default=SENSE_Y_MODE_LN '
+                       'allow=SENSE_Y_MODE_LP,SENSE_Y_MODE_LN hazard="drains the battery" hazard_values=SENSE_Y_MODE_LP'],
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(hosts[1]["controls"][0]["hazard"], {"reason": "drains the battery", "values": [2]})
+
+    def test_hazard_mistakes_fail_the_build(self):
+        cases = {
+            # hazard_values without a reason
+            'needs hazard="<short reason>"': [self.ODR + " hazard_values=SENSE_Y_ODR_6HZ"],
+            # a reason without values
+            "needs hazard_values=": [self.ODR + ' hazard="x"'],
+            # an unknown member
+            "hazard_values=SENSE_Y_ODR_1HZ is not a member": [
+                self.ODR + ' hazard="x" hazard_values=SENSE_Y_ODR_1HZ'
+            ],
+            # the default must never be hazardous
+            "the default is a hazard value": [
+                self.ODR + ' hazard="x" hazard_values=SENSE_Y_ODR_100HZ'
+            ],
+        }
+        for needle, tags in cases.items():
+            hosts, errors = self._hosts(tags)
+            self.assertTrue(any(needle in e for e in errors), f"{needle!r} not in {errors}")
+            self.assertNotIn("hazard", hosts[0]["controls"][0])
+        # a member the argument does not offer (allow=) is not a hazard it can take
+        _, errors = self._hosts(
+            [self.ODR],
+            mode_tags=['@studio control mode label="Power mode" tier=advanced default=SENSE_Y_MODE_LN '
+                       'allow=SENSE_Y_MODE_LN hazard="x" hazard_values=SENSE_Y_MODE_LP'],
+        )
+        self.assertTrue(any("not one of the offered members" in e for e in errors), errors)
+
+    def _limit_hosts(self, control_tag, range_doc="@param neg_v [0..95] V Negative limit"):
+        """One numeric-argument setter (`set_limit(tile, uint8_t neg_v)`) for hazard_above."""
+        import gen_studio_manifest as gsm
+
+        gsm.VIBE_ERRORS.clear()
+        lines = ["@studio expose category=tile name=set_limit section=config", control_tag]
+        if range_doc:
+            lines.append(range_doc)
+        tags = parse_studio_tags(lines)
+        sig = {
+            "returns": "void",
+            "name": "tile_sense_y_set_limit",
+            "params": [{"name": "tile", "ctype": "tile_t *"}, {"name": "neg_v", "ctype": "uint8_t"}],
+        }
+        with redirect_stderr(io.StringIO()):
+            host = build_host_entry(tags[0][2], lines, sig, "y.h", scope="tile", all_tags=tags)
+        gsm.resolve_vibe_settings([host], "y.h")
+        return host, list(gsm.VIBE_ERRORS)
+
+    LIMIT = '@studio control neg_v label="Negative limit" tier=basic default=10'
+
+    def test_hazard_above_on_a_numeric_argument(self):
+        host, errors = self._limit_hosts(self.LIMIT + ' hazard="damages PowerHap" hazard_above=10')
+        self.assertEqual(errors, [])
+        self.assertEqual(host["controls"][0]["hazard"], {"reason": "damages PowerHap", "above": 10})
+        # the default may sit AT the threshold, and hex works like default=
+        host, errors = self._limit_hosts(
+            '@studio control neg_v label="Negative limit" tier=basic default=0x0A hazard="x" hazard_above=0x0A'
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(host["controls"][0]["hazard"]["above"], 10)
+
+    def test_hazard_above_mistakes_fail_the_build(self):
+        cases = {
+            # a threshold without a reason
+            'hazard_above=… needs hazard="<short reason>"': self.LIMIT + " hazard_above=10",
+            # both forms at once
+            "not both": self.LIMIT + ' hazard="x" hazard_values=20 hazard_above=10',
+            # not an integer
+            "must be an integer": self.LIMIT + ' hazard="x" hazard_above=10.5',
+            # outside [min..max]
+            "hazard_above=96 must lie within [0..95)": self.LIMIT + ' hazard="x" hazard_above=96',
+            # at max it marks nothing
+            "hazard_above=95 must lie within": self.LIMIT + ' hazard="x" hazard_above=95',
+            "hazard_above=-1 must lie within": self.LIMIT + ' hazard="x" hazard_above=-1',
+            # the default must not be hazardous
+            "the default 20 is above hazard_above=10": (
+                '@studio control neg_v label="Negative limit" tier=basic default=20 hazard="x" hazard_above=10'
+            ),
+        }
+        for needle, tag in cases.items():
+            host, errors = self._limit_hosts(tag)
+            self.assertTrue(any(needle in e for e in errors), f"{needle!r} not in {errors}")
+            self.assertNotIn("hazard", host["controls"][0])
+        # no [min..max] to check it against (also its own numeric-range error)
+        host, errors = self._limit_hosts(self.LIMIT + ' hazard="x" hazard_above=10', range_doc=None)
+        self.assertTrue(any("needs the argument's `@param [min..max]`" in e for e in errors), errors)
+        # an enum argument takes hazard_values=, not a threshold
+        hosts, errors = self._hosts([self.ODR + ' hazard="x" hazard_above=8'])
+        self.assertTrue(any("only applies to a numeric argument" in e for e in errors), errors)
+        self.assertNotIn("hazard", hosts[0]["controls"][0])
+
     def test_authoring_mistakes_fail_the_build(self):
         cases = {
             "no exposed function named 'set_nope'": [self.ODR, '@studio require expr="set_nope.x == 1" message="m"'],

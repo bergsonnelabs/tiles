@@ -25,6 +25,35 @@ static uint8_t resolve_id(uint8_t instance)
 }
 
 /* -------------------------------------------------------------- */
+/* Range-dependent tuning                                          */
+/* -------------------------------------------------------------- */
+
+#define BOS_PARCAP_VALUE_MASK       0x00FFu     /* PARCAP[7:0] */
+
+/**
+ * @brief  Range-dependent tuning (datasheet §6.10.2, §6.10.7, §6.10.8).
+ *
+ * Three fields are linear in FBratio, which CONFIG.GAIND selects (31 for
+ * ±95 V, 4.33 for ±13.28 V; §6.10.6):
+ *   - ION_BL.I_ON_SCALE[7:0] = round(Latency / (L1 × 2^-12) × Rsense × FBratio)
+ *   - PARCAP[7:0]            = sqrt(Csw / L1) / 2^-11 × Rsense × FBratio
+ *   - SUP_RISE.TI_RISE[5:0]  = (Tclk × 31.25 / L1) × (FBratio / Rsense)
+ * Every other term is a board constant, so the low-range value is the
+ * high-range value × 4.33 / 31 (rounded). The high-range values are the ones
+ * this driver has always used (I_ON_SCALE and PARCAP: chip reset values;
+ * TI_RISE: 34 from the formula with Tclk = 70 ns, L1 = 10 µH, Rsense = 0.2 Ω).
+ */
+#define BOS_FB_LOW_FROM_HIGH(v)     ((uint16_t)((((uint32_t)(v)) * 433u + 1550u) / 3100u))
+#define BOS_I_ON_SCALE_HIGH         0xA0u   /**< 160 (chip reset value) */
+#define BOS_I_ON_SCALE_LOW          BOS_FB_LOW_FROM_HIGH(BOS_I_ON_SCALE_HIGH)  /**< 22 */
+#define BOS_PARCAP_HIGH             0x3Au   /**< 58 (chip reset value) */
+#define BOS_PARCAP_LOW              BOS_FB_LOW_FROM_HIGH(BOS_PARCAP_HIGH)      /**< 8 */
+#define BOS_TI_RISE_HIGH            0x22u   /**< 34 = 70 ns × 31.25 / 10 µH × 31 / 0.2 Ω */
+#define BOS_TI_RISE_LOW             BOS_FB_LOW_FROM_HIGH(BOS_TI_RISE_HIGH)     /**< 5 (formula: 4.74) */
+#define BOS_ION_BL_BASE             0x0300u /**< FSWMAX = 0, SB = 0x3 (reset values) */
+#define BOS_SUP_RISE_TIMING_BASE    0x09C0u /**< LP = 1, VDD[4:0] = 7 (3.7 V), TI_RISE cleared */
+
+/* -------------------------------------------------------------- */
 /* Per-instance shadow state                                       */
 /* -------------------------------------------------------------- */
 
@@ -39,18 +68,31 @@ static uint8_t resolve_id(uint8_t instance)
  *   CONFIG write performed by set_mode() / sleep().
  * - comm_persistent_bits: TOUT — OR'd into the COMM write done by
  *   bos_set_return_reg() so the bit survives return-register changes.
- * - parcap: full PARCAP value (init computes the lower 8 bits;
- *   set_upi() flips bit 9). Tracked so we can rewrite it without
- *   reading back through the RDADDR path.
+ * - parcap: full PARCAP value (PARCAP[7:0] follows the output range —
+ *   init / set_output_range write it; CCM is set by init; set_upi()
+ *   flips bit 9). Tracked so we can rewrite it without reading back
+ *   through the RDADDR path.
  * - cfg_mode: the mode part of the last CONFIG write (PLAY_MODE / OE /
  *   SENSE / DS / PLAY_SRATE), so the safe reset can clear OE without
  *   changing the play mode, and knows whether REFERENCE is a sample.
+ * - lim_pos_v / lim_neg_v: the output voltage limits in volts (≤ 95), as
+ *   set_voltage_limits() took them. lim_pos_code / lim_neg_code are the same
+ *   limits as REFERENCE codes for the range the shadow selects; every change
+ *   of range or limit re-derives them (update_limit_codes), so the per-sample
+ *   clamp is two compares, no division.
+ * - clamp_count: samples clamp_sample() flattened since init or the last
+ *   read_clamp_count(); saturates at UINT32_MAX.
  */
 typedef struct {
     uint16_t cfg_persistent_bits;
     uint16_t comm_persistent_bits;
     uint16_t parcap;
     uint16_t cfg_mode;
+    uint8_t  lim_pos_v;
+    uint8_t  lim_neg_v;
+    int16_t  lim_pos_code;
+    int16_t  lim_neg_code;
+    uint32_t clamp_count;
 } drive_p_state_t;
 
 static drive_p_state_t drv_state[ID_TABLE_LEN];
@@ -119,28 +161,131 @@ static void bos_config(tile_t* tile, uint16_t base)
     bos_write(tile, BOS1921_REG_CONFIG, cfg_with_persistent(tile, base));
 }
 
-/* SUP_RISE as init writes it: tuned supply-rise timing 0x09E2 plus this
- * chip's I2C_ADDR nibble (bits [15:12]). The nibble only latches with
+/* 1 when the shadow selects the low output range (CONFIG.GAIND = 1,
+ * FBratio 4.33), 0 for the high range (GAIND = 0, FBratio 31). */
+static uint8_t range_is_low(const drive_p_state_t *st)
+{
+    return (st->cfg_persistent_bits & BOS_CONFIG_GAIND_BIT) ? 1u : 0u;
+}
+
+/* SUP_RISE as init writes it: LP = 1, VDD[4:0] = 7 (3.7 V), TI_RISE for the
+ * selected range (34 high → 0x49E2 at 0x44, as before v3.6; 5 low), plus
+ * this chip's I2C_ADDR nibble (bits [15:12]). The nibble only latches with
  * COMM.GPIODIR = 1 and GPIO low (§6.10.8), and it equals the current
  * address anyway, so rewriting it never moves the chip. */
 static uint16_t sup_rise_value(tile_t* tile)
 {
+    uint16_t ti_rise = range_is_low(state_for(tile)) ? BOS_TI_RISE_LOW
+                                                     : BOS_TI_RISE_HIGH;
     return (uint16_t)(((uint16_t)(tile->id & 0x0Fu) << BOS_SUP_RISE_I2C_ADDR_POS)
-                      | 0x09E2u);
+                      | BOS_SUP_RISE_TIMING_BASE | ti_rise);
+}
+
+/* ION_BL with I_ON_SCALE for the selected range; FSWMAX / SB stay at their
+ * reset values (high range = the reset value 0x03A0 exactly). */
+static uint16_t ion_bl_value(tile_t* tile)
+{
+    return (uint16_t)(BOS_ION_BL_BASE |
+                      (range_is_low(state_for(tile)) ? BOS_I_ON_SCALE_LOW
+                                                     : BOS_I_ON_SCALE_HIGH));
+}
+
+/* Put PARCAP[7:0] for the selected range into the shadow (CCM / UPI kept). */
+static void parcap_follow_range(drive_p_state_t *st)
+{
+    st->parcap = (uint16_t)((st->parcap & (uint16_t)~BOS_PARCAP_VALUE_MASK) |
+                            (range_is_low(st) ? BOS_PARCAP_LOW : BOS_PARCAP_HIGH));
+}
+
+/* -------------------------------------------------------------- */
+/* Output voltage limits                                           */
+/* -------------------------------------------------------------- */
+
+/* Volts → REFERENCE code for one range, rounded DOWN so the limit in force
+ * never exceeds the one asked for. Vpk = code / 2047 × 3.6 V × FBratio
+ * (§6.10.1), so:
+ *   high (FBratio 31):   code = V × 2047 / 111.6  (one code = 54.5 mV)
+ *   low  (FBratio 4.33): code = V × 2047 / 15.588 (one code = 7.6 mV)
+ * Capped at BOS1921_REFERENCE_MAX: a limit at or above the range's maximum
+ * is that maximum. 95 V on the high range is 1743, the datasheet's own ±95 V
+ * code (it is 95.03 V; rounding down would give 1742). */
+static int16_t volts_to_code(uint8_t low_range, uint8_t volts)
+{
+    uint32_t code;
+    if (low_range) {
+        code = ((uint32_t)volts * 2047000u) / 15588u;
+    } else {
+        if (volts >= DRIVE_P_VOLTAGE_LIMIT_MAX_V) return BOS1921_REFERENCE_MAX;
+        code = ((uint32_t)volts * 20470u) / 1116u;
+    }
+    return (int16_t)((code > BOS1921_REFERENCE_MAX) ? BOS1921_REFERENCE_MAX : code);
+}
+
+/* Re-derive the limit codes for the range the shadow selects. Call after
+ * any change to the limits or to CONFIG.GAIND in the shadow. */
+static void update_limit_codes(drive_p_state_t *st)
+{
+    uint8_t low = range_is_low(st);
+    st->lim_pos_code = volts_to_code(low, st->lim_pos_v);
+    st->lim_neg_code = volts_to_code(low, st->lim_neg_v);
+}
+
+/* THE clamp: every output sample the driver sends to the chip passes here.
+ * Limits it to [-lim_neg_code, +lim_pos_code] and counts each one it had to
+ * flatten. */
+static int16_t clamp_sample(drive_p_state_t *st, int32_t s)
+{
+    if (s > st->lim_pos_code) {
+        s = st->lim_pos_code;
+    } else if (s < -(int32_t)st->lim_neg_code) {
+        s = -(int32_t)st->lim_neg_code;
+    } else {
+        return (int16_t)s;
+    }
+    if (st->clamp_count != UINT32_MAX) st->clamp_count++;
+    return (int16_t)s;
+}
+
+/* 1 when a REFERENCE write is a waveform sample: Direct or FIFO mode
+ * (PLAY_MODE[1:0] = 0 / 1). In the RAM modes REFERENCE takes WFS command
+ * words instead (§6.10.1), which must pass unchanged. */
+static uint8_t reference_is_sample(const drive_p_state_t *st)
+{
+    uint16_t play_mode = (uint16_t)(st->cfg_mode & BOS_CONFIG_PLAY_MODE_MASK);
+    return (play_mode == 0x0000u || play_mode == 0x0200u) ? 1u : 0u;
+}
+
+/* A raw 16-bit REFERENCE word, limited as the sample the chip would play:
+ * REFERENCE[11:0], 12-bit two's complement (§6.10.1). A RAM-mode word is a
+ * WFS command and passes unchanged. */
+static uint16_t limit_reference_word(drive_p_state_t *st, uint16_t word)
+{
+    if (!reference_is_sample(st)) return word;
+    int16_t s = (int16_t)(word & 0x0FFFu);
+    if (s & 0x0800) s = (int16_t)(s - 0x1000);
+    return (uint16_t)clamp_sample(st, s);
+}
+
+/* Write the range-dependent tuning registers from the shadow: ION_BL,
+ * PARCAP, SUP_RISE. Call with OE = 0 (after a CONFIG write). */
+static void bos_write_tuning(tile_t* tile)
+{
+    drive_p_state_t *st = state_for(tile);
+    bos_write(tile, BOS1921_REG_ION_BL,   ion_bl_value(tile));
+    bos_write(tile, BOS1921_REG_PARCAP,   st->parcap);
+    bos_write(tile, BOS1921_REG_SUP_RISE, sup_rise_value(tile));
 }
 
 /* Rewrite every register the driver configures from the shadow: CONFIG
- * (IDLE: OE=0, DS=0, plus GAINS/GAIND/RET), PARCAP (tuned value + CCM +
- * UPI), SUP_RISE, COMM (TOUT). Then read CHIP_ID back and leave RDADDR on
+ * (IDLE: OE=0, DS=0, plus GAINS/GAIND/RET), ION_BL (I_ON_SCALE), PARCAP
+ * (range value + CCM + UPI), SUP_RISE (TI_RISE), COMM (TOUT). Then read CHIP_ID back and leave RDADDR on
  * IC_STATUS. Used after a no-retention SLEEP (wake) and after a software
  * reset (check_and_recover), both of which return registers to defaults.
  * Returns 1 if CHIP_ID matched. */
 static uint8_t bos_apply_config(tile_t* tile)
 {
-    drive_p_state_t *st = state_for(tile);
     bos_config(tile, 0x0000);
-    bos_write(tile, BOS1921_REG_PARCAP,   st->parcap);
-    bos_write(tile, BOS1921_REG_SUP_RISE, sup_rise_value(tile));
+    bos_write_tuning(tile);
     bos_set_return_reg(tile, BOS1921_REG_CHIP_ID);
     uint16_t chip_id = bos_read(tile);
     bos_set_return_reg(tile, BOS1921_REG_IC_STATUS);
@@ -161,9 +306,8 @@ static uint8_t bos_apply_config(tile_t* tile)
 static void bos_safe_reset(tile_t* tile)
 {
     drive_p_state_t *st = state_for(tile);
-    uint16_t play_mode = (uint16_t)(st->cfg_mode & 0x0600u);   /* PLAY_MODE[1:0] */
 
-    if (play_mode == 0x0000u || play_mode == 0x0200u) {        /* Direct / FIFO */
+    if (reference_is_sample(st)) {                             /* Direct / FIFO */
         bos_write(tile, BOS1921_REG_REFERENCE, 0x0000);
     }
     bos_config(tile, (uint16_t)(st->cfg_mode & ~(BOS_CONFIG_OE_BIT | BOS_CONFIG_DS_BIT)));
@@ -236,22 +380,32 @@ void tile_drive_p_init_at(tiles_pal_t* hal, uint8_t addr, tile_t* tile,
         return;
     }
 
-    /* Initialize shadow state to chip defaults for the bits we
-     * track. GAINS=1 (fine) is the BOS1921 reset default; GAIND=0
-     * (±95 V), RET=0 (retain), TOUT=0 (no auto-sleep), UPI=0. */
+    /* Initialize the shadow. GAINS=1 (fine) is the BOS1921 reset default.
+     * GAIND=1: the LOW output range (±13.28 V, FBratio 4.33). The chip
+     * resets to GAIND=0 (±95 V); the driver never leaves it there on its
+     * own — ±95 V is only entered via set_output_range(HIGH). RET=0
+     * (retain), TOUT=0 (no auto-sleep), CCM=1, UPI=0. */
     drive_p_state_t *st = state_for(tile);
-    st->cfg_persistent_bits  = BOS_CONFIG_GAINS_BIT;
+    st->cfg_persistent_bits  = BOS_CONFIG_GAINS_BIT | BOS_CONFIG_GAIND_BIT;
     st->comm_persistent_bits = 0;
-    st->parcap               = 0x043A;
+    st->parcap               = BOS_PARCAP_CCM_BIT;
     st->cfg_mode             = 0x0000;
+    parcap_follow_range(st);   /* PARCAP[7:0] for the low range */
+    /* PowerHap-safe output limits: positive = the range's maximum,
+     * negative = 10 V (PowerHap actuators take only ~10 V negative). */
+    st->lim_pos_v            = DRIVE_P_POS_LIMIT_DEFAULT_V;
+    st->lim_neg_v            = DRIVE_P_NEG_LIMIT_DEFAULT_V;
+    st->clamp_count          = 0;
+    update_limit_codes(st);
 
-    /* Configure for 260nF piezo, L1=10µH, Rsense=0.2Ω, VDD=3.7V LiPo.
-     * The tuned supply-rise timing is 0x09E2; the I2C_ADDR nibble
-     * (bits [15:12]) is derived from this chip's address so a re-addressed
-     * chip keeps its address instead of being staged back to 0x44. For an
-     * address of 0x44 this evaluates to the original 0x49E2. */
-    bos_write(tile, BOS1921_REG_PARCAP,   st->parcap);
-    bos_write(tile, BOS1921_REG_SUP_RISE, sup_rise_value(tile));
+    /* CONFIG first (IDLE: OE=0, DS=0, GAINS=1, GAIND=1), so the chip is in
+     * the low range before anything else, then the range-dependent tuning
+     * for a 260nF piezo, L1=10µH, Rsense=0.2Ω, VDD=3.7V LiPo: ION_BL,
+     * PARCAP, SUP_RISE. SUP_RISE's I2C_ADDR nibble (bits [15:12]) is derived
+     * from this chip's address so a re-addressed chip keeps its address
+     * instead of being staged back to 0x44. */
+    bos_config(tile, 0x0000);
+    bos_write_tuning(tile);
 
     tile->state = TILE_STATE_READY;
 }
@@ -313,7 +467,9 @@ void tile_drive_p_reset(tile_t* tile)
 {
     /* Safe order (§6.2.8): output 0, OE=0, wait for IDLE, then RST. RST
      * self-clears; chip returns to its power-on defaults (CONFIG=0x1000,
-     * COMM=0x001E, PARCAP=0x003A). Mirror that in the driver shadow so
+     * COMM=0x001E, PARCAP=0x003A; GAIND=0, the high range, but the tile
+     * stays NONE — no mode can be set — until init, which selects the low
+     * range again). Mirror that in the driver shadow so
      * subsequent set_mode()/sleep() writes are coherent until the caller
      * re-runs init or the setters. */
     if (tile->state == TILE_STATE_SLEEPING) {
@@ -326,6 +482,7 @@ void tile_drive_p_reset(tile_t* tile)
     st->cfg_persistent_bits  = BOS_CONFIG_GAINS_BIT;
     st->comm_persistent_bits = 0;
     st->parcap               = 0x003A;
+    update_limit_codes(st);   /* the limits stay in volts; codes follow GAIND = 0 */
     tile->state = TILE_STATE_NONE;
 }
 
@@ -415,21 +572,52 @@ uint16_t tile_drive_p_read_status(tile_t* tile)
 
 void tile_drive_p_write_fifo(tile_t* tile, int16_t sample)
 {
-    bos_write(tile, BOS1921_REG_REFERENCE, (uint16_t)sample);
+    drive_p_state_t *st = state_for(tile);
+    /* A sample (Direct / FIFO) is limited as the int16 the caller meant, so
+     * a value beyond 12 bits clamps instead of wrapping. A RAM-mode WFS
+     * command word passes unchanged. */
+    uint16_t word = reference_is_sample(st) ? (uint16_t)clamp_sample(st, sample)
+                                            : (uint16_t)sample;
+    bos_write(tile, BOS1921_REG_REFERENCE, word);
 }
 
 void tile_drive_p_write_reg(tile_t* tile, uint8_t reg, uint16_t value)
 {
+    drive_p_state_t *st = state_for(tile);
+    if (reg == BOS1921_REG_REFERENCE) {
+        /* A raw REFERENCE sample is limited like any other. */
+        value = limit_reference_word(st, value);
+    } else if (reg == BOS1921_REG_CONFIG) {
+        /* Keep the shadow's range and play mode in step with the chip, so
+         * the voltage limits stay correct in volts: a raw GAIND change
+         * would otherwise scale them by 31 / 4.33. RST returns CONFIG to
+         * its reset value (GAIND = 0, the high range). */
+        uint16_t persistent = (uint16_t)(BOS_CONFIG_GAINS_BIT |
+                                         BOS_CONFIG_GAIND_BIT |
+                                         BOS_CONFIG_RET_BIT);
+        if (value & BOS_CONFIG_RST_BIT) {
+            st->cfg_persistent_bits = BOS_CONFIG_GAINS_BIT;
+            st->cfg_mode            = 0x0000;
+        } else {
+            st->cfg_persistent_bits = (uint16_t)(value & persistent);
+            st->cfg_mode            = (uint16_t)(value & (uint16_t)~persistent);
+        }
+        update_limit_codes(st);
+    }
     bos_write(tile, reg, value);
 }
 
 void tile_drive_p_wfs_write(tile_t* tile, const uint16_t* words, uint16_t count)
 {
+    drive_p_state_t *st = state_for(tile);
     uint8_t buf[16];
     if (count > 8) count = 8;
     for (uint16_t i = 0; i < count; i++) {
-        buf[i * 2]     = (uint8_t)(words[i] >> 8);
-        buf[i * 2 + 1] = (uint8_t)(words[i] & 0xFF);
+        /* In Direct / FIFO mode these words are samples and are limited;
+         * in the RAM modes they are WFS commands and go out unchanged. */
+        uint16_t w = limit_reference_word(st, words[i]);
+        buf[i * 2]     = (uint8_t)(w >> 8);
+        buf[i * 2 + 1] = (uint8_t)(w & 0xFF);
     }
     tile->hal->i2c_write(tile->hal->handle, tile->id,
                          BOS1921_REG_REFERENCE, buf, count * 2);
@@ -519,18 +707,25 @@ uint8_t tile_drive_p_check_and_recover(tile_t* tile, drive_p_mode_t restore_mode
 void tile_drive_p_set_output_range(tile_t* tile, drive_p_output_range_t range)
 {
     drive_p_state_t *st = state_for(tile);
-    if (range == DRIVE_P_OUTPUT_LOW_V) {
-        st->cfg_persistent_bits |= BOS_CONFIG_GAIND_BIT;
-    } else {
+    if (range == DRIVE_P_OUTPUT_HIGH_V) {
+        /* ±95 V: only ever by an explicit request. */
         st->cfg_persistent_bits &= (uint16_t)~BOS_CONFIG_GAIND_BIT;
+    } else {
+        /* Anything else, including an out-of-range value, is the safe range. */
+        st->cfg_persistent_bits |= BOS_CONFIG_GAIND_BIT;
     }
+    parcap_follow_range(st);
+    update_limit_codes(st);   /* same volts, the new range's codes */
     /* Apply immediately if the device is already configured (IDLE-style
      * write). Caller is expected to be in IDLE; if a play mode is active
      * the existing CONFIG.OE bit will be cleared by this write — that's
      * intentional and matches the datasheet's "set OE=0 before changing
-     * gain" guidance (§7.5). */
+     * gain" guidance. Then rewrite the FBratio-dependent tuning (ION_BL,
+     * PARCAP, SUP_RISE). A sleeping tile keeps the shadow; wake() applies
+     * it. */
     if (tile->state == TILE_STATE_READY) {
         bos_config(tile, 0x0000);
+        bos_write_tuning(tile);
     }
 }
 
@@ -601,6 +796,37 @@ void tile_drive_p_set_upi(tile_t* tile, uint8_t enabled)
     }
 }
 
+/* -------------------------------------------------------------- */
+/* Output voltage limits                                           */
+/* -------------------------------------------------------------- */
+
+void tile_drive_p_set_voltage_limits(tile_t* tile, uint8_t pos_v, uint8_t neg_v)
+{
+    drive_p_state_t *st = state_for(tile);
+    /* Driver-side only: nothing is written to the chip. */
+    st->lim_pos_v = (pos_v > DRIVE_P_VOLTAGE_LIMIT_MAX_V) ? DRIVE_P_VOLTAGE_LIMIT_MAX_V : pos_v;
+    st->lim_neg_v = (neg_v > DRIVE_P_VOLTAGE_LIMIT_MAX_V) ? DRIVE_P_VOLTAGE_LIMIT_MAX_V : neg_v;
+    update_limit_codes(st);
+}
+
+uint8_t tile_drive_p_get_pos_limit_v(tile_t* tile)
+{
+    return state_for(tile)->lim_pos_v;
+}
+
+uint8_t tile_drive_p_get_neg_limit_v(tile_t* tile)
+{
+    return state_for(tile)->lim_neg_v;
+}
+
+uint32_t tile_drive_p_read_clamp_count(tile_t* tile)
+{
+    drive_p_state_t *st = state_for(tile);
+    uint32_t n = st->clamp_count;
+    st->clamp_count = 0;
+    return n;
+}
+
 /* ============================================================== */
 /* Runtime — tier-2 idiomatic helpers                              */
 /* ============================================================== */
@@ -647,15 +873,6 @@ static int16_t scale_intensity(int16_t sample, uint8_t intensity_pct)
                      / (100 * 2047));
 }
 
-/** Clamp a caller sample to ±BOS1921_REFERENCE_MAX (±95 V rated output).
- *  Caller buffers from `play_samples` may overshoot. */
-static int16_t clamp_ref(int16_t s)
-{
-    if (s >  BOS1921_REFERENCE_MAX) return  BOS1921_REFERENCE_MAX;
-    if (s < -BOS1921_REFERENCE_MAX) return -BOS1921_REFERENCE_MAX;
-    return s;
-}
-
 /* -------------------------------------------------------------- */
 /* FIFO streaming                                                  */
 /* -------------------------------------------------------------- */
@@ -695,13 +912,15 @@ static uint16_t fifo_space(uint16_t fifo_state)
     return space;
 }
 
-/* Stream samples fn(ctx, 0..total-1) into the FIFO. Expects FIFO mode with
+/* Stream samples fn(ctx, 0..total-1) into the FIFO, each through
+ * clamp_sample() (the voltage limits). Expects FIFO mode with
  * OE set (set_mode(PLAY_FIFO)). Leaves RDADDR on IC_STATUS, as set_mode()
  * does. Returns 1 if every sample was queued. Does not change tile->state:
  * a chip fault stays visible through read_status() / check_and_recover(). */
 static uint8_t stream_fifo(tile_t* tile, uint32_t total,
                            stream_fn_t fn, const void *ctx)
 {
+    drive_p_state_t *st = state_for(tile);
     uint8_t  buf[DRIVE_P_BURST * 2u];
     uint32_t sent       = 0;
     uint16_t last_space = 0;
@@ -742,7 +961,8 @@ static uint8_t stream_fifo(tile_t* tile, uint32_t total,
         while (n > 0) {
             uint16_t chunk = (uint16_t)((n < DRIVE_P_BURST) ? n : DRIVE_P_BURST);
             for (uint16_t k = 0; k < chunk; k++) {
-                uint16_t v = (uint16_t)fn(ctx, sent + k);
+                /* Every generated or caller sample meets the limits here. */
+                uint16_t v = (uint16_t)clamp_sample(st, fn(ctx, sent + k));
                 buf[2u * k]      = (uint8_t)(v >> 8);
                 buf[2u * k + 1u] = (uint8_t)(v & 0xFF);
             }
@@ -804,7 +1024,7 @@ static int16_t sine_sample(const void *ctx, uint32_t i)
 
 static int16_t buffer_sample(const void *ctx, uint32_t i)
 {
-    return clamp_ref(((const int16_t *)ctx)[i]);
+    return ((const int16_t *)ctx)[i];   /* stream_fifo() clamps it */
 }
 
 /* Stop sequence step 6 (§6.5.1 / §6.6.2): OE=0 once the waveform is done.
@@ -910,7 +1130,7 @@ void tile_drive_p_play_samples(tile_t* tile, const int16_t* samples,
     tile_drive_p_set_mode(tile, DRIVE_P_MODE_PLAY_FIFO);
     if (tile->state != TILE_STATE_READY) return;
 
-    /* Played as given (clamped to the rated range): no 0 V lead-in or tail,
+    /* Played as given (clamped to the voltage limits): no 0 V lead-in or tail,
      * and the output stays on (OE=1), so back-to-back calls can stream one
      * long waveform in pieces without a stop/start between them. */
     (void)stream_fifo(tile, count, buffer_sample, samples);

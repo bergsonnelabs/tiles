@@ -65,6 +65,15 @@ int main(void)
     tile_drive_p_set_upi(&piezo, 1);
     tile_drive_p_set_upi(&piezo, 0);
 
+    /* ---- v3.6 output voltage limits + clamp count ---- */
+    tile_drive_p_set_voltage_limits(&piezo, DRIVE_P_POS_LIMIT_DEFAULT_V,
+                                    DRIVE_P_NEG_LIMIT_DEFAULT_V);
+    uint8_t pos_v = tile_drive_p_get_pos_limit_v(&piezo);
+    uint8_t neg_v = tile_drive_p_get_neg_limit_v(&piezo);
+    (void)pos_v; (void)neg_v;
+    uint32_t clamped = tile_drive_p_read_clamp_count(&piezo);
+    (void)clamped;
+
     /* ---- v3.1 tier-2 runtime helpers ---- */
     tile_drive_p_play_click(&piezo, 80);
     tile_drive_p_play_sine(&piezo, 250, 60, 100);
@@ -82,6 +91,8 @@ int main(void)
         2047, 1792, 1536, 1280, 1024, 768, 512, 256
     };
     tile_drive_p_play_samples(&piezo, custom_samples, 16);
+    clamped = tile_drive_p_read_clamp_count(&piezo);   /* the 2047 peak hits +95 V's 1743 */
+    (void)clamped;
 
     int16_t sense_buf[8];
     tile_drive_p_read_sense_samples(&piezo, sense_buf, 8);

@@ -934,6 +934,19 @@ def build_host_entry(tag, doxy_lines, sig, header_name, scope, all_tags=()):
             control["_show_src"] = attrs["show"]
             if "unit" in attrs:
                 control["show_unit"] = attrs["unit"]
+        # hazard="<reason>" hazard_values=<ENUM|n>,…: values of this setting that
+        # can hurt a person or the hardware (±95 V on a piezo). Or, on a numeric
+        # argument, hazard="<reason>" hazard_above=<n>: every value above n is a
+        # hazard (more than 10 V negative on a PowerHap). Studio never writes one
+        # on its own and makes the user confirm it. Resolved and linted in
+        # resolve_vibe_settings(), where the offered members and range are known.
+        if "hazard" in attrs or "hazard_values" in attrs or "hazard_above" in attrs:
+            control["_hazard_src"] = (
+                attrs.get("hazard"),
+                [v for v in attrs.get("hazard_values", "").split(",") if v]
+                if "hazard_values" in attrs else None,
+                attrs.get("hazard_above"),
+            )
         if "default" in attrs:
             raw = attrs["default"]
             param_entry = next((dp for dp in dsl_params if dp["name"] == pname), {})
@@ -1111,6 +1124,79 @@ def parse_header(path, scope):
     return hosts, sections, docs, events
 
 
+def resolve_hazard(tag, src, choices, offered, control, param_range=None):
+    """`hazard="<reason>" hazard_values=<ENUM|n>,…` → {"reason", "values": [int]};
+    `hazard="<reason>" hazard_above=<n>` (numeric arguments) → {"reason", "above": n}.
+    Members resolve to their register values, as for default=. Every mistake is a
+    VIBE_ERRORS entry (fails the build); returns None when it can't be emitted."""
+    reason, raw_values, raw_above = src
+    if reason is None or not reason.strip():
+        what = "hazard_above=…" if raw_above is not None and raw_values is None else "hazard_values=…"
+        VIBE_ERRORS.append(f'{tag}: {what} needs hazard="<short reason>"')
+        return None
+    if raw_values is not None and raw_above is not None:
+        VIBE_ERRORS.append(f"{tag}: use hazard_values=… OR hazard_above=…, not both")
+        return None
+    if raw_above is not None:
+        return resolve_hazard_above(tag, reason.strip(), raw_above, choices, control, param_range)
+    if not raw_values:
+        VIBE_ERRORS.append(f"{tag}: hazard=… needs hazard_values=<ENUM|n>[,…] or hazard_above=<n> (which values are hazardous)")
+        return None
+    values, ok = [], True
+    for raw in raw_values:
+        member = next((c for c in choices if c["name"] == raw), None)
+        if member is not None:
+            if offered and member not in offered:
+                VIBE_ERRORS.append(f"{tag}: hazard_values={raw} is not one of the offered members")
+                ok = False
+                continue
+            value = member["value"]
+        elif choices:
+            VIBE_ERRORS.append(f"{tag}: hazard_values={raw} is not a member of the argument's enum")
+            ok = False
+            continue
+        else:
+            try:
+                value = int(raw, 0)
+            except ValueError:
+                VIBE_ERRORS.append(f"{tag}: hazard_values={raw!r} is neither an enum member nor an integer")
+                ok = False
+                continue
+        if value not in values:
+            values.append(value)
+    if "default" in control and control["default"] in values:
+        VIBE_ERRORS.append(f"{tag}: the default is a hazard value — a hazardous setting must never be the default")
+        ok = False
+    if not ok:
+        return None
+    return {"reason": reason.strip(), "values": values}
+
+
+def resolve_hazard_above(tag, reason, raw, choices, control, param_range):
+    """`hazard_above=<n>`: every value above n is hazardous. Numeric arguments only;
+    n is an integer inside the argument's `[min..max]` and below max (a threshold
+    at max marks nothing), and the default is not above it."""
+    if choices or control.get("type") == "bool":
+        VIBE_ERRORS.append(f"{tag}: hazard_above= only applies to a numeric argument (use hazard_values=…)")
+        return None
+    try:
+        above = int(raw, 0)
+    except ValueError:
+        VIBE_ERRORS.append(f"{tag}: hazard_above={raw!r} must be an integer")
+        return None
+    if not param_range:
+        VIBE_ERRORS.append(f"{tag}: hazard_above= needs the argument's `@param [min..max]`")
+        return None
+    lo, hi = param_range
+    if not (lo <= above < hi):
+        VIBE_ERRORS.append(f"{tag}: hazard_above={above} must lie within [{lo}..{hi}) (the argument's range, below its max)")
+        return None
+    if "default" in control and control["default"] > above:
+        VIBE_ERRORS.append(f"{tag}: the default {control['default']} is above hazard_above={above} — a hazardous setting must never be the default")
+        return None
+    return {"reason": reason, "above": above}
+
+
 def resolve_vibe_settings(hosts, where):
     """Second pass over ONE tile's hosts: turn every Vibe Settings expression into
     an AST, resolve names, and lint. Anything wrong is an authoring error that
@@ -1203,6 +1289,11 @@ def resolve_vibe_settings(hosts, where):
                 ast = compile_expr(show_src, fn, "show")
                 if ast is not None:
                     control["show"] = ast
+            hazard_src = control.pop("_hazard_src", None)
+            if hazard_src is not None:
+                hazard = resolve_hazard(tag, hazard_src, choices, offered, control, param.get("range"))
+                if hazard is not None:
+                    control["hazard"] = hazard
         rules = []
         for attrs in host.pop("_requires_src", []):
             if "expr" not in attrs or "message" not in attrs:
@@ -1738,7 +1829,7 @@ def main():
             "definition": ROOT / "definitions/Drive-P-a.json",
             "prefix": "tile_drive_p",
             "init": "tile_drive_p_init",
-            "version": "3.5.0",
+            "version": "3.6.0",
         },
         {
             "path": ROOT / "drivers/tile_power_l_1t.h",
