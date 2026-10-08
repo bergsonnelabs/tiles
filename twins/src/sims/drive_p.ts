@@ -1,14 +1,18 @@
 // Digital twin for Drive.P — Boréas BOS1921 piezoelectric haptic driver.
 //
 // A boost converter fed from V_DRIVE (pad 9) swings a differential output
-// OUT+/OUT- (pads 7/8) up to 190 Vpp (±95 V; ±13.28 V in the low range), and
+// OUT+/OUT- (pads 7/8) up to ±13.28 V (low range, what init selects) or, only
+// after an explicit set_output_range(HIGH), 190 Vpp (±95 V), and
 // the same pins sense the piezo's voltage for touch. Logic on V+ (pad 10).
 //
 // One module, one vocabulary: hostCalls answer the firmware (tile_drive_p.c)
 // and write `mode`, `amplitude`, `freq_hz`, `sleeping`, …; power / padOutputs
 // read those same fields, so the drive current follows the program.
 //
-// Behavior notes from the driver (v3.5) + datasheet:
+// Behavior notes from the driver (v3.6) + datasheet:
+//   - init selects the LOW output range (CONFIG.GAIND = 1, ±13.28 V) and the
+//     PARCAP / TI_RISE / I_ON_SCALE values for it; ±95 V needs an explicit
+//     set_output_range(DRIVE_P_OUTPUT_HIGH_V). Before v3.6 init left ±95 V.
 //   - sleep() writes CONFIG DS=1; wake() runs the start-up sequence (dummy
 //     write, settle, rewrite CONFIG/PARCAP/SUP_RISE/COMM from the shadow,
 //     CHIP_ID check, BOS1921 §7.4.1-7.4.2) and leaves the tile in IDLE.
@@ -20,6 +24,12 @@
 //     plays out the FIFO, then idles (STATE IDLE). play_samples() keeps OE on
 //     (so calls chain) and holds the caller's last sample; with COMM.TOUT set
 //     the chip then sleeps once the FIFO has been empty 4 ms.
+//   - Every output sample passes the driver's voltage limits (clamp_sample):
+//     [-neg, +pos] in REFERENCE codes, derived from volts for the active range
+//     and rounded down (high: V × 2047 / 111.6, low: V × 2047 / 15.588, capped
+//     at 1743). Init: +95 V / -10 V (PowerHap-safe). The twin generates the
+//     driver's click / sine samples one by one, so clamped output and the
+//     clamp count match the firmware. RAM-mode WFS commands are not clamped.
 //   - check_and_recover() resets in the §6.2.8 order and restores the full
 //     configuration (range, gain, retention, auto-sleep, UPI) — nothing
 //     reverts to chip defaults.
@@ -51,8 +61,12 @@ const PLAYST_BIT = 0x0001; // FIFO empty
 
 const SAMPLE_FS = 2047; // 12-bit signed full-scale code
 // REFERENCE bound for the rated output (BOS1921 §6.10.1): ±1743 = ±95 V /
-// ±13.28 V. The driver scales 100 % intensity to it and clamps buffers to it.
+// ±13.28 V. The driver scales 100 % intensity to it.
 const REF_MAX = 1743;
+// Output voltage limits (tile_drive_p.h DRIVE_P_*_LIMIT_*), volts.
+const LIMIT_MAX_V = 95;
+const POS_LIMIT_DEFAULT_V = 95;
+const NEG_LIMIT_DEFAULT_V = 10;
 const UVLO_MV = 3000; // V_DRIVE minimum (Drive-P-a.json power[] min 3.0 V)
 const PRESS_MV = 3000; // what the "press" toggle applies to the sense pins
 
@@ -89,6 +103,9 @@ interface State {
   sleep_retention: number; // the driver's `retain` arg: 1 = retain (RET=0)
   auto_sleep: number; // COMM.TOUT
   upi: number; // PARCAP.UPI
+  pos_limit_v: number; // set_voltage_limits pos_v (0..95)
+  neg_limit_v: number; // set_voltage_limits neg_v, a magnitude (0..95)
+  clamp_count: number; // samples the limits flattened since init / last read
 
   // ── output ──
   amplitude: number; // |sample| on the output, 0..2047
@@ -110,19 +127,70 @@ const outputActive = (s: State) => s.output_on === 1 && isPlayMode(s.mode);
 const powered = (s: State) => !s.sleeping && !s.auto_slept && s.supply_mv >= UVLO_MV;
 
 // Q12 sine as the driver's quarter-wave LUT (tile_drive_p.c sine_q12).
+const QSINE = Array.from({ length: 64 }, (_, i) =>
+  Math.round(Math.sin((Math.PI / 2) * (i / 64)) * 2047),
+);
 function sineQ12(phase: number): number {
   const q = (phase >> 14) & 3;
   const idx = (phase >> 8) & 0x3f;
-  const lut = (i: number) => Math.round(Math.sin((Math.PI / 2) * (i / 64)) * 2047);
-  if (q === 0) return lut(idx);
-  if (q === 1) return lut(63 - idx);
-  if (q === 2) return -lut(idx);
-  return -lut(63 - idx);
+  if (q === 0) return QSINE[idx];
+  if (q === 1) return QSINE[63 - idx];
+  if (q === 2) return -QSINE[idx];
+  return -QSINE[63 - idx];
 }
 // scale_intensity(): 100 % of a ±2046 sine peaks at REF_MAX.
 const scale = (sample: number, pct: number) =>
   Math.trunc((sample * Math.min(100, pct) * REF_MAX) / (100 * SAMPLE_FS));
 const pctArg = (v: number | undefined) => Math.min(100, (v ?? 0) & 0xff);
+
+// volts_to_code(): a limit in volts → REFERENCE code for the range, rounded
+// down; at or above the range's maximum it is 1743 (95 V high is 1743 itself).
+function voltsToCode(lowRange: boolean, v: number): number {
+  if (lowRange) return Math.min(REF_MAX, Math.floor((v * 2047000) / 15588));
+  if (v >= LIMIT_MAX_V) return REF_MAX;
+  return Math.min(REF_MAX, Math.floor((v * 20470) / 1116));
+}
+
+// clamp_sample() over a run of samples: each limited to [-neg, +pos] for the
+// active range. Returns the peak |sample| and last sample actually played and
+// how many were flattened.
+function limitRun(
+  s: State,
+  n: number,
+  sample: (i: number) => number,
+): { peak: number; last: number; clamped: number } {
+  const low = s.output_range === 1;
+  const pos = voltsToCode(low, s.pos_limit_v);
+  const neg = voltsToCode(low, s.neg_limit_v);
+  let peak = 0;
+  let last = 0;
+  let clamped = 0;
+  for (let i = 0; i < n; i++) {
+    let v = sample(i);
+    if (v > pos) {
+      v = pos;
+      clamped++;
+    } else if (v < -neg) {
+      v = -neg;
+      clamped++;
+    }
+    peak = Math.max(peak, Math.abs(v));
+    last = v;
+  }
+  return { peak, last, clamped };
+}
+const addClamped = (s: State, n: number) => Math.min(0xffffffff, s.clamp_count + n);
+// REFERENCE is a sample in Direct / FIFO (and IDLE / sense: PLAY_MODE Direct);
+// in RAM Synthesis it takes WFS commands, which the driver passes unchanged.
+const referenceIsSample = (s: State) => s.mode !== MODE_PLAY_RAM_SYNTH;
+const int16 = (v: number) => {
+  const raw = v & 0xffff;
+  return raw > 0x7fff ? raw - 0x10000 : raw;
+};
+const int12 = (v: number) => {
+  const raw = v & 0x0fff;
+  return raw > 0x07ff ? raw - 0x1000 : raw;
+};
 
 // Drive envelope magnitude 0..1 on OUT±.
 function driveStrength(s: State): number {
@@ -219,13 +287,32 @@ function play(
 // only); a pulse train counts its repetition rate.
 const CLICK_SAMPLES = 19;
 const CLICK_MS = CLICK_SAMPLES / 8;
-const clickPeak = (pct: number) => scale(sineQ12(8 * 2048), pct);
+// click_sample(): 2 × 0 V, then the half-sine; i = 16 (phase π) is 0 V.
+const clickSample = (pct: number) => (i: number) =>
+  i < 2 || i - 2 >= 16 ? 0 : scale(sineQ12((i - 2) * 2048), pct);
+const clickRun = (s: State, pct: number) => limitRun(s, CLICK_SAMPLES, clickSample(pct));
+
+// sine_sample(): 2 × 0 V, then `body` = ms × 8 samples at a Q16 phase step,
+// the last 16 fading linearly to exactly 0 V.
+function sineRun(s: State, freq: number, pct: number, ms: number) {
+  const step = Math.floor((freq * 65536) / 8000);
+  const body = ms * 8;
+  return limitRun(s, 2 + body, (i) => {
+    if (i < 2) return 0;
+    const k = i - 2;
+    let v = scale(sineQ12((k * step) % 65536), pct);
+    const left = body - 1 - k;
+    if (left < 16) v = Math.trunc((v * left) / 16);
+    return v;
+  });
+}
 
 const sim: TileSim<State> = {
   tile: 'Drive.P',
 
   // After tile_drive_p_init(): soft reset (RDADDR = CHIP_ID, IDLE), GAINS=1,
-  // GAIND=0, RET=0 (retain), TOUT=0, UPI=0 (tile_drive_p_init_at).
+  // GAIND=1 (low range, ±13.28 V), RET=0 (retain), TOUT=0, UPI=0
+  // (tile_drive_p_init_at).
   defaultState: {
     sense_mv: 0,
     touch_detected: 0,
@@ -239,11 +326,14 @@ const sim: TileSim<State> = {
     sleeping: 0,
     auto_slept: 0,
     return_reg: REG_CHIP_ID,
-    output_range: 0,
+    output_range: 1,
     sense_gain: 1,
     sleep_retention: 1,
     auto_sleep: 0,
     upi: 0,
+    pos_limit_v: POS_LIMIT_DEFAULT_V,
+    neg_limit_v: NEG_LIMIT_DEFAULT_V,
+    clamp_count: 0,
 
     amplitude: 0,
     freq_hz: 0,
@@ -336,11 +426,14 @@ const sim: TileSim<State> = {
         sleeping: 0,
         auto_slept: 0,
         return_reg: REG_CHIP_ID,
-        output_range: 0,
+        output_range: 1,
         sense_gain: 1,
         sleep_retention: 1,
         auto_sleep: 0,
         upi: 0,
+        pos_limit_v: POS_LIMIT_DEFAULT_V,
+        neg_limit_v: NEG_LIMIT_DEFAULT_V,
+        clamp_count: 0,
         amplitude: 0,
         currently_playing: '',
         play_ms: 0,
@@ -396,29 +489,50 @@ const sim: TileSim<State> = {
       scalar: statusWord(state),
       nextState: { return_reg: REG_IC_STATUS },
     }),
-    // REFERENCE write: in a play mode the sample goes out (and stays there).
-    tile_drive_p_write_fifo: ({ args }) => {
-      const raw = (args[0] ?? 0) & 0xffff;
-      const sample = raw > 0x7fff ? raw - 0x10000 : raw; // int16
+    // REFERENCE write: in a play mode the sample goes out (and stays there),
+    // limited as the int16 the caller meant; a RAM-mode word is a WFS command.
+    tile_drive_p_write_fifo: ({ state, args }) => {
+      const sample = int16(args[0] ?? 0);
+      if (!referenceIsSample(state)) {
+        return { nextState: { last_fifo_sample: sample, auto_slept: 0 } };
+      }
+      const r = limitRun(state, 1, () => sample);
       return {
         nextState: {
-          last_fifo_sample: sample,
-          amplitude: clamp(Math.abs(sample), 0, SAMPLE_FS),
+          last_fifo_sample: r.last,
+          amplitude: clamp(r.peak, 0, SAMPLE_FS),
+          clamp_count: addClamped(state, r.clamped),
           auto_slept: 0,
         },
       };
     },
-    // Up to 8 WFS words to REFERENCE (tile_drive_p_wfs_write); RAM synth not modeled.
-    tile_drive_p_wfs_write: ({ bufferIn }) => ({
-      nextState: { last_wfs_count: Math.min(8, (bufferIn?.words ?? []).length) },
-    }),
+    // Up to 8 words to REFERENCE (tile_drive_p_wfs_write): samples
+    // (REFERENCE[11:0], limited) in Direct / FIFO; WFS commands, unchanged and
+    // not modeled, in RAM synthesis.
+    tile_drive_p_wfs_write: ({ state, bufferIn }) => {
+      const words = (bufferIn?.words ?? []).slice(0, 8);
+      if (!referenceIsSample(state) || words.length === 0) {
+        return { nextState: { last_wfs_count: words.length } };
+      }
+      const r = limitRun(state, words.length, (i) => int12(words[i]));
+      return {
+        nextState: {
+          last_wfs_count: words.length,
+          last_fifo_sample: r.last,
+          amplitude: clamp(Math.abs(r.last), 0, SAMPLE_FS),
+          clamp_count: addClamped(state, r.clamped),
+          auto_slept: 0,
+        },
+      };
+    },
 
     // ── config setters ──
     // GAIND / GAINS land with an IDLE CONFIG write when READY, which clears OE
-    // (set_output_range / set_sense_gain) — a play mode stops.
+    // (set_output_range / set_sense_gain) — a play mode stops. Only HIGH (0)
+    // selects ±95 V; any other value is the low range, as in the driver.
     tile_drive_p_set_output_range: ({ state, args }) => ({
       nextState: {
-        output_range: args[0] === 1 ? 1 : 0,
+        output_range: args[0] === 0 ? 0 : 1,
         ...(state.sleeping ? {} : { ...setMode(state, MODE_IDLE), return_reg: state.return_reg }),
       },
     }),
@@ -440,12 +554,31 @@ const sim: TileSim<State> = {
       },
     }),
     tile_drive_p_set_upi: ({ args }) => ({ nextState: { upi: args[0] ? 1 : 0 } }),
+    // Driver-side only (tile_drive_p_set_voltage_limits): volts, capped at 95;
+    // the codes follow the range at play time, as the driver re-derives them.
+    tile_drive_p_set_voltage_limits: ({ args }) => ({
+      nextState: {
+        pos_limit_v: Math.min(LIMIT_MAX_V, (args[0] ?? 0) & 0xff),
+        neg_limit_v: Math.min(LIMIT_MAX_V, (args[1] ?? 0) & 0xff),
+      },
+    }),
+    tile_drive_p_get_pos_limit_v: ({ state }) => ({ scalar: state.pos_limit_v }),
+    tile_drive_p_get_neg_limit_v: ({ state }) => ({ scalar: state.neg_limit_v }),
+    // Read-and-clear (tile_drive_p_read_clamp_count).
+    tile_drive_p_read_clamp_count: ({ state }) => ({
+      scalar: state.clamp_count,
+      nextState: { clamp_count: 0 },
+    }),
 
     // ── playback helpers ──
     tile_drive_p_play_click: ({ state, args }) => {
       const pct = pctArg(args[0]);
+      const r = clickRun(state, pct);
       return {
-        nextState: play(state, `click @ ${pct}%`, clickPeak(pct), 0, CLICK_MS, 0, true),
+        nextState: {
+          ...play(state, `click @ ${pct}%`, r.peak, 0, CLICK_MS, 0, true),
+          clamp_count: addClamped(state, r.clamped),
+        },
       };
     },
     // FIFO sine at 8 ksps for `ms`, last 2 ms fading to exactly 0 V
@@ -455,16 +588,12 @@ const sim: TileSim<State> = {
       const pct = pctArg(args[1]);
       const ms = (args[2] ?? 0) & 0xffff;
       if (freq === 0 || ms === 0) return {};
+      const r = sineRun(state, freq, pct, ms);
       return {
-        nextState: play(
-          state,
-          `sine ${freq} Hz @ ${pct}% / ${ms} ms`,
-          scale(2046, pct),
-          freq,
-          ms,
-          0,
-          true,
-        ),
+        nextState: {
+          ...play(state, `sine ${freq} Hz @ ${pct}% / ${ms} ms`, r.peak, freq, ms, 0, true),
+          clamp_count: addClamped(state, r.clamped),
+        },
       };
     },
     // play_sine at 150 Hz (tile_drive_p_play_buzz).
@@ -472,8 +601,12 @@ const sim: TileSim<State> = {
       const pct = pctArg(args[0]);
       const ms = (args[1] ?? 0) & 0xffff;
       if (ms === 0) return {};
+      const r = sineRun(state, 150, pct, ms);
       return {
-        nextState: play(state, `buzz @ ${pct}% / ${ms} ms`, scale(2046, pct), 150, ms, 0, true),
+        nextState: {
+          ...play(state, `buzz @ ${pct}% / ${ms} ms`, r.peak, 150, ms, 0, true),
+          clamp_count: addClamped(state, r.clamped),
+        },
       };
     },
     tile_drive_p_play_pulse_train: ({ state, args }) => {
@@ -481,16 +614,20 @@ const sim: TileSim<State> = {
       const count = (args[1] ?? 0) & 0xff;
       const gap = (args[2] ?? 0) & 0xffff;
       if (count === 0) return {};
+      const r = clickRun(state, pct);
       return {
-        nextState: play(
-          state,
-          `pulse train ${count}× @ ${pct}%, ${gap} ms gap`,
-          clickPeak(pct),
-          count > 1 ? Math.round(1000 / (CLICK_MS + gap)) : 0,
-          count * CLICK_MS + (count - 1) * gap,
-          0,
-          true,
-        ),
+        nextState: {
+          ...play(
+            state,
+            `pulse train ${count}× @ ${pct}%, ${gap} ms gap`,
+            r.peak,
+            count > 1 ? Math.round(1000 / (CLICK_MS + gap)) : 0,
+            count * CLICK_MS + (count - 1) * gap,
+            0,
+            true,
+          ),
+          clamp_count: addClamped(state, r.clamped * count),
+        },
       };
     },
     // set_mode(SENSE_FINE) + read_sense, |raw·7.6 mV| ≥ threshold
@@ -523,38 +660,27 @@ const sim: TileSim<State> = {
           nextState: { ...setMode(state, MODE_SENSE_FINE), return_reg: REG_SENSE_VAL },
         };
       }
+      const r = clickRun(state, pct);
       return {
         scalar: 1,
-        nextState: play(
-          sensing,
-          `click @ ${pct}% (on touch)`,
-          clickPeak(pct),
-          0,
-          CLICK_MS,
-          0,
-          true,
-        ),
+        nextState: {
+          ...play(sensing, `click @ ${pct}% (on touch)`, r.peak, 0, CLICK_MS, 0, true),
+          clamp_count: addClamped(state, r.clamped),
+        },
       };
     },
-    // FIFO playback of the caller's samples at 8 ksps, each clamped to
-    // ±REF_MAX; the last one holds on the output (tile_drive_p.c).
+    // FIFO playback of the caller's samples at 8 ksps, each clamped to the
+    // voltage limits; the last one holds on the output (tile_drive_p.c).
     tile_drive_p_play_samples: ({ state, bufferIn }) => {
-      const samples = (bufferIn?.samples ?? []).map((v) => clamp(Math.trunc(v), -REF_MAX, REF_MAX));
+      const samples = (bufferIn?.samples ?? []).map((v) => int16(Math.trunc(v)));
       const count = samples.length;
       if (count === 0) return {};
-      const peak = samples.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      const r = limitRun(state, count, (i) => samples[i]);
       return {
         nextState: {
-          ...play(
-            state,
-            `samples ×${count}`,
-            peak,
-            0,
-            Math.ceil(count / 8),
-            samples[count - 1],
-            false,
-          ),
+          ...play(state, `samples ×${count}`, r.peak, 0, Math.ceil(count / 8), r.last, false),
           last_samples_count: count,
+          clamp_count: addClamped(state, r.clamped),
         },
       };
     },
@@ -581,7 +707,7 @@ const sim: TileSim<State> = {
     tile_drive_p_set_mode: 'canonical', // CONFIG per mode, RDADDR, GAINS
     tile_drive_p_set_output_range: 'canonical', // GAIND, clears OE
     tile_drive_p_set_sense_gain: 'canonical', // GAINS, clears OE
-    tile_drive_p_write_fifo: 'canonical', // REFERENCE; last sample holds
+    tile_drive_p_write_fifo: 'canonical', // REFERENCE, clamped to the limits; last sample holds
     tile_drive_p_is_touched: 'canonical', // 7.6 mV/LSB threshold compare
     tile_drive_p_play_click: 'canonical', // driver's 0 V-framed half-sine, 100 % = 1743
     tile_drive_p_play_sine: 'canonical', // driver's Q12 phase, ends at 0 V
@@ -594,8 +720,12 @@ const sim: TileSim<State> = {
     tile_drive_p_set_sleep_retention: 'inferred',
     tile_drive_p_set_auto_sleep: 'inferred',
     tile_drive_p_set_upi: 'inferred',
-    tile_drive_p_wfs_write: 'hallucinated', // RAM synthesis not modeled
-    tile_drive_p_play_samples: 'inferred', // envelope = peak |sample|, clamped ±1743
+    tile_drive_p_wfs_write: 'hallucinated', // RAM synthesis not modeled (Direct/FIFO samples are clamped)
+    tile_drive_p_play_samples: 'inferred', // envelope = peak |sample|; per-sample clamp + count exact
+    tile_drive_p_set_voltage_limits: 'canonical', // volts → codes per range, §6.10.1, rounded down
+    tile_drive_p_get_pos_limit_v: 'canonical',
+    tile_drive_p_get_neg_limit_v: 'canonical',
+    tile_drive_p_read_clamp_count: 'canonical', // driver's click / sine samples generated one by one
     tile_drive_p_read_sense_samples: 'inferred', // a constant press level, no waveform
     power: 'inferred', // CV²f + HV-hold fit to datasheet Table 7; loss factor inferred
   },
@@ -685,7 +815,10 @@ const sim: TileSim<State> = {
           role: 'output',
           v_mv: Math.round(s * outFsMv(state)),
           pads: ['7', '8'],
-          note: 'boosted differential piezo drive (±95 V at code 1743)',
+          note:
+            state.output_range === 1
+              ? 'boosted differential piezo drive (low range, ±13.28 V at code 1743)'
+              : 'boosted differential piezo drive (HIGH range, ±95 V at code 1743)',
         },
       ],
     };

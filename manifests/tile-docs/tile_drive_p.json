@@ -1,13 +1,13 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@cb18d1e",
   "file": "tile_drive_p.h",
   "brief": "Piezoelectric haptic driver for the Drive.P tile (rev a).",
-  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential, up to 820 nF capacitive load\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to\n    1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.\n    Account for that in teardown / discharge timing (don't switch to SENSE or\n    read status assuming playback is done). Streaming paces on FIFO_SPACE\n    and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)\n    bus — at 100 kHz two bytes per sample top out near 5.5 ksps.\n\n  - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on\n    the output (datasheet §6.6). The click / sine / buzz / pulse-train\n    helpers end at exactly 0 V; play_samples() plays the caller's buffer\n    as-is, so make its last sample 0.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
+  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential (high range, ±95 V), up to 820 nF\n                 capacitive load. The driver STARTS IN THE LOW RANGE\n                 (±13.28 V); ±95 V needs an explicit\n                 tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V).\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - INIT STARTS IN THE LOW RANGE (±13.28 V, CONFIG.GAIND = 1) since v3.6.\n    Before v3.6 init left the chip's reset value GAIND = 0, i.e. ±95 V. Firmware\n    that drives a high-voltage actuator must now call\n    tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V) after init.\n\n  - EVERY OUTPUT SAMPLE IS VOLTAGE-LIMITED (since v3.6), separately per\n    polarity: by default +the range's maximum / -10 V, because PowerHap\n    actuators take a high positive voltage but only ~10 V negative. A\n    waveform that exceeds a limit still plays, flattened at it; read\n    tile_drive_p_read_clamp_count() to find out it happened. Widen the\n    negative limit only for an actuator rated for it\n    (tile_drive_p_set_voltage_limits). The limits are not applied to RAM\n    Playback / RAM Synthesis waveforms (WFS commands), see wfs_write().\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to\n    1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.\n    Account for that in teardown / discharge timing (don't switch to SENSE or\n    read status assuming playback is done). Streaming paces on FIFO_SPACE\n    and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)\n    bus — at 100 kHz two bytes per sample top out near 5.5 ksps.\n\n  - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on\n    the output (datasheet §6.6). The click / sine / buzz / pulse-train\n    helpers end at exactly 0 V; play_samples() plays the caller's buffer\n    as-is, so make its last sample 0.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
   "code_examples": [
     {
       "label": "Quick start",
-      "code": "  #include \"core_tiles.h\"\n\n  tile_t piezo;\n  tile_drive_p_init(core_tiles_pal(&core_i2c1), 0, &piezo, NULL);\n  if (tile_is_ready(&piezo)) {\n      tile_drive_p_set_mode(&piezo, DRIVE_P_MODE_PLAY_FIFO);\n      tile_drive_p_write_fifo(&piezo, 0x7FFF);\n  }"
+      "code": "  #include \"core_tiles.h\"\n\n  tile_t piezo;\n  tile_drive_p_init(core_tiles_pal(&core_i2c1), 0, &piezo, NULL);\n  if (tile_is_ready(&piezo)) {\n      // init leaves the output in the LOW range (±13.28 V). Opt in to\n      // ±95 V explicitly, and only for a piezo rated for it:\n      // tile_drive_p_set_output_range(&piezo, DRIVE_P_OUTPUT_HIGH_V);\n      // Every sample is limited to +95 V / -10 V by default (PowerHap-safe;\n      // see tile_drive_p_set_voltage_limits), flattened at the limit.\n      tile_drive_p_play_click(&piezo, 80);\n  }"
     }
   ],
   "studio_ready": true,
@@ -33,7 +33,7 @@
     },
     {
       "name": "TILE_DRIVE_P_VERSION_MINOR",
-      "value": "5",
+      "value": "6",
       "description": "",
       "section": ""
     },
@@ -70,6 +70,24 @@
     {
       "name": "BOS1921_REFERENCE_MAX",
       "value": "1743",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "DRIVE_P_VOLTAGE_LIMIT_MAX_V",
+      "value": "95",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "DRIVE_P_POS_LIMIT_DEFAULT_V",
+      "value": "95",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "DRIVE_P_NEG_LIMIT_DEFAULT_V",
+      "value": "10",
       "description": "",
       "section": ""
     },
@@ -119,6 +137,12 @@
       "name": "BOS1921_FIFO_DEPTH",
       "value": "1024",
       "description": "FIFO depth in samples (chip default; the driver never changes it).",
+      "section": "* @brief  STATE field in IC_STATUS (bits 9:8)."
+    },
+    {
+      "name": "BOS_CONFIG_PLAY_MODE_MASK",
+      "value": "0x0600",
+      "description": "",
       "section": "* @brief  STATE field in IC_STATUS (bits 9:8)."
     },
     {
@@ -175,17 +199,17 @@
     {
       "name": "drive_p_output_range_t",
       "brief": "Output voltage range (CONFIG.GAIND).",
-      "description": "High range is FBratio 31 (the chip default); low range is FBratio 4.33.\n        set during init (those are computed against the configured\n        FBratio, which is determined by GAIND). After changing the\n        range, recompute and rewrite PARCAP and TI_RISE for the\n        new FBratio if precise output behaviour matters.",
+      "description": "High range (±95 V) is FBratio 31, the chip's reset value; low range\n(±13.28 V) is FBratio 4.33. **The driver initializes the LOW range**;\nthe high range is only ever entered by an explicit\ntile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V).\nPARCAP, SUP_RISE.TI_RISE and ION_BL.I_ON_SCALE depend on FBratio;\ninit and set_output_range write the values for the selected range.",
       "members": [
         {
           "name": "DRIVE_P_OUTPUT_HIGH_V",
           "value": "0",
-          "description": "±95V"
+          "description": "±95 V (high voltage)"
         },
         {
           "name": "DRIVE_P_OUTPUT_LOW_V",
           "value": "1",
-          "description": "±13.28V"
+          "description": "±13.28 V (init default)"
         }
       ]
     },
@@ -262,7 +286,7 @@
       ],
       "notes": [],
       "brief": "Initialize the BOS1921 piezoelectric driver.",
-      "description": "Wakes the device, performs a software reset, verifies the chip ID, and\nconfigures parasitic capacitance and supply parameters for a 260nF piezo\non a 3.7V LiPo supply. The SUP_RISE I2C_ADDR nibble is derived from the\ninstance's address, so a reassigned chip (0x45/0x46) keeps its address —\na soft reset doesn't revert it, so init may reset such a chip normally.\nPass cfg=NULL for defaults.",
+      "description": "Wakes the device, performs a software reset, verifies the chip ID, and\nconfigures parasitic capacitance and supply parameters for a 260nF piezo\non a 3.7V LiPo supply. The output is left in IDLE in the LOW range\n(±13.28 V, CONFIG.GAIND = 1) with PARCAP / TI_RISE / I_ON_SCALE tuned for\nit; call tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V) to\nopt in to ±95 V. The SUP_RISE I2C_ADDR nibble is derived from the\ninstance's address, so a reassigned chip (0x45/0x46) keeps its address —\na soft reset doesn't revert it, so init may reset such a chip normally.\nPass cfg=NULL for defaults.",
       "name": "tile_drive_p_init"
     },
     {
@@ -380,14 +404,14 @@
       "params": [
         {
           "name": "sample",
-          "description": "Signed 12-bit waveform sample (REFERENCE[11:0], two's complement)"
+          "description": "Signed waveform sample in REFERENCE codes (±1743 = full scale of the range)"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
       "brief": "Write a sample to the FIFO.",
-      "description": "Raw REFERENCE write, no clamping (the same register takes WFS\ncommand words in the RAM modes). In Direct / FIFO mode keep samples\nwithin ±BOS1921_REFERENCE_MAX (±1743 = ±95 V).",
+      "description": "One REFERENCE write. In Direct / FIFO mode (and IDLE / sense, whose\nPLAY_MODE is Direct) the sample is limited to the output voltage\nlimits (@ref tile_drive_p_set_voltage_limits) and counted if clamped;\na value beyond 12 bits clamps rather than wrapping. In the RAM modes\nthe same register takes WFS command words, which go out unchanged.",
       "name": "tile_drive_p_write_fifo"
     },
     {
@@ -408,7 +432,7 @@
       ],
       "notes": [],
       "brief": "Write a raw 16-bit value to any BOS1921 register.",
-      "description": "",
+      "description": "Two registers are not entirely raw. A REFERENCE (0x00) write in Direct /\nFIFO mode is a sample: REFERENCE[11:0] is limited like write_fifo()'s.\nA CONFIG (0x05) write updates the driver's view of the output range and\nplay mode, so the voltage limits stay correct in volts. Changing the\nrange this way does not retune PARCAP / TI_RISE / I_ON_SCALE; use",
       "name": "tile_drive_p_write_reg"
     },
     {
@@ -427,7 +451,7 @@
       "studio_exposed": true,
       "studio_section": "advanced",
       "brief": "Write a multi-word WFS command to the BOS1921.",
-      "description": "",
+      "description": "In the RAM modes the words are WFS commands and go out unchanged, so\nthe output voltage limits do NOT cover RAM Playback / RAM Synthesis\nwaveforms: keep their samples and AMPLITUDE fields within the limits\nyourself. In Direct / FIFO mode the words are samples (REFERENCE[11:0])\nand are limited like write_fifo()'s.",
       "name": "tile_drive_p_wfs_write"
     },
     {
@@ -475,13 +499,11 @@
           "description": "DRIVE_P_OUTPUT_HIGH_V or DRIVE_P_OUTPUT_LOW_V"
         }
       ],
-      "notes": [
-        "Changing range invalidates the PARCAP / TI_RISE tuning set at init. If accurate output behaviour matters, recompute and rewrite those registers for the new FBratio (see datasheet §7.5)."
-      ],
+      "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Select the output voltage range (CONFIG.GAIND).",
-      "description": "High-V (±95 V) is the BOS1921 default and suits most piezo\nactuators. Low-V (±13.28 V) is for low-voltage piezos where the\nfull ±95 V swing would be wasteful or destructive. Use this from\nIDLE before setting a play mode — the change takes effect on the\nnext OE-enable.",
+      "description": "The tile starts in the LOW range (±13.28 V): init sets it. The HIGH\nrange is ±95 V (190 Vpp across OUT+/OUT-), a shock and\npiezo-damage hazard, and is only entered by calling this with\nDRIVE_P_OUTPUT_HIGH_V. Use it only for an actuator rated for that\nswing. (The chip's own reset value is the high range; the driver\noverrides it at init.)\n\nWrites CONFIG with OE = 0 (output stops; datasheet: set OE = 0\nbefore changing gain), then rewrites PARCAP, SUP_RISE.TI_RISE and\nION_BL.I_ON_SCALE for the new FBratio. Use from IDLE before setting\na play mode. On a sleeping tile it only updates the driver's shadow;\nwake() applies it.",
       "name": "tile_drive_p_set_output_range"
     },
     {
@@ -547,18 +569,70 @@
       "name": "tile_drive_p_set_upi"
     },
     {
+      "signature": "void tile_drive_p_set_voltage_limits(tile_t* tile, uint8_t pos_v, uint8_t neg_v)",
+      "params": [
+        {
+          "name": "pos_v",
+          "description": "[0..95] V Largest positive output; values above 95 mean 95"
+        },
+        {
+          "name": "neg_v",
+          "description": "[0..95] V Largest negative output, as a magnitude; values above 95 mean 95"
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Limit the output voltage, separately for each polarity.",
+      "description": "Every output sample the driver sends (click, sine, buzz, pulse train,\nplay_samples, write_fifo, and REFERENCE samples through write_reg /\nwfs_write in Direct / FIFO mode) is clamped to [-neg_v, +pos_v]: a\nwaveform that exceeds a limit still plays, flattened at it, and each\nflattened sample is counted (@ref tile_drive_p_read_clamp_count).\nRAM Playback / RAM Synthesis waveforms are not covered (see wfs_write).\n\nInit sets +95 V / -10 V: positive up to the range's maximum, negative\n10 V, because PowerHap actuators take a high positive voltage but only\n~10 V negative. Widen the negative limit only for an actuator rated\nfor it.\n\nThe limits are kept in volts and converted to REFERENCE codes for the\nactive output range, rounded down so the limit in force never exceeds\nthe one asked for; set_output_range re-derives them. A limit at or\nabove the range's maximum is that maximum (±1743). Resolution: one\ncode is 54.5 mV on the ±95 V range (1 V = ~18.3 codes) and 7.6 mV on\nthe ±13.28 V range (1 V = ~131 codes); e.g. 10 V is code 183 (9.98 V)\nhigh, 1313 (10.00 V) low. Driver-side only; nothing is written to the\nchip. The limits survive set_output_range, sleep and reset; init\nrestores the defaults.",
+      "name": "tile_drive_p_set_voltage_limits"
+    },
+    {
+      "signature": "uint8_t tile_drive_p_get_pos_limit_v(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "Positive limit in volts (0..95)",
+      "brief": "The positive output voltage limit, in volts.",
+      "description": "As set (default 95). The limit in force is the smaller of this and the\nactive range's maximum (±95 V or ±13.28 V).",
+      "name": "tile_drive_p_get_pos_limit_v"
+    },
+    {
+      "signature": "uint8_t tile_drive_p_get_neg_limit_v(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "advanced",
+      "return": "Negative limit in volts, as a magnitude (0..95)",
+      "brief": "The negative output voltage limit, in volts (a magnitude).",
+      "description": "As set (default 10). The limit in force is the smaller of this and the\nactive range's maximum (±95 V or ±13.28 V).",
+      "name": "tile_drive_p_get_neg_limit_v"
+    },
+    {
+      "signature": "uint32_t tile_drive_p_read_clamp_count(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Clamped samples since the last call",
+      "brief": "How many output samples the voltage limits flattened, then reset the count.",
+      "description": "Counts every sample clamped to +pos / -neg (@ref\ntile_drive_p_set_voltage_limits) since init or the previous call, and\nresets it to 0. Nonzero means the waveform hit a limit and was played\nflattened. Saturates at 4294967295.",
+      "name": "tile_drive_p_read_clamp_count"
+    },
+    {
       "signature": "void tile_drive_p_play_click(tile_t* tile, uint8_t intensity_pct)",
       "params": [
         {
           "name": "intensity_pct",
-          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Fire a single sharp tactile click.",
-      "description": "Streams a 2 ms half-sine pulse through the FIFO at 8 ksps in one\nburst, framed by 0 V samples: two before it (discharges residual\npiezo charge, §6.2.18) and the pulse itself ends at exactly 0 V, so\nthe output rests at 0 V when the FIFO drains (§6.6). Intensity\nscales the peak output amplitude in the configured voltage range\n(default ±95 V; see @ref tile_drive_p_set_output_range to switch\nto ±13.28 V for low-voltage piezos). Returns when the FIFO has\nbeen written; the chip continues playing the click after the\ncall returns. The output is switched off (OE = 0) right after the\nlast sample is queued; the chip finishes the FIFO first (§6.6), then\nidles. The next play / set_mode call turns it back on.",
+      "description": "Streams a 2 ms half-sine pulse through the FIFO at 8 ksps in one\nburst, framed by 0 V samples: two before it (discharges residual\npiezo charge, §6.2.18) and the pulse itself ends at exactly 0 V, so\nthe output rests at 0 V when the FIFO drains (§6.6). Intensity\nscales the peak output amplitude in the configured voltage range\n(±13.28 V after init; see @ref tile_drive_p_set_output_range to opt\nin to ±95 V). Returns when the FIFO has\nbeen written; the chip continues playing the click after the\ncall returns. The output is switched off (OE = 0) right after the\nlast sample is queued; the chip finishes the FIFO first (§6.6), then\nidles. The next play / set_mode call turns it back on.",
       "name": "tile_drive_p_play_click"
     },
     {
@@ -570,7 +644,7 @@
         },
         {
           "name": "intensity_pct",
-          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "ms",
@@ -589,7 +663,7 @@
       "params": [
         {
           "name": "intensity_pct",
-          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "ms",
@@ -608,7 +682,7 @@
       "params": [
         {
           "name": "intensity_pct",
-          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "count",
@@ -647,7 +721,7 @@
       "params": [
         {
           "name": "intensity_pct",
-          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "[0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "threshold_mv",
@@ -671,7 +745,7 @@
       "params": [
         {
           "name": "samples",
-          "description": "Buffer of signed samples, within ±1743"
+          "description": "Buffer of signed samples in REFERENCE codes (±1743 = full scale)"
         },
         {
           "name": "count",
@@ -682,7 +756,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Stream a buffer of pre-computed samples through the FIFO.",
-      "description": "Switches into FIFO play mode (if not already there) and writes\n`count` samples to REFERENCE[11:0] (signed 12-bit, two's\ncomplement), 8 ksps. Values beyond ±BOS1921_REFERENCE_MAX (±1743,\nthe ±95 V rated output) are clamped. Start and end the waveform at\n0: the last sample stays on the output when the FIFO drains, and\nthe driver does not append one (so back-to-back calls can stream a\nlong waveform in pieces). Paced on FIFO_SPACE with 32-sample burst\nwrites; returns once the last sample is queued (up to 128 ms of it\nstill playing). Stops early if the chip reports ERROR or stops\ndraining for 20 ms. Leaves the output on (OE = 1) so calls chain;\ncall set_mode(DRIVE_P_MODE_IDLE) when done to switch it off. Use\nthis for arbitrary waveforms that don't fit the click / sine /\nbuzz / pulse-train idioms — e.g., recorded waveforms or\nDSP-generated patterns.",
+      "description": "Switches into FIFO play mode (if not already there) and writes\n`count` samples to REFERENCE[11:0] (signed 12-bit, two's\ncomplement), 8 ksps. Each sample is clamped to the output voltage\nlimits (@ref tile_drive_p_set_voltage_limits; by default +full scale\n/ -10 V) and counted (@ref tile_drive_p_read_clamp_count); ±1743 is\nfull scale of the range. Start and end the waveform at\n0: the last sample stays on the output when the FIFO drains, and\nthe driver does not append one (so back-to-back calls can stream a\nlong waveform in pieces). Paced on FIFO_SPACE with 32-sample burst\nwrites; returns once the last sample is queued (up to 128 ms of it\nstill playing). Stops early if the chip reports ERROR or stops\ndraining for 20 ms. Leaves the output on (OE = 1) so calls chain;\ncall set_mode(DRIVE_P_MODE_IDLE) when done to switch it off. Use\nthis for arbitrary waveforms that don't fit the click / sine /\nbuzz / pulse-train idioms — e.g., recorded waveforms or\nDSP-generated patterns.",
       "name": "tile_drive_p_play_samples"
     },
     {
@@ -706,7 +780,7 @@
     }
   ],
   "source_file": "tile_drive_p.h",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "tile_family": "Drive",
   "tile_name": "P",
   "display_name": "Drive.P",
@@ -719,10 +793,48 @@
       "param": "range",
       "kind": "choice",
       "choices": [
-        "±95V",
-        "±13.28V"
+        "±95 V (high voltage)",
+        "±13.28 V (init default)"
       ],
-      "default": "±95V"
+      "default": "±13.28 V (init default)",
+      "hazard": {
+        "reason": "high voltage (±95 V)",
+        "values": [
+          "±95 V (high voltage)"
+        ]
+      }
+    },
+    {
+      "label": "Positive voltage limit",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_voltage_limits",
+      "param": "pos_v",
+      "kind": "number",
+      "range": [
+        0,
+        95
+      ],
+      "unit": "V",
+      "default": 95
+    },
+    {
+      "label": "Negative voltage limit",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_voltage_limits",
+      "param": "neg_v",
+      "kind": "number",
+      "range": [
+        0,
+        95
+      ],
+      "unit": "V",
+      "default": 10,
+      "hazard": {
+        "reason": "more than 10 V negative can damage PowerHap actuators",
+        "above": 10
+      }
     },
     {
       "label": "Touch sensing resolution",

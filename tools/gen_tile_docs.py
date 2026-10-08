@@ -162,6 +162,19 @@ def vibe_settings(path):
                 row["computed_unit"] = control.get("show_unit", "")
             if "role" in control:
                 row["role"] = control["role"]
+            # A hazardous value is documented by its label, like the default.
+            if "hazard" in control:
+                hz = control["hazard"]
+                row["hazard"] = {"reason": hz["reason"]}
+                if "values" in hz:
+                    row["hazard"]["values"] = [
+                        next((c["label"] for c in choices if c["value"] == v), v)
+                        for v in hz["values"]
+                    ]
+                if "above" in hz:
+                    # in the units the row's range is documented in
+                    above = round(hz["above"] * control.get("scale", 1), 6)
+                    row["hazard"]["above"] = int(above) if above == int(above) else above
             rows.append(row)
         for rule in host.get("requires", []):
             rules.append({"function": fn, "message": rule["message"]})

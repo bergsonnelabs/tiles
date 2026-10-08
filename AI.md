@@ -522,6 +522,8 @@ that is already `@studio expose`d. Reference driver: `drivers/tile_sense_i_6p6.h
 | `scale=<n> unit=<u>` | The argument is stored in sub-units: people read and type `value × scale`, in `unit` (`scale=0.1 unit=dB` for a threshold in tenths of a dB). Invertible, so it drives the input as well as the display; numeric arguments only, and not together with `show=`. The `[min..max]` stays in raw units. |
 | `when="<expr>"` | The setting only applies while this holds (a filter on a sensor that is switched off, a range on a powered-down axis). Studio greys it out in the inspector, and leaves it and the part that gates it out of the plain-language story. |
 | `show="<expr>" unit=Hz` | What the value *means*, computed for the reader (a filter setting shown as its bandwidth in Hz rather than "ODR/16"). |
+| `hazard="<reason>" hazard_values=A,B,…` | Values that can hurt a person or the hardware (Drive.P: `hazard="high voltage (±95 V)" hazard_values=DRIVE_P_OUTPUT_HIGH_V`). Members resolve to their register values like `default=`; integers work on numeric arguments. Emitted as `"hazard": {"reason": "…", "values": [0]}`; Studio never writes a hazard value on its own and makes the user confirm one. The two attributes go together, and the default may never be a hazard value: **a driver's init must leave the safe value in force**. |
+| `hazard="<reason>" hazard_above=<n>` | The numeric form: every value above `n` is a hazard (Drive.P: `hazard="more than 10 V negative can damage PowerHap actuators" hazard_above=10` on the negative voltage limit). An integer in the argument's raw units, inside `[min..max)` (at max it would mark nothing). Emitted as `"hazard": {"reason": "…", "above": 10}`; Studio treats it like `hazard_values`. Numeric arguments only, never together with `hazard_values`, and the default may equal `n` but not exceed it. |
 
 Numeric settings take their bounds from `@param <arg> [min..max] unit`, which is
 required. Enum settings take their options and labels from the enum's member doc
@@ -546,7 +548,10 @@ anything it cannot resolve. Studio only ever evaluates the AST.
 The generator refuses to build (exit 1, `error: vibe settings: …`) when: a name or
 member does not resolve, a `scope=config` control has no default, a numeric control
 has no `[min..max]`, a default is not an offered member, two offered members share a
-register value, or two settings share a label. Treat these as compile errors.
+register value, two settings share a label, or a hazard is incomplete (`hazard` without
+`hazard_values` / `hazard_above`, or the reverse), gives both forms, names a member the
+argument doesn't offer, puts `hazard_above` on an enum or bool, outside the argument's
+range or under its default, or includes the default (`hazard_values`). Treat these as compile errors.
 
 Read the datasheet for every default and every rule (`~/Documents/local/tile references/<Stem>/`).
 The 6P6 sweep found the header's own filter-bandwidth comments were wrong

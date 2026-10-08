@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@cb18d1e",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_p",
     "header": "tile_drive_p.h",
-    "version": "3.5.0"
+    "version": "3.6.0"
   },
   "handle": {
     "type": "tile_t",
@@ -122,7 +122,7 @@
         {
           "name": "sample",
           "type": "int",
-          "description": "Signed 12-bit waveform sample (REFERENCE[11:0], two's complement)"
+          "description": "Signed waveform sample in REFERENCE codes (±1743 = full scale of the range)"
         }
       ],
       "returns": "void",
@@ -249,12 +249,12 @@
             {
               "name": "DRIVE_P_OUTPUT_HIGH_V",
               "value": 0,
-              "label": "±95V"
+              "label": "±95 V (high voltage)"
             },
             {
               "name": "DRIVE_P_OUTPUT_LOW_V",
               "value": 1,
-              "label": "±13.28V"
+              "label": "±13.28 V (init default)"
             }
           ]
         }
@@ -266,7 +266,13 @@
           "label": "Output voltage range",
           "tier": "basic",
           "scope": "config",
-          "default": 0
+          "default": 1,
+          "hazard": {
+            "reason": "high voltage (±95 V)",
+            "values": [
+              0
+            ]
+          }
         }
       ],
       "receiver": "tile_t*"
@@ -401,6 +407,102 @@
     {
       "qname": [
         "$slot",
+        "set_voltage_limits"
+      ],
+      "symbol": "tile_drive_p_set_voltage_limits",
+      "header": "tile_drive_p.h",
+      "category": "tile",
+      "description": "Limit the output voltage, separately for each polarity.",
+      "params": [
+        {
+          "name": "pos_v",
+          "type": "int",
+          "range": [
+            0,
+            95
+          ],
+          "unit": "V",
+          "description": "Largest positive output; values above 95 mean 95"
+        },
+        {
+          "name": "neg_v",
+          "type": "int",
+          "range": [
+            0,
+            95
+          ],
+          "unit": "V",
+          "description": "Largest negative output, as a magnitude; values above 95 mean 95"
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "pos_v",
+          "label": "Positive voltage limit",
+          "tier": "basic",
+          "scope": "config",
+          "default": 95
+        },
+        {
+          "param": "neg_v",
+          "label": "Negative voltage limit",
+          "tier": "basic",
+          "scope": "config",
+          "default": 10,
+          "hazard": {
+            "reason": "more than 10 V negative can damage PowerHap actuators",
+            "above": 10
+          }
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_pos_limit_v"
+      ],
+      "symbol": "tile_drive_p_get_pos_limit_v",
+      "header": "tile_drive_p.h",
+      "category": "tile",
+      "description": "The positive output voltage limit, in volts.",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_neg_limit_v"
+      ],
+      "symbol": "tile_drive_p_get_neg_limit_v",
+      "header": "tile_drive_p.h",
+      "category": "tile",
+      "description": "The negative output voltage limit, in volts (a magnitude).",
+      "params": [],
+      "returns": "uint8_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "read_clamp_count"
+      ],
+      "symbol": "tile_drive_p_read_clamp_count",
+      "header": "tile_drive_p.h",
+      "category": "tile",
+      "description": "How many output samples the voltage limits flattened, then reset the count.",
+      "params": [],
+      "returns": "uint32_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
         "play_click"
       ],
       "symbol": "tile_drive_p_play_click",
@@ -415,7 +517,7 @@
             0,
             100
           ],
-          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         }
       ],
       "returns": "void",
@@ -447,7 +549,7 @@
             0,
             100
           ],
-          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "ms",
@@ -475,7 +577,7 @@
             0,
             100
           ],
-          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "ms",
@@ -503,7 +605,7 @@
             0,
             100
           ],
-          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "count",
@@ -560,7 +662,7 @@
             0,
             100
           ],
-          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range)"
+          "description": "Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits"
         },
         {
           "name": "threshold_mv",
@@ -589,7 +691,7 @@
         {
           "name": "samples",
           "type": "int[]",
-          "description": "Buffer of signed samples, within ±1743"
+          "description": "Buffer of signed samples in REFERENCE codes (±1743 = full scale)"
         }
       ],
       "returns": "void",
