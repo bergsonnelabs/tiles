@@ -407,6 +407,11 @@ void tile_drive_p_init_at(tiles_pal_t* hal, uint8_t addr, tile_t* tile,
     bos_config(tile, 0x0000);
     bos_write_tuning(tile);
 
+    /* Let the supply settle before anything can drive the output: the first
+     * click straight after power-up browns out a USB-powered Core. Once, at
+     * init, so runtime range switches never wait (see TILE_DRIVE_P_SETTLE_MS). */
+    if (TILE_DRIVE_P_SETTLE_MS > 0u) tile->hal->delay_ms(TILE_DRIVE_P_SETTLE_MS);
+
     tile->state = TILE_STATE_READY;
 }
 
