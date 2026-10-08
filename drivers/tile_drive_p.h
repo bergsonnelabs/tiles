@@ -119,7 +119,20 @@
 
 #define TILE_DRIVE_P_VERSION_MAJOR  3
 #define TILE_DRIVE_P_VERSION_MINOR  6
-#define TILE_DRIVE_P_VERSION_PATCH  0
+#define TILE_DRIVE_P_VERSION_PATCH  1
+
+/**
+ * Power-up settle, in ms, at the end of tile_drive_p_init(). The BOS1921 is
+ * ready 3 ms after power-up (datasheet §7.4.1), but the SUPPLY is not: a Core
+ * plugged into USB that clicks straight after boot browns out (bench,
+ * 2026-10-08: 60 V clicks in the ±95 V range reset the Core below ~60 ms after
+ * power-up, solid at 100 ms). Init runs once at boot, so the wait sits between
+ * power-up and the first output and never delays a later range switch. A
+ * design with stronger supply decoupling may define it lower (or 0).
+ */
+#ifndef TILE_DRIVE_P_SETTLE_MS
+#define TILE_DRIVE_P_SETTLE_MS  100u
+#endif
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -309,7 +322,9 @@ typedef struct {
  * opt in to ±95 V. The SUP_RISE I2C_ADDR nibble is derived from the
  * instance's address, so a reassigned chip (0x45/0x46) keeps its address —
  * a soft reset doesn't revert it, so init may reset such a chip normally.
- * Pass cfg=NULL for defaults.
+ * Ends with a TILE_DRIVE_P_SETTLE_MS (default 100 ms) wait so the supply has
+ * settled before the first output (a click right after power-up can brown
+ * out a USB-powered Core). Pass cfg=NULL for defaults.
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (0=0x44, 1=0x45, 2=0x46; see mapping table)
