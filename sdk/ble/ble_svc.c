@@ -234,8 +234,25 @@ static uint16_t char_register(uint16_t svc_handle, uint8_t uuid_type, const void
                       permissions,
                       evt_mask,
                       10,     /* encryption key size */
-                      0,      /* not fixed length */
+                      1,      /* Is_Variable = 1: variable length (ble_gatt_aci.h: 0x00 = fixed) */
                       &char_handle);
+
+    /* Variable length, because a fixed-length attribute keeps all `value_len`
+     * bytes: an update shorter than that overwrites only its own bytes and
+     * every notification still carries the whole attribute, the previous
+     * value's tail included. That doubled the Studio scope's frames over BLE
+     * (each schema-only notification resent the last data frame) and gave
+     * BYTES / string contract values a stale tail. This used to pass 0 under a
+     * "not fixed length" comment, which is the opposite of what 0 means.
+     *
+     * A variable-length attribute starts EMPTY, so give it `value_len` zero
+     * bytes now: a read before the first write returns exactly what the
+     * fixed-length attribute did, and fixed-size values (BOOL / UINTn) keep
+     * their width because every update writes the full length. */
+    if (char_handle && value_len) {
+        static const uint8_t zeros[255] = { 0 };
+        (void)aci_gatt_update_char_value(svc_handle, char_handle, 0, value_len, zeros);
+    }
 
     /* Publish the human-readable name as a Characteristic User Description
      * (0x2901) so generic scanners can show it. Without this the name argument
