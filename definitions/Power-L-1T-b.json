@@ -172,7 +172,7 @@
       },
       "functions": [
         {
-          "note": "1.8V, up to 10mA",
+          "note": "1.8V default (adjustable), up to 100mA",
           "type": "power",
           "function": "V+",
           "direction": "output"
@@ -199,7 +199,7 @@
       "direction": "output",
       "adjustable": true,
       "is_required": true,
-      "max_current": "",
+      "max_current": "100mA",
       "positive_pad": [
         "10"
       ]
