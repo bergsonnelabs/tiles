@@ -47,8 +47,8 @@ const IBAT_LP_UA = 0.46; // low-power mode, LDO disabled
 const IBAT_LP_LDO_UA = 1.7; // low-power mode, LDO enabled
 const IBAT_ACTIVE_UA = 18; // active battery mode, LDO disabled
 const IBAT_ACTIVE_LDO_UA = 21; // active battery mode, LDO enabled
-// LS/LDO output current, datasheet §7.3 ILDO max 100 mA. (The tile JSON's pad 10
-// note says 10 mA and its application note 150 mA; the part's rating is used.)
+// LS/LDO output current, datasheet §7.3 ILDO max 100 mA (the tile JSON's pad 10
+// note and V+ rail `max_current` agree since 2026-10-09; its application note says 150 mA).
 const LDO_LIMIT_UA = 100_000;
 // SI8806 ground switch: gate = V+ via 220 kΩ; VGS(th) max 1.0 V (SI8806DB §Specs).
 const GND_SWITCH_VTH_MV = 1000;
