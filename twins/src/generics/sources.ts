@@ -92,37 +92,93 @@ const VBUS_MV = 5000;
 /** What an ordinary USB port gives a device that has not negotiated for more. */
 const USB_PORT_LIMIT_UA = 500_000;
 
+// What the source advertises (USB Type-C Rp), by `usbc`: 0 none, 1 default USB,
+// 2 1.5 A, 3 3.0 A. The CC voltage a sink's Rd (5.1 kΩ) sees is the Type-C
+// current-source Rp (80 / 180 / 330 µA) times Rd: 0.41 / 0.92 / 1.68 V, inside
+// the sink's bands (nPM1300: 0.2 / 0.66 / 1.23 V thresholds).
+const USBC_CC_MV = [0, 408, 918, 1683] as const;
+// VBUS current the source offers at each level. Default USB is USB 2.0's 500 mA
+// (a USB 3 port gives 900, which Rp can't signal); none = a non-Type-C supply,
+// taken as an ordinary port.
+const USBC_LIMIT_UA = [USB_PORT_LIMIT_UA, USB_PORT_LIMIT_UA, 1_500_000, 3_000_000] as const;
+const USBC_LABEL = ['no Type-C source', 'default USB', '1.5 A', '3.0 A'] as const;
+
+const usbcOf = (s: SimState) => Math.max(0, Math.min(3, Math.round(Number(s.usbc) || 0)));
+
 /** USB-C port. Unlike a battery it isn't always live: `pow` is whether VBUS is
  * delivering power (a charger/cable plugged in) and drives the 5V0 output; `conn`
- * is whether a data host is attached (informational for now). */
+ * is whether a data host is attached (informational for now). `usbc` is what the
+ * source advertises on CC1 (the plug's CC side; CC2 stays open). Pads are keyed
+ * by terminal name, like Studio's generic parts: 5V0, GND, D+, D-, CC1, CC2. */
 export const usb: TileSim<SimState> = {
   tile: 'Generic.USB',
-  defaultState: { pow: 1, conn: 0 },
+  defaultState: { pow: 1, conn: 0, usbc: 1 },
   controls: [
     { type: 'toggle', field: 'pow', label: 'POW' }, // VBUS delivering power
     { type: 'toggle', field: 'conn', label: 'CONN' }, // data host attached
+    {
+      type: 'slider',
+      field: 'usbc',
+      label: 'USB-C source (0 none·1 default·2 1.5 A·3 3 A)',
+      min: 0,
+      max: 3,
+      step: 1,
+    },
   ],
   // Plugged in or not: to a person that is ONE fact, power and the data host.
+  // Which charger it is (what it advertises on CC) is the other.
   stimuli: [
     {
       id: 'connected',
       label: 'Connected',
-      controls: [{ kind: 'toggle', id: 'connected', label: 'connected', fields: ['pow', 'conn'] }],
+      controls: [
+        { kind: 'toggle', id: 'connected', label: 'connected', fields: ['pow', 'conn'] },
+        {
+          kind: 'slider',
+          id: 'usbc',
+          label: 'USB-C source (0 none·1 default·2 1.5 A·3 3 A)',
+          field: 'usbc',
+          min: 0,
+          max: 3,
+          step: 1,
+        },
+      ],
     },
   ],
-  power: (s) => ({
-    draw_ua: 0,
-    rails: [
-      {
-        name: '5V0',
-        role: 'output',
-        v_mv: s.pow ? VBUS_MV : 0,
-        pads: ['5V0'],
-        limit_ua: USB_PORT_LIMIT_UA,
-        note: s.pow ? 'VBUS 5 V' : 'VBUS off',
-      },
-    ],
-  }),
+  power: (s) => {
+    const src = usbcOf(s);
+    // A Type-C source presents Rp only while it is plugged in (VBUS on).
+    const ccMv = s.pow ? USBC_CC_MV[src] : 0;
+    return {
+      draw_ua: 0,
+      rails: [
+        {
+          name: '5V0',
+          role: 'output',
+          v_mv: s.pow ? VBUS_MV : 0,
+          pads: ['5V0'],
+          limit_ua: USBC_LIMIT_UA[src],
+          note: s.pow ? `VBUS 5 V (${USBC_LABEL[src]})` : 'VBUS off',
+        },
+        {
+          name: 'CC1',
+          role: 'output',
+          v_mv: ccMv,
+          pads: ['CC1'],
+          note: ccMv > 0 ? `Rp: ${USBC_LABEL[src]}` : 'CC open',
+        },
+        // the other plug side: open, so it drives nothing (a 0 V output rail
+        // sets no net voltage)
+        {
+          name: 'CC2',
+          role: 'output',
+          v_mv: 0,
+          pads: ['CC2'],
+          note: 'CC open',
+        },
+      ],
+    };
+  },
   provenance: { power: 'inferred' },
 };
 

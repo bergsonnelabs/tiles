@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@c260a08",
+  "source": "tiles@f82b284",
   "file": "tile_power_l_1n.h",
   "brief": "Power.L.1N tile driver — Nordic nPM1300 PMIC.",
-  "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nWhich LED is which (confirmed 2026-09-24): red, orange, green sit left to\nright on the nPM1300's A1, A2, A3 balls, which are LED0, LED1, LED2 (WLCSP\npin table). So LED0 = red (U3), LED1 = orange (U4), LED2 = green (U5).\n\nDriver mode assignment made by init() (the chip's own reset assignment):\n  LED0 red    → ERROR mode    (auto, on for charger faults)\n  LED1 orange → CHARGING mode (auto, on while charging)\n  LED2 green  → HOST mode     (firmware \"ready\"/status, via led_set())\n\nBefore 1.2.0 init() had this backwards (LED0 HOST, LED2 ERROR, from a\nmisread schematic), so a charger fault lit the green LED and firmware\nstatus the red one.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship (370 nA) and\n  hibernate modes that isolate the battery for storage (datasheet §7.4:\n  TASKENTERSHIPMODE 0x0B02, TASKENTERHIBERNATE 0x0B00). Not yet exposed. The\n  SHPHLD wake button is not routed to a pad on Power-L-1N-a, so the only way\n  back out of ship mode on this tile is applying CHG (VBUS), which needs a\n  bench check before it is offered as a Studio call.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.\n\n@studio unsupported severity=advanced category=\"USB-C source detection (CC1 / CC2)\"\n  Driver-deferred. The nPM1300 reports what the attached source can supply\n  (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to\n  pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore\n  takes the caller's word for what the source can give: 500 mA is safe for\n  any USB port, more is only safe for a supply known to deliver it.",
+  "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nWhich LED is which (confirmed 2026-09-24): red, orange, green sit left to\nright on the nPM1300's A1, A2, A3 balls, which are LED0, LED1, LED2 (WLCSP\npin table). So LED0 = red (U3), LED1 = orange (U4), LED2 = green (U5).\n\nDriver mode assignment made by init() (the chip's own reset assignment):\n  LED0 red    → ERROR mode    (auto, on for charger faults)\n  LED1 orange → CHARGING mode (auto, on while charging)\n  LED2 green  → HOST mode     (firmware \"ready\"/status, via led_set())\n\nBefore 1.2.0 init() had this backwards (LED0 HOST, LED2 ERROR, from a\nmisread schematic), so a charger fault lit the green LED and firmware\nstatus the red one.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship (370 nA) and\n  hibernate modes that isolate the battery for storage (datasheet §7.4:\n  TASKENTERSHIPMODE 0x0B02, TASKENTERHIBERNATE 0x0B00). Not yet exposed. The\n  SHPHLD wake button is not routed to a pad on Power-L-1N-a, so the only way\n  back out of ship mode on this tile is applying CHG (VBUS), which needs a\n  bench check before it is offered as a Studio call.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -44,11 +44,6 @@
       "severity": "niche",
       "category": "POF warning + buck retention / forced-PWM",
       "brief": "Driver-deferred. Power-fail early-warning (via GPIO) and buck retention-voltage / forced-PWM modes aren't exposed yet."
-    },
-    {
-      "severity": "advanced",
-      "category": "USB-C source detection (CC1 / CC2)",
-      "brief": "Driver-deferred. The nPM1300 reports what the attached source can supply (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore takes the caller's word for what the source can give: 500 mA is safe for any USB port, more is only safe for a supply known to deliver it."
     }
   ],
   "defines": [
@@ -60,7 +55,7 @@
     },
     {
       "name": "TILE_POWER_L_1N_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -78,6 +73,33 @@
     }
   ],
   "enums": [
+    {
+      "name": "power_l_1n_usbc_t",
+      "brief": "USB-C source capability (get_usbc_source).",
+      "description": "What the attached source advertises on its CC line (Type-C Rp level), as the\nnPM1300's CC comparators decode it (USBCDETECTSTATUS, datasheet 6.1.3 /\n6.1.8.5). The values are the chip's own field codes.",
+      "members": [
+        {
+          "name": "NPM1300_USBC_NONE",
+          "value": "0",
+          "description": "No Type-C source: no VBUS, CC open/grounded, or a legacy supply"
+        },
+        {
+          "name": "NPM1300_USBC_DEFAULT",
+          "value": "1",
+          "description": "Default USB power (USB 2.0: 500 mA once configured)"
+        },
+        {
+          "name": "NPM1300_USBC_1A5",
+          "value": "2",
+          "description": "Type-C Current 1.5 A"
+        },
+        {
+          "name": "NPM1300_USBC_3A",
+          "value": "3",
+          "description": "Type-C Current 3.0 A"
+        }
+      ]
+    },
     {
       "name": "power_l_1n_led_mode_t",
       "brief": "LED indicator mode (LEDDRVxMODESEL).",
@@ -148,7 +170,7 @@
       ],
       "notes": [],
       "brief": "Initialize the nPM1300 PMIC.",
-      "description": "Sets the indicator LED modes (LED0 red = ERROR, LED1 orange = CHARGING,\nLED2 green = HOST),\ndisables NTC monitoring (no thermistor on this tile), and applies the\ncharger settings. The buck regulators are left at their boot voltages\n(1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.\nPass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging\nenabled). A zero-initialised cfg is NOT the same as NULL: it leaves\ncharging OFF (enable_charging = 0).\n\n4.20 V and at least ~100 mAh (100 mA is 1C for a 100 mAh cell). They are\nNOT safe for a LiFePO4 cell (charge to 3.60 V: pass term_mv = 3600) or for\na smaller cell (lower charge_current_ma to <= 1C). The chip itself powers\nup with charging disabled at 3.60 V / 32 mA; init() is what raises it.",
+      "description": "Sets the indicator LED modes (LED0 red = ERROR, LED1 orange = CHARGING,\nLED2 green = HOST),\ndisables NTC monitoring (no thermistor on this tile), and applies the\ncharger settings. The buck regulators are left at their boot voltages\n(1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.\nPass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging\nenabled, USB-C auto limit off). A zero-initialised cfg is NOT the same as NULL: it leaves\ncharging OFF (enable_charging = 0).\n\n4.20 V and at least ~100 mAh (100 mA is 1C for a 100 mAh cell). They are\nNOT safe for a LiFePO4 cell (charge to 3.60 V: pass term_mv = 3600) or for\na smaller cell (lower charge_current_ma to <= 1C). The chip itself powers\nup with charging disabled at 3.60 V / 32 mA; init() is what raises it.",
       "name": "tile_power_l_1n_init"
     },
     {
@@ -178,7 +200,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the VBUS (USB) input current limit.",
-      "description": "The nPM1300 powers up with a 100 mA input limit; init() raises it to 500 mA\n(what any USB port gives) unless the config says otherwise. The limit caps\nwhat is drawn from USB for the system AND the charger together. It does not\nregulate VSYS: with a battery attached, asking for more than the limit gives\ncuts the charge back and lets VSYS fall to just above the battery voltage\n(measured: a 100 mA charge on the 100 mA limit took VSYS from 5.15 V to\n~3.65 V; both bucks held, but with only ~350 mV of headroom on 3.3 V, which a\nload with a start-up surge can dip). With no battery, VSYS simply sags.\n\nThe chip falls back to its START-UP limit whenever VBUS is removed, which\nmatters for exactly the system that charges: one with a battery keeps running\nthrough an unplug, and would otherwise be back at 100 mA on re-plug. So this\nwrites the start-up limit too, and the value holds until the chip is RESET\n(when it returns to 100 mA, and init() sets it again).\n\nSettable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step\n(never more than asked) and clamped to that range. 100 and 500 mA are the\nUSB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.",
+      "description": "The nPM1300 powers up with a 100 mA input limit; init() raises it to 500 mA\n(what any USB port gives) unless the config says otherwise. The limit caps\nwhat is drawn from USB for the system AND the charger together. It does not\nregulate VSYS: with a battery attached, asking for more than the limit gives\ncuts the charge back and lets VSYS fall to just above the battery voltage\n(measured: a 100 mA charge on the 100 mA limit took VSYS from 5.15 V to\n~3.65 V; both bucks held, but with only ~350 mV of headroom on 3.3 V, which a\nload with a start-up surge can dip). With no battery, VSYS simply sags.\n\nThe chip falls back to its START-UP limit whenever VBUS is removed, which\nmatters for exactly the system that charges: one with a battery keeps running\nthrough an unplug, and would otherwise be back at 100 mA on re-plug. So this\nwrites the start-up limit too, and the value holds until the chip is RESET\n(when it returns to 100 mA, and init() sets it again).\n\nSettable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step\n(never more than asked) and clamped to that range. 100 and 500 mA are the\nUSB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.\nMore is only safe for a source known to deliver it: check\nget_usbc_source(), or let set_vbus_limit_auto() choose from what the USB-C\nsource advertises.\n\nWith the auto limit ON, this value is the fallback: it stays the start-up\nlimit (what a re-plug starts at) and applies whenever no USB-C source is\ndetected; a detected source overrides it (see set_vbus_limit_auto).",
       "name": "tile_power_l_1n_set_vbus_limit_ma"
     },
     {
@@ -265,6 +287,54 @@
       "brief": "Whether a battery is detected.",
       "description": "BATTERYDETECTED in BCHGCHARGESTATUS, a charger-domain bit: the datasheet\nstates \"CHARGER waits until a battery is detected before charging\", i.e.\ndetection runs as part of the charge cycle. With the charger disabled the\nbit reads 0 whether or not a cell is fitted — measured on the bench with a\nbattery physically attached (0 before enable, 1 after).\n\nDo NOT gate a charge-enable decision on this; that deadlocks. Enable\ncharging first, poll this for a second or two, and disable again if nothing\nappears. Note also that get_vbat_mv() cannot substitute: an open battery\nterminal reads a plausible ~3 V once charger current has pushed the VBAT\ndecoupling cap up.",
       "name": "tile_power_l_1n_battery_present"
+    },
+    {
+      "signature": "power_l_1n_usbc_t tile_power_l_1n_get_usbc_source(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "power_l_1n_usbc_t: 0 none, 1 default USB, 2 1.5 A, 3 3.0 A.",
+      "brief": "What the attached USB-C source advertises (its Type-C Rp level).",
+      "description": "The nPM1300 has the Type-C sink pull-downs (Rd = 5.1 kOhm) on CC1 / CC2\ninside the chip, and comparators that decode the CC voltage while VBUS is\npresent (thresholds 0.2 / 0.66 / 1.23 V, debounced 15 ms; datasheet 6.1.3,\n6.1.6). Only the CC line on the plug's side carries a level; the other stays\nat 0 V. This reads both fields of USBCDETECTSTATUS and returns the one that\nis set (if both ever are, the lower, as the safer of the two).\n\nThe chip only reports; it never raises the input limit by itself. Use\nset_vbus_limit_auto() for that.\n\nNONE also covers a supply that is not Type-C at all (CC pads left open or\ngrounded), so NONE with VBUS present means \"unknown\", not \"no power\".",
+      "name": "tile_power_l_1n_get_usbc_source"
+    },
+    {
+      "signature": "uint16_t tile_power_l_1n_get_usbc_current_ma(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "Advertised source current in mA (0, 500, 1500 or 3000).",
+      "brief": "The current the attached USB-C source advertises, in mA.",
+      "description": "NONE gives 0; DEFAULT gives 500 (USB 2.0's configured level: the Rp level\ncannot tell a USB 3 port's 900 mA apart, and a strict USB 2.0 device draws\nonly 100 mA until the host configures it); 1.5 A gives 1500; 3.0 A gives\n3000. That is what the source offers, not what this tile draws: the input\nlimit tops out at 1500 mA.",
+      "name": "tile_power_l_1n_get_usbc_current_ma"
+    },
+    {
+      "signature": "void tile_power_l_1n_set_vbus_limit_auto(tile_t* tile, uint8_t on)",
+      "params": [
+        {
+          "name": "on",
+          "description": "1 = follow the USB-C source, 0 = use the set_vbus_limit_ma() value."
+        }
+      ],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "config",
+      "brief": "Let the detected USB-C source set the USB input limit.",
+      "description": "Off by default (init() writes 500 mA, or cfg->vbus_limit_ma, and leaves it).\nWhen on, the input limit follows the source: default USB 500 mA, 1.5 A and\n3.0 A sources 1500 mA (the chip's maximum). With no USB-C source detected\n(no VBUS, or a supply without CC) it falls back to the set_vbus_limit_ma()\nvalue. Turning it off restores that value.\n\nThe limit is applied now, and again each time update_vbus_limit() runs. The\nchip drops back to the start-up limit (the set_vbus_limit_ma() value)\nwhenever VBUS is removed, so a system that stays up on its battery should\ncall update_vbus_limit() after a re-plug (e.g. from its main loop), at least\n15 ms after VBUS returns so the CC comparators have settled.",
+      "name": "tile_power_l_1n_set_vbus_limit_auto"
+    },
+    {
+      "signature": "uint16_t tile_power_l_1n_update_vbus_limit(tile_t* tile)",
+      "params": [],
+      "notes": [],
+      "studio_exposed": true,
+      "studio_section": "runtime",
+      "return": "The input limit now in force, in mA.",
+      "brief": "Re-apply the USB input limit from the attached USB-C source.",
+      "description": "With the auto limit on, reads the CC status and applies the limit\nset_vbus_limit_auto() describes; call it after a re-plug. With it off, or\nwith no VBUS present, it changes nothing. Cheap (a few register reads and\ntwo writes), so calling it from a main loop is fine.",
+      "name": "tile_power_l_1n_update_vbus_limit"
     },
     {
       "signature": "uint16_t tile_power_l_1n_get_vbat_mv(tile_t* tile)",
@@ -388,7 +458,7 @@
     }
   ],
   "source_file": "tile_power_l_1n.h",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "tile_family": "Power",
   "tile_name": "L.1N",
   "display_name": "Power.L.1N",
@@ -443,6 +513,15 @@
       ],
       "unit": "V",
       "default": 4200
+    },
+    {
+      "label": "USB input limit from USB-C source",
+      "tier": "advanced",
+      "scope": "config",
+      "function": "set_vbus_limit_auto",
+      "param": "on",
+      "kind": "bool",
+      "default": 0
     }
   ]
 }

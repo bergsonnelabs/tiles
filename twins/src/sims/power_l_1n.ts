@@ -13,6 +13,13 @@
 // supplies — and back-filling the battery draw from downstream loads — is a
 // solver/modeling choice (the actual downstream load lives on other tiles), so
 // the power layer is marked "inferred".
+//
+// USB-C source detection: the nPM1300 has the Type-C sink pull-downs (Rd =
+// 5.1 kOhm) on CC1 / CC2 inside the chip, and the tile routes CC1 / CC2 to pads
+// 2 / 3. A source's Rp sets the CC voltage across Rd; the chip's comparators
+// decode it at VRDCONN 0.2 V, VRD1A5 0.66 V and VRD3A 1.23 V (nPM1300 PS v1.1,
+// Table 10) into USBCDETECTSTATUS (6.1.8.5). The twin decodes the wired pad
+// voltages with the same thresholds.
 import type { PowerCtx, TileSim } from '../tileSim';
 
 const QUIESCENT_UA = 10; // nPM1300 system quiescent (bucks in PFM, light load)
@@ -43,6 +50,10 @@ interface State {
   charging_enabled: number;
   charge_current_ma: number; // CC level (32-800)
   vbus_ilim_ma: number; // VBUS input current limit (100-1500); the chip boots at 100, init() sets 500
+  vbus_auto: number; // 1 = the limit follows the detected USB-C source (set_vbus_limit_auto)
+  // USB-C source (0 none, 1 default USB, 2 1.5 A, 3 3.0 A): stands in for the CC
+  // pads only where there is no wiring to read (a standalone PMIC, host calls).
+  usbc_source: number;
   term_mv: number; // termination (full) voltage
 
   // ── buck regulators (1 = VOUT1 1.8 V, 2 = VOUT2 3.3 V) ──
@@ -73,6 +84,17 @@ const CHG_CV = 1 << 4;
 const LED_ERROR = 0;
 const LED_CHARGING = 1;
 const LED_HOST = 2;
+
+// USB-C source codes (USBCDETECTSTATUS CCxCMP / power_l_1n_usbc_t)
+const USBC_NONE = 0;
+const USBC_DEFAULT = 1;
+const USBC_1A5 = 2;
+const USBC_3A = 3;
+// CC comparator thresholds, mV (nPM1300 PS v1.1 Table 10: VRDCONN, VRD1A5, VRD3A)
+const VRDCONN_MV = 200;
+const VRD1A5_MV = 660;
+const VRD3A_MV = 1230;
+const RD_KOHM = 5.1; // CC1 / CC2 internal pull-down (Table 10)
 
 const pick = (args: number[], i: number, cur: number) =>
   args.length > i && Number.isFinite(args[i]) ? args[i] : cur;
@@ -110,6 +132,43 @@ function resolveInputs(s: State, ctx?: PowerCtx): Inputs {
     battPad != null ? battV > UVLO_MV : wired ? false : s.battery_present === 1;
   const vinMv = Math.max(chgV, battV);
   return { chgV, battV, usbPresent, batteryPresent, vinMv, inputOk: vinMv > UVLO_MV };
+}
+
+// One CC pad's voltage → the source code the chip's comparators would report.
+function decodeCc(mv: number): number {
+  if (mv < VRDCONN_MV) return USBC_NONE;
+  if (mv < VRD1A5_MV) return USBC_DEFAULT;
+  if (mv < VRD3A_MV) return USBC_1A5;
+  return USBC_3A;
+}
+
+// What USBCDETECTSTATUS reports. The comparators only run with VBUS present.
+// Inside a solved system (`ctx` given) the CC pads are the truth, and an
+// unwired CC pad reads as nothing attached; only a twin asked on its own (no
+// ctx: standalone, or a host call) uses the `usbc_source` stand-in. Only the
+// plug-side CC carries a level; if both ever do, the lower wins (as the driver).
+function usbcSource(s: State, inp: Inputs, ctx?: PowerCtx): number {
+  if (!inp.usbPresent) return USBC_NONE;
+  if (ctx == null) return clamp(Math.round(s.usbc_source), USBC_NONE, USBC_3A);
+  const cc1 = decodeCc(ctx.padVoltage?.['2'] ?? 0);
+  const cc2 = decodeCc(ctx.padVoltage?.['3'] ?? 0);
+  if (cc1 === USBC_NONE) return cc2;
+  if (cc2 === USBC_NONE) return cc1;
+  return Math.min(cc1, cc2);
+}
+
+// Advertised source current, mA (get_usbc_current_ma).
+function usbcCurrentMa(src: number): number {
+  return src === USBC_DEFAULT ? 500 : src === USBC_1A5 ? 1500 : src === USBC_3A ? 3000 : 0;
+}
+
+// The VBUS input limit in force (mA). With the auto limit on, a detected source
+// sets it (default 500 mA; 1.5 A / 3 A capped at the chip's 1500 mA); with none
+// detected it is the set_vbus_limit_ma() value. Modelled as if the program calls
+// update_vbus_limit() after every re-plug, as the driver header asks.
+function vbusLimitMa(s: State, src: number): number {
+  if (s.vbus_auto !== 1 || src === USBC_NONE) return s.vbus_ilim_ma;
+  return src === USBC_DEFAULT ? 500 : 1500;
 }
 
 // Is the charger actively pushing current into the battery? Needs USB power in,
@@ -191,6 +250,8 @@ const sim: TileSim<State> = {
     // Like the charge settings beside it, this is the state AFTER the driver's init():
     // the chip powers up at 100 mA and init() raises it to 500 before it charges.
     vbus_ilim_ma: 500,
+    vbus_auto: 0, // init() leaves the auto limit off unless the config asks
+    usbc_source: USBC_DEFAULT,
     term_mv: 4200,
 
     buck1_en: 1,
@@ -231,6 +292,14 @@ const sim: TileSim<State> = {
       unit: '°C',
     },
     { type: 'toggle', field: 'led2_host', label: 'LED2 green (host)' },
+    {
+      type: 'slider',
+      field: 'usbc_source',
+      label: "USB-C source (0 none·1 default·2 1.5 A·3 3 A), when CC isn't wired",
+      min: 0,
+      max: 3,
+      step: 1,
+    },
   ],
 
   // The one thing a person makes HAPPEN to a charger: a fault (a shorted cell, a
@@ -240,6 +309,23 @@ const sim: TileSim<State> = {
       id: 'fault',
       label: 'Charger fault',
       controls: [{ kind: 'toggle', id: 'fault', label: 'charger fault', fields: ['fault'] }],
+    },
+    // Which USB-C source is plugged in. A wired USB-C connector's own setting
+    // decides through CC1 / CC2; this stands in where nothing is wired.
+    {
+      id: 'usbc',
+      label: 'USB-C source',
+      controls: [
+        {
+          kind: 'slider',
+          id: 'usbc_source',
+          label: 'USB-C source (0 none·1 default·2 1.5 A·3 3 A)',
+          field: 'usbc_source',
+          min: 0,
+          max: 3,
+          step: 1,
+        },
+      ],
     },
   ],
 
@@ -255,6 +341,7 @@ const sim: TileSim<State> = {
         led1_mode: LED_CHARGING,
         led2_mode: LED_HOST,
         vbus_ilim_ma: 500,
+        vbus_auto: 0,
         charge_current_ma: 100,
         term_mv: 4200,
         charging_enabled: 1,
@@ -270,6 +357,20 @@ const sim: TileSim<State> = {
       nextState: {
         vbus_ilim_ma: Math.floor(clamp(pick(args, 0, state.vbus_ilim_ma), 100, 1500) / 100) * 100,
       },
+    }),
+    // ── USB-C source detection ──
+    tile_power_l_1n_get_usbc_source: ({ state }) => ({
+      scalar: usbcSource(state, resolveInputs(state)),
+    }),
+    tile_power_l_1n_get_usbc_current_ma: ({ state }) => ({
+      scalar: usbcCurrentMa(usbcSource(state, resolveInputs(state))),
+    }),
+    tile_power_l_1n_set_vbus_limit_auto: ({ args }) => ({
+      nextState: { vbus_auto: pick(args, 0, 0) ? 1 : 0 },
+    }),
+    // the limit in force: the manual one when auto is off or VBUS is absent
+    tile_power_l_1n_update_vbus_limit: ({ state }) => ({
+      scalar: vbusLimitMa(state, usbcSource(state, resolveInputs(state))),
     }),
     tile_power_l_1n_set_charge_current_ma: ({ state, args }) => ({
       // 2 mA steps, rounded down (ISETMSB/LSB idx = mA / 2)
@@ -358,6 +459,10 @@ const sim: TileSim<State> = {
     tile_power_l_1n_set_term_mv: 'canonical', // 3.5-4.45 V range
     tile_power_l_1n_buck_set_mv: 'canonical', // 1.0-3.3 V range
     tile_power_l_1n_led_set_mode: 'canonical', // LEDDRVxMODESEL codes
+    tile_power_l_1n_get_usbc_source: 'canonical', // USBCDETECTSTATUS codes, VRD* thresholds
+    tile_power_l_1n_get_usbc_current_ma: 'inferred', // default = 500 is the driver's reading of "default USB"
+    tile_power_l_1n_update_vbus_limit: 'inferred', // the driver's mapping, VBUSINILIM0 max 1500
+    tile_power_l_1n_set_vbus_limit_auto: 'inferred',
     // inferred — behavior follows obviously from the driver but isn't a datasheet number
     tile_power_l_1n_charger_enable: 'inferred',
     tile_power_l_1n_buck_enable: 'inferred',
@@ -396,8 +501,9 @@ const sim: TileSim<State> = {
     ];
   },
 
-  // Electrical layer. Inputs CHG (pad 6) / BATT (pad 7); outputs VSYS (pad 8),
-  // 3V3 buck (pad 9), 1V8 buck (pad 10).
+  // Electrical layer. Inputs CHG (pad 6) / BATT (pad 7) and the USB-C CC lines
+  // CC1 / CC2 (pads 2 / 3); outputs VSYS (pad 8), 3V3 buck (pad 9), 1V8 buck
+  // (pad 10).
   //
   // Inputs are read from the wired net (PowerCtx) so the upstream circuit — a
   // battery behind a switch, a USB-C jack — actually drives the PMIC. An input
@@ -413,6 +519,8 @@ const sim: TileSim<State> = {
     const inp = resolveInputs(state, ctx);
     const { chgV, battV, usbPresent, inputOk, vinMv } = inp;
     const isChg = charging(state, inp);
+    const src = usbcSource(state, inp, ctx);
+    const ilimMa = vbusLimitMa(state, src);
     const chargeUa = isChg ? state.charge_current_ma * 1000 : 0;
     const ownUa = inputOk ? chargeUa + QUIESCENT_UA : 0;
     const rails = [] as NonNullable<ReturnType<NonNullable<TileSim<State>['power']>>['rails']>;
@@ -433,8 +541,9 @@ const sim: TileSim<State> = {
       v_mv: chgV,
       ...(usbPresent ? {} : { i_ua: 0 }),
       pads: ['6'],
-      // the VBUS input limiter (500 mA once the driver's init() has run)
-      limit_ua: state.vbus_ilim_ma * 1000,
+      // the VBUS input limiter (500 mA once the driver's init() has run; with
+      // the auto limit on, what the USB-C source advertises, up to 1500 mA)
+      limit_ua: ilimMa * 1000,
       note: usbPresent ? (isChg ? 'USB input — charging + system' : 'USB input') : 'USB absent',
     });
     rails!.push(
@@ -455,6 +564,22 @@ const sim: TileSim<State> = {
             note: 'battery input (discharging)',
           },
     );
+
+    // CC1 / CC2 (pads 2 / 3): the chip's Rd pull-downs. Always declared so the
+    // solver hands their wired voltage back through ctx. The current is what the
+    // source's Rp pushes through Rd (tens to hundreds of µA).
+    const ccRail = (name: string, pad: string) => {
+      const mv = ctx?.padVoltage?.[pad] ?? 0;
+      return {
+        name,
+        role: 'supply' as const,
+        v_mv: mv,
+        i_ua: Math.round(mv / RD_KOHM),
+        pads: [pad],
+        note: `Rd 5.1 kΩ (${['no source', 'default USB', '1.5 A', '3.0 A'][decodeCc(mv)]})`,
+      };
+    };
+    rails!.push(ccRail('CC1', '2'), ccRail('CC2', '3'));
 
     // A buck can't boost: its rail holds the setpoint only while VSYS is at least
     // a dropout above it; once VSYS sags toward the setpoint the rail follows

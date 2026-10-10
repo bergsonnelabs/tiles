@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@c260a08",
+  "source": "tiles@f82b284",
   "tile": "Power.L.1N",
   "palette": {
     "label": "Power.L.1N",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_power_l_1n",
     "header": "tile_power_l_1n.h",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -212,6 +212,77 @@
       "params": [],
       "returns": "uint8_t",
       "dsl_returns": "bool",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_usbc_source"
+      ],
+      "symbol": "tile_power_l_1n_get_usbc_source",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "What the attached USB-C source advertises (its Type-C Rp level).",
+      "params": [],
+      "returns": "power_l_1n_usbc_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "get_usbc_current_ma"
+      ],
+      "symbol": "tile_power_l_1n_get_usbc_current_ma",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "The current the attached USB-C source advertises, in mA.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "set_vbus_limit_auto"
+      ],
+      "symbol": "tile_power_l_1n_set_vbus_limit_auto",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Let the detected USB-C source set the USB input limit.",
+      "params": [
+        {
+          "name": "on",
+          "type": "int",
+          "description": "1 = follow the USB-C source, 0 = use the set_vbus_limit_ma() value."
+        }
+      ],
+      "returns": "void",
+      "controls": [
+        {
+          "param": "on",
+          "label": "USB input limit from USB-C source",
+          "tier": "advanced",
+          "scope": "config",
+          "type": "bool",
+          "default": 0
+        }
+      ],
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "update_vbus_limit"
+      ],
+      "symbol": "tile_power_l_1n_update_vbus_limit",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Re-apply the USB input limit from the attached USB-C source.",
+      "params": [],
+      "returns": "uint16_t",
+      "dsl_returns": "int",
       "receiver": "tile_t*"
     },
     {
