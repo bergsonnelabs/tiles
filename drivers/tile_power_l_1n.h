@@ -80,13 +80,6 @@
  * @studio unsupported severity=niche category="POF warning + buck retention / forced-PWM"
  *   Driver-deferred. Power-fail early-warning (via GPIO) and buck
  *   retention-voltage / forced-PWM modes aren't exposed yet.
- *
- * @studio unsupported severity=advanced category="USB-C source detection (CC1 / CC2)"
- *   Driver-deferred. The nPM1300 reports what the attached source can supply
- *   (USBCDETECTSTATUS: default / 1.5 A / 3 A) and the tile routes CC1 / CC2 to
- *   pads 2 / 3, but the driver does not read it. set_vbus_limit_ma() therefore
- *   takes the caller's word for what the source can give: 500 mA is safe for
- *   any USB port, more is only safe for a supply known to deliver it.
  */
 
 #ifndef INC_TILE_POWER_L_1N_H_
@@ -100,7 +93,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_POWER_L_1N_VERSION_MAJOR  1
-#define TILE_POWER_L_1N_VERSION_MINOR  2
+#define TILE_POWER_L_1N_VERSION_MINOR  3
 #define TILE_POWER_L_1N_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -111,6 +104,8 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 #define NPM1300_REG_TASKUPDATEILIMSW    0x0200  /**< Write 1: VBUSINILIM0 takes effect */
 #define NPM1300_REG_VBUSINILIM0         0x0201  /**< Input limit, code = mA / 100 (1-15) */
 #define NPM1300_REG_VBUSINILIMSTARTUP   0x0202  /**< Limit VBUS re-plug falls back to, same code */
+#define NPM1300_REG_USBCDETECTSTATUS    0x0205  /**< CC comparators: [1:0] CC1, [3:2] CC2 (6.1.8.5) */
+#define NPM1300_REG_VBUSINSTATUS        0x0207  /**< bit0 VBUSINPRESENT (6.1.8.6) */
 
 /* ── charger (BCHARGER, base 0x03) ─────────────────────────────────────────── */
 #define NPM1300_REG_BCHGENABLESET       0x0304
@@ -174,15 +169,32 @@ typedef enum {
     NPM1300_LED_NOTUSED  = 3,  /**< disabled                          */
 } power_l_1n_led_mode_t;
 
+/**
+ * @brief  USB-C source capability (get_usbc_source).
+ *
+ * What the attached source advertises on its CC line (Type-C Rp level), as the
+ * nPM1300's CC comparators decode it (USBCDETECTSTATUS, datasheet 6.1.3 /
+ * 6.1.8.5). The values are the chip's own field codes.
+ */
+typedef enum {
+    NPM1300_USBC_NONE    = 0,  /**< No Type-C source: no VBUS, CC open/grounded, or a legacy supply */
+    NPM1300_USBC_DEFAULT = 1,  /**< Default USB power (USB 2.0: 500 mA once configured) */
+    NPM1300_USBC_1A5     = 2,  /**< Type-C Current 1.5 A                                */
+    NPM1300_USBC_3A      = 3,  /**< Type-C Current 3.0 A                                */
+} power_l_1n_usbc_t;
+
 /** Optional init config (pass NULL for defaults: 500 mA USB input limit, 100 mA
- *  charge, 4.20 V, charging on). New fields go at the END, so an existing
- *  initialiser keeps meaning what it meant. */
+ *  charge, 4.20 V, charging on, USB-C auto limit off). New fields go at the END,
+ *  so an existing initialiser keeps meaning what it meant. */
 typedef struct {
     uint16_t charge_current_ma;  /**< 32-800 mA. 0 = default (100 mA).     */
     uint16_t term_mv;            /**< 3500-4450 mV. 0 = default (4200 mV). */
     uint8_t  enable_charging;    /**< 0 = leave charging off, 1 = enable.  */
     uint16_t vbus_limit_ma;      /**< 100-1500 mA. 0 = default (500 mA). Use 100
                                   *   for a source that has not granted more. */
+    uint8_t  vbus_limit_auto;    /**< 1 = set the USB input limit from the USB-C
+                                  *   source's advertised current (see
+                                  *   set_vbus_limit_auto). 0 = default (off). */
 } power_l_1n_cfg_t;
 
 /**
@@ -203,7 +215,7 @@ uint8_t tile_power_l_1n_find(tiles_pal_t* hal, uint8_t instance);
  * charger settings. The buck regulators are left at their boot voltages
  * (1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.
  * Pass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging
- * enabled). A zero-initialised cfg is NOT the same as NULL: it leaves
+ * enabled, USB-C auto limit off). A zero-initialised cfg is NOT the same as NULL: it leaves
  * charging OFF (enable_charging = 0).
  *
  * @warning The NULL defaults suit a single Li-ion / Li-poly cell rated
@@ -251,6 +263,13 @@ void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on);
  * Settable 100-1500 mA in 100 mA steps; a request is rounded DOWN to a step
  * (never more than asked) and clamped to that range. 100 and 500 mA are the
  * USB-compliant, accurately trimmed levels; 500 mA is safe for any USB port.
+ * More is only safe for a source known to deliver it: check
+ * get_usbc_source(), or let set_vbus_limit_auto() choose from what the USB-C
+ * source advertises.
+ *
+ * With the auto limit ON, this value is the fallback: it stays the start-up
+ * limit (what a re-plug starts at) and applies whenever no USB-C source is
+ * detected; a detected source overrides it (see set_vbus_limit_auto).
  *
  * @studio expose category=tile name=set_vbus_limit_ma section=config
  * @studio control ma label="USB input limit" tier=basic default=500
@@ -332,6 +351,77 @@ uint8_t tile_power_l_1n_is_charge_complete(tile_t* tile);
  * @return 1 if a battery is present, 0 otherwise.
  */
 uint8_t tile_power_l_1n_battery_present(tile_t* tile);
+
+/* ── USB-C source detection (CC1 / CC2 on pads 2 / 3) ──────────────────────── */
+
+/**
+ * @brief  What the attached USB-C source advertises (its Type-C Rp level).
+ *
+ * The nPM1300 has the Type-C sink pull-downs (Rd = 5.1 kOhm) on CC1 / CC2
+ * inside the chip, and comparators that decode the CC voltage while VBUS is
+ * present (thresholds 0.2 / 0.66 / 1.23 V, debounced 15 ms; datasheet 6.1.3,
+ * 6.1.6). Only the CC line on the plug's side carries a level; the other stays
+ * at 0 V. This reads both fields of USBCDETECTSTATUS and returns the one that
+ * is set (if both ever are, the lower, as the safer of the two).
+ *
+ * The chip only reports; it never raises the input limit by itself. Use
+ * set_vbus_limit_auto() for that.
+ *
+ * NONE also covers a supply that is not Type-C at all (CC pads left open or
+ * grounded), so NONE with VBUS present means "unknown", not "no power".
+ *
+ * @studio expose category=tile name=get_usbc_source returns=int section=runtime
+ * @return power_l_1n_usbc_t: 0 none, 1 default USB, 2 1.5 A, 3 3.0 A.
+ */
+power_l_1n_usbc_t tile_power_l_1n_get_usbc_source(tile_t* tile);
+
+/**
+ * @brief  The current the attached USB-C source advertises, in mA.
+ *
+ * NONE gives 0; DEFAULT gives 500 (USB 2.0's configured level: the Rp level
+ * cannot tell a USB 3 port's 900 mA apart, and a strict USB 2.0 device draws
+ * only 100 mA until the host configures it); 1.5 A gives 1500; 3.0 A gives
+ * 3000. That is what the source offers, not what this tile draws: the input
+ * limit tops out at 1500 mA.
+ *
+ * @studio expose category=tile name=get_usbc_current_ma returns=int section=runtime
+ * @return Advertised source current in mA (0, 500, 1500 or 3000).
+ */
+uint16_t tile_power_l_1n_get_usbc_current_ma(tile_t* tile);
+
+/**
+ * @brief  Let the detected USB-C source set the USB input limit.
+ *
+ * Off by default (init() writes 500 mA, or cfg->vbus_limit_ma, and leaves it).
+ * When on, the input limit follows the source: default USB 500 mA, 1.5 A and
+ * 3.0 A sources 1500 mA (the chip's maximum). With no USB-C source detected
+ * (no VBUS, or a supply without CC) it falls back to the set_vbus_limit_ma()
+ * value. Turning it off restores that value.
+ *
+ * The limit is applied now, and again each time update_vbus_limit() runs. The
+ * chip drops back to the start-up limit (the set_vbus_limit_ma() value)
+ * whenever VBUS is removed, so a system that stays up on its battery should
+ * call update_vbus_limit() after a re-plug (e.g. from its main loop), at least
+ * 15 ms after VBUS returns so the CC comparators have settled.
+ *
+ * @studio expose category=tile name=set_vbus_limit_auto section=config
+ * @studio control on label="USB input limit from USB-C source" tier=advanced type=bool default=0
+ * @param  on  1 = follow the USB-C source, 0 = use the set_vbus_limit_ma() value.
+ */
+void tile_power_l_1n_set_vbus_limit_auto(tile_t* tile, uint8_t on);
+
+/**
+ * @brief  Re-apply the USB input limit from the attached USB-C source.
+ *
+ * With the auto limit on, reads the CC status and applies the limit
+ * set_vbus_limit_auto() describes; call it after a re-plug. With it off, or
+ * with no VBUS present, it changes nothing. Cheap (a few register reads and
+ * two writes), so calling it from a main loop is fine.
+ *
+ * @studio expose category=tile name=update_vbus_limit returns=int section=runtime
+ * @return The input limit now in force, in mA.
+ */
+uint16_t tile_power_l_1n_update_vbus_limit(tile_t* tile);
 
 /* ── measurements (ADC) ────────────────────────────────────────────────────── */
 

@@ -1,0 +1,20 @@
+{
+  "core": "Core.ST.L4",
+  "clock": "max",
+  "pads": {
+    "4": "I2C1.CLK",
+    "5": "I2C1.DAT"
+  },
+  "interfaces": {
+    "I2C1": {
+      "speed": 400000
+    }
+  },
+  "tiles": [
+    {
+      "tile": "Power.L.1N",
+      "bus": "I2C1",
+      "instance": 0
+    }
+  ]
+}

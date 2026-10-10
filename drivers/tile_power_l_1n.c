@@ -55,6 +55,34 @@ static uint16_t adc_read10(tile_t* tile, uint16_t task_reg, uint16_t msb_reg,
     return (uint16_t)(((uint16_t)msb << 2) | lo);
 }
 
+/* Auto-limit mode lives in tile->flags (the driver keeps no other RAM state;
+ * other drivers use flags for driver data the same way). Bit 7 stays clear of
+ * the TILE_FLAG_* event bits in tiles.h. */
+#define POWER_L_1N_FLAG_VBUS_AUTO  (1u << 7)
+
+/* VBUSINILIM0 / VBUSINILIMSTARTUP code → mA (datasheet 6.1.8.2-3: code = mA /
+ * 100 for 1-15; code 0 is a second spelling of 500 mA). */
+static uint16_t ilim_code_to_ma(uint8_t code)
+{
+    code &= 0x0F;
+    return (code == 0) ? 500u : (uint16_t)(code * 100u);
+}
+
+/* The caller's own limit (set_vbus_limit_ma / cfg / init default). It is kept
+ * in VBUSINILIMSTARTUP, which the auto limit never writes, so it survives the
+ * auto limit taking over VBUSINILIM0. */
+static uint16_t manual_limit_ma(tile_t* tile)
+{
+    return ilim_code_to_ma(pmic_read(tile, NPM1300_REG_VBUSINILIMSTARTUP));
+}
+
+/* Apply a limit to VBUSINILIM0 only and switch to it (TASKUPDATEILIMSW). */
+static void apply_ilim0(tile_t* tile, uint16_t ma)
+{
+    pmic_write(tile, NPM1300_REG_VBUSINILIM0, (uint8_t)(ma / 100u));
+    pmic_write(tile, NPM1300_REG_TASKUPDATEILIMSW, 0x01);
+}
+
 /* Charge-termination voltage → BCHGVTERM code. The nPM1300 supports two
  * linear bands (datasheet "Charger" §): 3.50-3.65 V (codes 0-3) and
  * 4.00-4.45 V (codes 4-13), both in 50 mV steps; 3.70-3.95 V is not
@@ -129,7 +157,9 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     uint16_t charge_ma = 100;
     uint16_t term_mv   = 4200;
     uint8_t  enable    = 1;
+    uint8_t  auto_ilim = 0;
     if (cfg != NULL) {
+        auto_ilim = cfg->vbus_limit_auto ? 1 : 0;
         if (cfg->vbus_limit_ma != 0)     vbus_ma   = cfg->vbus_limit_ma;
         if (cfg->charge_current_ma != 0) charge_ma = cfg->charge_current_ma;
         if (cfg->term_mv != 0)           term_mv   = cfg->term_mv;
@@ -142,6 +172,9 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * measured) and the 3.3 V rail is left ~350 mV of headroom. 500 mA is what
      * any USB port gives; a design that must stay at 100 sets vbus_limit_ma. */
     tile_power_l_1n_set_vbus_limit_ma(tile, vbus_ma);
+    /* Opt-in: let the USB-C source's advertised current raise (or lower) the
+     * limit, still before the charger is enabled. Off by default. */
+    if (auto_ilim) tile_power_l_1n_set_vbus_limit_auto(tile, 1);
     tile_power_l_1n_set_charge_current_ma(tile, charge_ma);
     tile_power_l_1n_set_term_mv(tile, term_mv);
     tile_power_l_1n_charger_enable(tile, enable);
@@ -176,6 +209,12 @@ void tile_power_l_1n_set_vbus_limit_ma(tile_t* tile, uint16_t ma)
      * with a battery stays up through an unplug, so without this it would be
      * back at 100 mA on re-plug — the system that charges is the one it bites. */
     pmic_write(tile, NPM1300_REG_VBUSINILIMSTARTUP, code);
+    /* With the auto limit on, a detected USB-C source still decides; this
+     * value is then the fallback (and the start-up limit). */
+    if (tile->flags & POWER_L_1N_FLAG_VBUS_AUTO) {
+        (void)tile_power_l_1n_update_vbus_limit(tile);
+        return;
+    }
     pmic_write(tile, NPM1300_REG_VBUSINILIM0, code);
     pmic_write(tile, NPM1300_REG_TASKUPDATEILIMSW, 0x01);
 }
@@ -240,6 +279,76 @@ uint8_t tile_power_l_1n_battery_present(tile_t* tile)
 {
     return (pmic_read(tile, NPM1300_REG_BCHGCHARGESTATUS)
             & NPM1300_CHG_BATTERYDETECTED) ? 1 : 0;
+}
+
+/* -------------------------------------------------------------- */
+/* USB-C source detection                                         */
+/* -------------------------------------------------------------- */
+
+power_l_1n_usbc_t tile_power_l_1n_get_usbc_source(tile_t* tile)
+{
+    /* USBCDETECTSTATUS (0x0205, datasheet 6.1.8.5): bits [1:0] VBUSINCC1CMP,
+     * [3:2] VBUSINCC2CMP; each 0 no connection, 1 default USB 100/500 mA,
+     * 2 1.5 A, 3 3 A. Only the CC line on the plug's side carries a level, the
+     * other reads 0 (6.1.3). Both set is not a normal sink attach; take the
+     * lower non-zero one, the safer answer for a current limit. */
+    uint8_t st  = pmic_read(tile, NPM1300_REG_USBCDETECTSTATUS);
+    uint8_t cc1 = (uint8_t)(st & 0x03);
+    uint8_t cc2 = (uint8_t)((st >> 2) & 0x03);
+    uint8_t cc;
+    if (cc1 == 0)      cc = cc2;
+    else if (cc2 == 0) cc = cc1;
+    else               cc = (cc1 < cc2) ? cc1 : cc2;
+    return (power_l_1n_usbc_t)cc;
+}
+
+uint16_t tile_power_l_1n_get_usbc_current_ma(tile_t* tile)
+{
+    switch (tile_power_l_1n_get_usbc_source(tile)) {
+    case NPM1300_USBC_DEFAULT: return 500;
+    case NPM1300_USBC_1A5:     return 1500;
+    case NPM1300_USBC_3A:      return 3000;
+    default:                   return 0;
+    }
+}
+
+void tile_power_l_1n_set_vbus_limit_auto(tile_t* tile, uint8_t on)
+{
+    if (on) {
+        tile->flags |= POWER_L_1N_FLAG_VBUS_AUTO;
+        (void)tile_power_l_1n_update_vbus_limit(tile);
+    } else {
+        tile->flags &= (uint8_t)~POWER_L_1N_FLAG_VBUS_AUTO;
+        /* Back to the caller's own limit (kept in VBUSINILIMSTARTUP). */
+        apply_ilim0(tile, manual_limit_ma(tile));
+    }
+}
+
+uint16_t tile_power_l_1n_update_vbus_limit(tile_t* tile)
+{
+    uint16_t manual = manual_limit_ma(tile);
+    if (!(tile->flags & POWER_L_1N_FLAG_VBUS_AUTO)) return manual;
+
+    /* The CC comparators only run while VBUS is present (6.1.3). Without VBUS
+     * there is nothing to limit and a re-plug starts at the start-up limit
+     * anyway, so leave the registers alone. */
+    if (!(pmic_read(tile, NPM1300_REG_VBUSINSTATUS) & 0x01)) return manual;
+
+    /* The chip only reports the source; the host sets the limit (6.1.3:
+     * "Host software can update the VBUS current limit in VBUSINILIM0 after
+     * device detection"). 1500 mA is the chip's ceiling (VBUSINILIM0 = 15). */
+    uint16_t ma;
+    switch (tile_power_l_1n_get_usbc_source(tile)) {
+    case NPM1300_USBC_DEFAULT: ma = 500;    break;
+    case NPM1300_USBC_1A5:
+    case NPM1300_USBC_3A:      ma = 1500;   break;
+    default:                   ma = manual; break;  /* no Type-C source seen */
+    }
+    /* Always written, not only on a change: after a re-plug the chip runs on
+     * the start-up limit while VBUSINILIM0 still holds the old value, and only
+     * TASKUPDATEILIMSW switches back to it. */
+    apply_ilim0(tile, ma);
+    return ma;
 }
 
 /* -------------------------------------------------------------- */
