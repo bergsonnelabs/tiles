@@ -3,10 +3,13 @@
 //
 // The world (the magnetic field at the tile, in µT, and the die temperature)
 // is what a person moves. The chip converts it into its data registers in
-// normal mode at the configured ODR, or once per forced-mode trigger; the
-// driver's read() copies the registers into its cache, and the get_* calls
-// return that cache. So, as on hardware, nothing changes until the program
-// puts the part in normal mode (init leaves it in suspend) and reads.
+// normal mode at the configured ODR, or once per forced-mode trigger. Since
+// driver 1.1.0, init leaves the part in normal mode at 25 Hz with the first
+// sample cached, and in normal mode every get_* call refreshes the driver's
+// cache from the newest conversion by itself (the driver checks SENSORTIME
+// and burst-reads on a change), so a program that only calls getters sees
+// the field move. Outside normal mode (sleep(), forced) getters return the
+// cache; read() copies the data registers into it explicitly.
 //
 // Values are the driver's COMPENSATED output (nT, m°C). The twin returns the
 // ideal field: no noise (datasheet ~190 nT rms), no offset or gain error, no
@@ -41,7 +44,7 @@ interface State {
   sensor_clock: number;
   sensortime: number;
 
-  // ── driver cache (the last read()) ──
+  // ── driver cache (the last read() or getter refresh) ──
   mag_x_nt: number;
   mag_y_nt: number;
   mag_z_nt: number;
@@ -138,6 +141,18 @@ const readIntoCache = (s: State): Partial<State> => ({
   temp_mc: s.conv_temp_mc,
 });
 
+/** A getter's view: in normal mode (tile READY) the driver refreshes its
+ * cache from the newest conversion first, so the getter returns the latest
+ * sample; otherwise it returns the cache untouched. All four channels come
+ * from one conversion, as in the driver's burst. The driver's "finish the
+ * group first" rule only matters when a conversion lands between two
+ * getters, which cannot happen inside one twin tick. */
+function getterView(s: State): { view: State; nextState?: Partial<State> } {
+  if (s.mode !== 1 || s.tile_ready !== 1) return { view: s };
+  const fresh = readIntoCache(s);
+  return { view: { ...s, ...fresh }, nextState: fresh };
+}
+
 /** set_mode(), including the driver's park-in-suspend before forced mode and
  * the device's return to suspend after one forced conversion. */
 function enterMode(s: State, mode: number): Partial<State> {
@@ -177,33 +192,36 @@ export function normalCurrentUa(odr: number, avg: number): number {
 const sim: TileSim<State> = {
   tile: 'Sense.M.3G',
 
-  // After init with cfg = NULL: 25 Hz, 4x averaging, XYZ, data-ready mapped
-  // into INT_STATUS with the pin off (active low, push-pull, PULSED), device
-  // in suspend, tile SLEEPING, driver cache zeroed. World: the field and die
-  // temperature measured on the bring-up bench (driver commit d7f1cc0).
+  // After init with cfg = NULL (driver 1.1.0): 25 Hz, 4x averaging, XYZ,
+  // data-ready mapped into INT_STATUS with the pin off (active low,
+  // push-pull, PULSED), device in NORMAL mode, tile READY, and the first
+  // conversion already in the data registers and the driver cache (init
+  // waits for it; its INT_STATUS poll consumed the drdy). World: the field
+  // and die temperature measured on the bring-up bench (driver commit
+  // d7f1cc0). cfg.start_suspended is not modeled: Studio inits with NULL.
   defaultState: {
     field_x_ut: 42.4,
     field_y_ut: 32.5,
     field_z_ut: 55.8,
     die_temp_c: 29.6,
 
-    conv_x_nt: 0,
-    conv_y_nt: 0,
-    conv_z_nt: 0,
-    conv_temp_mc: 0,
+    conv_x_nt: 42400,
+    conv_y_nt: 32500,
+    conv_z_nt: 55800,
+    conv_temp_mc: 29600,
     drdy: 0,
     last_conv_t: 0,
     last_tick_t: 0,
     sensor_clock: 0,
     sensortime: 0,
 
-    mag_x_nt: 0,
-    mag_y_nt: 0,
-    mag_z_nt: 0,
-    temp_mc: 0,
+    mag_x_nt: 42400,
+    mag_y_nt: 32500,
+    mag_z_nt: 55800,
+    temp_mc: 29600,
 
-    mode: 0,
-    tile_ready: 0,
+    mode: 1,
+    tile_ready: 1,
     odr: ODR_25HZ,
     avg: AVG_4,
     axis_en: EN_XYZ,
@@ -214,7 +232,7 @@ const sim: TileSim<State> = {
     pad_drive: 7,
     i2c_wdt: 0,
     sensortime_aon: 0,
-    last_pmu_cmd: CMD_UPD_OAE,
+    last_pmu_cmd: CMD_NM,
     fm_primed: 0,
   },
 
@@ -280,17 +298,31 @@ const sim: TileSim<State> = {
       return { nextState: { drdy: 0, ...readIntoCache(state) } };
     },
     tile_sense_m_3g_on_data: () => undefined,
-    tile_sense_m_3g_get_x_nt: ({ state }) => ({ scalar: state.mag_x_nt }),
-    tile_sense_m_3g_get_y_nt: ({ state }) => ({ scalar: state.mag_y_nt }),
-    tile_sense_m_3g_get_z_nt: ({ state }) => ({ scalar: state.mag_z_nt }),
-    tile_sense_m_3g_get_temperature_mc: ({ state }) => ({
-      scalar: state.temp_mc,
-    }),
-    tile_sense_m_3g_get_magnitude_nt: ({ state }) => ({
-      scalar: Math.floor(
-        Math.sqrt(state.mag_x_nt ** 2 + state.mag_y_nt ** 2 + state.mag_z_nt ** 2),
-      ),
-    }),
+    // Getters: the latest sample in normal mode (see getterView), the cache
+    // otherwise.
+    tile_sense_m_3g_get_x_nt: ({ state }) => {
+      const { view, nextState } = getterView(state);
+      return { scalar: view.mag_x_nt, nextState };
+    },
+    tile_sense_m_3g_get_y_nt: ({ state }) => {
+      const { view, nextState } = getterView(state);
+      return { scalar: view.mag_y_nt, nextState };
+    },
+    tile_sense_m_3g_get_z_nt: ({ state }) => {
+      const { view, nextState } = getterView(state);
+      return { scalar: view.mag_z_nt, nextState };
+    },
+    tile_sense_m_3g_get_temperature_mc: ({ state }) => {
+      const { view, nextState } = getterView(state);
+      return { scalar: view.temp_mc, nextState };
+    },
+    tile_sense_m_3g_get_magnitude_nt: ({ state }) => {
+      const { view, nextState } = getterView(state);
+      return {
+        scalar: Math.floor(Math.sqrt(view.mag_x_nt ** 2 + view.mag_y_nt ** 2 + view.mag_z_nt ** 2)),
+        nextState,
+      };
+    },
     // Reading INT_STATUS clears it.
     tile_sense_m_3g_data_ready: ({ state }) => ({
       scalar: state.drdy ? 1 : 0,
@@ -320,34 +352,32 @@ const sim: TileSim<State> = {
     tile_sense_m_3g_wake: ({ state }) => ({
       nextState: enterMode(state, CMD_NM),
     }),
-    // Soft reset + bring_up: registers to POR (100 Hz / 2x, INT_CTRL 0), the
-    // driver's odr/avg/axis cache kept, cached sample zeroed, suspend.
-    tile_sense_m_3g_reset: () => ({
-      nextState: {
-        mode: 0,
-        tile_ready: 0,
-        mag_x_nt: 0,
-        mag_y_nt: 0,
-        mag_z_nt: 0,
-        temp_mc: 0,
-        conv_x_nt: 0,
-        conv_y_nt: 0,
-        conv_z_nt: 0,
-        conv_temp_mc: 0,
-        drdy: 0,
-        sensor_clock: 0,
-        sensortime: 0,
-        int_output_en: 0,
-        int_active_high: 0,
-        int_push_pull: 0,
-        int_latched: 0,
-        pad_drive: 7,
-        i2c_wdt: 0,
-        sensortime_aon: 0,
-        last_pmu_cmd: CMD_FGR,
-        fm_primed: 0,
-      },
-    }),
+    // Soft reset + bring_up, then (driver 1.1.0) the driver re-applies its
+    // cached odr/avg/axes and init's interrupt setup (pin off, active low,
+    // push-pull, pulsed) and returns to normal mode, waiting for and caching
+    // the first conversion. Other registers are back at POR.
+    tile_sense_m_3g_reset: ({ state }) => {
+      const first = convert({ ...state, sensor_clock: 0 });
+      return {
+        nextState: {
+          ...first,
+          ...readIntoCache({ ...state, ...first }),
+          drdy: 0,
+          mode: 1,
+          tile_ready: 1,
+          sensor_clock: 0,
+          int_output_en: 0,
+          int_active_high: 0,
+          int_push_pull: 1,
+          int_latched: 0,
+          pad_drive: 7,
+          i2c_wdt: 0,
+          sensortime_aon: 0,
+          last_pmu_cmd: CMD_NM,
+          fm_primed: 0,
+        },
+      };
+    },
     // Bit reset then flip-gain reset from suspend; normal mode is restored.
     tile_sense_m_3g_magnetic_reset: () => ({
       scalar: 1,
@@ -365,8 +395,13 @@ const sim: TileSim<State> = {
         },
       };
     },
+    // The axis bits only take in suspend (§5.7): in normal mode the driver
+    // parks, writes, and resumes, so the last PMU command is NM again.
     tile_sense_m_3g_set_axes: ({ state, args }) => ({
-      nextState: { axis_en: arg(args, 0, state.axis_en) & EN_XYZ },
+      nextState: {
+        axis_en: arg(args, 0, state.axis_en) & EN_XYZ,
+        ...(state.mode === 1 ? { last_pmu_cmd: CMD_NM } : {}),
+      },
     }),
     tile_sense_m_3g_configure_interrupt: ({ args }) => ({
       nextState: {
@@ -476,18 +511,18 @@ const sim: TileSim<State> = {
     tile_sense_m_3g_read: 'inferred', // ideal compensated field, no noise / trim
     tile_sense_m_3g_process: 'inferred',
     tile_sense_m_3g_on_data: 'inferred',
-    tile_sense_m_3g_get_x_nt: 'inferred',
+    tile_sense_m_3g_get_x_nt: 'inferred', // driver 1.1.0 refresh: newest conversion in normal mode, else the cache
     tile_sense_m_3g_get_y_nt: 'inferred',
     tile_sense_m_3g_get_z_nt: 'inferred',
     tile_sense_m_3g_get_temperature_mc: 'inferred',
-    tile_sense_m_3g_get_magnitude_nt: 'canonical', // integer sqrt of the cached axes
+    tile_sense_m_3g_get_magnitude_nt: 'canonical', // integer sqrt of the (refreshed) axes
     tile_sense_m_3g_data_ready: 'canonical', // INT_STATUS bit 2, clear on read, pulsed 1.25 ms (§5.5, §8.13)
     tile_sense_m_3g_get_sensortime: 'canonical', // 40 µs ticks, latched per conversion (§5.2.2)
     tile_sense_m_3g_set_mode: 'canonical', // forced only from suspend, returns to suspend (§5.1.4)
     tile_sense_m_3g_trigger_measurement: 'canonical', // first FM, then FM_FAST at ≥ 25 Hz (§5.1.4)
     tile_sense_m_3g_sleep: 'inferred',
     tile_sense_m_3g_wake: 'inferred',
-    tile_sense_m_3g_reset: 'inferred',
+    tile_sense_m_3g_reset: 'inferred', // driver re-applies config and resumes normal mode
     tile_sense_m_3g_magnetic_reset: 'inferred', // always acknowledged
     tile_sense_m_3g_set_odr_averaging: 'canonical', // Table 5 clamp
     tile_sense_m_3g_set_axes: 'canonical',

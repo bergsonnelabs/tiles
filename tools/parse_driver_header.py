@@ -50,6 +50,35 @@ def strip_comment_prefix(lines):
     return result
 
 
+def parse_usage(body):
+    """`@studio usage` — a driver-authored note on how to use the tile from
+    Studio (what init leaves running, what to call, what to avoid). Written
+    in the file-level block like `@studio unsupported`:
+
+        @studio usage
+          Starts measuring at 25 Hz as soon as init returns, ...
+
+    The text may start on the tag line and continue on the following lines
+    until a blank line or the next @-directive; lines are joined with single
+    spaces. Surrounding double quotes are dropped. Returns None when the
+    header has no (or an empty) usage tag; only the first one counts.
+    """
+    for i, line in enumerate(body):
+        m = re.match(r'@studio\s+usage\b(.*)', line.strip())
+        if not m:
+            continue
+        parts = [m.group(1).strip()] if m.group(1).strip() else []
+        for cont in body[i + 1:]:
+            if cont.strip() == '' or cont.lstrip().startswith('@'):
+                break
+            parts.append(cont.strip())
+        text = ' '.join(parts).strip()
+        if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+            text = text[1:-1].strip()
+        return text or None
+    return None
+
+
 def parse_file_header(text):
     """Extract the file-level doc comment (first /** ... */ block)."""
     m = re.match(r'\s*/\*\*\s*\n(.*?)\*/\s*\n', text, re.DOTALL)
@@ -141,6 +170,13 @@ def parse_file_header(text):
     # and to render the exposed/internal function split. Absent on
     # drivers that haven't been annotated yet (most tiles, as of A4d-3).
     header['studio_ready'] = any('@studio tile' in line for line in body)
+
+    # @studio usage — top-level `usage` string in both the docs manifest
+    # (here) and the Studio palette manifest (gen_studio_manifest reads it
+    # through this same function). Absent when the driver has none.
+    usage = parse_usage(body)
+    if usage:
+        header['usage'] = usage
 
     # @studio event — declared at file scope. Captured for the tile page
     # to render an "Events" section alongside the function lists. We
