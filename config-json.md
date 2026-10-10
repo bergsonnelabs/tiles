@@ -608,8 +608,9 @@ The production switch for [`core_scope`](sdk/core/core_scope.h), the live
 variable stream Studio's Scope panel plots. Absent (or `true`) leaves the
 module available; a project that never calls it still pays nothing, because
 the linker drops it. `false` compiles every `core_scope_*` call to nothing —
-no flash, no RAM, and on a radio Core no Studio Link service in the GATT
-table. Read by the Makefile, not coregen (`make SCOPE_ENABLED=0` is the
+no flash, no RAM, and on a radio Core no Studio Scope characteristic in the
+GATT table (the Studio Link service stays: it carries the Bluetooth firmware
+update, [docs/ble-update-protocol.md](docs/ble-update-protocol.md)). Read by the Makefile, not coregen (`make SCOPE_ENABLED=0` is the
 one-off override).
 
 ### `timer` (Studio only)

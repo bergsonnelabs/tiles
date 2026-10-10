@@ -33,6 +33,26 @@ Reset_Handler:
     ldr r0, =_estack
     mov sp, r0
 
+    /* BLE builds: finish (or resume) a pending BLE update before anything
+     * else runs (sdk/ble/ble_update_boot.c; docs/ble-update-protocol.md §8).
+     * Stack only: .data and .bss don't exist yet. A weak no-op otherwise. */
+    bl Reset_EarlyHook
+
+    /* The rest needs the image's layout (.data / .bss bounds, main), which
+     * moves with every program edit. It lives in Reset_Continue, linked just
+     * before the project's own code, so nothing here (page 0 on a BLE build)
+     * changes when the program does (Makefile, OBJECTS). */
+    b Reset_Continue
+
+    .size Reset_Handler, .-Reset_Handler
+
+/**
+ * Reset_Continue — the C runtime start: .data, .bss, FPU, VTOR, constructors,
+ * main(). Reached only from Reset_Handler.
+ */
+    .section .text.Reset_Continue, "ax", %progbits
+    .type Reset_Continue, %function
+Reset_Continue:
     /* Copy .data section from FLASH to SRAM */
     ldr r0, =_sdata
     ldr r1, =_edata
@@ -87,7 +107,17 @@ Reset_Handler:
 .Lhang:
     b .Lhang
 
-    .size Reset_Handler, .-Reset_Handler
+    .size Reset_Continue, .-Reset_Continue
+
+/**
+ * Reset_EarlyHook — weak default: nothing to do. BLE builds replace it.
+ */
+    .section .text.Reset_EarlyHook, "ax", %progbits
+    .weak Reset_EarlyHook
+    .type Reset_EarlyHook, %function
+Reset_EarlyHook:
+    bx lr
+    .size Reset_EarlyHook, .-Reset_EarlyHook
 
 /**
  * Default handler for unimplemented interrupts — infinite loop.

@@ -80,8 +80,8 @@ void core_ble_set_services(void (*builder)(void));
 
 /**
  * Register an ADDITIONAL service builder, run after the application's own.
- * For SDK modules that bring a GATT service of their own (core_scope's
- * Studio Link) without taking over core_ble_set_services(), which the
+ * For SDK modules that bring a GATT service of their own without taking
+ * over core_ble_set_services(), which the
  * application — or coregen's generated contract — owns. Call before
  * core_ble_init(). Registering the same builder twice is harmless.
  * Returns 0, or -1 if the slots are full or the stack has already started.

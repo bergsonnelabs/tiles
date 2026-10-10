@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-#define SU_FLASHER_H5_SRC_HASH "de006d8e7e91c602"
+#define SU_FLASHER_H5_SRC_HASH "01a3b9e5ffa93585"
 #define SU_FLASHER_H5_LEN      5392u
 
 static const uint8_t su_flasher_h5_bytes[SU_FLASHER_H5_LEN] __attribute__((aligned(4))) = {

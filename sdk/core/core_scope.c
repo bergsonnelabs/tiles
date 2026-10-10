@@ -563,25 +563,24 @@ const core_scope_link_t core_scope_link_usb = {
 #if defined(BLE_ENABLED) && BLE_ENABLED
 #include "core_ble.h"
 
-#define SCOPE_BLE_SERVICE_ID 0x5C00u /* Studio Link  */
-#define SCOPE_BLE_CHAR_ID    0x5C01u /* Studio Scope */
-/* core_ble does not report the negotiated ATT MTU. Every desktop and phone
- * central negotiates at least 185, so 180 fits without asking. */
-#define SCOPE_BLE_PACKET     180u
+#include "ble_studio_link.h"
+
+/* Studio Scope is a characteristic of the Studio Link service, which core_ble
+ * registers in every BLE build (it also carries the firmware update). */
+#define SCOPE_BLE_PACKET     STUDIO_LINK_PACKET
 /* A connection event comes every 15-50 ms and carries a few packets, so
  * frames are batched; they carry device time, so a batch plots correctly. */
 #define SCOPE_BLE_FLUSH_MS   30u
 
 static core_ble_char_t s_ble_ch;
 
-static void ble_build(void)
+static void ble_attach(uint16_t svc)
 {
-    core_ble_svc_t svc = core_ble_add_service_id("Studio Link", SCOPE_BLE_SERVICE_ID);
-    s_ble_ch = core_ble_add_char_id(svc, "Studio Scope", SCOPE_BLE_CHAR_ID, CORE_BLE_NOTIFY,
+    s_ble_ch = core_ble_add_char_id(svc, "Studio Scope", STUDIO_LINK_SCOPE_ID, CORE_BLE_NOTIFY,
                                     CORE_BLE_BYTES(SCOPE_BLE_PACKET), 0, 0);
 }
 
-static void ble_link_init(void) { (void)core_ble_add_services(ble_build); }
+static void ble_link_init(void) { (void)ble_studio_link_attach(ble_attach); }
 
 static int ble_ready(void)
 {
