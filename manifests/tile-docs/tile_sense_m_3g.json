@@ -1,20 +1,25 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@cd2d6a4",
+  "source": "tiles@80443b5",
   "file": "tile_sense_m_3g.h",
   "brief": "Triaxial geomagnetic magnetometer driver for Sense.M.3G (BMM350).",
-  "description": "@version 1.0.0\n\nBosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from\n1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a\n24-bit sensor-time counter.\n\nOutput is integer nanotesla (nT) and milli-degrees Celsius, fully\ntemperature- and trim-compensated. 1000 nT = 1 uT; Earth's field is\nroughly 25000-65000 nT depending on where you are.\n\n## Where the compensation math comes from\n\nThe BMM350 datasheet (BST-BMM350-DS001-27, rev 1.27) deliberately does\nNOT publish the compensation formulas or the OTP trim-word layout — its\nchapter 7 is a single link to Bosch's SensorAPI, and every accuracy\nfigure in Table 3 is qualified \"after API compensation\". The data\nregisters hold *uncompensated* counts.\n\nThe OTP word map and the compensation chain implemented here are\ntherefore ported from Bosch Sensortec's BMM350_SensorAPI:\n\n  https://github.com/boschsensortec/BMM350_SensorAPI\n  Copyright (c) 2025 Bosch Sensortec GmbH, BSD-3-Clause\n\nPorted, not copied verbatim: the reference implementation is\nfloating-point, and this driver is integer-only per house style, so the\nchain runs in Q16.16 fixed point on int64 intermediates. Every ported\nconstant is marked `[API]` in the implementation, and everything marked\n`[DS]` is traceable to the datasheet instead. If you are changing the\ncompensation, check it against the upstream API, not the datasheet —\nthe datasheet cannot tell you whether it is right.\n\n## Power modes\n\nSuspend (the boot state, lowest power, settings retained), normal\n(free-running at the configured ODR), and forced (one conversion on\nrequest, then back to suspend). Forced mode is reachable only FROM\nsuspend — a normal-to-forced transition is ignored by the device, so\nset_mode() routes through suspend for you.\n\n\n\n## The dummy-byte rule\n\nEvery BMM350 I2C read returns TWO dummy bytes before the real data\n(datasheet §9.2.3), so an n-byte read must fetch n+2 and discard the\nfront. Verified on hardware. Miss it and every register is silently\nshifted by two — plausible-looking wrong values rather than an obvious\nfailure. All bus access in this driver goes through helpers that handle\nit; if you add a raw read, do the same.\n\nDatasheet: Bosch Sensortec BMM350, BST-BMM350-DS001-27\n\n@studio tile label=Sense.M.3G icon=🧭\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Self-test\" section=advanced\n  The BMM350 can inject a ~130 uT internal field to verify the X and Y\n  channels (datasheet §5.1.6). The datasheet describes the concept and\n  the pass criterion but not the register sequence, which lives in the\n  SensorAPI's self_test_config / TMR_SELFTEST_USER handling. Exposing\n  it means porting that sequence and validating it against a known\n  field. Driver-deferred, and the highest-value thing to add next.\n\n@studio unsupported severity=advanced category=\"OTP programming\" section=advanced\n  OTP write commands (DIR_PRGM, DIR_PRGM_1B, EXT_PRGM) are exposed by\n  the chip but are a factory-provisioning facility — programming OTP is\n  irreversible and would destroy the part's trim data. Read access is\n  used internally for compensation and available through get_otp_word.\n\n@studio unsupported severity=niche category=\"I3C interface and in-band interrupts\" section=advanced\n  Hardware-gated: the BMM350 supports I3C with in-band interrupts\n  (IBI), but Sense.M.3G is wired for I2C and the Core's I3C support is\n  not routed to this tile. INT_CTRL_IBI and the I3C error register are\n  consequently not exposed.\n\n@studio unsupported severity=niche category=\"Cross-axis coefficient override\" section=config\n  The cross-axis compensation coefficients are read from OTP and\n  applied automatically. There is no API to override them with values\n  from a system-level calibration; hard-iron and soft-iron correction\n  for a specific enclosure belongs above this driver anyway.",
+  "description": "@version 1.1.0\n\nBosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from\n1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a\n24-bit sensor-time counter.\n\nOutput is integer nanotesla (nT) and milli-degrees Celsius, fully\ntemperature- and trim-compensated. 1000 nT = 1 uT; Earth's field is\nroughly 25000-65000 nT depending on where you are.\n\n## Where the compensation math comes from\n\nThe BMM350 datasheet (BST-BMM350-DS001-27, rev 1.27) deliberately does\nNOT publish the compensation formulas or the OTP trim-word layout — its\nchapter 7 is a single link to Bosch's SensorAPI, and every accuracy\nfigure in Table 3 is qualified \"after API compensation\". The data\nregisters hold *uncompensated* counts.\n\nThe OTP word map and the compensation chain implemented here are\ntherefore ported from Bosch Sensortec's BMM350_SensorAPI:\n\n  https://github.com/boschsensortec/BMM350_SensorAPI\n  Copyright (c) 2025 Bosch Sensortec GmbH, BSD-3-Clause\n\nPorted, not copied verbatim: the reference implementation is\nfloating-point, and this driver is integer-only per house style, so the\nchain runs in Q16.16 fixed point on int64 intermediates. Every ported\nconstant is marked `[API]` in the implementation, and everything marked\n`[DS]` is traceable to the datasheet instead. If you are changing the\ncompensation, check it against the upstream API, not the datasheet —\nthe datasheet cannot tell you whether it is right.\n\n## Power modes\n\nSuspend (the chip's boot state, lowest power, settings retained), normal\n(free-running at the configured ODR), and forced (one conversion on\nrequest, then back to suspend). Forced mode is reachable only FROM\nsuspend — a normal-to-forced transition is ignored by the device, so\nset_mode() routes through suspend for you.\n\ninit() leaves the part MEASURING: normal mode at 25 Hz with 4x averaging\n(about 96 uA, datasheet Table 5), with the first sample already cached.\nSet `start_suspended` in the config to stay in suspend instead\n(~1.8 uA), or call sleep() at any time.\n\n## Getters return fresh data\n\nIn normal mode every get_* call keeps itself current: it reads the\n3-byte sensor-time stamp (one short I2C read), and only when the chip has\nwritten a new sample since does it burst-read and compensate that sample\n(one 15-byte read). X, Y, Z and temperature always come from the same\nsample, and get_x, get_y, get_z called back to back return ONE sample.\nNo read() is needed. Outside normal mode (suspend, forced) the getters\nreturn the last sample with no bus traffic; after trigger_measurement(),\ncall read() to fetch the new one. read() still works everywhere and\ntakes an explicit snapshot that the getters return until each of its\nchannels has been read once.\n\n\n\n\n## The dummy-byte rule\n\nEvery BMM350 I2C read returns TWO dummy bytes before the real data\n(datasheet §9.2.3), so an n-byte read must fetch n+2 and discard the\nfront. Verified on hardware. Miss it and every register is silently\nshifted by two — plausible-looking wrong values rather than an obvious\nfailure. All bus access in this driver goes through helpers that handle\nit; if you add a raw read, do the same.\n\nDatasheet: Bosch Sensortec BMM350, BST-BMM350-DS001-27\n\n@studio tile label=Sense.M.3G icon=🧭\n\n@studio usage\n  Starts measuring at 25 Hz as soon as init returns, so get_x_nt,\n  get_y_nt, get_z_nt, get_magnitude_nt and get_temperature_mc always\n  return the latest sample; no read() or wake() needed. Call sleep()\n  for low power (getters then repeat the last sample until wake()).\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Self-test\" section=advanced\n  The BMM350 can inject a ~130 uT internal field to verify the X and Y\n  channels (datasheet §5.1.6). The datasheet describes the concept and\n  the pass criterion but not the register sequence, which lives in the\n  SensorAPI's self_test_config / TMR_SELFTEST_USER handling. Exposing\n  it means porting that sequence and validating it against a known\n  field. Driver-deferred, and the highest-value thing to add next.\n\n@studio unsupported severity=advanced category=\"OTP programming\" section=advanced\n  OTP write commands (DIR_PRGM, DIR_PRGM_1B, EXT_PRGM) are exposed by\n  the chip but are a factory-provisioning facility — programming OTP is\n  irreversible and would destroy the part's trim data. Read access is\n  used internally for compensation and available through get_otp_word.\n\n@studio unsupported severity=niche category=\"I3C interface and in-band interrupts\" section=advanced\n  Hardware-gated: the BMM350 supports I3C with in-band interrupts\n  (IBI), but Sense.M.3G is wired for I2C and the Core's I3C support is\n  not routed to this tile. INT_CTRL_IBI and the I3C error register are\n  consequently not exposed.\n\n@studio unsupported severity=niche category=\"Cross-axis coefficient override\" section=config\n  The cross-axis compensation coefficients are read from OTP and\n  applied automatically. There is no API to override them with values\n  from a system-level calibration; hard-iron and soft-iron correction\n  for a specific enclosure belongs above this driver anyway.",
   "code_examples": [
     {
       "label": "Polled example (Cores SDK)",
-      "code": "  tile_t mag;\n  tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, NULL);\n  tile_sense_m_3g_set_mode(&mag, SENSE_M_3G_MODE_NORMAL);\n  while (1) {\n      if (tile_sense_m_3g_data_ready(&mag)) {\n          tile_sense_m_3g_read(&mag);\n          printf(\"%ld %ld %ld nT\\n\",\n                 tile_sense_m_3g_get_x_nt(&mag),\n                 tile_sense_m_3g_get_y_nt(&mag),\n                 tile_sense_m_3g_get_z_nt(&mag));\n      }\n      core_delay_ms(10);\n  }"
+      "code": "  tile_t mag;\n  tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, NULL);\n  while (1) {\n      printf(\"%ld %ld %ld nT\\n\",\n             tile_sense_m_3g_get_x_nt(&mag),\n             tile_sense_m_3g_get_y_nt(&mag),\n             tile_sense_m_3g_get_z_nt(&mag));\n      core_delay_ms(40);                  // one sample per 25 Hz period\n  }"
+    },
+    {
+      "label": "Low-power example (forced mode, one sample on demand)",
+      "code": "  sense_m_3g_cfg_t cfg = { .start_suspended = 1 };\n  tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, &cfg);\n  if (tile_sense_m_3g_trigger_measurement(&mag)) {\n      tile_sense_m_3g_read(&mag);\n      int32_t x = tile_sense_m_3g_get_x_nt(&mag);\n  }"
     },
     {
       "label": "Interrupt-driven example (INT wired to a Core pad)",
-      "code": "  sense_m_3g_cfg_t cfg = {\n      .odr = SENSE_M_3G_ODR_50HZ,\n      .averaging = SENSE_M_3G_AVG_4,\n      .int_pin = 9,                       // Core pad carrying INT\n      .on_data = on_mag_sample,\n  };\n  tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, &cfg);\n  tile_sense_m_3g_set_mode(&mag, SENSE_M_3G_MODE_NORMAL);\n  while (1) { tile_sense_m_3g_process(&mag); }"
+      "code": "  sense_m_3g_cfg_t cfg = {\n      .odr = SENSE_M_3G_ODR_50HZ,\n      .averaging = SENSE_M_3G_AVG_4,\n      .int_pin = 9,                       // Core pad carrying INT\n      .on_data = on_mag_sample,\n  };\n  tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, &cfg);\n  while (1) { tile_sense_m_3g_process(&mag); }"
     }
   ],
   "studio_ready": true,
+  "usage": "Starts measuring at 25 Hz as soon as init returns, so get_x_nt, get_y_nt, get_z_nt, get_magnitude_nt and get_temperature_mc always return the latest sample; no read() or wake() needed. Call sleep() for low power (getters then repeat the last sample until wake()).",
   "studio_unsupported": [
     {
       "severity": "advanced",
@@ -50,7 +55,7 @@
     },
     {
       "name": "TILE_SENSE_M_3G_VERSION_MINOR",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -269,7 +274,7 @@
     {
       "name": "sense_m_3g_cfg_t",
       "brief": "",
-      "description": "Optional init config. Pass NULL for defaults: 25 Hz, 4x averaging, all\nthree axes, polled operation, INT pin untouched.",
+      "description": "Optional init config. Pass NULL for defaults: 25 Hz, 4x averaging, all\nthree axes, polled operation, INT pin untouched, measuring in normal\nmode when init returns.",
       "fields": [
         {
           "type": "sense_m_3g_odr_t",
@@ -295,6 +300,11 @@
           "type": "sense_m_3g_data_cb_t",
           "name": "on_data",
           "description": "Called by process() on a new sample."
+        },
+        {
+          "type": "uint8_t",
+          "name": "start_suspended",
+          "description": "1 = init and reset leave the device in suspend (~1.8 uA) for forced-mode or low-power apps. 0 = measuring in normal mode (default)."
         }
       ]
     }
@@ -340,7 +350,7 @@
       ],
       "notes": [],
       "brief": "Initialize the magnetometer.",
-      "description": "Soft-resets the device, verifies CHIP_ID, downloads the 32 OTP trim\nwords and derives the compensation coefficients from them, powers the\nOTP back down, then runs a full magnetic reset so the transducer starts\nfrom a known magnetic state. Leaves the device in suspend — call\nset_mode() to start measuring.\n\nTakes roughly 100 ms, most of it the OTP download and the magnetic\nreset's bit-reset and flip-gain-reset settling.",
+      "description": "Soft-resets the device, verifies CHIP_ID, downloads the 32 OTP trim\nwords and derives the compensation coefficients from them, powers the\nOTP back down, runs a full magnetic reset so the transducer starts from\na known magnetic state, and applies the configuration. Then it enters\nnormal mode and waits for the first sample, so the device is measuring\nand the getters return real data from the first call. With\ncfg->start_suspended set it stays in suspend instead.\n\nTakes roughly 100 ms for the OTP download and the magnetic reset's\nbit-reset and flip-gain-reset settling, plus up to 70 ms suspend-to-\nnormal start-up (datasheet Table 1) and one ODR period for the first\nsample (40 ms at the default 25 Hz).",
       "name": "tile_sense_m_3g_init"
     },
     {
@@ -351,7 +361,7 @@
       "studio_section": "runtime",
       "return": "1 on success, 0 if the bus read failed",
       "brief": "Read one sample and apply the full compensation chain.",
-      "description": "Burst-reads magnetic and temperature data in a single transaction —\nmandatory, because the device freezes the data registers for the\nduration of a burst and single reads would tear across an update\n(datasheet §5.2).",
+      "description": "Not needed for fresh data in normal mode: the getters refresh on their\nown. Use it after trigger_measurement(), or to take an explicit\nsnapshot, which the getters then return until each channel has been\nread once.\n\nBurst-reads magnetic, temperature and sensor-time data in a single\ntransaction — mandatory, because the device freezes the data registers\nfor the duration of a burst and single reads would tear across an\nupdate (datasheet §5.2).",
       "name": "tile_sense_m_3g_read"
     },
     {
@@ -390,8 +400,8 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "X in nT (1000 nT = 1 uT)",
-      "brief": "Compensated X field from the last read, in nanotesla.",
-      "description": "",
+      "brief": "Compensated X field of the latest sample, in nanotesla.",
+      "description": "In normal mode this returns the latest sample (see \"Getters return fresh\ndata\" above): one 3-byte sensor-time read per call, plus a 15-byte burst\nwhen the chip has a new sample. Otherwise the last sample, no bus traffic.",
       "name": "tile_sense_m_3g_get_x_nt"
     },
     {
@@ -401,8 +411,8 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "Y in nT",
-      "brief": "Compensated Y field from the last read, in nanotesla.",
-      "description": "",
+      "brief": "Compensated Y field of the latest sample, in nanotesla.",
+      "description": "Same sample and refresh rules as get_x_nt().",
       "name": "tile_sense_m_3g_get_y_nt"
     },
     {
@@ -412,8 +422,8 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "Z in nT",
-      "brief": "Compensated Z field from the last read, in nanotesla.",
-      "description": "",
+      "brief": "Compensated Z field of the latest sample, in nanotesla.",
+      "description": "Same sample and refresh rules as get_x_nt().",
       "name": "tile_sense_m_3g_get_z_nt"
     },
     {
@@ -423,8 +433,8 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "Temperature in m°C (25000 = 25.000 °C)",
-      "brief": "Die temperature from the last read, in milli-degrees Celsius.",
-      "description": "This is the compensation chain's own temperature, not an ambient\nreading — the die sits above ambient by whatever the board is doing.",
+      "brief": "Die temperature of the latest sample, in milli-degrees Celsius.",
+      "description": "This is the compensation chain's own temperature, not an ambient\nreading — the die sits above ambient by whatever the board is doing.\nSame sample and refresh rules as get_x_nt().",
       "name": "tile_sense_m_3g_get_temperature_mc"
     },
     {
@@ -434,8 +444,8 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "Magnitude in nT",
-      "brief": "Field magnitude of the last sample, in nanotesla.",
-      "description": "sqrt(x² + y² + z²), computed with an integer square root. Useful as a\nsanity check: a quiet indoor spot should land in the 25000-65000 nT\nband, and a magnet nearby will swamp it.",
+      "brief": "Field magnitude of the latest sample, in nanotesla.",
+      "description": "sqrt(x² + y² + z²), computed with an integer square root. Useful as a\nsanity check: a quiet indoor spot should land in the 25000-65000 nT\nband, and a magnet nearby will swamp it. Same sample and refresh rules\nas get_x_nt(), for all three axes at once.",
       "name": "tile_sense_m_3g_get_magnitude_nt"
     },
     {
@@ -472,7 +482,7 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Set the power mode.",
-      "description": "Forced mode is reachable only from suspend, so a request to enter it\nfrom normal mode is routed through suspend first. Each transition\nblocks for the settling time the device needs, which for suspend to\nforced depends on the averaging setting.\n\nInit leaves the device in suspend, so nothing is measured until this\n(or wake(), or trigger_measurement()) is called.",
+      "description": "Forced mode is reachable only from suspend, so a request to enter it\nfrom normal mode is routed through suspend first. Each transition\nblocks for the settling time the device needs, which for suspend to\nforced depends on the averaging setting.\n\nInit already leaves the device in normal mode (unless\ncfg->start_suspended is set), so this is for changing modes later.",
       "name": "tile_sense_m_3g_set_mode"
     },
     {
@@ -503,7 +513,7 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Return the device to normal (free-running) mode.",
-      "description": "",
+      "description": "The mode init leaves it in; use after sleep() or a forced measurement.",
       "name": "tile_sense_m_3g_wake"
     },
     {
@@ -513,7 +523,7 @@
       "studio_exposed": true,
       "studio_section": "lifecycle",
       "brief": "Soft-reset the device and re-run the full init sequence.",
-      "description": "Re-downloads the OTP trim data and repeats the magnetic reset, so the\ncompensation coefficients survive. Leaves the device in suspend.",
+      "description": "Re-downloads the OTP trim data and repeats the magnetic reset, so the\ncompensation coefficients survive, then re-applies the configuration\n(ODR, averaging, axes, interrupt) and returns to the mode init left the\ndevice in: measuring, or suspend with cfg->start_suspended.",
       "name": "tile_sense_m_3g_reset"
     },
     {
@@ -558,7 +568,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Enable or disable individual measurement axes.",
-      "description": "A disabled axis stops converting, saving current, and reads back 0.",
+      "description": "A disabled axis stops converting, saving current, and reads back 0.\nThe device only accepts the change in suspend (datasheet §5.7), so in\nnormal mode this parks it in suspend, writes, and resumes (~45 ms).",
       "name": "tile_sense_m_3g_set_axes"
     },
     {
@@ -686,9 +696,9 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
-      "return": "Signed raw counts from the last read()",
+      "return": "Signed raw counts of the cached sample (last read() or getter",
       "brief": "Read the uncompensated 21-bit signed counts for one axis.",
-      "description": "Straight from the data registers with no compensation applied — the\ninput to the compensation chain. For debugging only; these are not\nfield values and are not in spec.",
+      "description": "Straight from the data registers with no compensation applied — the\ninput to the compensation chain. For debugging only; these are not\nfield values and are not in spec.\n\n        refresh; this call does not refresh)",
       "name": "tile_sense_m_3g_get_raw"
     },
     {
@@ -728,7 +738,7 @@
     }
   ],
   "source_file": "tile_sense_m_3g.h",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "tile_family": "Sense",
   "tile_name": "M.3G",
   "display_name": "Sense.M.3G",

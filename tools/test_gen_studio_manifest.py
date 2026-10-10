@@ -34,7 +34,9 @@ from gen_studio_manifest import (  # noqa: E402
     parse_layer_docs,
     parse_sdk_gaps,
     parse_studio_tags,
+    tile_usage,
 )
+from parse_driver_header import parse_file_header  # noqa: E402
 
 
 # ---- Console encoding ----------------------------------------------------
@@ -910,6 +912,54 @@ void core_demo(void);
             p = Path(d) / "core_none.h"
             p.write_text("/** core_none.h */\nvoid f(void);\n")
             self.assertIsNone(parse_sdk_gaps(p))
+
+
+class TileUsage(unittest.TestCase):
+    """`@studio usage` -> top-level `usage` in BOTH manifests, from one parser."""
+
+    HEADER = """/**
+ * @file   tile_demo_x.h
+ * @brief  Demo tile.
+ *
+ * @studio tile label=Demo.X icon=x
+ *
+ * @studio usage
+ *   Starts measuring when init returns; getters
+ *   return the latest sample.
+ *
+ * @studio unsupported severity=niche category="Thing" section=advanced
+ *   Not usage text.
+ */
+#ifndef X
+#define X
+#endif
+"""
+
+    def _write(self, d, text):
+        p = Path(d) / "tile_demo_x.h"
+        p.write_text(text)
+        return p
+
+    def test_multiline_block(self):
+        want = "Starts measuring when init returns; getters return the latest sample."
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write(d, self.HEADER)
+            self.assertEqual(tile_usage(p), want)
+            self.assertEqual(parse_file_header(self.HEADER).get("usage"), want)
+
+    def test_inline_and_quoted(self):
+        text = self.HEADER.replace(
+            " * @studio usage\n *   Starts measuring when init returns; getters\n"
+            " *   return the latest sample.\n",
+            ' * @studio usage "Call read() first."\n')
+        self.assertEqual(parse_file_header(text).get("usage"), "Call read() first.")
+
+    def test_absent(self):
+        text = self.HEADER.split(" * @studio usage")[0] + " */\n#endif\n"
+        with tempfile.TemporaryDirectory() as d:
+            p = self._write(d, text)
+            self.assertIsNone(tile_usage(p))
+        self.assertNotIn("usage", parse_file_header(text))
 
 
 if __name__ == "__main__":

@@ -52,7 +52,8 @@ static uint8_t resolve_id(uint8_t instance)
 #define BMM350_START_UP_MS            3    /* Power-on to first command */
 #define BMM350_SOFT_RESET_MS          24
 #define BMM350_GOTO_SUSPEND_MS        6
-#define BMM350_SUSPEND_TO_NORMAL_MS   38
+#define BMM350_SUSPEND_TO_NORMAL_MS   38   /* [API]; DS Table 1 gives Tsus2nm 70 ms */
+#define BMM350_TSUS2NM_DS_MS          70   /* [DS Table 1] start-up, suspend to normal */
 #define BMM350_UPD_OAE_MS             1    /* ODR/averaging update command */
 #define BMM350_BR_MS                  14   /* Bit reset */
 #define BMM350_FGR_MS                 18   /* Flip-gain reset */
@@ -152,6 +153,11 @@ typedef struct {
     int32_t raw[4];          /* Uncompensated counts: x, y, z, temp */
     int32_t mag_nt[3];
     int32_t temp_mc;
+    uint32_t sample_st;      /* SENSORTIME of the cached sample [DS §5.2.2] */
+
+    /* Getter refresh bookkeeping (see refresh_for_getter) */
+    uint8_t served;          /* CH_* channels a getter has returned since the last read */
+    uint8_t pinned;          /* Cache came from an explicit read() / process() */
 
     sense_m_3g_data_cb_t on_data;
     void *data_ctx;
@@ -162,7 +168,16 @@ typedef struct {
     uint8_t avg;                 /* Cached averaging, for settling delays */
     uint8_t odr;                 /* Cached ODR, to pick FM vs FM_FAST */
     uint8_t fm_primed;           /* A forced conversion has run since bring-up */
+    uint8_t mode;                /* Last PMU mode command (BMM350_PMU_CMD_SUS/NM/FM/FM_FAST) */
+    uint8_t start_suspended;     /* cfg: init / reset leave the device in suspend */
 } bmm350_state_t;
+
+/* Channels a getter returns, for the refresh bookkeeping. */
+#define CH_X    0x01
+#define CH_Y    0x02
+#define CH_Z    0x04
+#define CH_T    0x08
+#define CH_XYZ  (CH_X | CH_Y | CH_Z)
 
 static bmm350_state_t state[NUM_INSTANCES];
 
@@ -183,16 +198,19 @@ static void memzero(void *p, uint16_t n)
     while (n--) *b++ = 0;
 }
 
+/** Longest burst this driver performs: X, Y, Z, temperature, sensortime. */
+#define BMM350_BURST_MAX  (BMM350_MAG_TEMP_DATA_LEN + 3)
+
 /**
  * Read `len` bytes from `reg`, discarding the two dummy bytes the device
  * sends first [DS §9.2.3]. Caps at a buffer that covers the longest burst
- * this driver performs (the 12-byte data block).
+ * this driver performs (the 15-byte data + sensortime block).
  */
 static uint8_t read_regs(tile_t *tile, uint8_t reg, uint8_t *out, uint8_t len)
 {
-    uint8_t buf[BMM350_MAG_TEMP_DATA_LEN + BMM350_DUMMY_BYTES];
+    uint8_t buf[BMM350_BURST_MAX + BMM350_DUMMY_BYTES];
 
-    if (len > BMM350_MAG_TEMP_DATA_LEN)
+    if (len > BMM350_BURST_MAX)
         return 0;
 
     memzero(buf, sizeof(buf));
@@ -428,6 +446,7 @@ static void set_mode_direct(tile_t *tile, uint8_t mode)
     default: break;
     }
     pmu_command(tile, mode, settle);
+    s->mode = mode;
 }
 
 void tile_sense_m_3g_set_mode(tile_t *tile, sense_m_3g_mode_t mode)
@@ -519,6 +538,8 @@ uint8_t tile_sense_m_3g_magnetic_reset(tile_t *tile)
 
     if (was_normal)
         set_mode_direct(tile, BMM350_PMU_CMD_NM);
+    else
+        state_for(tile)->mode = BMM350_PMU_CMD_SUS;   /* reset ran from suspend */
 
     if (!ok)
         TILE_ON_ERROR(tile, "sense_m_3g: magnetic reset not acknowledged");
@@ -556,8 +577,88 @@ static uint8_t bring_up(tile_t *tile, bmm350_state_t *s)
     tile->state = TILE_STATE_READY;
     (void)tile_sense_m_3g_magnetic_reset(tile);
 
+    s->mode = BMM350_PMU_CMD_SUS;
     tile->state = TILE_STATE_SLEEPING;   /* Device rests in suspend */
     return 1;
+}
+
+/* ODR period in whole ms, rounded: 2.5 ms x 2^(code - 2), so 400 Hz (0x2)
+ * is 3 ms and 1.5625 Hz (0xA) is 640 ms [DS §8.4]. */
+static uint32_t odr_period_ms(uint8_t odr)
+{
+    uint8_t code = (odr < SENSE_M_3G_ODR_400HZ) ? SENSE_M_3G_ODR_400HZ
+                 : (odr > SENSE_M_3G_ODR_1_5625HZ) ? SENSE_M_3G_ODR_1_5625HZ : odr;
+    return ((5u << (code - SENSE_M_3G_ODR_400HZ)) + 1u) / 2u;
+}
+
+/* One and a half ODR periods in sensortime ticks. The datasheet calls the
+ * tick "40 us", but its note that the XLSB byte repeats at ODR <= 100 Hz
+ * (two values at 200 Hz, four at 400 Hz) [DS §5.2.2] makes one period
+ * exactly 64 << (code - 2) ticks (39.0625 us each). 1.5 periods sits
+ * between "the next sample" and "two samples on", with room for the RC
+ * oscillator's +/-2 %. */
+static uint32_t gap_1p5_periods_ticks(uint8_t odr)
+{
+    uint8_t code = (odr < SENSE_M_3G_ODR_400HZ) ? SENSE_M_3G_ODR_400HZ
+                 : (odr > SENSE_M_3G_ODR_1_5625HZ) ? SENSE_M_3G_ODR_1_5625HZ : odr;
+    return 96u << (code - SENSE_M_3G_ODR_400HZ);
+}
+
+static uint32_t read_sensortime_reg(tile_t *tile, uint8_t *ok)
+{
+    uint8_t d[3] = {0};
+    *ok = read_regs(tile, BMM350_REG_SENSORTIME_XLSB, d, sizeof(d));
+    return (uint32_t)d[0] | ((uint32_t)d[1] << 8) | ((uint32_t)d[2] << 16);
+}
+
+static uint8_t read_sample(tile_t *tile, bmm350_state_t *s);
+
+/* Program the cached ODR / averaging / axes and the interrupt into the
+ * suspended device. Shared by init() and reset() (a soft reset puts every
+ * register back to its POR value, e.g. 100 Hz / 2x). */
+static void configure_device(tile_t *tile, bmm350_state_t *s)
+{
+    tile_sense_m_3g_set_odr_averaging(tile, (sense_m_3g_odr_t)s->odr,
+                                      (sense_m_3g_avg_t)s->avg);
+    tile_sense_m_3g_set_axes(tile, s->axis_en);
+
+    /* Data-ready mapping into INT_STATUS is what polling reads, so enable
+     * it either way; only drive the pin when one is wired. */
+    tile_sense_m_3g_configure_interrupt(tile, s->int_pin ? 1 : 0,
+                                        0 /* active low */, 1 /* push-pull */,
+                                        0 /* pulsed */);
+}
+
+/* Suspend -> normal, then wait for the first conversion and cache it, so a
+ * getter called right after init returns a real sample, not zeros.
+ *
+ * NM is issued with the SensorAPI's 38 ms settle; the datasheet's start-up
+ * figure is 70 ms (Tsus2nm, Table 1), and the first sample lands within one
+ * ODR period after that. Wait for it by data-ready (pulsed, so polled every
+ * millisecond) or by SENSORTIME moving, which only happens when a new
+ * sample is written [DS §5.2.2]. */
+static void start_normal(tile_t *tile, bmm350_state_t *s)
+{
+    uint8_t ok;
+    uint32_t st0 = read_sensortime_reg(tile, &ok);
+
+    (void)read_reg(tile, BMM350_REG_INT_STATUS);   /* drop a stale drdy */
+    set_mode_direct(tile, BMM350_PMU_CMD_NM);
+    tile->state = TILE_STATE_READY;
+
+    uint32_t budget = (BMM350_TSUS2NM_DS_MS - BMM350_SUSPEND_TO_NORMAL_MS)
+                    + odr_period_ms(s->odr) + 10u;
+    for (uint32_t t = 0; t < budget; t++) {
+        if (read_reg(tile, BMM350_REG_INT_STATUS) & BMM350_INT_STATUS_DRDY)
+            break;
+        uint32_t st = read_sensortime_reg(tile, &ok);
+        if (ok && st != st0)
+            break;
+        tile->hal->delay_ms(1);
+    }
+
+    (void)read_sample(tile, s);
+    s->pinned = 0;
 }
 
 static void isr_instance_0(void *ctx) { state[0].int_flag = 1; (void)ctx; }
@@ -616,16 +717,12 @@ void tile_sense_m_3g_init(tiles_pal_t *hal, uint8_t instance,
         if (cfg->odr) odr = (uint8_t)cfg->odr;
         avg = (uint8_t)cfg->averaging;      /* AVG_NONE is 0 and is a real choice */
         if (cfg->axes) s->axis_en = cfg->axes;
+        s->start_suspended = cfg->start_suspended ? 1 : 0;
     }
 
-    tile_sense_m_3g_set_odr_averaging(tile, (sense_m_3g_odr_t)odr, (sense_m_3g_avg_t)avg);
-    tile_sense_m_3g_set_axes(tile, s->axis_en);
-
-    /* Data-ready mapping into INT_STATUS is what polling reads, so enable
-     * it either way; only drive the pin when one is wired. */
-    tile_sense_m_3g_configure_interrupt(tile, s->int_pin ? 1 : 0,
-                                        0 /* active low */, 1 /* push-pull */,
-                                        0 /* pulsed */);
+    s->odr = odr;
+    s->avg = avg;
+    configure_device(tile, s);
 
     if (s->int_pin && hal->gpio_irq_enable) {
         void (*isr)(void *) = (instance == 0) ? isr_instance_0 : isr_instance_1;
@@ -633,7 +730,9 @@ void tile_sense_m_3g_init(tiles_pal_t *hal, uint8_t instance,
                              TILES_GPIO_EDGE_FALLING, isr, NULL);
     }
 
-    tile->state = TILE_STATE_SLEEPING;   /* In suspend until set_mode() */
+    /* Measuring from here on, unless the app asked for a quiet start. */
+    if (!s->start_suspended)
+        start_normal(tile, s);
 }
 
 void tile_sense_m_3g_reset(tile_t *tile)
@@ -644,24 +743,32 @@ void tile_sense_m_3g_reset(tile_t *tile)
     memzero(s->raw, sizeof(s->raw));
     memzero(s->mag_nt, sizeof(s->mag_nt));
     s->temp_mc = 0;
+    s->sample_st = 0;
+    s->served = 0;
+    s->pinned = 0;
 
-    (void)bring_up(tile, s);
+    if (!bring_up(tile, s))
+        return;
+
+    /* The soft reset dropped every register to POR; put the app's
+     * configuration back and return to the mode init left it in. */
+    configure_device(tile, s);
+    if (!s->start_suspended)
+        start_normal(tile, s);
 }
 
 /* ================================================================
  * Data
  * ================================================================ */
 
-uint8_t tile_sense_m_3g_read(tile_t *tile)
+/* Burst-read X, Y, Z, temperature AND sensortime (0x31-0x3F) and
+ * compensate. One burst: the device freezes the data registers for its
+ * duration, so the four channels and the timestamp are one sample; separate
+ * reads would tear across an update [DS §5.2]. */
+static uint8_t read_sample(tile_t *tile, bmm350_state_t *s)
 {
-    if (tile->state != TILE_STATE_READY && tile->state != TILE_STATE_SLEEPING)
-        return 0;
+    uint8_t d[BMM350_BURST_MAX];
 
-    bmm350_state_t *s = state_for(tile);
-    uint8_t d[BMM350_MAG_TEMP_DATA_LEN];
-
-    /* One burst. The device freezes the data registers for its duration;
-     * separate reads would tear across an update [DS §5.2]. */
     if (!read_regs(tile, BMM350_REG_MAG_X_XLSB, d, sizeof(d)))
         return 0;
 
@@ -675,9 +782,62 @@ uint8_t tile_sense_m_3g_read(tile_t *tile)
                      ((uint32_t)d[i * 3 + 2] << 16);
         s->raw[i] = fix_sign(v, 24);
     }
+    s->sample_st = (uint32_t)d[12] | ((uint32_t)d[13] << 8) | ((uint32_t)d[14] << 16);
 
     compensate(s);
+    s->served = 0;
     return 1;
+}
+
+uint8_t tile_sense_m_3g_read(tile_t *tile)
+{
+    if (tile->state != TILE_STATE_READY && tile->state != TILE_STATE_SLEEPING)
+        return 0;
+
+    bmm350_state_t *s = state_for(tile);
+    if (!read_sample(tile, s))
+        return 0;
+    s->pinned = 1;   /* an explicit snapshot: see refresh_for_getter */
+    return 1;
+}
+
+/*
+ * Getter refresh. In normal mode a getter keeps the cache current by itself:
+ *
+ *   1. Read SENSORTIME (3 bytes + 2 dummy). It changes when, and only when,
+ *      the device writes a new sample [DS §5.2.2], so it is a side-effect-
+ *      free "new data?" check: unlike INT_STATUS it clears nothing, so
+ *      data_ready() and process() see the same flags as before.
+ *   2. Unchanged: return the cache, which is already the newest sample.
+ *   3. Changed: burst-read the new sample (read_sample: 15 bytes + 2 dummy),
+ *      unless that would split a group. A channel not yet returned from the
+ *      cached sample keeps it, so get_x, get_y, get_z called one after the
+ *      other come from ONE sample even if a conversion lands in between;
+ *      the next call for a channel already returned refreshes. That reuse
+ *      lasts 1.5 ODR periods for an auto-refreshed cache (beyond that it is
+ *      a stale sample, not a group); an explicit read() snapshot is kept
+ *      until each of its channels has been returned once.
+ *
+ * Outside normal mode (suspend, or after a forced conversion) nothing new
+ * arrives on its own, so getters return the cache with no bus traffic.
+ */
+static void refresh_for_getter(tile_t *tile, uint8_t need)
+{
+    bmm350_state_t *s = state_for(tile);
+
+    if (tile->state == TILE_STATE_READY && s->mode == BMM350_PMU_CMD_NM) {
+        uint8_t ok;
+        uint32_t st = read_sensortime_reg(tile, &ok);
+
+        if (ok && st != s->sample_st) {
+            uint8_t refresh = (s->served & need) != 0;
+            if (!refresh && !s->pinned)
+                refresh = ((st - s->sample_st) & 0xFFFFFFu) > gap_1p5_periods_ticks(s->odr);
+            if (refresh && read_sample(tile, s))
+                s->pinned = 0;
+        }
+    }
+    s->served |= need;
 }
 
 void tile_sense_m_3g_process(tile_t *tile)
@@ -704,12 +864,27 @@ void tile_sense_m_3g_on_data(tile_t *tile, sense_m_3g_data_cb_t cb, void *ctx)
     s->data_ctx = ctx;
 }
 
-int32_t tile_sense_m_3g_get_x_nt(tile_t *tile) { return state_for(tile)->mag_nt[0]; }
-int32_t tile_sense_m_3g_get_y_nt(tile_t *tile) { return state_for(tile)->mag_nt[1]; }
-int32_t tile_sense_m_3g_get_z_nt(tile_t *tile) { return state_for(tile)->mag_nt[2]; }
+int32_t tile_sense_m_3g_get_x_nt(tile_t *tile)
+{
+    refresh_for_getter(tile, CH_X);
+    return state_for(tile)->mag_nt[0];
+}
+
+int32_t tile_sense_m_3g_get_y_nt(tile_t *tile)
+{
+    refresh_for_getter(tile, CH_Y);
+    return state_for(tile)->mag_nt[1];
+}
+
+int32_t tile_sense_m_3g_get_z_nt(tile_t *tile)
+{
+    refresh_for_getter(tile, CH_Z);
+    return state_for(tile)->mag_nt[2];
+}
 
 int32_t tile_sense_m_3g_get_temperature_mc(tile_t *tile)
 {
+    refresh_for_getter(tile, CH_T);
     return state_for(tile)->temp_mc;
 }
 
@@ -728,6 +903,7 @@ static uint32_t isqrt64(uint64_t n)
 
 uint32_t tile_sense_m_3g_get_magnitude_nt(tile_t *tile)
 {
+    refresh_for_getter(tile, CH_XYZ);
     bmm350_state_t *s = state_for(tile);
     int64_t x = s->mag_nt[0], y = s->mag_nt[1], z = s->mag_nt[2];
     return isqrt64((uint64_t)(x * x + y * y + z * z));
@@ -790,10 +966,7 @@ void tile_sense_m_3g_set_odr_averaging(tile_t *tile, sense_m_3g_odr_t odr,
     for (uint8_t i = 0; i < 20 && (read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) & 1U); i++)
         tile->hal->delay_ms(1);
     if (normal) {
-        /* Period = 2.5 ms x 2^(code - 2): 400 Hz is 0x2, 1.5625 Hz is 0xA. */
-        uint8_t code = (odr < SENSE_M_3G_ODR_400HZ) ? SENSE_M_3G_ODR_400HZ
-                     : (odr > SENSE_M_3G_ODR_1_5625HZ) ? SENSE_M_3G_ODR_1_5625HZ : (uint8_t)odr;
-        uint32_t period_ms = ((5u << (code - SENSE_M_3G_ODR_400HZ)) + 1u) / 2u;
+        uint32_t period_ms = odr_period_ms((uint8_t)odr);
         for (uint32_t t = 0; t < period_ms + 20; t++) {
             if (read_reg(tile, BMM350_REG_INT_STATUS) & BMM350_INT_STATUS_DRDY) break;
             tile->hal->delay_ms(1);
@@ -808,7 +981,16 @@ void tile_sense_m_3g_set_axes(tile_t *tile, uint8_t mask)
 
     bmm350_state_t *s = state_for(tile);
     s->axis_en = mask & BMM350_EN_XYZ;
+
+    /* The axis bits only take effect in suspend; a write in normal mode is
+     * ignored by the hardware [DS §5.7]. Park, write, and resume, as the
+     * SensorAPI's enable_axes does. */
+    uint8_t normal = (read_reg(tile, BMM350_REG_PMU_CMD_STATUS_0) >> 3) & 1U;
+    if (normal)
+        pmu_command(tile, BMM350_PMU_CMD_SUS, BMM350_GOTO_SUSPEND_MS);
     write_reg(tile, BMM350_REG_PMU_CMD_AXIS_EN, s->axis_en);
+    if (normal)
+        set_mode_direct(tile, BMM350_PMU_CMD_NM);
 }
 
 void tile_sense_m_3g_configure_interrupt(tile_t *tile, uint8_t enable,
@@ -891,4 +1073,12 @@ void tile_sense_m_3g_write_reg(tile_t *tile, uint8_t reg, uint8_t value)
     if (tile->state == TILE_STATE_NONE || tile->state == TILE_STATE_ERROR)
         return;
     write_reg(tile, reg, value);
+
+    /* Keep the getters' idea of the power mode honest after a raw
+     * PMU_CMD write. Magnetic-reset and update commands leave it alone. */
+    uint8_t cmd = value & 0x0F;
+    if (reg == BMM350_REG_PMU_CMD &&
+        (cmd == BMM350_PMU_CMD_SUS || cmd == BMM350_PMU_CMD_NM ||
+         cmd == BMM350_PMU_CMD_FM || cmd == BMM350_PMU_CMD_FM_FAST))
+        state_for(tile)->mode = cmd;
 }

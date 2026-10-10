@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_m_3g.h
  * @brief  Triaxial geomagnetic magnetometer driver for Sense.M.3G (BMM350).
- * @version 1.0.0
+ * @version 1.1.0
  *
  * Bosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from
  * 1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a
@@ -35,26 +35,50 @@
  *
  * ## Power modes
  *
- * Suspend (the boot state, lowest power, settings retained), normal
+ * Suspend (the chip's boot state, lowest power, settings retained), normal
  * (free-running at the configured ODR), and forced (one conversion on
  * request, then back to suspend). Forced mode is reachable only FROM
  * suspend — a normal-to-forced transition is ignored by the device, so
  * set_mode() routes through suspend for you.
  *
+ * init() leaves the part MEASURING: normal mode at 25 Hz with 4x averaging
+ * (about 96 uA, datasheet Table 5), with the first sample already cached.
+ * Set `start_suspended` in the config to stay in suspend instead
+ * (~1.8 uA), or call sleep() at any time.
+ *
+ * ## Getters return fresh data
+ *
+ * In normal mode every get_* call keeps itself current: it reads the
+ * 3-byte sensor-time stamp (one short I2C read), and only when the chip has
+ * written a new sample since does it burst-read and compensate that sample
+ * (one 15-byte read). X, Y, Z and temperature always come from the same
+ * sample, and get_x, get_y, get_z called back to back return ONE sample.
+ * No read() is needed. Outside normal mode (suspend, forced) the getters
+ * return the last sample with no bus traffic; after trigger_measurement(),
+ * call read() to fetch the new one. read() still works everywhere and
+ * takes an explicit snapshot that the getters return until each of its
+ * channels has been read once.
+ *
  * Polled example (Cores SDK):
  * @code
  *   tile_t mag;
  *   tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, NULL);
- *   tile_sense_m_3g_set_mode(&mag, SENSE_M_3G_MODE_NORMAL);
  *   while (1) {
- *       if (tile_sense_m_3g_data_ready(&mag)) {
- *           tile_sense_m_3g_read(&mag);
- *           printf("%ld %ld %ld nT\n",
- *                  tile_sense_m_3g_get_x_nt(&mag),
- *                  tile_sense_m_3g_get_y_nt(&mag),
- *                  tile_sense_m_3g_get_z_nt(&mag));
- *       }
- *       core_delay_ms(10);
+ *       printf("%ld %ld %ld nT\n",
+ *              tile_sense_m_3g_get_x_nt(&mag),
+ *              tile_sense_m_3g_get_y_nt(&mag),
+ *              tile_sense_m_3g_get_z_nt(&mag));
+ *       core_delay_ms(40);                  // one sample per 25 Hz period
+ *   }
+ * @endcode
+ *
+ * Low-power example (forced mode, one sample on demand):
+ * @code
+ *   sense_m_3g_cfg_t cfg = { .start_suspended = 1 };
+ *   tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, &cfg);
+ *   if (tile_sense_m_3g_trigger_measurement(&mag)) {
+ *       tile_sense_m_3g_read(&mag);
+ *       int32_t x = tile_sense_m_3g_get_x_nt(&mag);
  *   }
  * @endcode
  *
@@ -67,7 +91,6 @@
  *       .on_data = on_mag_sample,
  *   };
  *   tile_sense_m_3g_init(core_tiles_pal(&core_i2c1), 0, &mag, &cfg);
- *   tile_sense_m_3g_set_mode(&mag, SENSE_M_3G_MODE_NORMAL);
  *   while (1) { tile_sense_m_3g_process(&mag); }
  * @endcode
  *
@@ -83,6 +106,12 @@
  * Datasheet: Bosch Sensortec BMM350, BST-BMM350-DS001-27
  *
  * @studio tile label=Sense.M.3G icon=🧭
+ *
+ * @studio usage
+ *   Starts measuring at 25 Hz as soon as init returns, so get_x_nt,
+ *   get_y_nt, get_z_nt, get_magnitude_nt and get_temperature_mc always
+ *   return the latest sample; no read() or wake() needed. Call sleep()
+ *   for low power (getters then repeat the last sample until wake()).
  *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
@@ -124,7 +153,7 @@
  * ================================================================ */
 
 #define TILE_SENSE_M_3G_VERSION_MAJOR  1
-#define TILE_SENSE_M_3G_VERSION_MINOR  0
+#define TILE_SENSE_M_3G_VERSION_MINOR  1
 #define TILE_SENSE_M_3G_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -286,7 +315,8 @@ typedef void (*sense_m_3g_data_cb_t)(tile_t *tile, void *ctx);
 
 /**
  * Optional init config. Pass NULL for defaults: 25 Hz, 4x averaging, all
- * three axes, polled operation, INT pin untouched.
+ * three axes, polled operation, INT pin untouched, measuring in normal
+ * mode when init returns.
  */
 typedef struct {
     sense_m_3g_odr_t odr;         /**< Output data rate. 0 = default 25 Hz. */
@@ -300,6 +330,8 @@ typedef struct {
 
     sense_m_3g_data_cb_t on_data; /**< Called by process() on a new sample. */
     void *data_ctx;               /**< User context for the callback. */
+
+    uint8_t start_suspended;      /**< 1 = init and reset leave the device in suspend (~1.8 uA) for forced-mode or low-power apps. 0 = measuring in normal mode (default). */
 } sense_m_3g_cfg_t;
 
 /* ================================================================
@@ -319,12 +351,16 @@ uint8_t tile_sense_m_3g_find(tiles_pal_t *hal, uint8_t instance);
  *
  * Soft-resets the device, verifies CHIP_ID, downloads the 32 OTP trim
  * words and derives the compensation coefficients from them, powers the
- * OTP back down, then runs a full magnetic reset so the transducer starts
- * from a known magnetic state. Leaves the device in suspend — call
- * set_mode() to start measuring.
+ * OTP back down, runs a full magnetic reset so the transducer starts from
+ * a known magnetic state, and applies the configuration. Then it enters
+ * normal mode and waits for the first sample, so the device is measuring
+ * and the getters return real data from the first call. With
+ * cfg->start_suspended set it stays in suspend instead.
  *
- * Takes roughly 100 ms, most of it the OTP download and the magnetic
- * reset's bit-reset and flip-gain-reset settling.
+ * Takes roughly 100 ms for the OTP download and the magnetic reset's
+ * bit-reset and flip-gain-reset settling, plus up to 70 ms suspend-to-
+ * normal start-up (datasheet Table 1) and one ODR period for the first
+ * sample (40 ms at the default 25 Hz).
  *
  * @param  hal       Tiles HAL handle (I2C bus)
  * @param  instance  0 for 0x14, 1 for 0x15
@@ -340,10 +376,15 @@ void tile_sense_m_3g_init(tiles_pal_t *hal, uint8_t instance,
  * @brief  Read one sample and apply the full compensation chain.
  * @studio expose category=tile name=read returns=bool section=runtime
  *
- * Burst-reads magnetic and temperature data in a single transaction —
- * mandatory, because the device freezes the data registers for the
- * duration of a burst and single reads would tear across an update
- * (datasheet §5.2).
+ * Not needed for fresh data in normal mode: the getters refresh on their
+ * own. Use it after trigger_measurement(), or to take an explicit
+ * snapshot, which the getters then return until each channel has been
+ * read once.
+ *
+ * Burst-reads magnetic, temperature and sensor-time data in a single
+ * transaction — mandatory, because the device freezes the data registers
+ * for the duration of a burst and single reads would tear across an
+ * update (datasheet §5.2).
  *
  * @return 1 on success, 0 if the bus read failed
  */
@@ -369,31 +410,43 @@ void tile_sense_m_3g_process(tile_t *tile);
 void tile_sense_m_3g_on_data(tile_t *tile, sense_m_3g_data_cb_t cb, void *ctx);
 
 /**
- * @brief  Compensated X field from the last read, in nanotesla.
+ * @brief  Compensated X field of the latest sample, in nanotesla.
+ *
+ * In normal mode this returns the latest sample (see "Getters return fresh
+ * data" above): one 3-byte sensor-time read per call, plus a 15-byte burst
+ * when the chip has a new sample. Otherwise the last sample, no bus traffic.
+ *
  * @studio expose category=tile name=get_x_nt returns=int section=runtime
  * @return X in nT (1000 nT = 1 uT)
  */
 int32_t tile_sense_m_3g_get_x_nt(tile_t *tile);
 
 /**
- * @brief  Compensated Y field from the last read, in nanotesla.
+ * @brief  Compensated Y field of the latest sample, in nanotesla.
+ *
+ * Same sample and refresh rules as get_x_nt().
+ *
  * @studio expose category=tile name=get_y_nt returns=int section=runtime
  * @return Y in nT
  */
 int32_t tile_sense_m_3g_get_y_nt(tile_t *tile);
 
 /**
- * @brief  Compensated Z field from the last read, in nanotesla.
+ * @brief  Compensated Z field of the latest sample, in nanotesla.
+ *
+ * Same sample and refresh rules as get_x_nt().
+ *
  * @studio expose category=tile name=get_z_nt returns=int section=runtime
  * @return Z in nT
  */
 int32_t tile_sense_m_3g_get_z_nt(tile_t *tile);
 
 /**
- * @brief  Die temperature from the last read, in milli-degrees Celsius.
+ * @brief  Die temperature of the latest sample, in milli-degrees Celsius.
  *
  * This is the compensation chain's own temperature, not an ambient
  * reading — the die sits above ambient by whatever the board is doing.
+ * Same sample and refresh rules as get_x_nt().
  *
  * @studio expose category=tile name=get_temperature_mc returns=int section=runtime
  * @return Temperature in m°C (25000 = 25.000 °C)
@@ -401,11 +454,12 @@ int32_t tile_sense_m_3g_get_z_nt(tile_t *tile);
 int32_t tile_sense_m_3g_get_temperature_mc(tile_t *tile);
 
 /**
- * @brief  Field magnitude of the last sample, in nanotesla.
+ * @brief  Field magnitude of the latest sample, in nanotesla.
  *
  * sqrt(x² + y² + z²), computed with an integer square root. Useful as a
  * sanity check: a quiet indoor spot should land in the 25000-65000 nT
- * band, and a magnet nearby will swamp it.
+ * band, and a magnet nearby will swamp it. Same sample and refresh rules
+ * as get_x_nt(), for all three axes at once.
  *
  * @studio expose category=tile name=get_magnitude_nt returns=int section=runtime
  * @return Magnitude in nT
@@ -448,8 +502,8 @@ uint32_t tile_sense_m_3g_get_sensortime(tile_t *tile);
  * blocks for the settling time the device needs, which for suspend to
  * forced depends on the averaging setting.
  *
- * Init leaves the device in suspend, so nothing is measured until this
- * (or wake(), or trigger_measurement()) is called.
+ * Init already leaves the device in normal mode (unless
+ * cfg->start_suspended is set), so this is for changing modes later.
  *
  * @studio expose category=tile name=set_mode section=lifecycle
  * @param  mode  Target mode (sense_m_3g_mode_t)
@@ -477,6 +531,9 @@ void tile_sense_m_3g_sleep(tile_t *tile);
 
 /**
  * @brief  Return the device to normal (free-running) mode.
+ *
+ * The mode init leaves it in; use after sleep() or a forced measurement.
+ *
  * @studio expose category=tile name=wake section=lifecycle
  */
 void tile_sense_m_3g_wake(tile_t *tile);
@@ -485,7 +542,9 @@ void tile_sense_m_3g_wake(tile_t *tile);
  * @brief  Soft-reset the device and re-run the full init sequence.
  *
  * Re-downloads the OTP trim data and repeats the magnetic reset, so the
- * compensation coefficients survive. Leaves the device in suspend.
+ * compensation coefficients survive, then re-applies the configuration
+ * (ODR, averaging, axes, interrupt) and returns to the mode init left the
+ * device in: measuring, or suspend with cfg->start_suspended.
  *
  * @studio expose category=tile name=reset section=lifecycle
  */
@@ -532,6 +591,8 @@ void tile_sense_m_3g_set_odr_averaging(tile_t *tile, sense_m_3g_odr_t odr,
  * @brief  Enable or disable individual measurement axes.
  *
  * A disabled axis stops converting, saving current, and reads back 0.
+ * The device only accepts the change in suspend (datasheet §5.7), so in
+ * normal mode this parks it in suspend, writes, and resumes (~45 ms).
  *
  * @studio expose category=tile name=set_axes section=config
  * @param  mask  [0..7] OR of BMM350_EN_X (1) / _Y (2) / _Z (4)
@@ -623,7 +684,8 @@ uint16_t tile_sense_m_3g_get_otp_word(tile_t *tile, uint8_t word);
  *
  * @studio expose category=tile name=get_raw returns=int section=advanced
  * @param  axis  [0..3] 0 = X, 1 = Y, 2 = Z, 3 = temperature
- * @return Signed raw counts from the last read()
+ * @return Signed raw counts of the cached sample (last read() or getter
+ *         refresh; this call does not refresh)
  */
 int32_t tile_sense_m_3g_get_raw(tile_t *tile, uint8_t axis);
 

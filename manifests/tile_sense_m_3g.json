@@ -1,15 +1,16 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@cd2d6a4",
+  "source": "tiles@80443b5",
   "tile": "Sense.M.3G",
   "palette": {
     "label": "Sense.M.3G",
     "icon": "🧭"
   },
+  "usage": "Starts measuring at 25 Hz as soon as init returns, so get_x_nt, get_y_nt, get_z_nt, get_magnitude_nt and get_temperature_mc always return the latest sample; no read() or wake() needed. Call sleep() for low power (getters then repeat the last sample until wake()).",
   "driver": {
     "prefix": "tile_sense_m_3g",
     "header": "tile_sense_m_3g.h",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "handle": {
     "type": "tile_t",
@@ -75,7 +76,7 @@
       "symbol": "tile_sense_m_3g_get_x_nt",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Compensated X field from the last read, in nanotesla.",
+      "description": "Compensated X field of the latest sample, in nanotesla.",
       "params": [],
       "returns": "int32_t",
       "dsl_returns": "int",
@@ -89,7 +90,7 @@
       "symbol": "tile_sense_m_3g_get_y_nt",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Compensated Y field from the last read, in nanotesla.",
+      "description": "Compensated Y field of the latest sample, in nanotesla.",
       "params": [],
       "returns": "int32_t",
       "dsl_returns": "int",
@@ -103,7 +104,7 @@
       "symbol": "tile_sense_m_3g_get_z_nt",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Compensated Z field from the last read, in nanotesla.",
+      "description": "Compensated Z field of the latest sample, in nanotesla.",
       "params": [],
       "returns": "int32_t",
       "dsl_returns": "int",
@@ -117,7 +118,7 @@
       "symbol": "tile_sense_m_3g_get_temperature_mc",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Die temperature from the last read, in milli-degrees Celsius.",
+      "description": "Die temperature of the latest sample, in milli-degrees Celsius.",
       "params": [],
       "returns": "int32_t",
       "dsl_returns": "int",
@@ -131,7 +132,7 @@
       "symbol": "tile_sense_m_3g_get_magnitude_nt",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Field magnitude of the last sample, in nanotesla.",
+      "description": "Field magnitude of the latest sample, in nanotesla.",
       "params": [],
       "returns": "uint32_t",
       "dsl_returns": "int",

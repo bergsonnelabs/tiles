@@ -36,6 +36,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from parse_driver_header import parse_file_header  # noqa: E402
+
 
 # ---- Console encoding ----------------------------------------------------
 # Windows Python falls back to the legacy ANSI code page (cp1252) whenever
@@ -282,6 +285,16 @@ def strip_doxy(body):
         m = re.match(r"\s*\*\s?(.*)$", line)
         out.append(m.group(1) if m else line.strip())
     return out
+
+
+def tile_usage(path):
+    """The driver's `@studio usage` note (file-level block), or None.
+
+    Parsed by parse_driver_header.parse_file_header, the same function that
+    feeds the docs manifest, so Studio and the docs site carry the identical
+    string. Emitted as the palette manifest's top-level `usage` field.
+    """
+    return parse_file_header(Path(path).read_text()).get("usage")
 
 
 def parse_studio_tags(lines):
@@ -1794,7 +1807,7 @@ def main():
             "definition": ROOT / "definitions/Sense-M-3G-a.json",
             "prefix": "tile_sense_m_3g",
             "init": "tile_sense_m_3g_init",
-            "version": "1.0.0",
+            "version": "1.1.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_i_9.h",
@@ -1915,6 +1928,13 @@ def main():
             "source": source,
             "tile": palette["label"],
             "palette": palette,
+        }
+        # Driver-authored "how to use this tile" note (`@studio usage`),
+        # top-level and only when the header has one.
+        usage = tile_usage(t["path"])
+        if usage:
+            manifest["usage"] = usage
+        manifest.update({
             "driver": {
                 "prefix": t["prefix"],
                 "header": t["path"].name,
@@ -1923,7 +1943,7 @@ def main():
             "handle": {"type": "tile_t", "init": t["init"]},
             "hosts": hosts,
             "events": events,
-        }
+        })
         # Carry per-bus address variants from the tile-def JSON so
         # the frontend can cap how many instances of this tile fit on a
         # bus (I2C: one per address) and surface a variant selector when
