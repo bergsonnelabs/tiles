@@ -24,6 +24,7 @@
 #include "auto/ble_gap_aci.h"
 #include "auto/ble_gatt_aci.h"
 #include "auto/ble_hal_aci.h"
+#include "auto/ble_hci_le.h"     /* hci_le_set_scan_response_data */
 #include "ble_defs.h"
 #include "ble_bufsize.h"
 #include "bleplat.h"
@@ -39,6 +40,7 @@
 #include "ble_flash.h"
 #include "bpka.h"
 #include "hw.h"
+#include "ble_studio_link.h"
 
 /* Forward declarations for binary lib functions */
 extern void BleStackCB_Process(void);
@@ -56,7 +58,10 @@ extern void ll_sys_ble_cntrl_init(void *hostCallback);
  * register past the limit). 224 = 8*25 + headroom; the Ring uses 7 (DIS, Battery,
  * System, Motion, Haptics, Audio, Info). */
 #define CFG_BLE_NUM_GATT_ATTRIBUTES  224
-#define CFG_BLE_ATT_VALUE_ARRAY_SIZE 1344
+/* Attribute value storage (each value + ~19 B per 128-bit UUID + CCCDs). The
+ * always-present Studio Link service (ble_update.c) takes ~250 B of it for the
+ * Studio Update characteristic, ~250 more with the scope: raised by 256. */
+#define CFG_BLE_ATT_VALUE_ARRAY_SIZE 1600
 #define CFG_BLE_ATT_MTU_MAX          251
 #define CFG_BLE_MBLOCK_COUNT_MARGIN  0x15
 #define CFG_BLE_COC_NBR_MAX          0
@@ -529,8 +534,32 @@ int ble_app_advertise(const char *name)
 
 
     ret = aci_gap_update_adv_data(pos, adv_data);
+    if (ret != 0) return -1;
 
-    return (ret == 0) ? 0 : -1;
+    /* Scan response: the Studio Link service UUID (ble_studio_link.h,
+     * docs/ble-update-protocol.md §1), so a central can filter on it (Chrome's
+     * Bluetooth chooser does) while the advertising packet keeps the whole
+     * name. That packet is full: Flags (3) + the connection-interval range
+     * that set_discoverable adds (6) + a name of up to 20 characters (22) = 31.
+     * HCI LE Set Scan Response Data (ble_hci_le.h; implemented in the basic
+     * stack library, unlike aci_gap_adv_set_scan_resp_data, which is for
+     * extended advertising sets). ADV_IND is scannable; an active scanner
+     * gets this. Best effort: the device still advertises without it. Nothing
+     * else in the SDK sets scan response data, so nothing is overwritten. */
+    {
+        uint8_t sr[18];
+        sr[0] = 17;                                  /* length: type + 16 */
+        sr[1] = AD_TYPE_128_BIT_SERV_UUID_CMPLT_LIST; /* 0x07 */
+        /* 00005c00-8e22-4541-9d4c-21edae82ed19, little-endian (ble_svc.c make_uuid) */
+        static const uint8_t uuid[16] = { 0x19, 0xED, 0x82, 0xAE, 0xED, 0x21, 0x4C, 0x9D,
+                                          0x41, 0x45, 0x22, 0x8E,
+                                          (uint8_t)(STUDIO_LINK_SERVICE_ID & 0xFFu),
+                                          (uint8_t)(STUDIO_LINK_SERVICE_ID >> 8), 0x00, 0x00 };
+        for (int i = 0; i < 16; i++) sr[2 + i] = uuid[i];
+        (void)hci_le_set_scan_response_data(sizeof(sr), sr);
+    }
+
+    return 0;
 }
 
 /* ============================================================

@@ -5,6 +5,7 @@
  */
 
 #include "core_ble.h"
+#include "ble_studio_link.h"
 #include <stdint.h>
 
 /* Low-level BLE functions (sdk/ble/) */
@@ -97,6 +98,10 @@ static void _register_services(void)
     for (int i = 0; i < CORE_BLE_EXTRA_BUILDERS; i++) {
         if (_extra_builders[i]) _extra_builders[i]();
     }
+    /* Studio Link last, so it never shifts the application's handles. Always
+     * there: it carries the BLE firmware update (ble_update.c), and the scope
+     * when the project uses it. */
+    ble_studio_link_register();
 }
 
 /* ============================================================
@@ -166,6 +171,10 @@ void core_ble_process(void)
         _ble_seq_count++;
         if (_ble_seq_count > 100) _ble_seq_warmup_done = 1;
     }
+
+    /* BLE firmware update: frames received since the last pass (flash work
+     * runs here, in the main loop, never in the BLE event handler). */
+    ble_update_process();
 
     /* Auto re-advertise after disconnect */
     if (ble_need_readvertise && _adv_name) {

@@ -256,6 +256,15 @@ static int nvm_layout_ok(void)
 
 static volatile uint8_t s_ecc_hit;
 
+#if defined(STM32WBA55xx)
+/* The BLE update's reserved page (key + install marker log, page 124 below
+ * core_nvm; docs/ble-update-protocol.md §7.1) can hold a quad-word a power
+ * cut tore just the same. sdk/ble/ble_update.c clears this, reads, checks. */
+#define OTA_PAGE_ADDR    0x080F8000UL
+#define OTA_PAGE_SIZE    8192UL
+volatile uint8_t _core_flash_ecc_ota;
+#endif
+
 /* A double ECC error raises an NMI (it is not a bus fault: the load completes
  * with bad data). Ours are the ones inside the NVM pages, which a torn
  * program can leave behind: note it for the read in progress and return. */
@@ -269,6 +278,13 @@ void NMI_Handler(void)
             s_ecc_hit = 1;
             return;
         }
+#if defined(STM32WBA55xx)
+        if (a >= OTA_PAGE_ADDR && a < OTA_PAGE_ADDR + OTA_PAGE_SIZE) {
+            NVM_FLASH_ECCR = (eccr & ECCR_ECCIE) | ECCR_ECCD;
+            _core_flash_ecc_ota = 1;
+            return;
+        }
+#endif
     }
     for (;;)            /* anything else: what Default_Handler did */
         ;

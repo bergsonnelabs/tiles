@@ -38,9 +38,11 @@
  *
  * Production builds. Define CORE_SCOPE_ENABLED=0 (config.json
  * `"scope": {"enabled": false}`) and every call below compiles to nothing:
- * no flash, no RAM, and no Studio Link service in the GATT table.
+ * no flash, no RAM, and no Studio Scope characteristic in the GATT table
+ * (the Studio Link service itself stays: it carries the BLE firmware update).
  *
- * BLE ordering. On a radio Core the module adds its own GATT service, which
+ * BLE ordering. On a radio Core the module adds its characteristic to Studio
+ * Link (registered by core_ble), which
  * has to happen before the stack starts: make the first core_scope_* call
  * (or core_scope_init()) BEFORE core_ble_init().
  *

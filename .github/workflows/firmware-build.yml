@@ -66,6 +66,8 @@ jobs:
             'tools/test_serial_update.py'
             'tools/gen_serial_update_blob.py'
             'docs/serial-update-protocol.md'
+            'docs/ble-update-protocol.md'
+            'tools/check_ota_boot.py'
             'tests/ble-*/**'
             'tests/val-ble*/**'
             'tests/val-guard-ble/**'
@@ -206,7 +208,8 @@ jobs:
 
       # Serial update: the protocol core (su_core.c, host cc) on a simulated L4 and H5
       # flash, driven by the real host client — including a power cut after
-      # every frame. Then: the flashers still link with -nostdlib on this
+      # every frame — and the W5 BLE update (ota_sim: staging, auth, install
+      # copier, a power cut at every copy operation). Then: the flashers still link with -nostdlib on this
       # toolchain (nothing it runs may live in flash), and the committed blob
       # header was regenerated after the last source change.
       - name: Serial update protocol tests

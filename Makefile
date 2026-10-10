@@ -475,7 +475,8 @@ endif
 #   "scope": { "enabled": false }
 #
 # which compiles every core_scope_* call to nothing: the production-build
-# switch (no flash, no RAM, no Studio Link GATT service). A project that never
+# switch (no flash, no RAM, no Studio Scope characteristic; Studio Link stays
+# for the BLE firmware update). A project that never
 # calls core_scope pays nothing either way: --gc-sections drops the module.
 # `make SCOPE_ENABLED=0` overrides for a local one-off.
 _SCOPE_CFG := $(shell $(PYTHON) -c "import json; c=json.load(open('$(CONFIG_JSON)')); print(0 if (c.get('scope') or {}).get('enabled') is False else 1)" 2>/dev/null || echo 1)
@@ -555,7 +556,14 @@ GEN_OBJS = $(GEN_SOURCES:.c=.o)
 CORE_OBJS = $(BUILD_DIR)/sdk/core/core_led.o $(BUILD_DIR)/sdk/core/core_pdm.o \
             $(BUILD_DIR)/sdk/core/core_stepper.o $(BUILD_DIR)/sdk/core/core_scope.o \
             $(BUILD_DIR)/sdk/core/core_watchdog.o $(BUILD_DIR)/sdk/core/core_nvm.o
-OBJECTS  = $(C_OBJS) $(ASM_OBJS) $(HAL_OBJS) $(CORE_OBJS) $(GEN_OBJS)
+# Link order = flash order. The linker scripts place prebuilt archives (the ST
+# BLE stack, libc, libgcc) first and then every object in the order given here,
+# so the project's own sources go LAST: a small edit to a program then changes
+# only the last few flash pages, which SWD flash and a Bluetooth delta update
+# skip the rest of (tools/page_diff.py measures it). Before them: the SDK, the
+# generated objects (coregen), and the startup file, whose Reset_Handler /
+# Reset_Continue hold the image's layout and so change with every edit anyway.
+OBJECTS  = $(HAL_OBJS) $(CORE_OBJS)
 
 ifeq ($(TILES_ENABLED),1)
   TILES_OBJS = $(addprefix $(BUILD_DIR)/tiles/, $(notdir $(TILES_SOURCES:.c=.o)))
@@ -569,6 +577,8 @@ endif
 ifeq ($(WAMR_ENABLED),1)
   OBJECTS += $(WAMR_ALL_OBJS)
 endif
+
+OBJECTS += $(GEN_OBJS) $(ASM_OBJS) $(C_OBJS)
 
 # ---- Default goal ----
 
@@ -640,6 +650,10 @@ $(TARGET).elf: $(OBJECTS) $(LDSCRIPT)
 	@echo "  LD    $(notdir $@)"
 ifeq ($(BLE_ENABLED),1)
 	$(Q)$(CC) $(OBJECTS) $(BLE_LIBS) $(LDFLAGS) -o $@
+	@# The BLE update's copier must not reach outside flash page 0 / its SRAM
+	@# copy (sdk/ble/ble_update_boot.c): a failure here is a broken install
+	@# path, caught before it ships (docs/ble-update-protocol.md §8.2).
+	$(Q)$(PYTHON) "$(SDK_DIR)tools/check_ota_boot.py" --objdump $(OBJDUMP) $@ || { rm -f $@; exit 1; }
 else
 	$(Q)$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 endif
@@ -738,6 +752,13 @@ $(BUILD_DIR)/sdk/ble/%.o: $(SDK_DIR)sdk/ble/%.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $(notdir $<)"
 	$(Q)$(CC) $(CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers -c $< -o $@
+
+# ble_update.c calls the copier's su_ota_* functions, which run from SRAM
+# (.ota_ram), out of BL range. Plain calls get linker veneers, which ld puts at
+# the end of .text, behind the project's code, so every program edit moved them
+# and changed this file's flash page too. Long calls load the copier's fixed
+# SRAM address instead (see OBJECTS for why the order matters).
+$(BUILD_DIR)/sdk/ble/ble_update.o: CFLAGS += -mlong-calls
 
 # core_ble.c — in sdk/core/ but only compiled for BLE builds
 $(BUILD_DIR)/sdk/core/core_ble.o: $(SDK_DIR)sdk/core/core_ble.c $(GEN_HEADERS)

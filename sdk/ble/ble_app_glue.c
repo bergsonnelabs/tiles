@@ -28,6 +28,9 @@ extern void ble_svc_clear_subscriptions(void);
 
 volatile uint8_t  ble_connected;
 volatile uint16_t ble_conn_handle;
+/* Bumped on every connect and disconnect: ble_update.c drops a link's
+ * authentication and partial frames when it moves. */
+volatile uint32_t ble_link_gen;
 
 /* Debug event log for pairing investigation */
 #define EVT_LOG_SIZE 32
@@ -72,6 +75,7 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
     {
         ble_connected = 0;
         ble_conn_handle = 0xFFFF;
+        ble_link_gen++;
         ble_need_readvertise = 1;
         ble_conn_param_req_pending = 0;
         /* CCCD state belongs to the connection that set it. */
@@ -92,6 +96,7 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
             hci_le_connection_complete_event_rp0 *p_conn =
                 (hci_le_connection_complete_event_rp0 *)p_meta->data;
             if (p_conn->Status == 0) {
+                ble_link_gen++;
                 ble_connected = 1;
                 ble_conn_handle = p_conn->Connection_Handle;
                 ble_conn_param_req_pending = 1;
@@ -105,6 +110,7 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
             hci_le_enhanced_connection_complete_event_rp0 *p_conn =
                 (hci_le_enhanced_connection_complete_event_rp0 *)p_meta->data;
             if (p_conn->Status == 0) {
+                ble_link_gen++;
                 ble_connected = 1;
                 ble_conn_handle = p_conn->Connection_Handle;
                 ble_conn_param_req_pending = 1;

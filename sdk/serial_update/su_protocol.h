@@ -25,7 +25,9 @@
 #define SU_TRIGGER_BAUD         2400u
 
 /* 1: READY has 7 tokens. 2 (Core.ST.H5): READY appends the largest image the
- * flasher accepts, in bytes, so the host needs no per-chip table. */
+ * flasher accepts, in bytes, so the host needs no per-chip table. 3 (Core.ST.W5
+ * over BLE, SU_STAGING): READY also appends the board-key state and id; see
+ * docs/ble-update-protocol.md. */
 #ifndef SU_PROTOCOL_VERSION
 #define SU_PROTOCOL_VERSION     1u
 #endif
@@ -57,6 +59,20 @@
 #define SU_T_END                'E'   /* verify, write page 0, reset into the new image */
 #define SU_T_ABORT              'X'   /* reset now (old app if page 0 intact) */
 
+/* Staging mode (SU_STAGING, the BLE update on Core.ST.W5): the running app
+ * receives the image into free flash above itself; nothing is erased under it
+ * and nothing resets until the image is verified. Spec: docs/ble-update-protocol.md.
+ * The flashers build with SU_STAGING 0 and are unchanged by it. */
+#ifndef SU_STAGING
+#define SU_STAGING              0
+#endif
+#define SU_T_CHALLENGE          'C'   /* staging: → "SU NONCE <32 hex>" */
+#define SU_T_AUTH               'A'   /* staging: payload = 16-byte CMAC tag */
+#define SU_T_SAME               'S'   /* staging: arg0 = offset, arg1 = length, no payload:
+                                         these image bytes equal the running image's */
+#define SU_SAME_MAX             8192u /* longest S run, bytes */
+#define SU_KEY_BYTES            16u
+
 /* ---- Core → host replies ----
  *
  * One ASCII line per frame, each shorter than one 64-byte USB packet:
@@ -74,6 +90,12 @@
 #define SU_ERR_CRC              7u    /* chunk CRC mismatch (resend it) */
 #define SU_ERR_IMAGE_CRC        8u    /* whole-image CRC mismatch at END */
 #define SU_ERR_STATE            9u    /* frame not valid in this state */
+/* Staging mode only: */
+#define SU_ERR_NOKEY            10u   /* no board key provisioned */
+#define SU_ERR_AUTH             11u   /* authentication tag wrong (nonce spent) */
+#define SU_ERR_NOAUTH           12u   /* frame needs a successful A on this link */
+#define SU_ERR_MAC              13u   /* image end tag wrong at END */
+#define SU_ERR_RNG              14u   /* no nonce: RNG fault */
 
 /* The top of flash kept for core_nvm (its last two 2 KB pages on the L4,
  * sdk/core/core_nvm.h; on the H5 the last two 8 KB sectors, which core_nvm
