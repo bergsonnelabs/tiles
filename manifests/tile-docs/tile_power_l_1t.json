@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@afe442f",
+  "source": "tiles@cf79665",
   "file": "tile_power_l_1t.h",
   "brief": "Li-Ion charge controller driver for the Power.L.1T tile (rev b).",
   "description": "Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge\ncontroller with programmable 1.8 V LDO output and 12-bit ADC for\nbattery and system monitoring.\n\nKey specifications:\n  - Charge input:     3.4–5.5 V (VUVLO / VOVP), input limit 50–600 mA\n  - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)\n  - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V\n                      programmable, 100 mA max (datasheet 7.3 ILDO)\n  - ADC:              12-bit, 6 input channels\n  - Charge current:   1.25–500 mA programmable\n  - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)\n\nTile wiring that matters to firmware (Power-L-1T-b schematic):\n  - I²C only answers on battery when LP (pad 2) is driven > 1.35 V; with\n    LP low (its 900 kΩ default) and no SUPPLY+, the chip is in low-power\n    mode with I²C and the ADC off. With SUPPLY+ present LP has no effect.\n  - GND (pad 1) is a SWITCHED ground: an SI8806 N-FET joins it to\n    BATT-/SUPPLY- (pads 6/9), its gate fed from V+ through 220 kΩ. SW\n    (pad 3) to ground, LDO disabled, PMID off or ship mode all open it.\n  - IMAX = 10 kΩ (no hardware charge-current cap below 500 mA).\n  - /CE, /MR, /PG and INT are not routed (/CE's internal pull-down keeps\n    charging enabled).\n\nDatasheet: https://www.bergsonne.io/tiles/power/l1t\nIC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf\n\n@studio tile label=Power.L.1T icon=☷\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Battery NTC / JEITA\"\n  Hardware-gated (not a driver gap). The BQ25150 can pause or derate\n  charging from a battery thermistor on TS, but Power-L-1T-b straps TS to\n  a fixed 5 kΩ resistor (the datasheet's \"TS not used\" connection), which\n  reads a constant ~0.40 V: always the normal band. Battery temperature is\n  therefore NOT monitored; set_ts_* and set_ts_enabled have no practical\n  effect. The chip's die thermal foldback (80 °C) still applies.\n\n@studio unsupported severity=advanced category=\"MR button + INT pin handling\"\n  The chip's MR (push-button) and INT (interrupt) pins aren't\n  routed to tile pads on the current revision — nothing for a\n  Core GPIO to attach to. Closing this gap requires a tile\n  hardware revision that routes at least INT to a connector\n  pad. Until then, MASK0–3 / MRCTRL register writes have no\n  external effect.",
@@ -32,7 +32,7 @@
     },
     {
       "name": "TILE_POWER_L_1T_VERSION_MINOR",
-      "value": "3",
+      "value": "4",
       "description": "",
       "section": ""
     },
@@ -537,7 +537,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the LDO output voltage.",
-      "description": "VLDO = 600 + code × 100 mV (rounded down). Values clamp to\n600–3700 mV.\n\nchanged when the EN_LS_LDO ... have disabled the output\". This call\nwrites the code without disabling the LDO, so a change made while\nV+ is on may not apply until the LDO is next disabled and enabled.\nV+ also drives the pad 1 ground switch gate (SI8806, VGS(th) up to\n1.0 V, RDS(on) specified from 1.8 V): below ~1.8 V the downstream\nground is not reliably closed.",
+      "description": "VLDO = 600 + code × 100 mV (rounded down). Values clamp to\n600–3700 mV.\n\nTakes effect with the output on. The datasheet (8.3.5) says the\nvoltage \"can only be changed when the EN_LS_LDO ... have disabled the\noutput\", but a bench test on 2026-10-10 (Core.ST.W5 powered from V+,\nVDD read through VREFINT) saw V+ step from 1.8 V to 3.3 V on this\nwrite alone. Disabling first is not an option when the Core runs\nfrom V+: it would power the Core down mid-sequence.\n\nThe register resets to 1.8 V whenever the BQ25150 resets (power\nloss, MR long press), so set it on every boot, before initializing\nany tile that needs the higher rail (Sense.TOF needs 2.7 V min).\n\n1.0 V, RDS(on) specified from 1.8 V): below ~1.8 V the downstream\nground is not reliably closed.",
       "name": "tile_power_l_1t_set_ldo_voltage_mv"
     },
     {
@@ -791,7 +791,7 @@
     }
   ],
   "source_file": "tile_power_l_1t.h",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "tile_family": "Power",
   "tile_name": "L.1T",
   "display_name": "Power.L.1T",
@@ -823,6 +823,20 @@
       ],
       "unit": "mA",
       "default": 100
+    },
+    {
+      "label": "Output voltage",
+      "tier": "basic",
+      "scope": "config",
+      "function": "set_ldo_voltage_mv",
+      "param": "mv",
+      "kind": "number",
+      "range": [
+        0.6,
+        3.7
+      ],
+      "unit": "V",
+      "default": 1800
     },
     {
       "label": "Charge the battery",

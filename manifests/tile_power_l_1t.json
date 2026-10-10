@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@afe442f",
+  "source": "tiles@cf79665",
   "tile": "Power.L.1T",
   "palette": {
     "label": "Power.L.1T",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_power_l_1t",
     "header": "tile_power_l_1t.h",
-    "version": "3.3.0"
+    "version": "3.4.0"
   },
   "handle": {
     "type": "tile_t",
@@ -394,6 +394,17 @@
         }
       ],
       "returns": "void",
+      "controls": [
+        {
+          "param": "mv",
+          "label": "Output voltage",
+          "tier": "basic",
+          "scope": "config",
+          "scale": 0.001,
+          "display_unit": "V",
+          "default": 1800
+        }
+      ],
       "receiver": "tile_t*"
     },
     {

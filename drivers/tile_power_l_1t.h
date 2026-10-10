@@ -77,7 +77,7 @@
 /* -------------------------------------------------------------- */
 
 #define TILE_POWER_L_1T_VERSION_MAJOR  3
-#define TILE_POWER_L_1T_VERSION_MINOR  3
+#define TILE_POWER_L_1T_VERSION_MINOR  4
 #define TILE_POWER_L_1T_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -481,15 +481,23 @@ typedef enum {
  * VLDO = 600 + code × 100 mV (rounded down). Values clamp to
  * 600–3700 mV.
  *
- * @warning The datasheet (8.3.5) says the output voltage "can only be
- * changed when the EN_LS_LDO ... have disabled the output". This call
- * writes the code without disabling the LDO, so a change made while
- * V+ is on may not apply until the LDO is next disabled and enabled.
- * V+ also drives the pad 1 ground switch gate (SI8806, VGS(th) up to
+ * Takes effect with the output on. The datasheet (8.3.5) says the
+ * voltage "can only be changed when the EN_LS_LDO ... have disabled the
+ * output", but a bench test on 2026-10-10 (Core.ST.W5 powered from V+,
+ * VDD read through VREFINT) saw V+ step from 1.8 V to 3.3 V on this
+ * write alone. Disabling first is not an option when the Core runs
+ * from V+: it would power the Core down mid-sequence.
+ *
+ * The register resets to 1.8 V whenever the BQ25150 resets (power
+ * loss, MR long press), so set it on every boot, before initializing
+ * any tile that needs the higher rail (Sense.TOF needs 2.7 V min).
+ *
+ * @warning V+ also drives the pad 1 ground switch gate (SI8806, VGS(th) up to
  * 1.0 V, RDS(on) specified from 1.8 V): below ~1.8 V the downstream
  * ground is not reliably closed.
  *
  * @studio expose category=tile name=set_ldo_voltage_mv section=config
+ * @studio control mv label="Output voltage" tier=basic default=1800 scale=0.001 unit=V
  * @param  mv    [600..3700] mV Target LDO voltage.
  */
 void tile_power_l_1t_set_ldo_voltage_mv(tile_t* tile, uint16_t mv);
