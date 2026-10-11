@@ -15,7 +15,7 @@
  * Contexts: the characteristic's write callback runs in the BLE host task
  * (ble_svc.c) — it only copies bytes into `rx`. Frames are handled from
  * ble_update_process(), called by core_ble_process() in the main loop, where
- * the flash work may block on radio windows (ble_flash.c).
+ * the flash work may block on radio windows (wpan_flash.c).
  */
 
 #include <stdint.h>
@@ -31,7 +31,7 @@
 #include "../serial_update/su_core.c"
 #include "../serial_update/su_cmac.c"
 
-#include "ble_flash.h"
+#include "wpan_flash.h"
 #include "ble_studio_link.h"
 #include "core_timing.h"
 #include "ll_rcc.h"
@@ -73,7 +73,7 @@ static const uint8_t *volatile s_flash_image_end = __flash_image_end;
 #define REBOOT_RESET_MS      500u
 
 /* ============================================================
- * Flash (the app side): radio-safe windows through ble_flash
+ * Flash (the app side): radio-safe windows through wpan_flash
  * ============================================================ */
 
 /* The ICACHE (on in BLE builds) also caches data reads of flash: invalidate
@@ -104,23 +104,23 @@ static int writable(uint32_t off, uint32_t len)
 
 static int fl_erase(uint32_t page)
 {
-    if (!ble_flash_ready() || !writable(page * SU_OTA_PAGE, SU_OTA_PAGE)) return -1;
+    if (!wpan_flash_ready() || !writable(page * SU_OTA_PAGE, SU_OTA_PAGE)) return -1;
     ll_iwdg_refresh();
-    int rc = ble_flash_erase_page(page);
+    int rc = wpan_flash_erase_page(page);
     icache_invalidate();
     return rc;
 }
 
 static int fl_program(uint32_t off, const uint8_t *src, uint32_t len)
 {
-    if (!ble_flash_ready() || (off & 15u) || (len & 15u) || !writable(off, len)) return -1;
+    if (!wpan_flash_ready() || (off & 15u) || (len & 15u) || !writable(off, len)) return -1;
     uint32_t buf[64];                                /* 256 B, word aligned for FM_Write */
     int rc = 0;
     while (len && rc == 0) {
         uint32_t n = len < sizeof(buf) ? len : (uint32_t)sizeof(buf);
         uint8_t *b = (uint8_t *)buf;
         for (uint32_t i = 0; i < n; i++) b[i] = src[i];
-        rc = ble_flash_program(FLASH_BASE_ADDR + off, buf, n / 4u);
+        rc = wpan_flash_program(FLASH_BASE_ADDR + off, buf, n / 4u);
         off += n;
         src += n;
         len -= n;

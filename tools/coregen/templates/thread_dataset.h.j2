@@ -1,0 +1,26 @@
+/**
+ * thread_dataset.h — GENERATED from config.json's "thread" block. Do not edit.
+ *
+ * Regenerate with `make generate`. The Thread network every node built from
+ * this config joins (sdk/core/core_thread.c). DEVELOPMENT ONLY: a fixed
+ * network with no commissioning, so anyone holding this config (or these
+ * bytes) can join it and read its traffic.
+{% if thread.default_key %}
+ *
+ * The network key is the SDK's well-known development default: set
+ * "network_key" in config.json to 32 hex digits of your own.
+{% endif %}
+ */
+#ifndef THREAD_DATASET_H
+#define THREAD_DATASET_H
+
+#define THREAD_CFG_ROLE_FTD           1
+#define THREAD_CFG_CHANNEL            {{ thread.channel }}
+#define THREAD_CFG_PANID              0x{{ '%04X' % thread.panid }}
+#define THREAD_CFG_NETWORK_NAME       "{{ thread.network_name }}"
+#define THREAD_CFG_NETWORK_KEY        { {% for b in thread.network_key %}0x{{ '%02x' % b }}{{ ', ' if not loop.last }}{% endfor %} }
+#define THREAD_CFG_EXT_PANID          { {% for b in thread.ext_panid %}0x{{ '%02x' % b }}{{ ', ' if not loop.last }}{% endfor %} }
+/* {{ thread.mesh_local_prefix_str }} */
+#define THREAD_CFG_MESH_LOCAL_PREFIX  { {% for b in thread.mesh_local_prefix %}0x{{ '%02x' % b }}{{ ', ' if not loop.last }}{% endfor %} }
+
+#endif /* THREAD_DATASET_H */

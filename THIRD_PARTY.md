@@ -2,11 +2,12 @@
 
 Most of tiles is Bergsonne's own code. The exceptions are STMicroelectronics
 components (and the Synopsys and OpenThread headers ST ships with them) used
-by the Core.ST.W5 (STM32WBA55) radio support. They live in two folders:
+by the Core.ST.W5 (STM32WBA55) radio support. They live in three folders:
 
 - `sdk/wpan/`: the 2.4 GHz radio plumbing any ST link-layer protocol needs
   (link layer, sequencer, timer server, flash manager, memory managers).
 - `sdk/ble/`: the Bluetooth LE host stack and its glue.
+- `sdk/thread/`: OpenThread (ST's prebuilt Thread libraries) and its glue.
 
 They keep their original copyright headers (files changed for tiles are
 marked `tiles:` where they differ), and are distributed under the terms below,
@@ -19,8 +20,11 @@ folder its license. ST's STM32_WPAN license file (its bill of materials and
 the full SLA0044 text, which applies to the component outside the Cube
 package) is reproduced verbatim next to the code, as
 [`sdk/wpan/LICENSE-ST.txt`](sdk/wpan/LICENSE-ST.txt) and
-[`sdk/ble/LICENSE-ST.txt`](sdk/ble/LICENSE-ST.txt): the "LICENSE file" the
-ST file headers refer to.
+[`sdk/ble/LICENSE-ST.txt`](sdk/ble/LICENSE-ST.txt) and
+[`sdk/thread/LICENSE-ST.txt`](sdk/thread/LICENSE-ST.txt): the "LICENSE file"
+the ST file headers refer to. The OpenThread and Mbed TLS license texts sit
+next to their libraries as [`sdk/thread/LICENSE-OpenThread.txt`](sdk/thread/LICENSE-OpenThread.txt)
+and [`sdk/thread/LICENSE-mbedtls.txt`](sdk/thread/LICENSE-mbedtls.txt).
 
 | Component (CubeWBA origin) | Files in tiles | License |
 |---|---|---|
@@ -31,11 +35,20 @@ ST file headers refer to.
 | Application modules and glue (`Projects/Common/WPAN`, `Projects/*/Applications`) | `sdk/wpan/advanced_memory_manager.{c,h}`, `stm32_mm.{c,h}`, `flash_manager.{c,h}`, `flash_driver.{c,h}`, `rf_timing_synchro.{c,h}`, `ll_sys_if.c`, `linklayer_plat.c`, `power_table.c`; `sdk/ble/host_stack_if.{c,h}`, `sdk/ble/include/bpka.h`, `sdk/ble/include/ble_timer.h` | ST SLA (below) |
 | Adapted from ST sources | `sdk/ble/include/ble_common.h` | ST SLA (below) |
 | Utilities: sequencer and timer server (`Utilities/sequencer`, `Utilities/tim_serv`) | `sdk/wpan/stm32_seq.{c,h}`, `sdk/wpan/stm32_timer.{c,h}` | BSD-3-Clause (below) |
+| STM32_WPAN: Link Layer, Thread variant (`Middlewares/ST/STM32_WPAN/link_layer`) | `sdk/wpan/lib/LinkLayer_Thread_lib.a`; `sdk/wpan/link_layer/config/thread/ll_fw_config.h` (and `config/ble/ll_fw_config.h`, the BLE one, moved from `link_layer/inc/`) | ST SLA (below) |
+| OpenThread stack, prebuilt by ST (`Middlewares/ST/STM32_WPAN/thread/openthread/openthread_lib`, OpenThread 4a0d6b7, Thread 1.3) | `sdk/thread/lib/stm32wba_ot_ftd_lib.a` | BSD-3-Clause, The OpenThread Authors ([`sdk/thread/LICENSE-OpenThread.txt`](sdk/thread/LICENSE-OpenThread.txt)); ST's STM32_WPAN bill of materials lists the OpenThread stack as BSD-3-Clause |
+| OpenThread public headers (`.../openthread/stack/include/openthread`) | `sdk/thread/include/openthread/**` | BSD-3-Clause, notice in each file |
+| Mbed TLS with ST's hardware alt modules, prebuilt by ST (`.../openthread/openthread_lib/stm32wba_mbedtls_ftd_lib.a`) | `sdk/thread/lib/stm32wba_mbedtls_ftd_lib.a` | Apache-2.0 (Arm Limited, STMicroelectronics; [`sdk/thread/LICENSE-mbedtls.txt`](sdk/thread/LICENSE-mbedtls.txt); `Package_license.md`: mbedTLS and mbedTLS-alt, Apache-2.0) |
+| OpenThread configuration (`.../openthread/config`) | `sdk/thread/config/stm32wba-openthread-ftd-config.h`, `openthread_api_config_ftd.h` | ST SLA (below) |
+| Adapted from ST's OpenThread platform (`.../openthread/platform`) | `sdk/thread/thread_alarm.c` (alarm.c), `thread_settings.c` (the RAM store of flash.c) | ST SLA (below) |
+| Adapted from ST's OpenThread platform, BSD-3-Clause files (`.../openthread/platform/system.c`, `misc.c`, `entropy_renamed.c`) | `sdk/thread/thread_platform.c` | BSD-3-Clause, notices in the file header |
 
 (`.h` files listed with a `.c` sit in that folder's `include/`.) Everything
 else in `sdk/wpan/` and `sdk/ble/` (for example `hw_aes.c`, `hw_rng.c`,
-`stm32_timer_if.c`, `ble_app.c`, `ble_glue.c`, `ble_flash.c`, `nvm_stub.c`)
-is Bergsonne's.
+`stm32_timer_if.c`, `wpan_sys.c` (was `ble_glue.c`), `wpan_flash.c` (was
+`ble_flash.c`), `ble_app.c`, `nvm_stub.c`) is Bergsonne's, and so are
+`sdk/thread/thread_app.c`, `thread_crypto_hal.c` (written against the
+interface of ST's HAL, no ST code) and `sdk/core/core_thread.{c,h}`.
 
 ---
 

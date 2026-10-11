@@ -242,6 +242,11 @@
     "nvm.otp": {
       "status": "none",
       "note": "The STM32H523 has an OTP area; core_otp does not map it yet (size 0, reads return an error)"
-    }
+    },
+    "thread.network": "na",
+    "thread.udp": "na",
+    "thread.diag": "na",
+    "thread.settings": "na",
+    "thread.commissioning": "na"
   }
 }

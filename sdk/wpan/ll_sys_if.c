@@ -30,7 +30,9 @@
 
 /* Private function prototypes */
 static void ll_sys_sleep_clock_source_selection(void);
+#if defined(BLE)
 static uint8_t ll_sys_BLE_sleep_clock_accuracy_selection(void);
+#endif
 
 /* ============================================================
  * Link Layer background process management
@@ -70,6 +72,7 @@ void ll_sys_config_params(void)
     ll_intf_cmn_select_tx_power_table(CFG_RF_TX_POWER_TABLE_ID);
 }
 
+#if defined(BLE)
 /* ============================================================
  * Sleep clock accuracy
  * ============================================================ */
@@ -89,6 +92,7 @@ static uint8_t ll_sys_BLE_sleep_clock_accuracy_selection(void)
         return STM32WBA5x_DEFAULT_SCA_RANGE;
     }
 }
+#endif /* BLE */
 
 /* ============================================================
  * Sleep clock source selection
@@ -121,8 +125,11 @@ static void ll_sys_sleep_clock_source_selection(void)
 }
 
 /* ============================================================
- * Link Layer reset
+ * Link Layer reset — BLE: the BLE link layer calls it (HCI reset); the
+ * Thread library has no ll_sys_config_BLE_schldr_timings and never calls it.
  * ============================================================ */
+
+#if defined(BLE)
 
 void ll_sys_reset(void)
 {
@@ -159,3 +166,4 @@ void ll_sys_reset(void)
         ll_sys_config_BLE_schldr_timings(drift_time, exec_time);
     }
 }
+#endif /* BLE */

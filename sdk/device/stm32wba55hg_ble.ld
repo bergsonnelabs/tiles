@@ -9,8 +9,10 @@
  *                                        (docs/ble-update-protocol.md §7)
  *   0x080FA000-0x080FDFFF  pages 125-126  core_nvm flash emulation (core_nvm.h)
  *   0x080FE000-0x080FFFFF  page 127       BLE bond store (sdk/ble/nvm_stub.c)
- * Both scripts (BLE and not) reserve all of them, so switching a project's
- * BLE setting never overwrites any. */
+ * Every W5 script (plain, BLE, Thread) reserves all of them, so switching a
+ * project's radio setting never overwrites any. Thread builds also reserve
+ * pages 122-123 for the OpenThread settings (stm32wba55hg_thread.ld); this
+ * script does not use them. */
 
 MEMORY
 {

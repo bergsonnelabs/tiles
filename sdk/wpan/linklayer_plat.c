@@ -20,7 +20,7 @@
    Needed by DelayUs for cycle counting. */
 extern uint32_t SystemCoreClock;
 
-/* Forward decl — provided by LinkLayer_BLE_Basic_lib.a */
+/* Forward decl — provided by the link-layer library (BLE or Thread) */
 extern uint32_t ll_intf_cmn_get_slptmr_value(void);
 
 /* HW_RNG_Get — provided by hw_rng.c (sdk/stm/) */
@@ -51,7 +51,7 @@ static inline uint32_t _nvic_get_active(uint32_t irqn)
     return (*iabr >> (irqn & 0x1F)) & 1UL;
 }
 
-/* ---- 2.4GHz RADIO ISR callbacks (defined in ble_irq.c) ---- */
+/* ---- 2.4GHz RADIO ISR callbacks (defined in wpan_irq.c) ---- */
 extern void (*radio_callback)(void);
 extern void (*low_isr_callback)(void);
 extern volatile uint8_t radio_sw_low_isr_is_running_high_prio;
@@ -419,14 +419,19 @@ void LINKLAYER_PLAT_SCHLDR_TIMING_UPDATE_NOT(Evnt_timing_t *p_evnt_timing)
  * Device identification
  * ============================================================ */
 
+/* UID64 at 0x0BF90A00 (CubeWBA stm32wba55xx.h UID64_BASE = FLASH_ENGY_BASE
+ * 0x0BF90500 + 0x500): word 0 the device number, word 1 [31:8] ST's company
+ * ID (0x0080E1). As ST's LL_FLASH_GetUDN / LL_FLASH_GetSTCompanyID. These
+ * used to read 0x0BFA07xx, which is unmapped: OpenThread's EUI-64 read
+ * (otPlatRadioGetIeeeEui64) bus-faulted during otInstanceInit. */
+#define WPAN_UID64_BASE  0x0BF90A00UL
+
 uint32_t LINKLAYER_PLAT_GetSTCompanyID(void)
 {
-    /* UID96[95:64] at 0x0BFA0700 — company ID in lower 24 bits */
-    return *(volatile uint32_t *)0x0BFA0700UL & 0x00FFFFFFUL;
+    return (*(volatile uint32_t *)(WPAN_UID64_BASE + 4UL) >> 8) & 0x00FFFFFFUL;
 }
 
 uint32_t LINKLAYER_PLAT_GetUDN(void)
 {
-    /* UID96[63:32] at 0x0BFA0704 */
-    return *(volatile uint32_t *)0x0BFA0704UL;
+    return *(volatile uint32_t *)WPAN_UID64_BASE;
 }

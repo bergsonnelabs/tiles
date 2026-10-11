@@ -689,6 +689,42 @@
           "desc": "Scanning and GATT-client connections. Not implemented — peripheral role only."
         }
       ]
+    },
+    {
+      "id": "thread",
+      "name": "Thread",
+      "features": [
+        {
+          "id": "thread.network",
+          "layer": "Core",
+          "name": "network (fixed dataset)",
+          "desc": "Join or form a Thread network as a full, router-capable device (FTD), from credentials in config.json. Development only: no commissioning."
+        },
+        {
+          "id": "thread.udp",
+          "layer": "Core",
+          "name": "UDP send / broadcast / receive",
+          "desc": "Open UDP ports with a receive callback; unicast to an IPv6 address and realm-local multicast (ff03::1) to every node."
+        },
+        {
+          "id": "thread.diag",
+          "layer": "Core",
+          "name": "role + link diagnostics",
+          "desc": "Role and role-change callback, RLOC16, extended address, partition ID, neighbour count, parent RSSI."
+        },
+        {
+          "id": "thread.settings",
+          "layer": "Core",
+          "name": "settings in flash",
+          "desc": "OpenThread's settings (dataset, frame counters, network info) persisted in two reserved flash pages, power-loss safe."
+        },
+        {
+          "id": "thread.commissioning",
+          "layer": "Core",
+          "name": "commissioning (joiner / commissioner)",
+          "desc": "Joining a network with a PSKd through a commissioner. Not implemented: needs ECC (PKA) and a UI for the credentials."
+        }
+      ]
     }
   ]
 }

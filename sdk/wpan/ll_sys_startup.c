@@ -16,20 +16,25 @@
   ******************************************************************************
   */
 
-#ifndef BLE
-#define BLE  /* Enable BLE code path */
-#endif
+/* tiles: the BLE path is compiled when the build defines BLE (BLE_ENABLED
+ * builds pass -DBLE=1); Thread builds use ll_sys_thread_init() only. ST's
+ * MAC-only path (ll_sys_mac_cntrl_init) needs the 802.15.4 MAC library and is
+ * never built here. */
 
 #include "ll_fw_config.h"
 #include "ll_sys.h"
 #include "ll_intf.h"
 #include "common_types.h"
 
-/* Defined in ble_glue.c */
+#ifdef BLE
+/* Defined in wpan_sys.c */
 extern uint8_t missed_hci_event_flag;
+#endif
 
+#ifdef BLE
 /* Pre-init power table before ll_intf_init to prevent db_reset crash */
 extern void ll_tx_pwr_if_tx_power_params_init(void);
+#endif
 
 static void ll_sys_dependencies_init(void);
 #ifdef BLE
@@ -62,7 +67,7 @@ void ll_sys_ble_cntrl_init(hst_cbk hostCallback)
   ll_sys_dependencies_init();
 }
 #endif /* BLE */
-#if defined(MAC) && (SUPPORT_OPENTHREAD_1_2 == 0)
+#if defined(MAC) && (SUPPORT_OPENTHREAD_1_2 == 0) && !defined(OPENTHREAD_FTD) && !defined(OPENTHREAD_MTD)
 /**
   * @brief  Initialize the Link Layer IP 802.15.4 MAC controller
   * @param  None

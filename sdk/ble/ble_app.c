@@ -37,7 +37,7 @@
 #include "svc_ctl.h"
 #include "ll_sys.h"
 #include "ll_sys_if.h"
-#include "ble_flash.h"
+#include "wpan_flash.h"
 #include "bpka.h"
 #include "hw.h"
 #include "ble_studio_link.h"
@@ -328,10 +328,10 @@ void ble_app_init(void)
     /* 4. Initialize timer server */
     UTIL_TIMER_Init();
 
-    /* 4b. Flash manager (ble_flash.c): from here on core_nvm and the bond
+    /* 4b. Flash manager (wpan_flash.c): from here on core_nvm and the bond
      *     store erase and program flash through it, in radio-safe windows
-     *     once the stack is up (ble_flash_ll_started, below). */
-    ble_flash_init();
+     *     once the stack is up (wpan_flash_ll_started, below). */
+    wpan_flash_init();
 
     /* 5. Initialize link layer controller
      *    ll_sys_ble_cntrl_init calls ll_sys_bg_process_init and
@@ -470,7 +470,7 @@ void ble_app_init(void)
     if (_register_services_cb) _register_services_cb();
 
     /* The link layer runs: flash access now waits for time windows. */
-    ble_flash_ll_started();
+    wpan_flash_ll_started();
 
     ble_init_done = 1;
 }

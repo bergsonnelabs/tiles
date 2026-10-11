@@ -1,5 +1,8 @@
 /**
- * ble_irq.c — BLE radio interrupt handlers for STM32WBA55
+ * wpan_irq.c — 2.4 GHz radio interrupt handlers for STM32WBA55 (BLE and Thread)
+ *
+ * Formerly sdk/ble/ble_irq.c (unchanged code; it keeps ble_irq's place in the
+ * BLE link order, see the Makefile).
  *
  * RADIO_IRQHandler (IRQ 66) — high-priority radio ISR
  * HASH_IRQHandler  (IRQ 61) — repurposed as software low-priority radio ISR
