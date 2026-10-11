@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@d57b3eb",
+  "source": "tiles@dda49b6",
   "category": "ble",
   "label": "Core.BLE",
   "icon": "ᛒ",
@@ -257,7 +257,7 @@
       "name": "core_ble_set_value",
       "signature": "core_ble_set_value(core_ble_char_t ch, const void * data, uint16_t len)",
       "returns": "int",
-      "brief": "Update a characteristic's value. For readable characteristics, this is what the central will read. For notify characteristics, call core_ble_notify() after to push the update.",
+      "brief": "Update a characteristic's value. For readable characteristics this is what the central reads. For notify characteristics the stack also sends the new value to a subscribed central in the same call: there is nothing else to do (core_ble_notify() is a no-op kept for source compatibility).",
       "params": [
         {
           "name": "ch",
@@ -279,7 +279,7 @@
       "name": "core_ble_notify",
       "signature": "core_ble_notify(core_ble_char_t ch)",
       "returns": "int",
-      "brief": "Send a notification to the connected central. The central must have enabled notifications (CCCD) for this to work. Sends the current value set by core_ble_set_value().",
+      "brief": "Kept for source compatibility: does nothing and returns 0. core_ble_set_value() already notifies a subscribed central.",
       "params": [
         {
           "name": "ch",
