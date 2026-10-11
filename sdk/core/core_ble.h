@@ -204,16 +204,19 @@ core_ble_char_t core_ble_add_char_sig(core_ble_svc_t svc,
  * ============================================================ */
 
 /**
- * Update a characteristic's value. For readable characteristics,
- * this is what the central will read. For notify characteristics,
- * call core_ble_notify() after to push the update.
+ * Update a characteristic's value. For readable characteristics this is what
+ * the central reads. For notify characteristics the stack also sends the new
+ * value to a subscribed central in the same call: there is nothing else to
+ * do (core_ble_notify() is a no-op kept for source compatibility).
+ *
+ * @return 0 on success, -1 when the stack could not take the update (its TX
+ *         queue is full): keep the data and call again on a later pass.
  */
 int core_ble_set_value(core_ble_char_t ch, const void *data, uint16_t len);
 
 /**
- * Send a notification to the connected central.
- * The central must have enabled notifications (CCCD) for this to work.
- * Sends the current value set by core_ble_set_value().
+ * Kept for source compatibility: does nothing and returns 0.
+ * core_ble_set_value() already notifies a subscribed central.
  */
 int core_ble_notify(core_ble_char_t ch);
 
