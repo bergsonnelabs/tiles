@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@d57b3eb",
+  "source": "tiles@67d1ea0",
   "subsystems": [
     {
       "id": "adc",
@@ -607,6 +607,51 @@
         {
           "title": "No stall, fault or limit-switch inputs",
           "brief": "Drivers' nFAULT / ALM outputs and end-stop switches are left to the application (core_pad_on_change + core_stepper_halt).",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "name": "Thread — 802.15.4 mesh networking (OpenThread)",
+      "header": "core_thread.h",
+      "page": "/docs/sdk/thread",
+      "category": "thread",
+      "gaps": [
+        {
+          "title": "No DSL blocks for Thread",
+          "brief": "Thread is C-only (Tier 1) for now, like BLE: no palette blocks, no twin. The role and UDP callbacks need the host-call ABI to grow first.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "No commissioning (fixed development network)",
+          "brief": "Every node built from the same config.json joins the same network with the same network key; there is no joiner / commissioner yet. Development only.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
+          "title": "BLE and Thread not in the same build",
+          "brief": "A build enables one radio protocol: BLE + Thread (ST's concurrent link layer) comes in a later milestone. The build stops with an error if both are enabled.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "FTD only: no sleepy end devices (MTD / SED)",
+          "brief": "The device is always a full Thread device with its receiver on; battery end devices that sleep between polls are deferred.",
+          "tier": 1,
+          "value": "M"
+        },
+        {
+          "title": "No ECC (PKA): ECJPAKE, ECDSA, DTLS unavailable",
+          "brief": "The prebuilt mbedTLS calls the ST HAL for the PKA; the SDK answers those calls with an error, so commissioning, SRP client keys and CoAP secure fail. AES (MAC and MLE security) runs on the AES peripheral.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "No CoAP / SRP / DNS / border routing wrappers",
+          "brief": "Present in the OpenThread library and callable through core_thread_instance() and the OpenThread headers, but not wrapped.",
           "tier": 1,
           "value": "L"
         }

@@ -189,6 +189,23 @@
     "i3c.private": "na",
     "i3c.ibi": "na",
     "i3c.tiles": "na",
-    "i3c.hdr": "na"
+    "i3c.hdr": "na",
+    "thread.network": {
+      "status": "verified",
+      "note": "Bench 2026-10-11 (tests/hw-thread, three Core.ST.W5 at 1.8 V and 3.3 V): formed a network, joined, merged partitions, multi-hop via a router, recovered from a lost router and a lost leader. OpenThread FTD from STM32CubeWBA 1.6.1, fixed dataset."
+    },
+    "thread.udp": {
+      "status": "verified",
+      "note": "Bench 2026-10-11 (tests/hw-thread): ff03::1 broadcast once a second between three nodes, 45 of 46 received on a two-node link."
+    },
+    "thread.diag": {
+      "status": "verified",
+      "note": "Bench 2026-10-11 (tests/hw-thread): role, rloc16, partition, neighbor count and parent RSSI read back over SWD on three nodes."
+    },
+    "thread.settings": {
+      "status": "partial",
+      "note": "Bench 2026-10-11 (tests/hw-thread): settings snapshots are written to flash pages 122-123 (count observed) after the stm32_timer_if long-timeout fix. Restoring the network from flash after a reboot is not yet shown, nor the interaction with BLE update staging."
+    },
+    "thread.commissioning": "none"
   }
 }

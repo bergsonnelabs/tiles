@@ -1,5 +1,5 @@
 /**
- * ble_flash.c — ST's flash manager wired into the SDK (see ble_flash.h)
+ * wpan_flash.c — ST's flash manager wired into the SDK (see wpan_flash.h)
  *
  * The same setup ST's CubeWBA applications do in app_entry.c
  * (APPE_FLASH_MANAGER_Init, FM_ProcessRequest, the RFTS bypass switch), plus
@@ -9,7 +9,7 @@
  */
 
 #include <stdint.h>
-#include "ble_flash.h"
+#include "wpan_flash.h"
 #include "flash_manager.h"
 #include "flash_driver.h"
 #include "stm32_seq.h"
@@ -39,7 +39,7 @@ void FM_ProcessRequest(void)
     UTIL_SEQ_SetTask(1U << CFG_TASK_FLASH_MANAGER, CFG_SEQ_PRIO_0);
 }
 
-void ble_flash_init(void)
+void wpan_flash_init(void)
 {
     UTIL_SEQ_RegTask(1U << CFG_TASK_FLASH_MANAGER, UTIL_SEQ_RFU, FM_BackgroundProcess);
 
@@ -50,13 +50,13 @@ void ble_flash_init(void)
     s_ready = 1;
 }
 
-void ble_flash_ll_started(void)
+void wpan_flash_ll_started(void)
 {
     /* From here on every erase / program waits for a radio time window. */
     FD_SetStatus(FD_FLASHACCESS_RFTS_BYPASS, LL_FLASH_DISABLE);
 }
 
-int ble_flash_ready(void)
+int wpan_flash_ready(void)
 {
     return s_ready;
 }
@@ -92,12 +92,12 @@ static FM_Cmd_Status_t start_write(uint32_t dest, uint32_t src, uint32_t n_words
     return FM_Write((uint32_t *)src, (uint32_t *)dest, (int32_t)n_words, &s_node);
 }
 
-int ble_flash_erase_page(uint32_t page)
+int wpan_flash_erase_page(uint32_t page)
 {
     return run(start_erase, page, 0u, 0u);
 }
 
-int ble_flash_program(uint32_t dest, const uint32_t *src, uint32_t n_words)
+int wpan_flash_program(uint32_t dest, const uint32_t *src, uint32_t n_words)
 {
     if ((dest & 0xFu) || (n_words & 3u) || n_words == 0u) return -1;
     return run(start_write, dest, (uint32_t)(uintptr_t)src, n_words);

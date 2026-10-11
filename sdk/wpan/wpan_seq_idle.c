@@ -1,5 +1,8 @@
 /**
- * ble_seq_idle.c — Sequencer idle hooks for BLE
+ * wpan_seq_idle.c — Sequencer idle hooks for the radio builds (BLE and Thread)
+ *
+ * Formerly sdk/ble/ble_seq_idle.c (unchanged code; it keeps ble_seq_idle's
+ * place in the BLE link order, see the Makefile).
  */
 
 #include <stdint.h>

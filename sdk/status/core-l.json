@@ -188,6 +188,11 @@
     "nvm.otp": {
       "status": "na",
       "note": "The STM32L011 has no OTP area (it has data EEPROM, see nvm.eeprom)"
-    }
+    },
+    "thread.network": "na",
+    "thread.udp": "na",
+    "thread.diag": "na",
+    "thread.settings": "na",
+    "thread.commissioning": "na"
   }
 }

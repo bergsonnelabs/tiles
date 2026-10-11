@@ -19,7 +19,7 @@
  * (sdk/core/core_nvm.h), and the linker scripts end the application at
  * 0x080FA000 to leave all three alone.
  *
- * Once BLE is up (ble_flash_ready()), the flush goes through ST's flash
+ * Once BLE is up (wpan_flash_ready()), the flush goes through ST's flash
  * manager like core_nvm's writes, so the erase and the programming run in
  * time windows between radio events. It is asynchronous: NVM_Add is called
  * from inside the BLE stack, which must not block on the radio it runs. A
@@ -33,7 +33,7 @@
 #include "nvm.h"
 #include "ll_common.h"
 #include "ll_flash.h"
-#include "ble_flash.h"
+#include "wpan_flash.h"
 #include "flash_manager.h"
 #include "flash_driver.h"
 
@@ -183,7 +183,7 @@ static void fm_flush_kick(void)
 
 static void nvm_flush_to_flash(void)
 {
-    if (ble_flash_ready()) {
+    if (wpan_flash_ready()) {
         fm_flush_kick();
         return;
     }

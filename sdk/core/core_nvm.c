@@ -9,7 +9,8 @@
  *               was here before, plus FLASH_SR checks and a read-back).
  *   Core.ST.L4  flash emulation (this file), page erase/program via ll_flash.
  *   Core.ST.W5  flash emulation (this file); with BLE running, every erase and
- *               program goes through ST's flash manager (sdk/ble/ble_flash.c).
+ *               program goes through ST's flash manager (sdk/wpan/wpan_flash.c);
+ *               so does a Thread build's.
  *   Core.ST.H5  flash emulation (this file) in the high-cycle data area
  *               (EDATA), written 16 bits at a time; plus the first-boot switch
  *               that turns the area on (_core_nvm_h5_boot, at the end).
@@ -71,8 +72,9 @@
 #include "ll_flash_edata.h"
 #endif
 #include "ll_iwdg.h"
-#if defined(STM32WBA55xx) && defined(BLE_ENABLED) && BLE_ENABLED
-#include "ble_flash.h"
+#if defined(STM32WBA55xx) && ((defined(BLE_ENABLED) && BLE_ENABLED) || \
+                              (defined(THREAD_ENABLED) && THREAD_ENABLED))
+#include "wpan_flash.h"
 #define NVM_USE_FLASH_MANAGER 1
 #else
 #define NVM_USE_FLASH_MANAGER 0
@@ -264,6 +266,14 @@ static volatile uint8_t s_ecc_hit;
 #define OTA_PAGE_SIZE    8192UL
 volatile uint8_t _core_flash_ecc_ota;
 #endif
+#if defined(STM32WBA55xx) && defined(THREAD_ENABLED) && THREAD_ENABLED
+/* The OpenThread settings pages (sdk/thread/thread_settings.c, linker script
+ * symbols): a torn snapshot is caught the same way. thread_settings.c clears
+ * this, reads, checks. */
+extern const uint8_t __thread_settings_start[];
+extern const uint8_t __thread_settings_end[];
+volatile uint8_t _core_flash_ecc_thread;
+#endif
 
 /* A double ECC error raises an NMI (it is not a bus fault: the load completes
  * with bad data). Ours are the ones inside the NVM pages, which a torn
@@ -282,6 +292,14 @@ void NMI_Handler(void)
         if (a >= OTA_PAGE_ADDR && a < OTA_PAGE_ADDR + OTA_PAGE_SIZE) {
             NVM_FLASH_ECCR = (eccr & ECCR_ECCIE) | ECCR_ECCD;
             _core_flash_ecc_ota = 1;
+            return;
+        }
+#endif
+#if defined(STM32WBA55xx) && defined(THREAD_ENABLED) && THREAD_ENABLED
+        if (a >= (uint32_t)(uintptr_t)__thread_settings_start &&
+            a < (uint32_t)(uintptr_t)__thread_settings_end) {
+            NVM_FLASH_ECCR = (eccr & ECCR_ECCIE) | ECCR_ECCD;
+            _core_flash_ecc_thread = 1;
             return;
         }
 #endif
@@ -440,8 +458,8 @@ static int hw_erase(uint32_t page)
     ll_iwdg_refresh();
     int rc;
 #if NVM_USE_FLASH_MANAGER
-    if (ble_flash_ready()) {
-        rc = ble_flash_erase_page(page);
+    if (wpan_flash_ready()) {
+        rc = wpan_flash_erase_page(page);
     } else
 #endif
     {
@@ -470,8 +488,8 @@ static int hw_program(uint32_t addr, const uint8_t *src, uint32_t len)
     return rc;
 #else
 #if NVM_USE_FLASH_MANAGER
-    if (ble_flash_ready()) {
-        rc = ble_flash_program(addr, (const uint32_t *)(const void *)src, len / 4u);
+    if (wpan_flash_ready()) {
+        rc = wpan_flash_program(addr, (const uint32_t *)(const void *)src, len / 4u);
         icache_invalidate();
         return rc;
     }

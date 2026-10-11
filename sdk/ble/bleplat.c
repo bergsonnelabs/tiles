@@ -13,7 +13,7 @@
 #include "blestack.h"
 #include "host_stack_if.h"
 
-/* Forward declarations for stubs in ble_glue.c */
+/* Forward declarations for stubs in sdk/wpan/wpan_sys.c */
 extern void BAES_Reset(void);
 extern void BPKA_Reset(void);
 extern void BAES_EcbCrypt(const uint8_t *key, const uint8_t *input, uint8_t *output, int encrypt);

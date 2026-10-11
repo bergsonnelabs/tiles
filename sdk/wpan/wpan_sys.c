@@ -1,35 +1,20 @@
 /**
- * ble_glue.c -- Remaining stub implementations for BLE stack dependencies
+ * wpan_sys.c -- link layer system interface (ll_sys_*) and small runtime stubs
  *
- * Real implementations now live in their own files:
- *   bleplat.c       — BLEPLAT_* (BLE platform adaptation layer)
- *   ble_timer.c     — BLE_TIMER_* (BLE timer using UTIL_TIMER + AMM)
- *   stm32_timer.c   — UTIL_TIMER_* (timer server)
- *   advanced_memory_manager.c — AMM_* (advanced memory manager)
- *   stm32_mm.c      — UTIL_MM_* (basic memory manager)
- *   linklayer_plat.c — LINKLAYER_PLAT_* functions
+ * Shared by every ST link-layer protocol (BLE, Thread). Formerly
+ * sdk/ble/ble_glue.c; the functions and their order are unchanged, so BLE
+ * images stay byte-identical (the Makefile keeps this file at ble_glue's
+ * place in the BLE link order).
+ *
+ * Real implementations elsewhere:
+ *   linklayer_plat.c — LINKLAYER_PLAT_* functions (wrapped below)
  *   ll_sys_if.c     — ll_sys_bg_process_init, ll_sys_schedule_bg_process, etc.
  *   stm32_seq.c     — UTIL_SEQ_* sequencer
- *   host_stack_if.c — HostStack/BleStackCB
+ *   sdk/ble/host_stack_if.c — HostStack/BleStackCB (BLE builds)
  *
- * ST middleware files (sdk/stm/) now provide:
- *   scm.c           — SCM (system clock manager)
- *   stm32_lpm.c     — UTIL_LPM_* (low power manager)
- *   hw_aes.c + baes_*.c — BAES_* (BLE AES crypto)
- *   bpka.c + hw_pka.c   — BPKA_* (BLE PKA)
- *   hw_rng.c        — HW_RNG_* (hardware RNG)
- *   otp.c           — OTP_Read
- *   flash_driver.c  — FD_* (flash driver)
- *   flash_manager.c — FM_* (flash manager)
- *   nvm_emul.c      — NVM_* (NVM emulation)
- *   simple_nvm_arbiter.c — SNVMA_* (NVM arbiter)
- *   system_stm32wbaxx.c  — SystemInit, SystemCoreClock
- *   app_entry.c     — AMM_RegisterBasicMemoryManager, AMM_ProcessRequest,
- *                      UTIL_SEQ_Idle/PreIdle/PostIdle
- *
- * This file provides ONLY stubs not available elsewhere:
+ * This file provides:
  *   - ll_sys_* functions (link layer system interface)
- *   - LINKLAYER_DEBUG_SIGNAL_* stubs
+ *   - deep-sleep stubs (not used)
  *   - _sbrk (heap allocator for nano.specs)
  *   - APP_DBG_MSG (debug printf stub)
  */
@@ -139,7 +124,9 @@ void ll_sys_schldr_timing_update_not(void *p_evnt_timing)
 void ll_sys_bg_process(void)
 {
     extern void emngr_handle_all_events(void);
+#if defined(BLE)
     extern void HostStack_Process(void);
+#endif
     extern void ll_sys_schedule_bg_process(void);
     extern uint8_t emngr_can_mcu_sleep(void);
 
@@ -147,7 +134,9 @@ void ll_sys_bg_process(void)
      * Skipping processing causes connection supervision timeouts (0x08)
      * because the link layer events don't get handled in time. */
     emngr_handle_all_events();
-    HostStack_Process();
+#if defined(BLE)
+    HostStack_Process();          /* BLE host; Thread runs from its own tasks */
+#endif
 
     if (emngr_can_mcu_sleep() == 0)
     {
@@ -239,5 +228,5 @@ void *_sbrk(int incr)
     return prev;
 }
 
-/* missed_hci_event_flag — referenced by host_stack_if.c */
+/* missed_hci_event_flag — referenced by host_stack_if.c and ll_sys_startup.c (BLE) */
 uint8_t missed_hci_event_flag = 0;

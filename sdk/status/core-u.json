@@ -210,6 +210,11 @@
     "i3c.private": "na",
     "i3c.ibi": "na",
     "i3c.tiles": "na",
-    "i3c.hdr": "na"
+    "i3c.hdr": "na",
+    "thread.network": "na",
+    "thread.udp": "na",
+    "thread.diag": "na",
+    "thread.settings": "na",
+    "thread.commissioning": "na"
   }
 }

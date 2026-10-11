@@ -16,6 +16,7 @@ Output defaults to ./generated/ if not specified.
 """
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -1060,6 +1061,12 @@ def build_clock_config(config, tile, mcu):
     ble_on = bool((config.get("ble") or {}).get("enabled"))
     if define == "STM32WBA55xx" and ble_on and target_mhz <= 16:
         eprint(f"  ERROR: BLE needs clock medium or higher. Clock '{level}' runs HSI16 "
+               f"in voltage range 2, and the 2.4 GHz radio needs range 1 with an "
+               f"undivided hclk5 of 16-32 MHz (RM0493 §12.4.6). Set \"clock\": \"medium\".")
+        sys.exit(1)
+    thread_on = bool((config.get("thread") or {}).get("enabled"))
+    if define == "STM32WBA55xx" and thread_on and target_mhz <= 16:
+        eprint(f"  ERROR: Thread needs clock medium or higher. Clock '{level}' runs HSI16 "
                f"in voltage range 2, and the 2.4 GHz radio needs range 1 with an "
                f"undivided hclk5 of 16-32 MHz (RM0493 §12.4.6). Set \"clock\": \"medium\".")
         sys.exit(1)
@@ -2567,6 +2574,114 @@ def build_ble_radio(project, project_name, errors):
     return out
 
 
+# Thread network defaults: DEVELOPMENT ONLY. Every node built with them joins
+# the same network with a well-known key. sdk/core/core_thread.c falls back to
+# the same values when a build forces THREAD_ENABLED on a config without a
+# "thread" block; keep the two in step.
+THREAD_DEFAULTS = {
+    "channel": 15,
+    "panid": 0x1234,
+    "network_key": "00112233445566778899aabbccddeeff",
+    "network_name": "tiles-dev",
+    "ext_panid": "dead00beef00cafe",
+    "mesh_local_prefix": "fdde:ad00:beef:0::",
+}
+
+
+def _hex_bytes(field, value, n, errors):
+    """'<2n hex digits>' (':' / '-' / spaces allowed) -> list of n ints."""
+    if not isinstance(value, str):
+        errors.append(f"thread.{field}: expected a string of {2 * n} hex digits, got {value!r}")
+        return None
+    digits = re.sub(r"[\s:\-]", "", value)
+    if digits.lower().startswith("0x"):
+        digits = digits[2:]
+    if len(digits) != 2 * n or not re.fullmatch(r"[0-9a-fA-F]+", digits):
+        errors.append(f"thread.{field}: expected {2 * n} hex digits ({n} bytes), got {value!r}")
+        return None
+    return [int(digits[i:i + 2], 16) for i in range(0, 2 * n, 2)]
+
+
+def build_thread_config(project, mcu_define, errors):
+    """The `thread` block -> network credentials for coregen/thread_dataset.h.
+
+    Milestone 1: a fixed network for development, no commissioning. Every key
+    is optional; absent ones take THREAD_DEFAULTS.
+    """
+    th = project.get("thread") or {}
+    if not th.get("enabled"):
+        return None
+    if mcu_define != "STM32WBA55xx":
+        errors.append("thread: Thread is only supported on Core.ST.W5 (STM32WBA55). "
+                      "Remove \"thread\" from config.json, or build for Core.ST.W5.")
+        return None
+    if (project.get("ble") or {}).get("enabled"):
+        errors.append("thread: BLE + Thread together comes in a later milestone. "
+                      "Enable one of \"ble\" / \"thread\", not both.")
+
+    out = {}
+    role = str(th.get("role", "ftd")).lower()
+    if role != "ftd":
+        errors.append(f"thread.role: '{role}' is not supported yet; only \"ftd\" (a full, "
+                      f"router-capable Thread device)")
+    out["role"] = "ftd"
+
+    ch = th.get("channel", THREAD_DEFAULTS["channel"])
+    if not isinstance(ch, int) or isinstance(ch, bool) or not 11 <= ch <= 26:
+        errors.append(f"thread.channel: expected an 802.15.4 channel 11-26, got {ch!r}")
+        ch = THREAD_DEFAULTS["channel"]
+    out["channel"] = ch
+
+    pan = th.get("panid", THREAD_DEFAULTS["panid"])
+    if isinstance(pan, str):
+        try:
+            pan = int(pan, 0)
+        except ValueError:
+            pan = None
+    if not isinstance(pan, int) or isinstance(pan, bool) or not 0 <= pan <= 0xFFFE:
+        errors.append(f"thread.panid: expected 0x0000-0xFFFE (0xFFFF is broadcast), got {th.get('panid')!r}")
+        pan = THREAD_DEFAULTS["panid"]
+    out["panid"] = pan
+
+    key = _hex_bytes("network_key", th.get("network_key", THREAD_DEFAULTS["network_key"]), 16, errors)
+    out["network_key"] = key or _hex_bytes("network_key", THREAD_DEFAULTS["network_key"], 16, [])
+
+    name = th.get("network_name", THREAD_DEFAULTS["network_name"])
+    if not isinstance(name, str) or not 1 <= len(name.encode("utf-8")) <= 16:
+        errors.append(f"thread.network_name: expected 1-16 bytes of text, got {name!r}")
+        name = THREAD_DEFAULTS["network_name"]
+    elif any(c in name for c in '"\\') or not name.isprintable():
+        errors.append(f"thread.network_name: printable text without quotes or backslashes, got {name!r}")
+        name = THREAD_DEFAULTS["network_name"]
+    out["network_name"] = name
+
+    xpan = _hex_bytes("ext_panid", th.get("ext_panid", THREAD_DEFAULTS["ext_panid"]), 8, errors)
+    out["ext_panid"] = xpan or _hex_bytes("ext_panid", THREAD_DEFAULTS["ext_panid"], 8, [])
+
+    mlp = th.get("mesh_local_prefix", THREAD_DEFAULTS["mesh_local_prefix"])
+    mlp_bytes = None
+    if isinstance(mlp, str):
+        try:
+            net = ipaddress.IPv6Network(mlp if "/" in mlp else mlp + "/64", strict=False)
+            if net.prefixlen != 64:
+                raise ValueError("not /64")
+            mlp_bytes = list(net.network_address.packed[:8])
+        except ValueError:
+            pass
+    if mlp_bytes is None:
+        errors.append(f"thread.mesh_local_prefix: expected an IPv6 /64 prefix such as "
+                      f"\"fd00:1234:5678:9abc::\", got {mlp!r}")
+        mlp_bytes = list(ipaddress.IPv6Network(THREAD_DEFAULTS["mesh_local_prefix"] + "/64").network_address.packed[:8])
+    out["mesh_local_prefix"] = mlp_bytes
+    out["mesh_local_prefix_str"] = str(ipaddress.IPv6Address(bytes(mlp_bytes) + bytes(8))) + "/64"
+
+    out["default_key"] = "network_key" not in th
+    if out["default_key"]:
+        eprint("  NOTE: thread: no network_key in config.json, using the well-known "
+               "development key (anyone can join this network)")
+    return out
+
+
 def generate(tile_path, output_dir, config_path=None):
     """Generate all headers from a tile JSON and optional project config."""
     with open(tile_path, encoding="utf-8") as f:
@@ -2644,6 +2759,7 @@ def generate(tile_path, output_dir, config_path=None):
         # Parsed alongside the other validation so a malformed contract fails
         # the build with a clear message rather than emitting broken C.
         ctx["ble_contract"] = build_ble_contract(project, config_path, errors, warnings)
+        ctx["thread"] = build_thread_config(project, mcu["define"], errors)
         ctx["ble_radio"] = build_ble_radio(
             project,
             os.path.basename(os.path.dirname(os.path.abspath(config_path)))
@@ -2769,6 +2885,8 @@ def generate(tile_path, output_dir, config_path=None):
         if ctx.get("ble_contract") or ctx.get("ble_radio"):
             templates.append("ble_contract.h.j2")
             templates.append("ble_contract.c.j2")
+        if ctx.get("thread"):
+            templates.append("thread_dataset.h.j2")
 
     # Set up Jinja2
     templates_dir = os.path.join(os.path.dirname(__file__), "templates")

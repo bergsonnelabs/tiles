@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@d57b3eb",
+  "source": "tiles@67d1ea0",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -89,6 +89,10 @@
     "stepper": {
       "label": "Core.Stepper",
       "icon": "⟳"
+    },
+    "thread": {
+      "label": "Core.Thread",
+      "icon": "⌬"
     },
     "timer": {
       "label": "Core.Timer",

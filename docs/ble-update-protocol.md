@@ -357,7 +357,7 @@ end_tag  = f18a6f9daccd1c7c5de8e5b106df0802
 - Bytes that arrive between a reconnect and the next `core_ble_process()` can
   be dropped: that is why `Q` is repeated.
 - Staging flash is written through ST's flash manager in radio-safe windows
-  (`sdk/ble/ble_flash.c`), so advertising, the connection and the app's own
+  (`sdk/wpan/wpan_flash.c`), so advertising, the connection and the app's own
   services keep running during a transfer.
 
 ## 7. Flash layout (STM32WBA55, 1 MB, 128 pages of 8 KB)

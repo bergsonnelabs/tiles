@@ -1,0 +1,209 @@
+{
+  "schema": "studio-sdk-docs/v2",
+  "source": "tiles@67d1ea0",
+  "category": "thread",
+  "label": "Core.Thread",
+  "icon": "⌬",
+  "header": "core_thread.h",
+  "headers": {
+    "core": "core_thread.h"
+  },
+  "functions": [
+    {
+      "name": "core_thread_start",
+      "signature": "core_thread_start(void)",
+      "returns": "int",
+      "brief": "Start Thread: bring up the radio and OpenThread, then join (or form) the network from config.json.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_process",
+      "signature": "core_thread_process(void)",
+      "returns": "void",
+      "brief": "Run Thread: radio events, OpenThread timers and tasks, received datagrams.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_role",
+      "signature": "core_thread_role(void)",
+      "returns": "core_thread_role_t",
+      "brief": "The device's current Thread role.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_on_role_change",
+      "signature": "core_thread_on_role_change(core_thread_role_cb cb, void * ctx)",
+      "returns": "void",
+      "brief": "Register a callback for role changes (detached, child, router, leader).",
+      "params": [
+        {
+          "name": "cb",
+          "ctype": "core_thread_role_cb",
+          "description": "Called with the new role from core_thread_process(); NULL to remove."
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *",
+          "description": "Passed back to cb; may be NULL."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_udp_open",
+      "signature": "core_thread_udp_open(uint16_t port, core_thread_udp_rx_cb rx_cb, void * ctx)",
+      "returns": "int",
+      "brief": "Open a UDP socket bound to a port and receive datagrams sent to it.",
+      "params": [
+        {
+          "name": "port",
+          "ctype": "uint16_t",
+          "description": "Local UDP port (1-65535)."
+        },
+        {
+          "name": "rx_cb",
+          "ctype": "core_thread_udp_rx_cb",
+          "description": "Called for each datagram received on the port; may be NULL to only send."
+        },
+        {
+          "name": "ctx",
+          "ctype": "void *",
+          "description": "Passed back to rx_cb; may be NULL."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_udp_send",
+      "signature": "core_thread_udp_send(const uint8_t addr6[16], uint16_t port, const void * buf, uint16_t len)",
+      "returns": "int",
+      "brief": "Send a UDP datagram to an IPv6 address on the Thread network.",
+      "params": [
+        {
+          "name": "addr6",
+          "ctype": "const uint8_t[16]",
+          "description": "Destination IPv6 address, 16 bytes in network order."
+        },
+        {
+          "name": "port",
+          "ctype": "uint16_t",
+          "description": "Destination UDP port."
+        },
+        {
+          "name": "buf",
+          "ctype": "const void *",
+          "description": "Payload."
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t",
+          "description": "Payload length in bytes (up to ~1200)."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_udp_broadcast",
+      "signature": "core_thread_udp_broadcast(uint16_t port, const void * buf, uint16_t len)",
+      "returns": "int",
+      "brief": "Send a UDP datagram to every node on the Thread network (ff03::1, realm-local all-nodes).",
+      "params": [
+        {
+          "name": "port",
+          "ctype": "uint16_t",
+          "description": "Destination UDP port."
+        },
+        {
+          "name": "buf",
+          "ctype": "const void *",
+          "description": "Payload."
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t",
+          "description": "Payload length in bytes."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_rloc16",
+      "signature": "core_thread_rloc16(void)",
+      "returns": "uint16_t",
+      "brief": "The device's RLOC16 (its short address in the mesh; changes with the role).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_ext_addr",
+      "signature": "core_thread_ext_addr(uint8_t out[8])",
+      "returns": "void",
+      "brief": "Copy the device's IEEE 802.15.4 extended address (8 bytes).",
+      "params": [
+        {
+          "name": "out",
+          "ctype": "uint8_t[8]",
+          "description": "Receives 8 bytes; zeros before core_thread_start()."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_partition_id",
+      "signature": "core_thread_partition_id(void)",
+      "returns": "uint32_t",
+      "brief": "The ID of the Thread partition the device belongs to.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_neighbor_count",
+      "signature": "core_thread_neighbor_count(void)",
+      "returns": "uint8_t",
+      "brief": "Number of neighbours in the device's neighbour table (routers and children it hears).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_parent_rssi",
+      "signature": "core_thread_parent_rssi(void)",
+      "returns": "int8_t",
+      "brief": "Average RSSI of frames from the parent, when the device is a child.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_last_error",
+      "signature": "core_thread_last_error(void)",
+      "returns": "int",
+      "brief": "The last error OpenThread reported to this API (an otError value; 0 = none).",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_instance",
+      "signature": "core_thread_instance(void)",
+      "returns": "void *",
+      "brief": "The OpenThread instance, for C code that calls the OpenThread API directly.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    }
+  ]
+}
