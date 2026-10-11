@@ -119,7 +119,10 @@ pass (`gh pr merge --auto --merge`); merged branches are deleted.
 
 ## Third-party code
 
-The Core.ST.W5 Bluetooth LE support in `sdk/ble/` includes STMicroelectronics
-code (the BLE stack and link-layer libraries, application modules and two
-utilities) under ST's own license, for use with ST microcontrollers only. See
-[THIRD_PARTY.md](THIRD_PARTY.md) for the file list and license texts.
+The Core.ST.W5 radio support in `sdk/wpan/` (shared 2.4 GHz plumbing) and
+`sdk/ble/` (Bluetooth LE) includes STMicroelectronics code (the BLE stack and
+link-layer libraries, application modules and two utilities) under ST's own
+license, for use with ST microcontrollers only. See
+[THIRD_PARTY.md](THIRD_PARTY.md) for the file list and license texts; ST's
+license file also sits next to the code (`sdk/wpan/LICENSE-ST.txt`,
+`sdk/ble/LICENSE-ST.txt`).

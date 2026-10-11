@@ -66,6 +66,14 @@ cores/
 │   │   └── tal_exti.h          # Pad → EXTI with auto-pull
 │   ├── cmsis/                  # ARM CMSIS headers
 │   ├── device/                 # Linker scripts, startup code (per MCU)
+│   ├── wpan/                   # Core.ST.W5 2.4 GHz radio plumbing shared by every ST link-layer
+│   │                           #   protocol (BLE now, Thread next): sequencer, timer server, flash
+│   │                           #   manager, link-layer platform + ll_sys glue, RNG/AES, memory
+│   │                           #   managers; include/, link_layer/inc/ (ST/Synopsys/OpenThread
+│   │                           #   headers), lib/ (link-layer .a, WPAN_LL_LIB picks one per build)
+│   ├── ble/                    # BLE host stack (lib/), its glue (ble_*.c, bleplat, svc_ctl,
+│   │                           #   host_stack_if, bond store), Studio Link + BLE update. Built
+│   │                           #   with sdk/wpan when BLE_ENABLED=1. ST code: THIRD_PARTY.md
 │   └── status/                 # SDK implementation status per Core subfamily
 │       ├── features.json       # Canonical feature manifest (groups, IDs, layer, desc)
 │       ├── core-l.json         # Core.ST.L0 (STM32L011) feature statuses
@@ -241,7 +249,7 @@ Four more host differences the Makefile handles, each with its own trap:
 1. **coregen** runs → produces `project/coregen/` with generated `.h/.c/.mk` files
 2. **compiler** builds project `main.c` + SDK HAL sources + `core_init.c` + tile drivers
 3. **linker** uses MCU-specific linker script from `sdk/device/`
-   - **Link order = flash order, project last.** Every script puts `.init`/`.fini`, then the prebuilt archives (ST BLE stack, libc, libgcc), then the objects in `OBJECTS` order: SDK, coregen, startup (`Reset_Handler`, or on the W5 `Reset_Continue`, holds the layout), the project's `.c` files last; each file's `.rodata` sits with its `.text`. A small program edit changes only the last few flash pages, so SWD flash skips the rest; `tools/page_diff.py old.bin new.bin --page-size N` counts them. Keep new SDK code free of literals that move with the program (`__flash_image_end`, `end`, calls into `.ota_ram` from flash: see `ble_update.c` and its `-mlong-calls`). A new *initialized* project global still shifts `.bss` and so changes most pages.
+   - **Link order = flash order, project last.** Every script puts `.init`/`.fini`, then the prebuilt archives (ST BLE stack, libc, libgcc), then the objects in `OBJECTS` order (BLE builds: `sdk/wpan` + `sdk/ble` objects interleaved by file name): SDK, coregen, startup (`Reset_Handler`, or on the W5 `Reset_Continue`, holds the layout), the project's `.c` files last; each file's `.rodata` sits with its `.text`. A small program edit changes only the last few flash pages, so SWD flash skips the rest; `tools/page_diff.py old.bin new.bin --page-size N` counts them. Keep new SDK code free of literals that move with the program (`__flash_image_end`, `end`, calls into `.ota_ram` from flash: see `ble_update.c` and its `-mlong-calls`). A new *initialized* project global still shifts `.bss` and so changes most pages.
 
 ### coregen — Code Generator
 

@@ -1,26 +1,41 @@
 # Third-party code in tiles
 
 Most of tiles is Bergsonne's own code. The exceptions are STMicroelectronics
-components used by the Core.ST.W5 (STM32WBA55) Bluetooth LE support. All of
-them live in `sdk/ble/`, keep their original copyright headers (files changed
-for tiles are marked `tiles:` where they differ), and are distributed under
-STMicroelectronics' terms below, **for use with STMicroelectronics
-microcontrollers only.** They are not covered by any license Bergsonne
-applies to the rest of this repository.
+components (and the Synopsys and OpenThread headers ST ships with them) used
+by the Core.ST.W5 (STM32WBA55) radio support. They live in two folders:
 
-Source: STM32CubeWBA V1.7.0 (`STM32Cube_FW_WBA_V1.7.0`), whose
-`Package_license.md` assigns each folder its license.
+- `sdk/wpan/`: the 2.4 GHz radio plumbing any ST link-layer protocol needs
+  (link layer, sequencer, timer server, flash manager, memory managers).
+- `sdk/ble/`: the Bluetooth LE host stack and its glue.
+
+They keep their original copyright headers (files changed for tiles are
+marked `tiles:` where they differ), and are distributed under the terms below,
+**for use with STMicroelectronics microcontrollers only.** They are not
+covered by any license Bergsonne applies to the rest of this repository.
+
+Source: STM32CubeWBA V1.6.1 (`STM32Cube_FW_WBA_V1.6.1`; both libraries are
+byte-identical to that release's), whose `Package_license.md` assigns each
+folder its license. ST's STM32_WPAN license file (its bill of materials and
+the full SLA0044 text, which applies to the component outside the Cube
+package) is reproduced verbatim next to the code, as
+[`sdk/wpan/LICENSE-ST.txt`](sdk/wpan/LICENSE-ST.txt) and
+[`sdk/ble/LICENSE-ST.txt`](sdk/ble/LICENSE-ST.txt): the "LICENSE file" the
+ST file headers refer to.
 
 | Component (CubeWBA origin) | Files in tiles | License |
 |---|---|---|
-| STM32_WPAN: BLE stack and Link Layer (`Middlewares/ST/STM32_WPAN`) | `sdk/ble/lib/stm32wba_ble_stack_basic.a`, `sdk/ble/lib/LinkLayer_BLE_Basic_lib.a`; `sdk/ble/include/ble*.h`, `sdk/ble/include/auto/ble_*.h`, `bleplat.h`, `blestack.h`, `linklayer_plat.h`, `ll_sys.h`, `ll_sys_if.h`, `stm32_wpan_common.h`, `svc_ctl.h`; `sdk/ble/ble_wrap.c`, `ll_sys_startup.c`, `svc_ctl.c` | ST SLA (below) |
-| Application modules and glue (`Projects/Common/WPAN`, `Projects/*/Applications`) | `sdk/ble/advanced_memory_manager.{c,h}`, `stm32_mm.{c,h}`, `flash_manager.{c,h}`, `flash_driver.{c,h}`, `rf_timing_synchro.{c,h}`, `host_stack_if.{c,h}`, `ll_sys_if.c`, `linklayer_plat.c`, `power_table.c`, `include/bpka.h`, `include/ble_timer.h` | ST SLA (below) |
+| STM32_WPAN: BLE stack (`Middlewares/ST/STM32_WPAN/ble`) | `sdk/ble/lib/stm32wba_ble_stack_basic.a`; `sdk/ble/include/ble*.h`, `sdk/ble/include/auto/ble_*.h`, `bleplat.h`, `blestack.h`, `svc_ctl.h`; `sdk/ble/ble_wrap.c`, `svc_ctl.c` | ST SLA (below) |
+| STM32_WPAN: Link Layer (`Middlewares/ST/STM32_WPAN/link_layer`) | `sdk/wpan/lib/LinkLayer_BLE_Basic_lib.a`; `sdk/wpan/include/linklayer_plat.h`, `ll_sys.h`, `ll_sys_if.h`, `stm32_wpan_common.h`; `sdk/wpan/ll_sys_startup.c` | ST SLA (below) |
+| Link Layer public headers (Synopsys, Inc.) | `sdk/wpan/link_layer/inc/*.h`, `sdk/wpan/link_layer/inc/_40nm_reg_files/*.h` | Synopsys MIT notice in each file; listed under ST SLA in ST's bill of materials |
+| OpenThread headers (The OpenThread Authors) | `sdk/wpan/link_layer/inc/ot_inc/*.h` | BSD-3-Clause, notice in each file |
+| Application modules and glue (`Projects/Common/WPAN`, `Projects/*/Applications`) | `sdk/wpan/advanced_memory_manager.{c,h}`, `stm32_mm.{c,h}`, `flash_manager.{c,h}`, `flash_driver.{c,h}`, `rf_timing_synchro.{c,h}`, `ll_sys_if.c`, `linklayer_plat.c`, `power_table.c`; `sdk/ble/host_stack_if.{c,h}`, `sdk/ble/include/bpka.h`, `sdk/ble/include/ble_timer.h` | ST SLA (below) |
 | Adapted from ST sources | `sdk/ble/include/ble_common.h` | ST SLA (below) |
-| Utilities: sequencer and timer server (`Utilities/sequencer`, `Utilities/tim_serv`) | `sdk/ble/stm32_seq.{c,h}`, `sdk/ble/stm32_timer.{c,h}` | BSD-3-Clause (below) |
+| Utilities: sequencer and timer server (`Utilities/sequencer`, `Utilities/tim_serv`) | `sdk/wpan/stm32_seq.{c,h}`, `sdk/wpan/stm32_timer.{c,h}` | BSD-3-Clause (below) |
 
-(`.h` files listed with a `.c` sit in `sdk/ble/include/`.) Everything else in
-`sdk/ble/` (for example `ble_app.c`, `ble_glue.c`, `ble_flash.c`,
-`nvm_stub.c`) is Bergsonne's.
+(`.h` files listed with a `.c` sit in that folder's `include/`.) Everything
+else in `sdk/wpan/` and `sdk/ble/` (for example `hw_aes.c`, `hw_rng.c`,
+`stm32_timer_if.c`, `ble_app.c`, `ble_glue.c`, `ble_flash.c`, `nvm_stub.c`)
+is Bergsonne's.
 
 ---
 

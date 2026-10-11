@@ -505,20 +505,35 @@ BLE_ENABLED ?= $(_BLE_CFG)
 # on a project whose config says nothing still matches what coregen generated.
 # Detected here rather than with $(wildcard) because on a clean build the files
 # do not exist until coregen has run, and wildcard is evaluated before that.
+#
+# Two source trees:
+#   sdk/wpan/  the 2.4 GHz radio plumbing any ST link-layer protocol needs
+#              (sequencer, timer server, flash manager, link-layer platform
+#              and ll_sys glue, RNG/AES, memory managers, link-layer headers
+#              and libraries). Shared by BLE now and Thread later.
+#   sdk/ble/   the BLE host stack, its glue and the core_ble backend.
+# Which link-layer library a build links (WPAN_LL_LIB) depends on the
+# protocols it runs; BLE alone uses ST's BLE "basic" variant.
 ifeq ($(BLE_ENABLED),1)
   ifeq ($(MCU_PART),STM32WBA55xx)
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_ble.ld
     CFLAGS += -I$(SDK_DIR)sdk/ble/include
     CFLAGS += -I$(SDK_DIR)sdk/ble/include/auto
-    CFLAGS += -I$(SDK_DIR)sdk/ble/link_layer/inc
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/include
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/link_layer/inc
     CFLAGS += -DBLE_ENABLED=1 -DBASIC_FEATURES=1 -DBLE=1
     CFLAGS += -D'__PACKED_STRUCT=struct __attribute__((packed))'
     CFLAGS += -D'__PACKED_UNION=union __attribute__((packed))'
-    CFLAGS += -include $(SDK_DIR)sdk/ble/include/cmsis_compiler.h
+    CFLAGS += -include $(SDK_DIR)sdk/wpan/include/cmsis_compiler.h
+    WPAN_LL_LIB = $(SDK_DIR)sdk/wpan/lib/LinkLayer_BLE_Basic_lib.a
     BLE_LIBS  = $(SDK_DIR)sdk/ble/lib/stm32wba_ble_stack_basic.a
-    BLE_LIBS += $(SDK_DIR)sdk/ble/lib/LinkLayer_BLE_Basic_lib.a
+    BLE_LIBS += $(WPAN_LL_LIB)
+    WPAN_SOURCES = $(wildcard $(SDK_DIR)sdk/wpan/*.c)
     BLE_SOURCES = $(wildcard $(SDK_DIR)sdk/ble/*.c)
-    BLE_OBJS = $(addprefix $(BUILD_DIR)/sdk/ble/, $(notdir $(BLE_SOURCES:.c=.o)))
+    # One list, ordered by file name across both trees: link order is flash
+    # order (see OBJECTS), and this keeps it what it was when every file
+    # lived in sdk/ble.
+    BLE_OBJS = $(foreach n,$(sort $(notdir $(basename $(WPAN_SOURCES) $(BLE_SOURCES)))),$(if $(filter %/sdk/wpan/$(n).c,$(WPAN_SOURCES)),$(BUILD_DIR)/sdk/wpan/$(n).o,$(BUILD_DIR)/sdk/ble/$(n).o))
     BLE_OBJS += $(BUILD_DIR)/sdk/core/core_ble.o
   else
     $(error BLE is only supported on Core.ST.W5 (STM32WBA55xx) — this build is \
@@ -753,9 +768,14 @@ endef
 $(foreach d,$(sort $(dir $(TILES_OVERLAY_DRIVERS))),$(eval $(call TILES_OVERLAY_DRIVER_RULE,$(d))))
 endif
 
-# BLE sources (relaxed warnings — vendor headers are noisy)
+# BLE and shared radio (wpan) sources (relaxed warnings — vendor headers are noisy)
 ifeq ($(BLE_ENABLED),1)
 $(BUILD_DIR)/sdk/ble/%.o: $(SDK_DIR)sdk/ble/%.c $(GEN_HEADERS)
+	$(Q)mkdir -p $(dir $@)
+	$(LOG) "  CC    $(notdir $<)"
+	$(Q)$(CC) $(CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers -c $< -o $@
+
+$(BUILD_DIR)/sdk/wpan/%.o: $(SDK_DIR)sdk/wpan/%.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $(notdir $<)"
 	$(Q)$(CC) $(CFLAGS) -Wno-unused-parameter -Wno-sign-compare -Wno-missing-field-initializers -c $< -o $@

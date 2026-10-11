@@ -3,8 +3,8 @@
  *
  * The BLE update (docs/ble-update-protocol.md §5) authenticates the host and
  * the image with a per-board key. Software, not the WBA55's AES peripheral:
- * the peripheral is shared with the BLE stack (sdk/ble/baes.h), the SDK's
- * driver for it (sdk/ble/hw_aes.c) still guesses its byte order at run time,
+ * the peripheral is shared with the BLE stack (sdk/wpan/include/baes.h), the SDK's
+ * driver for it (sdk/wpan/hw_aes.c) still guesses its byte order at run time,
  * and the same code then runs in the host tests. ~10-15 ms per 2 KB chunk at
  * 32 MHz is affordable.
  *
