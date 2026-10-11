@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6f27e78",
+  "source": "tiles@dfa3dbe",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -11,6 +11,15 @@
     "ll": "ll_adc.h"
   },
   "functions": [
+    {
+      "name": "core_adc_default",
+      "signature": "core_adc_default(void)",
+      "returns": "core_adc_t *",
+      "brief": "`core_adc1`, initialised on first use if no ADC pad set it up (core_adc.c): the internal channels (temperature, VDD) need no pad.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
     {
       "name": "core_adc_init",
       "signature": "core_adc_init(core_adc_t * adc, uint32_t resolution)",

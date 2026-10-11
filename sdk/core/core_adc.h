@@ -29,8 +29,13 @@ typedef hal_adc_t core_adc_t;
 
 /** Default ADC instance — emitted by coregen into core_init.c when the
  * project declares any ADC pad. Today this is always `core_adc1`; multi-ADC
- * (Core.ST.H5) lands when tile JSON grows per-pad peripheral tagging. */
+ * (Core.ST.H5) lands when tile JSON grows per-pad peripheral tagging. Without
+ * an ADC pad, core_adc.c supplies a weak, uninitialised one. */
 extern core_adc_t core_adc1;
+
+/** `core_adc1`, initialised on first use if no ADC pad set it up (core_adc.c):
+ * the internal channels (temperature, VDD) need no pad. */
+core_adc_t *core_adc_default(void);
 
 /* ============================================================
  * Sampling speed aliases
@@ -131,7 +136,7 @@ static inline int core_adc_read_mv_pad(uint8_t pad)
  */
 static inline int core_adc_temp_decidegc(void)
 {
-    return (int)tal_adc_read_temp_decidegc(&core_adc1);
+    return (int)tal_adc_read_temp_decidegc(core_adc_default());
 }
 
 /**
@@ -143,7 +148,7 @@ static inline int core_adc_temp_decidegc(void)
  */
 static inline int core_adc_vdd_mv(void)
 {
-    return (int)tal_adc_read_vdda_mv(&core_adc1);
+    return (int)tal_adc_read_vdda_mv(core_adc_default());
 }
 
 /* ============================================================
