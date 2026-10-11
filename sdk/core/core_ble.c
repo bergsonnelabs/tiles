@@ -52,6 +52,7 @@ extern void UTIL_SEQ_Run(uint32_t mask);
 extern volatile uint8_t ble_connected;
 extern volatile uint16_t ble_conn_handle;
 extern volatile uint8_t ble_conn_param_req_pending;
+extern volatile uint8_t ble_mtu_exchange_pending;
 extern void (*ble_on_connect_cb)(void *ctx);
 extern void *ble_on_connect_ctx;
 extern void (*ble_on_disconnect_cb)(void *ctx);
@@ -62,6 +63,17 @@ extern void *ble_on_disconnect_ctx;
 extern uint8_t aci_l2cap_connection_parameter_update_req(
     uint16_t conn_handle, uint16_t interval_min, uint16_t interval_max,
     uint16_t latency, uint16_t timeout);
+
+/* ATT MTU exchange, started by the peripheral (ble_wrap.c). */
+extern uint8_t aci_gatt_exchange_config(uint16_t conn_handle);
+
+/* Stack status codes that mean "not now, try again" (ble_defs.h). Kept local
+ * for the same reason as the declarations above. */
+#define _BLE_STATUS_INSUFFICIENT_RESOURCES 0x64u
+#define _BLE_STATUS_BUSY                   0x93u
+
+/* Request an ATT MTU exchange after each connection (core_ble_set_auto_mtu). */
+static uint8_t  _auto_mtu = 1;
 
 /* Preferred connection parameters, in stack units (interval = 1.25 ms,
  * timeout = 10 ms), set via core_ble_set_conn_params(). */
@@ -192,6 +204,21 @@ void core_ble_process(void)
             ble_conn_param_req_pending = 0;
         }
     }
+
+    /* Start an ATT MTU exchange from this side, so large notifications work
+     * even when the central never asks (Android without requestMtu, or a
+     * central that cannot ask: iOS, Web Bluetooth). Retry while the stack is
+     * busy; any other error (the central already ran one, or the stack refuses
+     * it) ends the attempt for this connection. */
+    if (ble_mtu_exchange_pending && ble_connected) {
+        if (!_auto_mtu) {
+            ble_mtu_exchange_pending = 0;
+        } else {
+            uint8_t st = aci_gatt_exchange_config(ble_conn_handle);
+            if (st != _BLE_STATUS_BUSY && st != _BLE_STATUS_INSUFFICIENT_RESOURCES)
+                ble_mtu_exchange_pending = 0;
+        }
+    }
 }
 
 /* ============================================================
@@ -305,6 +332,11 @@ void core_ble_set_adv_interval(uint16_t min_ms, uint16_t max_ms)
     if (max_ms > 10240) max_ms = 10240;
     ble_app_adv_interval_min = (uint16_t)((uint32_t)min_ms * 8 / 5);
     ble_app_adv_interval_max = (uint16_t)((uint32_t)max_ms * 8 / 5);
+}
+
+void core_ble_set_auto_mtu(uint8_t on)
+{
+    _auto_mtu = on ? 1 : 0;
 }
 
 void core_ble_set_conn_params(uint16_t min_ms, uint16_t max_ms,

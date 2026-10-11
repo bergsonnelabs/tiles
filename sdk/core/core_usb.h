@@ -8,11 +8,17 @@
  * `studio_dispatch_core_usb()` each main-loop iteration (capped to
  * 64 bytes per iteration so burst traffic doesn't starve the DSL
  * loop). The DSL-facing `Core.USB.receive(byte)` event fires once
- * per byte. Gated on `usb.enabled` in config.json — emits a no-op
- * stub when USB isn't enabled.
+ * per byte. The same pass feeds every byte to a line assembler
+ * (core_usb_line_feed), and `Core.USB.line(text)` fires once per
+ * complete line ("led 1\n" arrives as "led 1"). The two events
+ * coexist: a program may subscribe to either or both, and with both
+ * it sees every byte and then the line it completes. Gated on
+ * `usb.enabled` in config.json — emits a no-op stub when USB isn't
+ * enabled.
  *
  * @studio category usb label=Core.USB icon=❝
  * @studio event name=receive payload=byte:int
+ * @studio event name=line payload=text:string
  *
  * @studio coverage
  *   id:    usb
@@ -22,9 +28,10 @@
  *          output (print, print_int, print_float, print_bool) with
  *          full Twin coverage (the simulator's CDC pane is a real-time
  *          mirror), plus byte-level TX/RX, ring-buffer reads, and a
- *          receive callback. The DSL `Core.USB.receive(byte:int)`
- *          event is wired through coregen's USB dispatch when the
- *          program subscribes.
+ *          receive callback, plus a line assembler for text
+ *          commands. The DSL `Core.USB.receive(byte:int)` and
+ *          `Core.USB.line(text:string)` events are wired through
+ *          coregen's USB dispatch when the program subscribes.
  */
 
 #ifndef CORE_USB_H
@@ -171,14 +178,89 @@ static inline int core_usb_try_read(uint8_t *byte)
     return hal_usb_cdc_rx_try(byte);
 }
 
+/* ---- Line reader ---- */
+
+/** Longest line core_usb_line_feed() assembles, not counting the NUL. */
+#define CORE_USB_LINE_MAX  127
+
+/** Line-assembler state for core_usb_line_feed() / core_usb_poll_line().
+ * Zero-initialize it (a static or global is). */
+typedef struct {
+    char    buf[CORE_USB_LINE_MAX + 1];  /**< Line so far, then the NUL-terminated line. */
+    uint8_t len;                         /**< Characters collected. */
+    uint8_t overflow;                    /**< Set while discarding an over-long line. */
+} core_usb_line_t;
+
+/**
+ * Feed one received byte to a line assembler.
+ *
+ * A line ends at '\n'. '\r' and NUL bytes are dropped, so "\r\n" and "\n"
+ * endings both work. Empty lines are ignored. A line longer than
+ * CORE_USB_LINE_MAX characters is dropped whole: the assembler discards
+ * everything up to the next '\n' and starts clean after it.
+ *
+ * @param lr    Assembler state (zero-initialized before first use).
+ * @param byte  The received byte.
+ * @return The completed line, NUL-terminated and without its ending, or NULL
+ *         if this byte did not complete one. The text stays valid until the
+ *         next call with the same `lr`.
+ */
+static inline const char *core_usb_line_feed(core_usb_line_t *lr, uint8_t byte)
+{
+    if (byte == '\r' || byte == '\0') return NULL;
+    if (byte == '\n') {
+        uint8_t n = lr->len, dropped = lr->overflow;
+        lr->len = 0;
+        lr->overflow = 0;
+        if (dropped || n == 0) return NULL;
+        lr->buf[n] = '\0';
+        return lr->buf;
+    }
+    if (lr->overflow) return NULL;
+    if (lr->len >= CORE_USB_LINE_MAX) {
+        lr->overflow = 1;               /* too long: drop it, resync on '\n' */
+        lr->len = 0;
+        return NULL;
+    }
+    lr->buf[lr->len++] = (char)byte;
+    return NULL;
+}
+
+/**
+ * Read received bytes until a line completes (non-blocking).
+ *
+ * Takes bytes from the receive ring with core_usb_try_read(), at most 64 per
+ * call so a flood can't stall the main loop, and stops at the first complete
+ * line; later bytes stay in the ring for the next call. Call it from the main
+ * loop. Not for use with core_usb_on_receive(), which bypasses the ring, and
+ * not alongside other ring reads, which would steal bytes from the line.
+ *
+ * Studio programs don't call this: `on Core.USB.line(text)` gets each line
+ * from coregen's dispatcher, which feeds core_usb_line_feed() directly.
+ *
+ * @param lr  Assembler state (zero-initialized before first use).
+ * @return The completed line, NUL-terminated and without its ending, or NULL
+ *         if no line is complete yet. Valid until the next call with `lr`.
+ */
+static inline const char *core_usb_poll_line(core_usb_line_t *lr)
+{
+    uint8_t b;
+    for (int i = 0; i < 64 && core_usb_try_read(&b); i++) {
+        const char *line = core_usb_line_feed(lr, b);
+        if (line) return line;
+    }
+    return NULL;
+}
+
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
 // @studio unsupported tier=2 value=M title="No DSL surface for receive (byte read / available)"
 //   The Core.USB.receive event handles inbound bytes one at a time,
-//   but DSL programs can't poll core_usb_available() / core_usb_read().
-//   That makes message-framed protocols (read N bytes after a header)
-//   awkward — the workaround is to accumulate bytes in a DSL array
-//   inside the receive handler.
+//   and Core.USB.line delivers newline-terminated text commands, but
+//   DSL programs can't poll core_usb_available() / core_usb_read().
+//   That makes binary message-framed protocols (read N bytes after a
+//   header) awkward — the workaround is to accumulate bytes in a DSL
+//   array inside the receive handler.
 //
 // @studio unsupported tier=2 value=L title="No DSL printf-with-formatting"
 //   print_int / float / bool emit one value per call, each on its own

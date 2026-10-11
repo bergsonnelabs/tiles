@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3bcb81b",
+  "source": "tiles@d57b3eb",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -1327,6 +1327,16 @@
         {
           "name": "byte",
           "type": "int"
+        }
+      ],
+      "category": "usb"
+    },
+    {
+      "name": "line",
+      "payload": [
+        {
+          "name": "text",
+          "type": "string"
         }
       ],
       "category": "usb"

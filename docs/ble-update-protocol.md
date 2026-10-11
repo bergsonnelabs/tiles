@@ -47,8 +47,9 @@ their handles).
 
 - **Host → Core:** write-without-response (plain write also works) packets of
   **at most 180 bytes**. A frame (§3) is split across as many packets as it
-  needs; packet boundaries carry no meaning. Negotiate an ATT MTU of at least
-  183 (every desktop and phone central does; Web Bluetooth does it for you).
+  needs; packet boundaries carry no meaning. The ATT MTU must be at least 183.
+  The Core starts an ATT MTU exchange itself right after connecting (offering
+  251), so a central that never asks still gets there; one that asks is fine too.
 - **Core → host:** one notification per reply line (§4), ASCII, ending in `\n`,
   at most 63 bytes. **Subscribe to notifications before the first write.**
 - Each characteristic has a User Description descriptor ("Studio Update").

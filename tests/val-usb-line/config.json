@@ -1,0 +1,8 @@
+{
+  "core": "Core.ST.L4",
+  "clock": "max",
+  "usb": {
+    "enabled": true
+  },
+  "pads": {}
+}

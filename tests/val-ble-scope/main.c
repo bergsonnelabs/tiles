@@ -31,6 +31,7 @@ int main(void)
     core_scope_set_interval_ms(10);
 
     core_ble_set_conn_params(15, 30, 0, 4000);   /* the tightest window Apple hosts accept */
+    core_ble_set_auto_mtu(1);   /* the default, made explicit: scope frames need an MTU >= 183 */
     core_ble_init();
     core_ble_process();
     core_ble_advertise("val-scope");

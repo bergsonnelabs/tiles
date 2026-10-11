@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6af026f",
+  "source": "tiles@d57b3eb",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
@@ -205,6 +205,41 @@
         {
           "name": "byte",
           "ctype": "uint8_t *"
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_usb_line_feed",
+      "signature": "core_usb_line_feed(core_usb_line_t * lr, uint8_t byte)",
+      "returns": "char *",
+      "brief": "Feed one received byte to a line assembler. A line ends at '\\n'. '\\r' and NUL bytes are dropped, so \"\\r\\n\" and \"\\n\" endings both work. Empty lines are ignored. A line longer than CORE_USB_LINE_MAX characters is dropped whole: the assembler discards everything up to the next '\\n' and starts clean after it.",
+      "params": [
+        {
+          "name": "lr",
+          "ctype": "core_usb_line_t *",
+          "description": "Assembler state (zero-initialized before first use)."
+        },
+        {
+          "name": "byte",
+          "ctype": "uint8_t",
+          "description": "The received byte."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_usb_poll_line",
+      "signature": "core_usb_poll_line(core_usb_line_t * lr)",
+      "returns": "char *",
+      "brief": "Read received bytes until a line completes (non-blocking). Takes bytes from the receive ring with core_usb_try_read(), at most 64 per call so a flood can't stall the main loop, and stops at the first complete line; later bytes stay in the ring for the next call. Call it from the main loop. Not for use with core_usb_on_receive(), which bypasses the ring, and not alongside other ring reads, which would steal bytes from the line. Studio programs don't call this: `on Core.USB.line(text)` gets each line from coregen's dispatcher, which feeds core_usb_line_feed() directly.",
+      "params": [
+        {
+          "name": "lr",
+          "ctype": "core_usb_line_t *",
+          "description": "Assembler state (zero-initialized before first use)."
         }
       ],
       "studio_exposed": false,
