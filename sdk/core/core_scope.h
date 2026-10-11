@@ -336,8 +336,10 @@ static inline int core_scope_off_(void) { return 0; }
 
 // @studio unsupported tier=3 value=L title="BLE packet size is assumed, not negotiated"
 //   core_ble does not report the ATT MTU, so the BLE link sends 180-byte
-//   notifications. A central that stayed at the 23-byte default would see
-//   nothing but CRC failures. Driver-deferred: needs core_ble_mtu().
+//   notifications. The Core requests a 251-byte MTU itself after connecting
+//   (core_ble_set_auto_mtu), but a central that answers below 183, or a
+//   project that turns the request off, would see nothing but CRC failures.
+//   Driver-deferred: needs core_ble_mtu().
 
 // @studio unsupported tier=3 value=L title="No 64-bit or double channels"
 //   The wire has no 8-byte type. Watching one is a compile error by design.

@@ -50,6 +50,15 @@ volatile uint8_t ble_need_readvertise;
  * core_ble_process to send the preferred params once the link is up */
 volatile uint8_t ble_conn_param_req_pending;
 
+/* ATT MTU exchange flag: set on connect, polled by core_ble_process, which
+ * starts the exchange from the peripheral side (core_ble_set_auto_mtu). */
+volatile uint8_t ble_mtu_exchange_pending;
+
+/* ATT MTU of the current link: 23 (the spec default) until an Exchange MTU
+ * completes, then the server RX MTU the stack reports. Not public API yet;
+ * readable over SWD on the bench. */
+volatile uint16_t ble_att_mtu = 23;
+
 /* ---- GAP command response release ---- */
 
 static void gap_cmd_resp_release(void)
@@ -78,6 +87,8 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
         ble_link_gen++;
         ble_need_readvertise = 1;
         ble_conn_param_req_pending = 0;
+        ble_mtu_exchange_pending = 0;
+        ble_att_mtu = 23;
         /* CCCD state belongs to the connection that set it. */
         ble_svc_clear_subscriptions();
         gap_cmd_resp_release();
@@ -100,6 +111,8 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
                 ble_connected = 1;
                 ble_conn_handle = p_conn->Connection_Handle;
                 ble_conn_param_req_pending = 1;
+                ble_mtu_exchange_pending = 1;
+                ble_att_mtu = 23;
                 if (ble_on_connect_cb) ble_on_connect_cb(ble_on_connect_ctx);
             }
             break;
@@ -114,6 +127,8 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
                 ble_connected = 1;
                 ble_conn_handle = p_conn->Connection_Handle;
                 ble_conn_param_req_pending = 1;
+                ble_mtu_exchange_pending = 1;
+                ble_att_mtu = 23;
                 if (ble_on_connect_cb) ble_on_connect_cb(ble_on_connect_ctx);
             }
             break;
@@ -152,6 +167,10 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
             break;
         case 0x0405:  /* ACI_GAP_BOND_LOST */
             aci_gap_allow_rebond(ble_conn_handle);
+            break;
+        case 0x0C03:  /* ACI_ATT_EXCHANGE_MTU_RESP */
+            /* data[0-1] = conn handle, data[2-3] = server RX MTU */
+            ble_att_mtu = (uint16_t)(p_aci->data[2] | (p_aci->data[3] << 8));
             break;
         case 0x0409:  /* ACI_GAP_NUMERIC_COMPARISON_VALUE */
             /* Auto-confirm numeric comparison (Just Works behavior) */

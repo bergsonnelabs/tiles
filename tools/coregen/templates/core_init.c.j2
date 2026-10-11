@@ -40,6 +40,9 @@
 {% endif %}
 {% if usb_capable %}
 #include "hal_usb_cdc.h"
+{% if usb_enabled %}
+#include "core_usb.h"       /* line assembler for Core.USB.line */
+{% endif %}
 #include "hal_dfu.h"
 #include "core_recovery.h"  /* self-guarded (DFU_STRIKE_TAG_ADDR); no-op off ROM_DFU */
 {% if led %}
@@ -230,17 +233,28 @@ void studio_dispatch_core_timer(void) { }
 /* ---- Studio USB-receive dispatcher ----
  * Drains the USB CDC RX ring once per main-loop iteration (capped at
  * 64 bytes so burst traffic can't starve the DSL loop). Fires the
- * weak `studio_evt_Core_USB_receive(int byte)` per byte. Gated on
+ * weak `studio_evt_Core_USB_receive(int byte)` per byte, and feeds the
+ * same byte to the line assembler, which fires the weak
+ * `studio_evt_Core_USB_line(const char *text)` once per complete line
+ * (core_usb_line_feed: '\n' ends a line, '\r' dropped, empty lines
+ * skipped, lines over CORE_USB_LINE_MAX dropped). Both events see every
+ * byte, so a program may subscribe to either or both. Gated on
  * `usb.enabled`; emits a no-op when USB isn't enabled.
  */
 __attribute__((weak)) void studio_evt_Core_USB_receive(int byte) { (void)byte; }
+__attribute__((weak)) void studio_evt_Core_USB_line(const char *text) { (void)text; }
 
 {% if usb_enabled %}
+static core_usb_line_t _studio_usb_line;
+
 void studio_dispatch_core_usb(void)
 {
     int drained = 0;
     while (drained++ < 64 && hal_usb_cdc_available() > 0) {
-        studio_evt_Core_USB_receive((int)hal_usb_cdc_getc());
+        uint8_t b = hal_usb_cdc_getc();
+        studio_evt_Core_USB_receive((int)b);
+        const char *line = core_usb_line_feed(&_studio_usb_line, b);
+        if (line) studio_evt_Core_USB_line(line);
     }
 }
 {% else %}

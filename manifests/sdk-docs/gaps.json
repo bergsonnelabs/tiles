@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@3bcb81b",
+  "source": "tiles@d57b3eb",
   "subsystems": [
     {
       "id": "adc",
@@ -483,7 +483,7 @@
         },
         {
           "title": "BLE packet size is assumed, not negotiated",
-          "brief": "core_ble does not report the ATT MTU, so the BLE link sends 180-byte notifications. A central that stayed at the 23-byte default would see nothing but CRC failures. Driver-deferred: needs core_ble_mtu().",
+          "brief": "core_ble does not report the ATT MTU, so the BLE link sends 180-byte notifications. The Core requests a 251-byte MTU itself after connecting (core_ble_set_auto_mtu), but a central that answers below 183, or a project that turns the request off, would see nothing but CRC failures. Driver-deferred: needs core_ble_mtu().",
           "tier": 3,
           "value": "L"
         },
@@ -687,7 +687,7 @@
       "gaps": [
         {
           "title": "No DSL surface for receive (byte read / available)",
-          "brief": "The Core.USB.receive event handles inbound bytes one at a time, but DSL programs can't poll core_usb_available() / core_usb_read(). That makes message-framed protocols (read N bytes after a header) awkward — the workaround is to accumulate bytes in a DSL array inside the receive handler.",
+          "brief": "The Core.USB.receive event handles inbound bytes one at a time, and Core.USB.line delivers newline-terminated text commands, but DSL programs can't poll core_usb_available() / core_usb_read(). That makes binary message-framed protocols (read N bytes after a header) awkward — the workaround is to accumulate bytes in a DSL array inside the receive handler.",
           "tier": 2,
           "value": "M"
         },

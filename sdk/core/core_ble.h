@@ -285,6 +285,27 @@ void core_ble_set_conn_params(uint16_t min_ms, uint16_t max_ms,
                               uint16_t latency, uint16_t timeout_ms);
 
 /**
+ * Turn the automatic ATT MTU exchange on or off.
+ *
+ * After each connection the SDK starts an ATT Exchange MTU request from the
+ * peripheral side, offering 251 bytes, so a central that never asks for a
+ * larger MTU (Android without requestMtu(), or a central with no way to ask,
+ * such as iOS or Web Bluetooth) still ends up with large notifications instead
+ * of the 23-byte default (20 bytes of payload). The request retries while the
+ * link is busy right after connecting, and is dropped for that connection if
+ * the stack refuses it (for example because the central already exchanged).
+ * The negotiated MTU is the smaller of both sides' offers.
+ *
+ * On by default. Turn it off only for a central that misbehaves when the
+ * peripheral starts the exchange. Takes effect from the next connection (or
+ * the next core_ble_process() pass, if an exchange is still pending).
+ *
+ * @param on  1 to request the exchange after connecting (default), 0 to leave
+ *            it to the central.
+ */
+void core_ble_set_auto_mtu(uint8_t on);
+
+/**
  * Enable OS-level pairing + bonding (Just Works).
  *
  * When enabled, every characteristic is registered behind an encrypted link,

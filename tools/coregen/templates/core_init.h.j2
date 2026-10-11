@@ -122,7 +122,8 @@ void studio_dispatch_core_timer(void);
 
 /**
  * Drain the USB CDC RX ring and fire the Studio byte-receive handler
- * (capped at 64 bytes per call). No-op when USB isn't enabled.
+ * (capped at 64 bytes per call), then the line handler for each line
+ * those bytes complete. No-op when USB isn't enabled.
  */
 void studio_dispatch_core_usb(void);
 {% if tiles_config %}
