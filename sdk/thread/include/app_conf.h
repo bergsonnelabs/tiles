@@ -4,12 +4,20 @@
  * The sdk/wpan sources (sequencer, link-layer platform, flash manager) read
  * their task ids, IRQ numbers and priorities from "app_conf.h". BLE builds
  * get sdk/ble/include/app_conf.h; Thread builds get this one (the Makefile
- * puts exactly one of the two on the include path). The radio values match
+ * puts exactly one of the two on the include path); BLE + Thread builds get
+ * the BLE one, which adds the OpenThread tasks below. The radio values match
  * the BLE file: the same IRQs, the same priorities.
  */
 
 #ifndef APP_CONF_H
 #define APP_CONF_H
+
+/* BLE + Thread builds take sdk/ble/include/app_conf.h (the BLE tasks, AMM and
+ * BLE settings plus the OpenThread tasks); reaching this file there means the
+ * include order broke. */
+#if defined(BLE_ENABLED)
+#error "BLE + Thread builds use sdk/ble/include/app_conf.h: put sdk/ble/include ahead of sdk/thread/include"
+#endif
 
 #ifdef __cplusplus
 extern "C" {

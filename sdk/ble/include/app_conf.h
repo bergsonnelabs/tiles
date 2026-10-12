@@ -4,6 +4,11 @@
  * Defines task IDs, priorities, IRQ numbers, and feature flags
  * needed by the BLE stack glue code (ll_sys_if.c, linklayer_plat.c,
  * host_stack_if.c, stm32_seq.c).
+ *
+ * BLE + Thread builds use this file too (the Makefile puts sdk/ble/include
+ * ahead of sdk/thread/include, and app_common.h includes it from here): the
+ * THREAD_ENABLED blocks add the OpenThread tasks and priorities that
+ * sdk/thread/include/app_conf.h carries in Thread-only builds.
  */
 
 #ifndef APP_CONF_H
@@ -67,6 +72,14 @@ enum {
     CFG_TASK_BPKA,
     CFG_TASK_BLE_TIMER_BCKGND,
     CFG_TASK_FLASH_MANAGER,
+#if defined(THREAD_ENABLED)
+    /* BLE + Thread builds (sdk/thread/thread_app.c registers these): this
+     * file is the one app_conf.h of such a build, see the end of the file. */
+    CFG_TASK_OT_ALARM,           /* otPlatAlarmMilliFired */
+    CFG_TASK_OT_US_ALARM,        /* otPlatAlarmMicroFired */
+    CFG_TASK_OT_TASKLETS,        /* otTaskletsProcess */
+    CFG_TASK_OT_SETTINGS,        /* write the settings buffer to flash */
+#endif
     /* Application tasks */
     CFG_TASK_APP_START,
     CFG_TASK_NBR  /* Must be last */
@@ -83,6 +96,18 @@ enum {
 };
 
 #define UTIL_SEQ_CONF_PRIO_NBR    CFG_SEQ_PRIO_NBR
+
+#if defined(THREAD_ENABLED)
+/* BLE + Thread: the OpenThread task priorities, as ST's BLE_HeartRate_Thread
+ * (stm32_rtos.h) and sdk/thread/include/app_conf.h. The BLE tasks run at
+ * CFG_SEQ_PRIO_0 like the link layer and the tasklets; the sequencer serves
+ * the tasks of one priority round-robin, so neither stack starves the other. */
+#define TASK_PRIO_LINK_LAYER      CFG_SEQ_PRIO_0
+#define TASK_PRIO_TASKLETS        CFG_SEQ_PRIO_0
+#define TASK_PRIO_ALARM           CFG_SEQ_PRIO_1
+#define TASK_PRIO_US_ALARM        CFG_SEQ_PRIO_1
+#define TASK_PRIO_SETTINGS        CFG_SEQ_PRIO_1
+#endif
 
 /* Sequencer idle events — gap_cmd_resp_wait/release, wpan_flash.c */
 enum {

@@ -19,6 +19,12 @@
  * ST's Thread projects), so no time window would ever be granted: Thread
  * builds keep the RFTS bypass and an erase stalls the CPU (~1.5 ms) like any
  * flash erase. The flash manager still serializes the operations.
+ *
+ * BLE + Thread: as BLE. ble_app_init() calls both; thread_app_init() then
+ * calls neither, and the concurrent link layer grants the windows between
+ * BLE and 802.15.4 events alike (ST's BLE_HeartRate_Thread does the same:
+ * RFTS bypass off after APP_BLE_Init, before APP_THREAD_Init), so the Thread
+ * settings are written in radio-free windows too.
  */
 
 #ifndef WPAN_FLASH_H

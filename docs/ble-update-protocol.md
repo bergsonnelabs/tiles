@@ -368,6 +368,7 @@ end_tag  = f18a6f9daccd1c7c5de8e5b106df0802
             pages 1..   the running app ...........  ends at __flash_image_end
             staging     from page_ceil(max(app end, new image size)), `size` bytes;
                         image page p at staging + p × 8 KB, kept pages left unused
+(0x080F4000 pages 122-123  OpenThread settings, Thread and BLE + Thread images only)
 0x080F8000  page 124    RESERVED: board key + install marker log (§7.1, §7.2)
 0x080FA000  pages 125-126  core_nvm (core_nvm.h)
 0x080FE000  page 127    BLE bonds (nvm_stub.c)
@@ -385,6 +386,18 @@ end_tag  = f18a6f9daccd1c7c5de8e5b106df0802
   `B` can't know which pages will be kept. The largest image that fits is therefore
   `L - page_ceil(A)` when `page_ceil(A) ≥ L/2`, else `L/2` = 507904, with
   L = 1015808. `READY` reports it; `B` applies the exact rule.
+- **BLE + Thread images** (config.json enables both; `stm32wba55hg_ble_thread.ld`)
+  keep the OpenThread settings in pages 122-123 (`0x080F4000`-`0x080F7FFF`:
+  dataset, frame counters) **out of the staging area**, so they survive an
+  update: those builds compile `su_ota.h` with `L = 0x080F4000 - 0x08000000`
+  (= 999424; `SU_OTA_APP_LIMIT`), and the image itself ends below page 122
+  (976 KB). The largest updatable image is then `L/2` = 499712 (488 KB) beside
+  an app of up to 488 KB, else `L - page_ceil(A)`: 8-16 KB less than with BLE
+  alone. The limit is the running image's: an update from a BLE-only image to
+  a BLE + Thread one may stage over pages 122-123, so that first BLE + Thread
+  boot starts with empty Thread settings (`thread_settings.c` checks every
+  snapshot's magic and CRC). `ota_sim_bt` (`make -C sdk/serial_update test`)
+  runs the host tests with that limit.
 - An image with BLE off installs fine but can't take the next Bluetooth
   update (no BLE): the next update is SWD.
 - **Link order.** Page 0 holds the vector table, `Reset_Handler` (it calls the

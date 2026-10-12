@@ -14,8 +14,10 @@
  *   0x080FA000-0x080FDFFF  pages 125-126  core_nvm flash emulation (core_nvm.h)
  *   0x080FE000-0x080FFFFF  page 127       BLE bond store (sdk/ble/nvm_stub.c)
  * Pages 124-127 are reserved by every W5 script, as before. Pages 122-123
- * only by this one: the other scripts end FLASH at 992K, and a BLE update may
- * stage over them (Thread settings are then lost, nothing else). */
+ * by this one and stm32wba55hg_ble_thread.ld (which also keeps them out of
+ * the BLE update's staging area): the plain and BLE scripts end FLASH at
+ * 992K, and a BLE update from such an image may stage over them (Thread
+ * settings are then lost, nothing else). */
 
 MEMORY
 {

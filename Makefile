@@ -516,13 +516,13 @@ BLE_ENABLED ?= $(_BLE_CFG)
 #   sdk/thread/ OpenThread (prebuilt FTD library), its platform glue and the
 #               core_thread backend.
 # Which link-layer library a build links (WPAN_LL_LIB) depends on the
-# protocol it runs: BLE uses ST's BLE "basic" variant, Thread the Thread one.
-# BLE + Thread together (ST's concurrent link layer) is a later milestone.
+# protocol it runs: BLE uses ST's BLE "basic" variant, Thread the Thread one,
+# and BLE + Thread together ST's concurrent BLE_Thread one (see below).
 _THREAD_CFG := $(shell $(PYTHON) -c "import json; c=json.load(open('$(CONFIG_JSON)')); print(1 if (c.get('thread') or {}).get('enabled') else 0)" 2>/dev/null || echo 0)
 THREAD_ENABLED ?= $(_THREAD_CFG)
-ifeq ($(BLE_ENABLED)$(THREAD_ENABLED),11)
-  $(error BLE + Thread together comes in a later milestone. Enable one of "ble" / "thread" in config.json (or BLE_ENABLED / THREAD_ENABLED), not both)
-endif
+# Both on: one image runs both stacks (the BLE + Thread block below). The
+# BLE-only and Thread-only blocks are untouched by it.
+BLE_THREAD := $(if $(filter 11,$(BLE_ENABLED)$(THREAD_ENABLED)),1,0)
 
 # sdk/wpan files that came from sdk/ble keep that file's place in the BLE link
 # order (link order is flash order, see OBJECTS), so BLE images stay
@@ -530,7 +530,59 @@ endif
 WPAN_BLE_ORDER := wpan_flash=ble_flash wpan_irq=ble_irq wpan_seq_idle=ble_seq_idle wpan_sys=ble_glue
 wpan_order_key = $(or $(patsubst $(1)=%,%,$(filter $(1)=%,$(WPAN_BLE_ORDER))),$(1))
 
-ifeq ($(BLE_ENABLED),1)
+# ---- BLE + Thread in one image (Core.ST.W5 only) ----
+#
+#   "ble": { "enabled": true }, "thread": { "enabled": true, ... }
+#
+# ST's concurrent link layer (LinkLayer_BLE_Thread_lib.a, STM32CubeWBA 1.6.1,
+# the regular build for production silicon, not the _cut1_ one for cut 1.x
+# samples) with its ll_fw_config.h, the BLE basic host stack, ST's mbedTLS and
+# a trimmed OpenThread FTD library (stm32wba_ot_ftd_trim_lib.a: ST's OpenThread
+# source rebuilt by tools/build_openthread_trim.py with fewer buffers and
+# without the unused features, sdk/thread/config/
+# stm32wba-openthread-ftd-trim-config.h, so both stacks leave RAM for an
+# application). Compiled the way ST's BLE_HeartRate_Thread project compiles
+# them: BLE and Thread defines, and no
+# DISABLE_RFTS_EXT_EVNT_HNDLR (this link layer schedules the flash manager's
+# radio-free windows, as the BLE one does). sdk/ble/include goes ahead of
+# sdk/thread/include: its app_conf.h is the build's (it adds the OpenThread
+# tasks when THREAD_ENABLED is defined). Linker script: the BLE one plus the
+# OpenThread settings pages, kept out of the BLE update's staging area.
+ifeq ($(BLE_THREAD),1)
+  ifeq ($(MCU_PART),STM32WBA55xx)
+    LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_ble_thread.ld
+    CFLAGS += -I$(SDK_DIR)sdk/ble/include
+    CFLAGS += -I$(SDK_DIR)sdk/ble/include/auto
+    CFLAGS += -I$(SDK_DIR)sdk/thread/include
+    CFLAGS += -I$(SDK_DIR)sdk/thread/config
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/include
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/link_layer/inc
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/link_layer/inc/ot_inc
+    CFLAGS += -I$(SDK_DIR)sdk/wpan/link_layer/config/ble_thread
+    CFLAGS += -DBLE_ENABLED=1 -DBASIC_FEATURES=1 -DBLE=1
+    CFLAGS += -DTHREAD_ENABLED=1 -DMAC=1 -DOPENTHREAD_FTD=1
+    CFLAGS += -D'OPENTHREAD_CONFIG_FILE=<stm32wba-openthread-ftd-trim-config.h>'
+    CFLAGS += -D'OPENTHREAD_PROJECT_CORE_CONFIG_FILE=<stm32wba-openthread-ftd-trim-config.h>'
+    CFLAGS += -D'__PACKED_STRUCT=struct __attribute__((packed))'
+    CFLAGS += -D'__PACKED_UNION=union __attribute__((packed))'
+    CFLAGS += -include $(SDK_DIR)sdk/wpan/include/cmsis_compiler.h
+    WPAN_LL_LIB = $(SDK_DIR)sdk/wpan/lib/LinkLayer_BLE_Thread_lib.a
+    BLE_THREAD_LIBS  = $(SDK_DIR)sdk/ble/lib/stm32wba_ble_stack_basic.a
+    BLE_THREAD_LIBS += $(SDK_DIR)sdk/thread/lib/stm32wba_ot_ftd_trim_lib.a
+    BLE_THREAD_LIBS += $(SDK_DIR)sdk/thread/lib/stm32wba_mbedtls_ftd_lib.a
+    BLE_THREAD_LIBS += $(WPAN_LL_LIB)
+    # All of sdk/wpan and sdk/ble in the BLE build's order, then sdk/thread.
+    WPAN_SOURCES = $(wildcard $(SDK_DIR)sdk/wpan/*.c)
+    BLE_SOURCES = $(wildcard $(SDK_DIR)sdk/ble/*.c)
+    THREAD_SOURCES = $(wildcard $(SDK_DIR)sdk/thread/*.c)
+    BLE_THREAD_OBJS = $(foreach e,$(sort $(foreach n,$(notdir $(basename $(WPAN_SOURCES) $(BLE_SOURCES))),$(call wpan_order_key,$(n))+$(n))),$(foreach n,$(word 2,$(subst +, ,$(e))),$(if $(filter %/sdk/wpan/$(n).c,$(WPAN_SOURCES)),$(BUILD_DIR)/sdk/wpan/$(n).o,$(BUILD_DIR)/sdk/ble/$(n).o)))
+    BLE_THREAD_OBJS += $(addprefix $(BUILD_DIR)/sdk/thread/,$(notdir $(THREAD_SOURCES:.c=.o)))
+    BLE_THREAD_OBJS += $(BUILD_DIR)/sdk/core/core_ble.o $(BUILD_DIR)/sdk/core/core_thread.o
+  else
+    $(error BLE and Thread are only supported on Core.ST.W5 (STM32WBA55xx) — this build is \
+$(MCU_PART). Remove "ble" and "thread" from config.json, or build for Core.ST.W5.)
+  endif
+else ifeq ($(BLE_ENABLED),1)
   ifeq ($(MCU_PART),STM32WBA55xx)
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_ble.ld
     CFLAGS += -I$(SDK_DIR)sdk/ble/include
@@ -568,7 +620,9 @@ endif
 # 1.6.1, compiled with the defines below (ST's Thread_Udp project); its
 # headers resolve "radio.h" etc. to the link layer's ot_inc copies, as ST's
 # include order does.
-ifeq ($(THREAD_ENABLED),1)
+ifeq ($(BLE_THREAD),1)
+  # (the BLE + Thread block above)
+else ifeq ($(THREAD_ENABLED),1)
   ifeq ($(MCU_PART),STM32WBA55xx)
     LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_thread.ld
     CFLAGS += -I$(SDK_DIR)sdk/thread/include
@@ -647,11 +701,11 @@ ifeq ($(TILES_ENABLED),1)
   OBJECTS += $(TILES_OBJS)
 endif
 
-ifeq ($(BLE_ENABLED),1)
+ifeq ($(BLE_THREAD),1)
+  OBJECTS += $(BLE_THREAD_OBJS)
+else ifeq ($(BLE_ENABLED),1)
   OBJECTS += $(BLE_OBJS)
-endif
-
-ifeq ($(THREAD_ENABLED),1)
+else ifeq ($(THREAD_ENABLED),1)
   OBJECTS += $(THREAD_OBJS)
 endif
 
@@ -732,9 +786,13 @@ generate: $(GEN_STAMP)
 
 all: $(TARGET).bin $(TARGET).hex size
 
-$(TARGET).elf: $(OBJECTS) $(LDSCRIPT)
+$(TARGET).elf: $(OBJECTS) $(LDSCRIPT) $(BLE_THREAD_LIBS)
 	@echo "  LD    $(notdir $@)"
-ifeq ($(BLE_ENABLED),1)
+ifeq ($(BLE_THREAD),1)
+	@# OpenThread, mbedTLS and the link layer call into each other: one group.
+	$(Q)$(CC) $(OBJECTS) -Wl,--start-group $(BLE_THREAD_LIBS) -Wl,--end-group $(LDFLAGS) -o $@
+	$(Q)$(PYTHON) "$(SDK_DIR)tools/check_ota_boot.py" --objdump $(OBJDUMP) $@ || { rm -f $@; exit 1; }
+else ifeq ($(BLE_ENABLED),1)
 	$(Q)$(CC) $(OBJECTS) $(BLE_LIBS) $(LDFLAGS) -o $@
 	@# The BLE update's copier must not reach outside flash page 0 / its SRAM
 	@# copy (sdk/ble/ble_update_boot.c): a failure here is a broken install

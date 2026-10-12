@@ -20,6 +20,8 @@
  * NMI code in ble_update_boot.c — those need the bench.
  *
  *   ota_sim            run everything; exit 0 = all passed
+ *   ota_sim_bt         the same, built as a BLE + Thread image is (staging
+ *                      ends below the OpenThread settings, page 122)
  *   ota_sim --vectors  print the spec's test vectors (docs/ble-update-protocol.md §5)
  */
 
@@ -623,6 +625,45 @@ static void test_full(uint32_t new_size, uint32_t seed, const char *what)
     free(old);
     free(img);
 }
+
+#ifdef SU_OTA_THREAD_PAGE
+/* BLE + Thread builds (su_ota.h with BLE_ENABLED and THREAD_ENABLED): the
+ * OpenThread settings in pages 122-123 are outside the staging area, so an
+ * update, even of the largest image that fits, leaves them as they were. */
+static void test_thread_pages(void)
+{
+    const uint32_t tp = SU_OTA_THREAD_PAGE * SU_OTA_PAGE;
+    const uint32_t old_size = 344u * 1024u + 120u;      /* a BLE + Thread image */
+    uint8_t *old = make_image(old_size, 21);
+    fresh_board(old, old_size);
+    for (uint32_t i = 0; i < 2u * SU_OTA_PAGE; i++) fl[tp + i] = (uint8_t)(i * 13u + 5u);
+    uint32_t settings = su_ota_crc32(0, fl + tp, 2u * SU_OTA_PAGE);
+    uint32_t nvm = nvm_sum();
+    device_boot_app(old_size);
+
+    check(SU_OTA_APP_LIMIT == tp, "limit is the settings page: %u", SU_OTA_APP_LIMIT);
+    uint32_t lim = su_ota_limit(old_size);
+    check(lim == tp / 2u, "limit beside a 344 KB app: %u (976 KB / 2)", lim);
+    uint32_t st;
+    check(su_ota_fit(old_size, lim, &st) == 0 && st + lim <= tp, "the largest image stages below page 122");
+    check(su_ota_fit(old_size, lim + 1u, &st) != 0 || st + lim + 1u <= tp, "nothing stages into page 122");
+    check(su_ota_fit(600u * 1024u, 377u * 1024u, &st) != 0, "600 KB app + 377 KB image don't fit in 976 KB");
+
+    uint32_t new_size = lim & ~15u;
+    uint8_t *img = make_image(new_size, 22);
+    const char *r = h_update(img, new_size);
+    check(strcmp(r, "SU DONE") == 0, "largest image: E -> '%s'", r);
+    int second;
+    int b = boot_until_settled(&second);
+    check(b == SU_OTA_BOOT_INSTALLED && second == SU_OTA_BOOT_NONE, "largest image: boot %d then %d", b, second);
+    check(flash_is(img, new_size), "largest image in place");
+    check(su_ota_crc32(0, fl + tp, 2u * SU_OTA_PAGE) == settings, "pages 122-123 (Thread settings) untouched");
+    check(nvm_sum() == nvm, "pages 125-127 untouched");
+    ok("BLE + Thread: an update leaves the Thread settings pages alone");
+    free(old);
+    free(img);
+}
+#endif
 
 static void test_resume(void)
 {
@@ -1639,6 +1680,9 @@ int main(int argc, char **argv)
     sweep_keep(OLD_SIZE, OLD_SIZE, 10u * SU_OTA_PAGE + 3000u, 1, "keep-mostly, 140 KB, edit in page 10");
     sweep_keep(OLD_SIZE, BIG_SIZE, 10u * SU_OTA_PAGE + 3000u, 7, "keep-mostly, 140 -> 150 KB");
     test_compaction();
+#ifdef SU_OTA_THREAD_PAGE
+    test_thread_pages();
+#endif
 
     if (failures) {
         printf("%d FAILED\n", failures);

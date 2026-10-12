@@ -22,8 +22,11 @@
  *
  * Erase / program go through ST's flash manager (wpan_flash.c), which on a
  * Thread build does them directly (no radio time windows on this link layer):
- * a page erase stalls the CPU ~1.5 ms. Snapshots are rare (attach, role
- * change, every 1000 frames for the frame counters).
+ * a page erase stalls the CPU ~1.5 ms. On a BLE + Thread build it waits for a
+ * radio-free window, as for BLE (wpan_flash.h). Snapshots are rare (attach,
+ * role change, every 1000 frames for the frame counters). In BLE + Thread
+ * builds the pages are outside the BLE update's staging area (su_ota.h), so
+ * the settings survive an update.
  *
  * The RAM functions are adapted from STM32CubeWBA V1.6.1
  * Middlewares/ST/STM32_WPAN/thread/openthread/platform/flash.c

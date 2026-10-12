@@ -190,15 +190,17 @@ void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat
 
 /* ============================================================
  * Link-layer debug GPIO hooks: unused (BLE builds have the same stubs in
- * sdk/ble/ble_app_glue.c)
+ * sdk/ble/ble_app_glue.c, which BLE + Thread builds take)
  * ============================================================ */
 
+#if !defined(BLE_ENABLED)
 void LINKLAYER_DEBUG_SIGNAL_SET(uint8_t signal);
 void LINKLAYER_DEBUG_SIGNAL_RESET(uint8_t signal);
 void LINKLAYER_DEBUG_SIGNAL_TOGGLE(uint8_t signal);
 void LINKLAYER_DEBUG_SIGNAL_SET(uint8_t signal)    { (void)signal; }
 void LINKLAYER_DEBUG_SIGNAL_RESET(uint8_t signal)  { (void)signal; }
 void LINKLAYER_DEBUG_SIGNAL_TOGGLE(uint8_t signal) { (void)signal; }
+#endif
 
 /* ============================================================
  * Runtime symbols the prebuilt (Arm Compiler) libraries reference

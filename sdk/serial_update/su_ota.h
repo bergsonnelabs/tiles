@@ -32,7 +32,16 @@
 #define SU_OTA_QW           16u                       /* programming unit, §7.3.7 */
 #define SU_OTA_RES_PAGE     124u                      /* key + install marker */
 #define SU_OTA_RES_OFF      (SU_OTA_RES_PAGE * SU_OTA_PAGE)   /* 0xF8000 */
+#if defined(BLE_ENABLED) && defined(THREAD_ENABLED)
+/* BLE + Thread builds: the OpenThread settings (pages 122-123,
+ * stm32wba55hg_ble_thread.ld) sit below page 124 and are kept out of the
+ * staging area, so they survive an update. Running image + staged image
+ * share 976 KB instead of 992 KB. */
+#define SU_OTA_THREAD_PAGE  122u
+#define SU_OTA_APP_LIMIT    (SU_OTA_THREAD_PAGE * SU_OTA_PAGE)   /* 999424: images end below page 122 */
+#else
 #define SU_OTA_APP_LIMIT    SU_OTA_RES_OFF            /* 1015808: images end below page 124 */
+#endif
 
 /* ---- Page 124 ---- */
 #define SU_OTA_KEY_OFF      0x000u                    /* 32-byte key record */
