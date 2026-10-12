@@ -48,6 +48,17 @@ extern uint8_t  ble_app_pairing_enabled;
 /* Sequencer */
 extern void UTIL_SEQ_Run(uint32_t mask);
 
+#if defined(THREAD_ENABLED)
+#include "core_thread.h"
+/* BLE + Thread: one sequencer runs both stacks. Mark the pass (thread_app.c)
+ * so a delay or watchdog feed inside a callback it runs does not start a
+ * nested pass (core_thread_process() checks the mark). */
+extern volatile uint8_t thread_app_seq_depth;
+#define SEQ_RUN()  do { thread_app_seq_depth++; UTIL_SEQ_Run(~0UL); thread_app_seq_depth--; } while (0)
+#else
+#define SEQ_RUN()  UTIL_SEQ_Run(~0UL)
+#endif
+
 /* Connection state (ble_app_glue.c) */
 extern volatile uint8_t ble_connected;
 extern volatile uint16_t ble_conn_handle;
@@ -114,6 +125,13 @@ static void _register_services(void)
      * there: it carries the BLE firmware update (ble_update.c), and the scope
      * when the project uses it. */
     ble_studio_link_register();
+#if defined(THREAD_ENABLED)
+    /* BLE + Thread: the Thread provisioning service when config.json asks for
+     * it ("thread": {"ble_provisioning": true}; a no-op otherwise). After
+     * Studio Link, so it shifts no other handle. */
+    extern void thread_prov_ble_register(void);   /* sdk/thread/thread_prov_ble.c */
+    thread_prov_ble_register();
+#endif
 }
 
 /* ============================================================
@@ -145,6 +163,12 @@ void core_ble_init(void)
     _ble_initialized = 1;
     _ble_seq_warmup_done = 0;
     _ble_seq_count = 0;
+#if defined(THREAD_ENABLED)
+    /* BLE + Thread: Thread joins on boot, and this is the first moment it may
+     * start (the radio comes up BLE first, as ST's BLE_HeartRate_Thread). An
+     * application's own core_thread_start() afterwards returns 0. */
+    (void)core_thread_start();
+#endif
 }
 
 /* Saved name for re-advertising after disconnect */
@@ -155,7 +179,7 @@ int core_ble_advertise(const char *name)
     if (!_ble_initialized) return -1;
     _adv_name = name;
     while (!_ble_seq_warmup_done) {
-        UTIL_SEQ_Run(~0UL);
+        SEQ_RUN();
         _ble_seq_count++;
         if (_ble_seq_count > 100) _ble_seq_warmup_done = 1;
     }
@@ -178,7 +202,7 @@ void core_ble_process(void)
      * value produced this pass should reach a subscriber in this pass. */
     ble_contract_publish();
 
-    UTIL_SEQ_Run(~0UL);
+    SEQ_RUN();
     if (!_ble_seq_warmup_done) {
         _ble_seq_count++;
         if (_ble_seq_count > 100) _ble_seq_warmup_done = 1;

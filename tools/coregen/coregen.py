@@ -2678,6 +2678,26 @@ def build_thread_config(project, mcu_define, errors):
     if out["default_key"]:
         eprint("  NOTE: thread: no network_key in config.json, using the well-known "
                "development key (anyone can join this network)")
+
+    # Run-time provisioning: "provisioning" lets core_thread_set_dataset() store
+    # a network that then wins over this one at boot (config.json's becomes the
+    # factory default); "ble_provisioning" adds the BLE service that lets a
+    # phone do it (docs/thread-provisioning-protocol.md) and implies the first.
+    prov, ble_prov = th.get("provisioning", False), th.get("ble_provisioning", False)
+    for field, value in (("provisioning", prov), ("ble_provisioning", ble_prov)):
+        if not isinstance(value, bool):
+            errors.append(f"thread.{field}: expected true or false, got {value!r}")
+    ble_prov = ble_prov is True
+    if ble_prov and not (project.get("ble") or {}).get("enabled"):
+        errors.append("thread.ble_provisioning: needs BLE in the same image; add "
+                      "\"ble\": {\"enabled\": true} to config.json, or use \"provisioning\" "
+                      "(core_thread_set_dataset() from C) without BLE")
+        ble_prov = False
+    out["provisioning"] = prov is True or ble_prov
+    out["ble_provisioning"] = ble_prov
+    if ble_prov:
+        eprint("  NOTE: thread.ble_provisioning is DEVELOPMENT ONLY: any phone that "
+               "connects can move this node to another Thread network (no pairing)")
     return out
 
 
@@ -2759,6 +2779,10 @@ def generate(tile_path, output_dir, config_path=None):
         # the build with a clear message rather than emitting broken C.
         ctx["ble_contract"] = build_ble_contract(project, config_path, errors, warnings)
         ctx["thread"] = build_thread_config(project, mcu["define"], errors)
+        # Thread joins on boot: core_init() starts it in a Thread-only build;
+        # with BLE too, core_ble_init() does (sdk/core/core_ble.c), since the
+        # radio has to come up BLE first.
+        ctx["thread_autostart"] = bool(ctx["thread"]) and not (project.get("ble") or {}).get("enabled")
         ctx["ble_radio"] = build_ble_radio(
             project,
             os.path.basename(os.path.dirname(os.path.abspath(config_path)))

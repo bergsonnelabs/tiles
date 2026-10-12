@@ -22,5 +22,18 @@
 #define THREAD_CFG_EXT_PANID          { {% for b in thread.ext_panid %}0x{{ '%02x' % b }}{{ ', ' if not loop.last }}{% endfor %} }
 /* {{ thread.mesh_local_prefix_str }} */
 #define THREAD_CFG_MESH_LOCAL_PREFIX  { {% for b in thread.mesh_local_prefix %}0x{{ '%02x' % b }}{{ ', ' if not loop.last }}{% endfor %} }
+{% if thread.provisioning %}
+
+/* "provisioning": a network stored at run time (core_thread_set_dataset())
+ * wins over the one above, which is the factory default
+ * (core_thread_factory_reset() returns to it). */
+#define THREAD_CFG_PROVISIONING       1
+{% endif %}
+{% if thread.ble_provisioning %}
+/* "ble_provisioning": the BLE service for it, 0x5D00
+ * (docs/thread-provisioning-protocol.md). DEVELOPMENT ONLY: any phone that
+ * connects can move this node to another network; no pairing. */
+#define THREAD_CFG_BLE_PROVISIONING   1
+{% endif %}
 
 #endif /* THREAD_DATASET_H */

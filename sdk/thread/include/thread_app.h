@@ -22,6 +22,9 @@ otInstance *thread_app_instance(void);
 /** Run the sequencer once: pending radio / OpenThread tasks, then WFI. */
 void thread_app_process(void);
 
+/** Nonzero inside a sequencer pass (thread_app_process, or core_ble's in BLE + Thread builds). */
+extern volatile uint8_t thread_app_seq_depth;
+
 /** Schedule the alarm tasks (called from the link layer's timer callbacks). */
 void thread_app_schedule_alarm(void);
 void thread_app_schedule_us_alarm(void);

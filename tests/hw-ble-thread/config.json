@@ -15,7 +15,8 @@
     "panid": "0x1234",
     "network_key": "00112233445566778899aabbccddeeff",
     "network_name": "tiles-dev",
-    "ext_panid": "dead00beef00cafe"
+    "ext_panid": "dead00beef00cafe",
+    "ble_provisioning": true
   },
   "pads": {}
 }

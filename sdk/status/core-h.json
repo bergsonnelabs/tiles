@@ -248,6 +248,7 @@
     "thread.diag": "na",
     "thread.settings": "na",
     "thread.ble_coexist": "na",
+    "thread.ble_provisioning": "na",
     "thread.commissioning": "na"
   }
 }

@@ -9,6 +9,11 @@
  * with one read / notify characteristic and joins the development Thread
  * network; tests/hw-ble-thread is the bench test.
  *
+ * config.json also enables "ble_provisioning": the Thread provisioning GATT
+ * service (0x5D00, docs/thread-provisioning-protocol.md) is linked, and the
+ * provisioning API is called behind a flag that is never set, so the board
+ * stays on config.json's network.
+ *
  * Order: core_ble_init() before core_thread_start() (BLE first, as ST's
  * BLE_HeartRate_Thread); one loop calls both process functions.
  */
@@ -23,6 +28,13 @@ static volatile uint32_t s_writes;
 static volatile uint32_t s_links;
 static uint8_t s_peer[16];
 static uint16_t s_peer_port;
+static volatile uint8_t s_never;          /* never set: links the calls, never runs them */
+
+/* The gate for BLE writes: the SDK's weak default returns 1 (open). */
+int core_thread_prov_allow_write(void)
+{
+    return s_writes < 1000u;
+}
 
 static void on_write(const uint8_t *data, uint16_t len, void *ctx)
 {
@@ -124,6 +136,15 @@ int main(void)
             (void)core_thread_partition_id();
             (void)core_thread_parent_rssi();
             (void)core_thread_last_error();
+
+            core_thread_dataset_t net;
+            if (core_thread_get_network(&net) == 0 && core_thread_is_provisioned() == 0 && s_never) {
+                net.panid ^= 1u;
+                (void)core_thread_set_dataset(&net);
+                (void)core_thread_factory_reset();
+                (void)core_thread_set_enabled(0);
+                (void)core_thread_set_enabled(1);
+            }
             if (s_writes > 100u)
                 (void)core_ble_stop_advertise();
         }
