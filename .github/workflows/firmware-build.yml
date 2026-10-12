@@ -77,6 +77,7 @@ jobs:
             'docs/thread-provisioning-protocol.md'
             'tests/hw-thread/**'
             'tests/hw-ble-thread/**'
+            'tests/hw-thread-ble-gw/**'
             'tests/host-nvm-sim/**'
             'tests/host-timer-sim/**'
             'Makefile'
@@ -263,7 +264,7 @@ jobs:
       # Thread links also run check_ota_boot.py, as the BLE ones do.
       - name: Build the Thread and BLE + Thread projects
         run: |
-          for p in val-thread hw-thread val-thread-provision val-ble-thread hw-ble-thread; do
+          for p in val-thread hw-thread val-thread-provision val-ble-thread hw-ble-thread hw-thread-ble-gw; do
             echo "::group::$p"
             make -C "tests/$p"
             echo "::endgroup::"
