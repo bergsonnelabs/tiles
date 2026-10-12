@@ -1,0 +1,8 @@
+{
+  "core": "Core.ST.W5",
+  "clock": "medium",
+  "iwdg": { "enabled": true, "timeout_ms": 5000 },
+  "ble": { "enabled": true, "pairing": "none" },
+  "thread": { "enabled": true },
+  "pads": {}
+}
