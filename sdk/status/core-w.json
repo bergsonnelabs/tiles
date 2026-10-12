@@ -207,8 +207,8 @@
       "note": "Bench 2026-10-11 (tests/hw-thread): settings snapshots are written to flash pages 122-123 (count observed) after the stm32_timer_if long-timeout fix. Restoring the network from flash after a reboot is not yet shown, nor the interaction with BLE update staging."
     },
     "thread.ble_coexist": {
-      "status": "compile",
-      "note": "2026-10-12: tests/val-ble-thread and tests/hw-ble-thread build (ST's LinkLayer_BLE_Thread_lib, STM32CubeWBA 1.6.1; OpenThread trimmed and rebuilt from ST's source, tools/build_openthread_trim.py). About 92 KB of RAM in use, 35 KB free. Not yet run on a board."
+      "status": "partial",
+      "note": "Bench 2026-10-12 (Core.ST.W5 at 1.8 V on the CoreProbe): a combined BLE + Thread image (BLE advertising, Thread leader, scope) ran ~3 min with no resets and was seen advertising on a phone; tests/hw-ble-thread reached its loop. Not yet shown: a BLE connection held while the node meshes with others and carries traffic."
     },
     "thread.ble_provisioning": {
       "status": "compile",
