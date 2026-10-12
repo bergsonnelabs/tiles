@@ -1,7 +1,8 @@
 /**
  * core_thread.c — core_thread.h on OpenThread (Core.ST.W5, THREAD_ENABLED builds)
  *
- * Compiled only when the build enables Thread (Makefile THREAD_ENABLED). The
+ * Compiled only when the build enables Thread (Makefile THREAD_ENABLED), alone
+ * or together with BLE (then core_ble_init() must run first). The
  * network credentials come from coregen/thread_dataset.h, which coregen writes
  * from config.json's "thread" block; a build forced with `make THREAD_ENABLED=1`
  * on a config without one uses the defaults below (the same as coregen's).
@@ -142,6 +143,12 @@ int core_thread_start(void)
 
     if (s_ot != NULL)
         return 0;
+#if defined(BLE_ENABLED)
+    /* BLE + Thread: the radio comes up in ST's order, BLE first (thread_app.c). */
+    extern int ble_app_ready(void);
+    if (!ble_app_ready())
+        return fail(OT_ERROR_INVALID_STATE);
+#endif
     otInstance *ot = thread_app_init();
     if (ot == NULL)
         return fail(OT_ERROR_FAILED);

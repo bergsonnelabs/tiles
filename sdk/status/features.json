@@ -719,6 +719,12 @@
           "desc": "OpenThread's settings (dataset, frame counters, network info) persisted in two reserved flash pages, power-loss safe."
         },
         {
+          "id": "thread.ble_coexist",
+          "layer": "Core",
+          "name": "BLE + Thread in one image",
+          "desc": "BLE (core_ble) and Thread (core_thread) running together on ST's concurrent link layer, one radio time-shared. OpenThread is a trimmed FTD build in this case (no commissioner, joiner, SRP, DNS, TCP); its settings pages stay out of the BLE update's staging area."
+        },
+        {
           "id": "thread.commissioning",
           "layer": "Core",
           "name": "commissioning (joiner / commissioner)",

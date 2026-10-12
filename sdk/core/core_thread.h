@@ -18,8 +18,17 @@
  *   }
  *
  * Requires: Core.ST.W5 (STM32WBA55), config.json `"thread": {"enabled": true}`
- * (or `make THREAD_ENABLED=1`), clock "medium" or higher. Not together with
- * BLE yet (BLE + Thread comes in a later milestone).
+ * (or `make THREAD_ENABLED=1`), clock "medium" or higher.
+ *
+ * With BLE: config.json may enable "ble" as well, and one image then runs
+ * both (ST's concurrent link layer time-shares the radio). Call
+ * core_ble_init() before core_thread_start() (core_thread_start() returns
+ * CORE_THREAD_ERR_STATE until BLE is up), and call both core_ble_process()
+ * and core_thread_process() from the main loop. They share one scheduler, so
+ * neither stack starves the other, and BLE callbacks may call this API;
+ * core_ble_process() also does BLE's own housekeeping (re-advertising,
+ * updates), so it must not be left out.
+ * OpenThread is a trimmed build in that case (see the notes at the end).
  *
  * Network: DEVELOPMENT ONLY. The network credentials come from config.json
  * ("thread": channel, panid, network_key, network_name, ext_panid,
@@ -29,8 +38,7 @@
  * commissioning (joiner / commissioner) is deferred.
  *
  * Deferred (not in this API yet): commissioning, MTD / sleepy end devices,
- * CoAP, SRP / DNS, border routing, TCP, BLE + Thread together, Studio DSL
- * blocks. The full OpenThread C API (sdk/thread/include/openthread) is
+ * CoAP, SRP / DNS, border routing, TCP, Studio DSL blocks. The full OpenThread C API (sdk/thread/include/openthread) is
  * available to C code through core_thread_instance().
  *
  * @studio category thread label=Core.Thread icon=⌬
@@ -99,7 +107,8 @@ typedef void (*core_thread_udp_rx_cb)(const uint8_t *data, uint16_t len,
  *
  * Call once after core_init(). Returns at once; attaching takes a few seconds
  * (watch core_thread_role()). Settings OpenThread keeps across resets (frame
- * counters, role) live in two reserved flash pages.
+ * counters, role) live in two reserved flash pages. In a build with BLE too,
+ * call it after core_ble_init(); before that it returns CORE_THREAD_ERR_STATE.
  */
 int core_thread_start(void);
 
@@ -216,10 +225,12 @@ void *core_thread_instance(void);
 //   Every node built from the same config.json joins the same network with the
 //   same network key; there is no joiner / commissioner yet. Development only.
 
-// @studio unsupported tier=1 value=M title="BLE and Thread not in the same build"
-//   A build enables one radio protocol: BLE + Thread (ST's concurrent link
-//   layer) comes in a later milestone. The build stops with an error if both
-//   are enabled.
+// @studio unsupported tier=1 value=L title="BLE + Thread builds use a trimmed OpenThread"
+//   With BLE in the same image, OpenThread is rebuilt without the commissioner,
+//   joiner, CoAP secure (DTLS), SRP and DNS clients, TCP, ping, mesh and
+//   link-metrics diagnostics, with 64 message buffers instead of 128, so both
+//   stacks fit in RAM with room for an application. A full router (FTD) all
+//   the same; Thread-only builds keep ST's complete library.
 
 // @studio unsupported tier=1 value=M title="FTD only: no sleepy end devices (MTD / SED)"
 //   The device is always a full Thread device with its receiver on; battery

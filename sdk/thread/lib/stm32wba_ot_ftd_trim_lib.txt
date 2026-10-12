@@ -1,0 +1,10 @@
+stm32wba_ot_ftd_trim_lib.a: OpenThread FTD (trimmed), built by tools/build_openthread_trim.py
+source:    STM32CubeWBA V1.6.1, Middlewares/ST/STM32_WPAN/thread/openthread/stack (OpenThread 4a0d6b7)
+project:   Middlewares/ST/STM32_WPAN/thread/openthread/openthread_lib/MDK-ARM/thread_ftd_keil_config/thread_ftd_keil_config.uvprojx (sources, includes, defines)
+config:    sdk/thread/config/stm32wba-openthread-ftd-trim-config.h
+toolchain: arm-none-eabi-gcc (Arm GNU Toolchain 15.2.Rel1 (Build arm-15.86)) 15.2.1 20251203
+flags:     -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=hard -Os -g0 -ffunction-sections -fdata-sections -fno-common -fshort-enums -mno-unaligned-access -w
+           C: -std=gnu11  C++: -std=gnu++11 -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit
+defines:   -DUSE_HAL_DRIVER -DMBEDTLS_CONFIG_FILE=<mbedtls-config.h> -DMBEDTLS_USER_CONFIG_FILE=<stm32wba-mbedtls-config.h> -DOPENTHREAD_FTD -DSTM32WBA55xx -DOPENTHREAD_CONFIG_FILE=<stm32wba-openthread-ftd-trim-config.h> -DOPENTHREAD_PROJECT_CORE_CONFIG_FILE=<stm32wba-openthread-ftd-trim-config.h> -DOPENTHREAD_BUILD_DATETIME="tiles-trim"
+sources:   229 (ST's list minus stack/src/cli/, stack/src/ncp/, stack/examples/apps/cli/, stack/examples/platforms/utils/debug_uart.c, stack/third_party/tcplp/)
+sha256:    643078b0694c00610c0ac7bfb6444141fadd146d09dc46179c2ad9091b5ec5d5

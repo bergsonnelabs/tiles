@@ -18,7 +18,20 @@
  *
  * The radio clock setup duplicates ble_app_init()'s steps 0-2 on purpose:
  * moving them into a shared function would change the BLE binaries, which
- * this milestone keeps byte-identical. BLE + Thread (milestone 2) merges them.
+ * stay byte-identical.
+ *
+ * BLE + Thread builds (BLE_ENABLED and THREAD_ENABLED) bring the radio up in
+ * the order of ST's BLE_HeartRate_Thread (STM32CubeWBA V1.6.1, app_entry.c
+ * MX_APPE_Init): APP_BLE_Init, the flash manager's RFTS bypass off, then
+ * APP_THREAD_Init. Here: core_ble_init() (ble_app_init: radio clocks, RNG,
+ * sequencer, timer server, flash manager, the link layer through
+ * ll_sys_ble_cntrl_init, the BLE stack, wpan_flash_ll_started), then
+ * core_thread_start(), which skips everything ble_app_init() already did
+ * (UTIL_SEQ_Init / UTIL_TIMER_Init again would drop BLE's tasks and timers)
+ * and starts the 802.15.4 side (otSysInit: radio_init) and OpenThread on the
+ * same sequencer. ll_sys_thread_init() is then a no-op (ll_sys_startup.c
+ * initializes the link layer's resources once). Thread's settings writes go
+ * through the flash manager's radio-free windows, like BLE's.
  */
 
 #include <stdint.h>
@@ -68,6 +81,7 @@ void thread_app_fatal(uint32_t reason, uint32_t arg, const char *file)
         ;
 }
 
+#if !defined(BLE_ENABLED)   /* BLE + Thread: ble_app_init() does this */
 /* ============================================================
  * HSE trim from OTP — as ble_app.c (ST's OTP record, CubeWBA otp.h)
  * ============================================================ */
@@ -90,6 +104,7 @@ static void config_hse_tuning(void)
     }
     MOD_BITS(RCC_ECSCR1, 0x3FUL << 16, ((uint32_t)(hsetune & 0x3Fu)) << 16);
 }
+#endif /* !BLE_ENABLED */
 
 /* ============================================================
  * Sequencer tasks
@@ -133,6 +148,7 @@ void thread_app_schedule_us_alarm(void)
  * Init
  * ============================================================ */
 
+#if !defined(BLE_ENABLED)   /* BLE + Thread: ble_app_init() steps 0-2 */
 static void radio_clocks_init(void)
 {
     /* Range 1 with hclk5 undivided by HDIV5 (RM0493 §12.4.6). core_clock_init
@@ -165,22 +181,35 @@ static void radio_clocks_init(void)
     ll_rcc_lsi1_enable_wait();
     ll_rcc_set_radio_sleep_clk(LL_RCC_RADIOSLEEPSOURCE_LSI);
 }
+#endif /* !BLE_ENABLED */
+
+#if defined(BLE_ENABLED)
+extern int ble_app_ready(void);                             /* sdk/ble/ble_app.c */
+#endif
 
 otInstance *thread_app_init(void)
 {
     if (s_instance != NULL)
         return s_instance;
 
+#if defined(BLE_ENABLED)
+    /* BLE + Thread: BLE first, as ST does (see the top of this file). */
+    if (!ble_app_ready())
+        return NULL;
+#else
     radio_clocks_init();
+#endif
 
     /* The AES path Thread's MAC and MLE security use (thread_crypto_hal.c):
      * refuse to start on a wrong result rather than send garbage. */
     if (thread_crypto_selftest() != 0)
         thread_app_fatal(THREAD_FATAL_CRYPTO, 0, NULL);
 
+#if !defined(BLE_ENABLED)
     UTIL_SEQ_Init();
     UTIL_TIMER_Init();
     wpan_flash_init();    /* Thread: the RFTS bypass stays on (see wpan_flash.h) */
+#endif
     UTIL_SEQ_RegTask(1U << CFG_TASK_OT_SETTINGS, UTIL_SEQ_RFU, thread_settings_process);
 
     /* Settings into RAM before OpenThread reads them (otInstanceInit). */

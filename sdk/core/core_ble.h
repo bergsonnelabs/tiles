@@ -11,6 +11,8 @@
  *   while (1) { core_ble_process(); }
  *
  * Requires: Core.ST.W5 (STM32WBA55), BLE_ENABLED=1, clock >= "default" (HSE).
+ * Thread may run in the same image (config.json "thread" too, core_thread.h):
+ * core_ble_init() first, then core_thread_start().
  *
  * @studio category ble label=Core.BLE icon=ᛒ
  *

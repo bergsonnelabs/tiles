@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@67d1ea0",
+  "source": "tiles@a328351",
   "subsystems": [
     {
       "id": "adc",
@@ -632,10 +632,10 @@
           "value": "H"
         },
         {
-          "title": "BLE and Thread not in the same build",
-          "brief": "A build enables one radio protocol: BLE + Thread (ST's concurrent link layer) comes in a later milestone. The build stops with an error if both are enabled.",
+          "title": "BLE + Thread builds use a trimmed OpenThread",
+          "brief": "With BLE in the same image, OpenThread is rebuilt without the commissioner, joiner, CoAP secure (DTLS), SRP and DNS clients, TCP, ping, mesh and link-metrics diagnostics, with 64 message buffers instead of 128, so both stacks fit in RAM with room for an application. A full router (FTD) all the same; Thread-only builds keep ST's complete library.",
           "tier": 1,
-          "value": "M"
+          "value": "L"
         },
         {
           "title": "FTD only: no sleepy end devices (MTD / SED)",

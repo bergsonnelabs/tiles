@@ -112,6 +112,12 @@ void ll_sys_rco_clbr_not(uint8_t start)
     }
 }
 
+/* STM32CubeWBA 1.7.0's link layers (BLE_Thread included) also call
+ * ll_sys_phy_start_clbr() / ll_sys_phy_stop_clbr() (ll_sys_cs.c, around a PHY
+ * calibration: LINKLAYER_PLAT_PhyStartClbr / PhyStopClbr). The 1.6.1 libraries
+ * the SDK links, LinkLayer_BLE_Thread_lib.a too, do not reference them, so
+ * they are not here; an upgrade to 1.7.0 must add them. */
+
 void ll_sys_request_temperature(void)
 {
 }

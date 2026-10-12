@@ -2615,9 +2615,8 @@ def build_thread_config(project, mcu_define, errors):
         errors.append("thread: Thread is only supported on Core.ST.W5 (STM32WBA55). "
                       "Remove \"thread\" from config.json, or build for Core.ST.W5.")
         return None
-    if (project.get("ble") or {}).get("enabled"):
-        errors.append("thread: BLE + Thread together comes in a later milestone. "
-                      "Enable one of \"ble\" / \"thread\", not both.")
+    # "ble" may be enabled too: one image runs both (ST's concurrent link
+    # layer; the Makefile's BLE + Thread block, stm32wba55hg_ble_thread.ld).
 
     out = {}
     role = str(th.get("role", "ftd")).lower()

@@ -1,0 +1,21 @@
+{
+  "core": "Core.ST.W5",
+  "clock": "medium",
+  "iwdg": {
+    "enabled": true,
+    "timeout_ms": 5000
+  },
+  "ble": {
+    "enabled": true
+  },
+  "thread": {
+    "enabled": true,
+    "role": "ftd",
+    "channel": 15,
+    "panid": "0x1234",
+    "network_key": "00112233445566778899aabbccddeeff",
+    "network_name": "tiles-dev",
+    "ext_panid": "dead00beef00cafe"
+  },
+  "pads": {}
+}

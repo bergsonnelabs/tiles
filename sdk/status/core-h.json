@@ -247,6 +247,7 @@
     "thread.udp": "na",
     "thread.diag": "na",
     "thread.settings": "na",
+    "thread.ble_coexist": "na",
     "thread.commissioning": "na"
   }
 }

@@ -475,6 +475,16 @@ void ble_app_init(void)
     ble_init_done = 1;
 }
 
+#if defined(THREAD_ENABLED)
+/* BLE + Thread builds: ble_app_init() has run, so the shared radio bring-up
+ * (clocks, sequencer, timer server, flash manager, link layer) is done and
+ * Thread may start on top of it (sdk/thread/thread_app.c). */
+int ble_app_ready(void)
+{
+    return ble_init_done;
+}
+#endif
+
 /* ============================================================
  * ble_app_advertise — start BLE advertising
  * ============================================================ */

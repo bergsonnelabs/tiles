@@ -73,6 +73,7 @@ jobs:
             'tests/val-guard-ble/**'
             'tests/val-thread/**'
             'tests/hw-thread/**'
+            'tests/hw-ble-thread/**'
             'tests/host-nvm-sim/**'
             'tests/host-timer-sim/**'
             'Makefile'
@@ -246,20 +247,17 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Thread (OpenThread, config.json "thread" block), and the refusal to
-      # build BLE and Thread together (a later milestone).
-      - name: Build the Thread projects
+      # Thread (OpenThread, config.json "thread" block), alone and together
+      # with BLE in one image (both blocks: ST's concurrent link layer, the
+      # trimmed OpenThread library, stm32wba55hg_ble_thread.ld). The BLE +
+      # Thread links also run check_ota_boot.py, as the BLE ones do.
+      - name: Build the Thread and BLE + Thread projects
         run: |
-          for p in val-thread hw-thread; do
+          for p in val-thread hw-thread val-ble-thread hw-ble-thread; do
             echo "::group::$p"
             make -C "tests/$p"
             echo "::endgroup::"
           done
-          if make -C tests/val-thread BLE_ENABLED=1 > /tmp/bt.log 2>&1; then
-            echo "::error::BLE + Thread built; the Makefile must refuse it"
-            exit 1
-          fi
-          grep -q 'BLE + Thread together comes in a later milestone' /tmp/bt.log || { tail -20 /tmp/bt.log; exit 1; }
 
       # val-guard-ble is a NEGATIVE test: core_ble.h must #error on a Core with
       # no radio. If it ever compiles, the availability guard has broken.
