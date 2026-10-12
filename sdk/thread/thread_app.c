@@ -237,7 +237,15 @@ otInstance *thread_app_instance(void)
     return s_instance;
 }
 
+/* Nonzero while a sequencer pass started by the SDK is running (this one, or
+ * core_ble's in BLE + Thread builds): the tasks it runs (OpenThread, BLE, and
+ * the application callbacks they call) must not be re-entered from a delay or
+ * a watchdog feed inside one of them (core_thread_process()). */
+volatile uint8_t thread_app_seq_depth;
+
 void thread_app_process(void)
 {
+    thread_app_seq_depth++;
     UTIL_SEQ_Run(~0UL);
+    thread_app_seq_depth--;
 }

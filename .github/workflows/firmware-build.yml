@@ -72,6 +72,9 @@ jobs:
             'tests/val-ble*/**'
             'tests/val-guard-ble/**'
             'tests/val-thread/**'
+            'tests/val-thread-*/**'
+            'tests/host-thread-prov/**'
+            'docs/thread-provisioning-protocol.md'
             'tests/hw-thread/**'
             'tests/hw-ble-thread/**'
             'tests/host-nvm-sim/**'
@@ -237,6 +240,13 @@ jobs:
       - name: Timer server simulation
         run: make -C tests/host-timer-sim
 
+      # Thread provisioning's wire format (sdk/thread/thread_prov_codec.c):
+      # dataset blob encode / decode / validation, the status layout, the boot
+      # precedence rule, and the worked example printed in
+      # docs/thread-provisioning-protocol.md. Host cc only.
+      - name: Thread provisioning codec tests
+        run: make -C tests/host-thread-prov
+
       # These take BLE_ENABLED from their config.json "ble" block, so they also
       # exercise the config-driven path Studio and the build service rely on.
       - name: Build the BLE projects
@@ -253,11 +263,16 @@ jobs:
       # Thread links also run check_ota_boot.py, as the BLE ones do.
       - name: Build the Thread and BLE + Thread projects
         run: |
-          for p in val-thread hw-thread val-ble-thread hw-ble-thread; do
+          for p in val-thread hw-thread val-thread-provision val-ble-thread hw-ble-thread; do
             echo "::group::$p"
             make -C "tests/$p"
             echo "::endgroup::"
           done
+          # Thread joins on boot: a main.c with no Thread code must still link
+          # (and start) OpenThread.
+          echo "::group::val-thread-auto"
+          make -C tests/val-thread-auto check-linked
+          echo "::endgroup::"
 
       # val-guard-ble is a NEGATIVE test: core_ble.h must #error on a Core with
       # no radio. If it ever compiles, the availability guard has broken.

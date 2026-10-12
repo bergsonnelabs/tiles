@@ -210,6 +210,10 @@
       "status": "compile",
       "note": "2026-10-12: tests/val-ble-thread and tests/hw-ble-thread build (ST's LinkLayer_BLE_Thread_lib, STM32CubeWBA 1.6.1; OpenThread trimmed and rebuilt from ST's source, tools/build_openthread_trim.py). About 92 KB of RAM in use, 35 KB free. Not yet run on a board."
     },
+    "thread.ble_provisioning": {
+      "status": "compile",
+      "note": "DEV-ONLY: open writes, any connected phone can set the network (no pairing; core_thread_prov_allow_write() is the gate hook). 2026-10-12: tests/hw-ble-thread, val-ble-thread (BLE service 0x5D00) and val-thread-provision (C API, no BLE) build; host tests for the wire format and boot precedence pass (tests/host-thread-prov). Not yet run on a board."
+    },
     "thread.commissioning": "none"
   }
 }

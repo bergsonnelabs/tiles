@@ -123,6 +123,10 @@ static inline uint32_t core_watchdog_sleep_chunk_ms(void)
     return (t >= 2UL) ? t / 2UL : 1UL;
 }
 
+#if defined(THREAD_ENABLED)
+void core_thread_service_tick(void);   /* sdk/core/core_thread.c */
+#endif
+
 /**
  * Feed the watchdog. Must be called before the timeout expires.
  *
@@ -135,6 +139,11 @@ static inline uint32_t core_watchdog_sleep_chunk_ms(void)
 static inline void core_watchdog_feed(void)
 {
     ll_iwdg_refresh();
+#if defined(THREAD_ENABLED)
+    /* Thread builds: a loop that feeds keeps Thread serviced even if it never
+     * delays (at most one sequencer pass every 5 ms; core_thread.c). */
+    core_thread_service_tick();
+#endif
 #if defined(DFU_STRIKE_TAG_ADDR) && defined(ROM_DFU)
     /* (ROM_DFU only: that is where core_init() keeps the count, and where the
      * linker reserves these SRAM words; elsewhere they are the stack top.)

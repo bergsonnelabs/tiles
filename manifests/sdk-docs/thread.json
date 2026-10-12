@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@67d1ea0",
+  "source": "tiles@bbda61f",
   "category": "thread",
   "label": "Core.Thread",
   "icon": "⌬",
@@ -201,6 +201,78 @@
       "signature": "core_thread_instance(void)",
       "returns": "void *",
       "brief": "The OpenThread instance, for C code that calls the OpenThread API directly.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_get_network",
+      "signature": "core_thread_get_network(core_thread_dataset_t * out)",
+      "returns": "int",
+      "brief": "Read the network the device is set to (its active dataset), without the network key.",
+      "params": [
+        {
+          "name": "out",
+          "ctype": "core_thread_dataset_t *",
+          "description": "Receives channel, PAN ID, ext PAN ID, mesh-local prefix, name and timestamp; network_key is all zeros."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_set_enabled",
+      "signature": "core_thread_set_enabled(int on)",
+      "returns": "int",
+      "brief": "Stop or restart Thread: leave the network (detach, radio idle for Thread) or attach again.",
+      "params": [
+        {
+          "name": "on",
+          "ctype": "int",
+          "description": "0 to stop (the role becomes CORE_THREAD_DISABLED), 1 to start again."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_set_dataset",
+      "signature": "core_thread_set_dataset(const core_thread_dataset_t * ds)",
+      "returns": "int",
+      "brief": "Move the device to another Thread network and store it, so it wins over config.json from now on.",
+      "params": [
+        {
+          "name": "ds",
+          "ctype": "const core_thread_dataset_t *",
+          "description": "The new network: channel 11-26, PAN ID 0x0000-0xFFFE, a 1-16 byte name, key, ext PAN ID, mesh-local prefix."
+        }
+      ],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_factory_reset",
+      "signature": "core_thread_factory_reset(void)",
+      "returns": "int",
+      "brief": "Forget the stored (provisioned) network and return to config.json's, then attach again.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_is_provisioned",
+      "signature": "core_thread_is_provisioned(void)",
+      "returns": "int",
+      "brief": "Is the current network a stored (provisioned) one rather than config.json's factory default?",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_thread_prov_allow_write",
+      "signature": "core_thread_prov_allow_write(void)",
+      "returns": "int",
+      "brief": "Hook: may a BLE client change the network now? Override to gate the provisioning service.",
       "params": [],
       "studio_exposed": false,
       "layer": "core"

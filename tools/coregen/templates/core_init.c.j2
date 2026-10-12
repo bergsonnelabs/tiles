@@ -58,6 +58,9 @@
 {% if ble_contract or ble_radio %}
 #include "ble_contract.h"
 {% endif %}
+{% if thread_autostart %}
+#include "core_thread.h"    /* "thread": joins on boot (core_thread_start below) */
+{% endif %}
 {% if dac_enabled %}
 #include "hal_dac.h"
 {% endif %}
@@ -873,5 +876,15 @@ void core_init(void)
      * while halted under SWD so a breakpoint doesn't false-trip the reset. */
     core_watchdog_debug_freeze();
     core_watchdog_start({{ iwdg_timeout_ms }});
+{% endif %}
+{% if thread_autostart %}
+
+    /* ---- Thread: joins on boot ----
+     * config.json enables "thread", so the node joins (or forms) its network
+     * now; main.c need not mention core_thread at all. core_delay_ms() and
+     * core_watchdog_feed() keep it serviced (core_thread_process() runs from
+     * them), and an explicit core_thread_start() later returns 0. With "ble"
+     * too, core_ble_init() starts Thread instead (BLE must come first). */
+    (void)core_thread_start();
 {% endif %}
 }

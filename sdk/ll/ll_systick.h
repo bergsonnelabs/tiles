@@ -76,6 +76,21 @@ static inline void ll_delay_us(uint32_t us)
     }
 }
 
+#if defined(THREAD_ENABLED)
+/* Thread builds (Core.ST.W5): the wait runs Thread's scheduler, so a program
+ * that only blinks with delays stays on the network (sdk/core/core_thread.c;
+ * a no-op before core_thread_start(), in interrupts, and inside OpenThread /
+ * BLE callbacks). Each pass sleeps (WFI) until the next interrupt, so the
+ * delay can end up to ~1 ms late. */
+void core_thread_process(void);
+
+static inline void ll_delay_ms(uint32_t ms)
+{
+    uint32_t start = _systick_ticks;
+    while ((_systick_ticks - start) < ms)
+        core_thread_process();
+}
+#else
 /**
  * Blocking delay in milliseconds.
  * Uses the SysTick interrupt counter for accurate timing.
@@ -86,5 +101,6 @@ static inline void ll_delay_ms(uint32_t ms)
     while ((_systick_ticks - start) < ms)
         ;
 }
+#endif
 
 #endif /* LL_SYSTICK_H */

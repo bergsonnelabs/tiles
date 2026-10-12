@@ -22,6 +22,16 @@
  * phone that sees the name, reads a role of 2-4 and watches the rx count climb
  * has seen both radios work in one image.
  *
+ * Provisioning (config.json "thread": {"ble_provisioning": true}): the SDK's
+ * Thread Provisioning service 0x5D00 is there as well
+ * (docs/thread-provisioning-protocol.md; DEVELOPMENT ONLY, open writes). With
+ * two nodes on the config.json network: write a new dataset to 0x5D02 on one
+ * of them and 01 (apply) to 0x5D03; it leaves the pair and forms its own
+ * partition on the new network (its rx count stops). Do the same on the other
+ * and they find each other again. Power-cycle both: they stay on the new
+ * network (provisioned wins over config.json). 02 (factory reset) on 0x5D03
+ * returns a node to config.json's network.
+ *
  * LED (PB12): heartbeats of 2 ms blips (dim, and a blip shows the loop is alive):
  *   detached / disabled   fast blink: a 2 ms flash every 125 ms
  *   child                 one blip a second
@@ -31,10 +41,10 @@
  *     receive time. One that lands on (or within 50 ms of) the heartbeat
  *     group waits until 50 ms after it, so it never merges into the rhythm.
  *
- * Status in RAM for SWD (CoreProbe), 25 words at g_ble_thread_status:
+ * Status in RAM for SWD (CoreProbe), 27 words at g_ble_thread_status:
  *   make
  *   arm-none-eabi-nm build/hw-ble-thread.elf | grep g_ble_thread_status    # its address
- *   probe-rs read --chip STM32WBA55CGUx b32 <address> 25
+ *   probe-rs read --chip STM32WBA55CGUx b32 <address> 27
  * Words 0-18 are hw-thread's g_thread_status (offsets in bytes), with its own
  * magic:
  *    0 magic 0x42544844 ("BTHD")     4 boots (warm resets since power-on)
@@ -58,6 +68,9 @@
  *      above the heap is painted at boot and checked every 10 s). The BLE +
  *      Thread linker script reserves 12 KB; free RAM beyond it absorbs more,
  *      but a peak near or past 12288 means the reserve is too small.
+ * and provisioning:
+ *  100 provisioned (1: a stored network, 0: config.json's)
+ *  104 network: channel | PAN ID << 16 (what the node is set to)
  * Healthy after a minute: the hw-thread numbers (roles 4 and 3 or 4 and 2 on
  * a pair, the same partition id, tx / rx climbing ~1 a second, last error 0),
  * advertise result 0, and with a phone connected and subscribed: connected 1,
@@ -104,6 +117,9 @@ typedef struct {
     int32_t  ble_adv_result;
     uint32_t ble_updates;
     uint32_t stack_peak;
+    /* provisioning */
+    uint32_t provisioned;
+    uint32_t network;
 } thread_status_t;
 
 /* .noinit: `boots` survives a warm reset (a watchdog reset shows up there);
@@ -314,7 +330,9 @@ int main(void)
     g_ble_thread_status.magic = STATUS_MAGIC;
 
     /* BLE first, then Thread (core_thread_start() needs the radio BLE brought
-     * up, as ST's BLE_HeartRate_Thread orders it). */
+     * up, as ST's BLE_HeartRate_Thread orders it). core_ble_init() starts
+     * Thread itself ("thread" in config.json joins on boot). */
+    core_thread_on_role_change(on_role, NULL);   /* before core_ble_init(), which starts Thread */
     core_ble_set_services(ble_services);
     core_ble_on_connect(on_connect, NULL);
     core_ble_on_disconnect(on_disconnect, NULL);
@@ -322,8 +340,7 @@ int main(void)
     core_ble_process();
     g_ble_thread_status.ble_adv_result = core_ble_advertise(BLE_NAME);
 
-    core_thread_on_role_change(on_role, NULL);
-    int rc = core_thread_start();
+    int rc = core_thread_start();        /* already started by core_ble_init(): returns 0 */
     if (rc != 0)
         g_ble_thread_status.last_error = rc;
     rc = core_thread_udp_open(UDP_PORT, on_rx, NULL);
@@ -358,6 +375,12 @@ int main(void)
             g_ble_thread_status.settings_saves = thread_settings_save_count();
             g_ble_thread_status.uptime_ms = now;
             ble_publish(role);
+            {
+                core_thread_dataset_t net;
+                g_ble_thread_status.provisioned = (uint32_t)core_thread_is_provisioned();
+                if (core_thread_get_network(&net) == 0)
+                    g_ble_thread_status.network = (uint32_t)net.channel | ((uint32_t)net.panid << 16);
+            }
             if (now / 1000u % 10u == 0u)
                 g_ble_thread_status.stack_peak = stack_peak();
         }

@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@a328351",
+  "source": "tiles@bbda61f",
   "subsystems": [
     {
       "id": "adc",
@@ -620,6 +620,12 @@
       "category": "thread",
       "gaps": [
         {
+          "title": "BLE provisioning is open (development only)",
+          "brief": "With \"ble_provisioning\" any phone that connects can move the node to another Thread network: there is no pairing or authorization yet. The network key cannot be read back. core_thread_prov_allow_write() is the hook for a gate; pairing-protected writes are planned.",
+          "tier": 1,
+          "value": "H"
+        },
+        {
           "title": "No DSL blocks for Thread",
           "brief": "Thread is C-only (Tier 1) for now, like BLE: no palette blocks, no twin. The role and UDP callbacks need the host-call ABI to grow first.",
           "tier": 2,
@@ -627,7 +633,7 @@
         },
         {
           "title": "No commissioning (fixed development network)",
-          "brief": "Every node built from the same config.json joins the same network with the same network key; there is no joiner / commissioner yet. Development only.",
+          "brief": "Every node built from the same config.json joins the same network with the same network key, unless it is moved at run time (core_thread_set_dataset(), or the open BLE provisioning service); there is no joiner / commissioner yet. Development only.",
           "tier": 1,
           "value": "H"
         },
