@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@bbda61f",
+  "source": "tiles@a155230",
   "category": "thread",
   "label": "Core.Thread",
   "icon": "⌬",
@@ -70,7 +70,7 @@
         {
           "name": "rx_cb",
           "ctype": "core_thread_udp_rx_cb",
-          "description": "Called for each datagram received on the port; may be NULL to only send."
+          "description": "Called with each datagram received on the port (one"
         },
         {
           "name": "ctx",

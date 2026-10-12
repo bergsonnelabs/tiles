@@ -142,10 +142,10 @@ static uint8_t s_ext[8];
 static volatile uint8_t s_rx_blips;   /* receive blips waiting to be shown */
 static uint32_t s_rx_blip_until;       /* end of the receive blip being shown */
 
-static void on_rx(const uint8_t *data, uint16_t len, const uint8_t src[16], uint16_t port, void *ctx)
+static void on_rx(const core_thread_udp_packet_t *pkt, void *ctx)
 {
-    (void)src;
-    (void)port;
+    const uint8_t *data = pkt->data;
+    uint16_t len = pkt->len;
     (void)ctx;
     beacon_t b;
     if (len < sizeof b)

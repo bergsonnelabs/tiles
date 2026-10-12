@@ -14,6 +14,9 @@
  * they wait or feed, so even a program that only blinks stays on the network.
  *
  * Usage (all of it optional except what you use):
+ *   static void on_rx(const core_thread_udp_packet_t *pkt, void *ctx)
+ *   { ... pkt->data, pkt->len, pkt->src, pkt->src_port ... }
+ *
  *   core_init();                                    // starts Thread
  *   core_thread_udp_open(1234, on_rx, NULL);
  *   while (1) {
@@ -108,12 +111,31 @@ typedef enum {
 typedef void (*core_thread_role_cb)(core_thread_role_t role, void *ctx);
 
 /**
- * UDP receive callback. Runs from core_thread_process().
- * src_addr is the sender's IPv6 address (16 bytes, network order); reply with
- * core_thread_udp_send(src_addr, src_port, ...).
+ * A received UDP datagram, as handed to a core_thread_udp_rx_cb.
+ *
+ * One struct instead of separate arguments on purpose: the old
+ * (data, len, src, port, ctx) form had two pointer and two uint16_t
+ * parameters, so a callback with them in the wrong order compiled silently
+ * and read the sender's address as the payload. Valid only during the
+ * callback: copy what you keep.
  */
-typedef void (*core_thread_udp_rx_cb)(const uint8_t *data, uint16_t len,
-                                      const uint8_t src_addr[16], uint16_t src_port, void *ctx);
+typedef struct {
+    const uint8_t *data;       /**< Payload bytes */
+    uint16_t       len;        /**< Payload length in bytes */
+    uint8_t        src[16];    /**< Sender's IPv6 address (network order) */
+    uint16_t       src_port;   /**< Sender's UDP port */
+} core_thread_udp_packet_t;
+
+/**
+ * UDP receive callback. Runs from core_thread_process().
+ * Reply with core_thread_udp_send(pkt->src, pkt->src_port, ...).
+ *
+ *   static void on_rx(const core_thread_udp_packet_t *pkt, void *ctx)
+ *   {
+ *       if (pkt->len >= 4) { ... pkt->data[0] ... }
+ *   }
+ */
+typedef void (*core_thread_udp_rx_cb)(const core_thread_udp_packet_t *pkt, void *ctx);
 
 /**
  * A Thread network: the operational dataset fields config.json sets.
@@ -179,7 +201,8 @@ void core_thread_on_role_change(core_thread_role_cb cb, void *ctx);
 /**
  * @brief  Open a UDP socket bound to a port and receive datagrams sent to it.
  * @param  port   Local UDP port (1-65535).
- * @param  rx_cb  Called for each datagram received on the port; may be NULL to only send.
+ * @param  rx_cb  Called with each datagram received on the port (one
+ *                core_thread_udp_packet_t); may be NULL to only send.
  * @param  ctx    Passed back to rx_cb; may be NULL.
  * @return 0 on success, CORE_THREAD_ERR_FULL when all sockets are taken, or another negative code.
  *
