@@ -48,6 +48,9 @@
 #include "ll_rcc.h"
 #include "ll_pwr.h"
 #include "ll_rtc.h"
+#include "ll_gpio.h"
+#include "ll_systick.h"
+#include "core_board.h"
 #include "app_conf.h"
 #include "stm32_seq.h"
 #include "stm32_timer.h"
@@ -70,6 +73,17 @@ thread_fatal_info_t thread_fatal_info __attribute__((section(".noinit")));
  * Fatal errors
  * ============================================================ */
 
+#if defined(LED_PORT)
+/* ms on SysTick's COUNTFLAG: interrupts are off here, the reload is 1 ms. */
+static void fatal_wait_ms(uint32_t ms)
+{
+    while (ms) {
+        if (SYSTICK_CSR & SYSTICK_CSR_COUNTFLAG)
+            ms--;
+    }
+}
+#endif
+
 void thread_app_fatal(uint32_t reason, uint32_t arg, const char *file)
 {
     (void)file;
@@ -77,8 +91,28 @@ void thread_app_fatal(uint32_t reason, uint32_t arg, const char *file)
     thread_fatal_info.reason = reason;
     thread_fatal_info.arg = arg;
     thread_fatal_info.magic = THREAD_FATAL_MAGIC;
+#if defined(LED_PORT)
+    /* Visible, not just a dark board: groups of `reason` short blinks, then a
+     * pause (THREAD_FATAL_CRYPTO = 4 blinks). Nothing here feeds the watchdog,
+     * so a running IWDG still resets the chip as before; without one this
+     * blinks until power-off. */
+    if (!(SYSTICK_CSR & SYSTICK_CSR_ENABLE))
+        ll_systick_init(SYSCLK_HZ);      /* TICKINT is masked by cpsid i */
+    ll_rcc_gpio_clk_enable(LED_PORT);
+    ll_gpio_config_output(LED_PORT, LED_PIN);
+    for (;;) {
+        for (uint32_t i = 0; i < reason; i++) {
+            LED_ON();
+            fatal_wait_ms(120);
+            LED_OFF();
+            fatal_wait_ms(280);
+        }
+        fatal_wait_ms(1600);
+    }
+#else
     for (;;)
         ;
+#endif
 }
 
 #if !defined(BLE_ENABLED)   /* BLE + Thread: ble_app_init() does this */

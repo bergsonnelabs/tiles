@@ -39,8 +39,9 @@ enum {
 
 /**
  * Unrecoverable platform error: recorded in thread_fatal_info (RAM, survives
- * a warm reset in .noinit), then the CPU halts in a loop so a debugger (or the
- * watchdog, if running) finds it.
+ * a warm reset in .noinit), then, with interrupts off, the onboard LED blinks
+ * the reason (groups of `reason` short blinks, ~2 s apart) until the watchdog,
+ * if running, resets the chip. A debugger finds it in that loop.
  */
 void thread_app_fatal(uint32_t reason, uint32_t arg, const char *file);
 

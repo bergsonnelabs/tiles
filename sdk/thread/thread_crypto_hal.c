@@ -34,6 +34,17 @@
  * stores 0x20 / 0x60000 there).
  * The register sequences follow RM0493 §25.4.5 (ECB/CBC encryption and
  * decryption processes) and ST's HAL_CRYP code.
+ *
+ * The AES peripheral is shared with BLE (sdk/wpan/hw_aes.c: SMP, privacy, and
+ * its ble_app_init() test vector) in BLE + Thread builds. Both run from the
+ * sequencer, never from an interrupt, so they never interleave, but neither
+ * may assume the other left the peripheral clean: hw_aes.c leaves ISR.CCF set
+ * after every block (it clears the flags before its next block instead). So
+ * every operation here starts from scratch (start_op: EN off, CCF / RWEIF /
+ * KEIF cleared, CR rewritten whole) and ends with EN off and CCF cleared. With
+ * a stale CCF, wait_ccf() returned at once and DOUTR was read mid-computation:
+ * zeros, RDERRF set, the start-up self-test failed (THREAD_FATAL_CRYPTO, the
+ * BLE + Thread boot loop, measured 2026-10-12: SR 0x81 / ISR 0x1 before it).
  */
 
 #include <stddef.h>
@@ -70,7 +81,10 @@ _Static_assert(offsetof(aes_regs_t, ISR) == 0x304, "AES ISR offset");
 #define AES_CR_KMOD       (3UL << 24)
 #define AES_SR_KEYVALID   (1UL << 7)
 #define AES_ISR_CCF       (1UL << 0)
+#define AES_ISR_RWEIF     (1UL << 1)
 #define AES_ICR_CCF       (1UL << 0)
+#define AES_ICR_RWEIF     (1UL << 1)      /* also clears SR.RDERRF / WRERRF */
+#define AES_ICR_KEIF      (1UL << 2)
 
 /* RCC is at 0x46020C00 (RM0493 §2.3, AHB4 + 0xC00); AHB2ENR at offset 0x08C.
  * This was 0x4602008C (no 0xC00), an unmapped address: a precise BusFault in
@@ -119,6 +133,7 @@ _Static_assert(offsetof(cryp_handle_t, Init.KeyMode) == 48, "CRYP Init.KeyMode")
 
 static int wait_ccf(aes_regs_t *a)
 {
+    /* CCF from this block only: start_op() cleared any earlier one. */
     for (uint32_t t = AES_TIMEOUT_LOOPS; t; t--) {
         if (a->ISR & AES_ISR_CCF) {
             a->ICR = AES_ICR_CCF;
@@ -155,12 +170,23 @@ static int check(const cryp_handle_t *h)
     return 0;
 }
 
+/* CR rewritten whole, EN and MODE clear: nothing another user (or an earlier
+ * operation) set survives (GCMPH, NPBLB, DMA enables, MODE). */
 static void configure(cryp_handle_t *h)
 {
     aes_regs_t *a = h->Instance;
-    uint32_t cr = a->CR & ~(AES_CR_EN | AES_CR_DATATYPE | AES_CR_KEYSIZE | AES_CR_CHMOD | AES_CR_KMOD);
-    a->CR = cr | (h->Init.DataType & AES_CR_DATATYPE) | h->Init.KeySize |
+    a->CR = (h->Init.DataType & AES_CR_DATATYPE) | h->Init.KeySize |
             (h->Init.Algorithm & AES_CR_CHMOD) | (h->Init.KeyMode & AES_CR_KMOD);
+}
+
+/* Take the peripheral from whatever state its last user left: disable, clear
+ * the flags (KEIF before reconfiguring, RM0493 §25.4.18), configure. */
+static void start_op(cryp_handle_t *h)
+{
+    aes_regs_t *a = h->Instance;
+    a->CR &= ~AES_CR_EN;
+    a->ICR = AES_ICR_CCF | AES_ICR_RWEIF | AES_ICR_KEIF;
+    configure(h);
 }
 
 HAL_StatusTypeDef HAL_CRYP_Init(cryp_handle_t *hcryp);
@@ -177,7 +203,7 @@ HAL_StatusTypeDef HAL_CRYP_Init(cryp_handle_t *hcryp)
         return HAL_ERROR;
     RCC_AHB2ENR |= RCC_AHB2ENR_AESEN;
     (void)RCC_AHB2ENR;
-    configure(hcryp);
+    start_op(hcryp);
     return HAL_OK;
 }
 
@@ -198,7 +224,7 @@ HAL_StatusTypeDef HAL_CRYP_SetConfig(cryp_handle_t *hcryp, cryp_config_t *pConf)
         hcryp->Init = *pConf;
     if (check(hcryp) != 0)
         return HAL_ERROR;
-    configure(hcryp);
+    start_op(hcryp);
     return HAL_OK;
 }
 
@@ -218,6 +244,10 @@ static int process(aes_regs_t *a, const uint32_t *in, uint32_t *out, uint32_t si
         w[1] = a->DOUTR;
         w[2] = a->DOUTR;
         w[3] = a->DOUTR;
+        if (a->ISR & AES_ISR_RWEIF) {           /* a DOUTR read returned zeros */
+            a->ICR = AES_ICR_RWEIF;
+            return -1;
+        }
         memcpy((uint8_t *)out + off, w, 16u);
     }
     return 0;
@@ -239,8 +269,7 @@ HAL_StatusTypeDef HAL_CRYP_Encrypt(cryp_handle_t *hcryp, uint32_t *Input, uint16
         return HAL_ERROR;
 
     aes_regs_t *a = hcryp->Instance;
-    a->CR &= ~AES_CR_EN;
-    configure(hcryp);
+    start_op(hcryp);
     a->CR = (a->CR & ~AES_CR_MODE) | AES_CR_MODE_ENC;
     if (load_key(a, &hcryp->Init) != 0)
         return HAL_TIMEOUT;
@@ -261,8 +290,7 @@ HAL_StatusTypeDef HAL_CRYP_Decrypt(cryp_handle_t *hcryp, uint32_t *Input, uint16
         return HAL_ERROR;
 
     aes_regs_t *a = hcryp->Instance;
-    a->CR &= ~AES_CR_EN;
-    configure(hcryp);
+    start_op(hcryp);
     /* ECB decryption: derive the decryption key first (MODE 01), then
      * decrypt (MODE 10) with the derived key left in KEYRx. */
     a->CR = (a->CR & ~(AES_CR_MODE | AES_CR_KMOD)) | AES_CR_MODE_KEYD;
