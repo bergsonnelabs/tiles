@@ -40,10 +40,11 @@ static void services(void)
                              CORE_BLE_BYTES(sizeof(notif_t)), NULL, NULL);
 }
 
-static void on_beacon(const uint8_t *data, uint16_t len, const uint8_t src[16],
-                      uint16_t port, void *ctx)
+static void on_beacon(const core_thread_udp_packet_t *pkt, void *ctx)
 {
-    (void)src; (void)port; (void)ctx;
+    const uint8_t *data = pkt->data;
+    uint16_t len = pkt->len;
+    (void)ctx;
     if (len < sizeof(beacon_t)) return;
     beacon_t b; memcpy(&b, data, sizeof b);
     if (b.tag[0] != 'T' || b.tag[1] != 'H') return;

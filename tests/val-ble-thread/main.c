@@ -72,15 +72,13 @@ static void on_role(core_thread_role_t role, void *ctx)
     (void)ctx;
 }
 
-static void on_rx(const uint8_t *data, uint16_t len, const uint8_t src[16], uint16_t port, void *ctx)
+static void on_rx(const core_thread_udp_packet_t *pkt, void *ctx)
 {
-    (void)data;
-    (void)len;
     (void)ctx;
     s_rx++;
     for (int i = 0; i < 16; i++)
-        s_peer[i] = src[i];
-    s_peer_port = port;
+        s_peer[i] = pkt->src[i];
+    s_peer_port = pkt->src_port;
 }
 
 int main(void)

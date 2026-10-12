@@ -438,7 +438,12 @@ static void udp_receive(void *ctx, otMessage *msg, const otMessageInfo *info)
     if (slot == NULL || slot->cb == NULL)
         return;
     uint16_t n = otMessageRead(msg, otMessageGetOffset(msg), buf, sizeof buf);
-    slot->cb(buf, n, info->mPeerAddr.mFields.m8, info->mPeerPort, slot->ctx);
+    core_thread_udp_packet_t pkt;
+    pkt.data = buf;
+    pkt.len = n;
+    memcpy(pkt.src, info->mPeerAddr.mFields.m8, sizeof pkt.src);
+    pkt.src_port = info->mPeerPort;
+    slot->cb(&pkt, slot->ctx);
 }
 
 int core_thread_udp_open(uint16_t port, core_thread_udp_rx_cb rx_cb, void *ctx)
