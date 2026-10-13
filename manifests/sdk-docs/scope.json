@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@e95f3f8",
+  "source": "tiles@77fd3f3",
   "category": "scope",
   "label": "Core.Scope",
   "icon": "📈",
@@ -42,12 +42,12 @@
         {
           "name": "name",
           "ctype": "const char *",
-          "description": "Channel name shown on the plot. Not copied — must outlive"
+          "description": "Channel name shown on the plot. Not copied — must outlive the program (a string literal)."
         },
         {
           "name": "ptr",
           "ctype": "const volatile void *",
-          "description": "The variable. Read on every sample, so it must stay valid"
+          "description": "The variable. Read on every sample, so it must stay valid (static or global, not a local)."
         },
         {
           "name": "type",
@@ -56,6 +56,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, -1 if the table or the schema frame is full.",
       "layer": "core"
     },
     {
@@ -86,6 +87,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, -1 if they do not all fit (none are added).",
       "layer": "core"
     },
     {
@@ -190,6 +192,7 @@
       "brief": "Is a host listening right now?",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "Non-zero while samples are being streamed.",
       "layer": "core"
     },
     {
@@ -199,7 +202,89 @@
       "brief": "Samples dropped since boot because the ring was full.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "Running count; wraps at 2^32.",
       "layer": "core"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_scope_type_t",
+      "kind": "enum",
+      "brief": "Channel value types — the wire type codes of docs/scope-protocol.md.",
+      "members": [
+        {
+          "name": "CORE_SCOPE_I32",
+          "value": "0",
+          "description": "int32_t, 4 bytes on the wire"
+        },
+        {
+          "name": "CORE_SCOPE_F32",
+          "value": "1",
+          "description": "float, 4 bytes"
+        },
+        {
+          "name": "CORE_SCOPE_BOOL",
+          "value": "2",
+          "description": "bool in memory, travels as int32 0/1"
+        },
+        {
+          "name": "CORE_SCOPE_U32",
+          "value": "3",
+          "description": "uint32_t, 4 bytes"
+        },
+        {
+          "name": "CORE_SCOPE_I16",
+          "value": "4",
+          "description": "int16_t, 2 bytes"
+        },
+        {
+          "name": "CORE_SCOPE_U16",
+          "value": "5",
+          "description": "uint16_t, 2 bytes"
+        },
+        {
+          "name": "CORE_SCOPE_I8",
+          "value": "6",
+          "description": "int8_t, 1 byte"
+        },
+        {
+          "name": "CORE_SCOPE_U8",
+          "value": "7",
+          "description": "uint8_t, 1 byte"
+        }
+      ]
+    },
+    {
+      "name": "core_scope_link_t",
+      "kind": "struct",
+      "brief": "A link carries the framed byte stream to the host. USB and BLE ship with the SDK; anything with a write function (a UART, a radio module) can be a link too — see core_scope_set_link().",
+      "fields": [
+        {
+          "name": "packet_bytes",
+          "ctype": "uint16_t"
+        },
+        {
+          "name": "flush_ms",
+          "ctype": "uint16_t"
+        }
+      ]
+    }
+  ],
+  "macros": [
+    {
+      "name": "core_scope_watch",
+      "signature": "core_scope_watch(var)",
+      "brief": "Register `var` as a channel named after itself."
+    },
+    {
+      "name": "core_scope_watch_as",
+      "signature": "core_scope_watch_as(name, var)",
+      "brief": "Register `var` under a display name of your choosing."
+    },
+    {
+      "name": "core_scope_watch_array",
+      "signature": "core_scope_watch_array(arr, count)",
+      "brief": "Register the first `count` elements of array `arr` as `arr[0]`, `arr[1]`, …"
     }
   ]
 }

@@ -157,7 +157,15 @@ def vibe_settings(path):
                     row["unit"] = control["display_unit"]
             if "default" in control:
                 named = next((c["label"] for c in choices if c["value"] == control["default"]), None)
-                row["default"] = named if named is not None else control["default"]
+                if named is not None:
+                    row["default"] = named
+                elif "scale" in control and isinstance(control["default"], (int, float)):
+                    # In the same units as the scaled range: 2230 mV on a 0.3-3.6 V
+                    # range is documented as 2.23.
+                    d = round(control["default"] * control["scale"], 6)
+                    row["default"] = int(d) if d == int(d) else d
+                else:
+                    row["default"] = control["default"]
             if "show" in control:
                 row["computed_unit"] = control.get("show_unit", "")
             if "role" in control:

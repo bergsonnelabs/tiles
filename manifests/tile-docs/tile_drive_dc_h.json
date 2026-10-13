@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@3edc9ed",
+  "source": "tiles@77fd3f3",
   "file": "tile_drive_dc_h.h",
   "brief": "H-bridge DC motor driver for the Drive.DC.H tile (rev a).",
   "description": "Embeds the TI DRV8214, a full H-bridge motor driver with integrated\ncurrent sensing, stall detection, and voltage/speed regulation.\n\nKey specifications:\n  - Output:        full H-bridge, 4 A peak / 2 A RMS continuous\n  - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)\n  - R_DS(on):      240 mOhm (high + low side total)\n  - Regulation:    voltage or speed, via internal PI loop\n  - Current sense: internal current mirror (IPROPI), 3 gain settings\n  - Stall detect:  hardware, configurable via IPROPI/VREF threshold\n  - Ripple count:  sensorless position/speed via commutation ripples\n  - Protection:    UVLO, OCP, OVP, thermal shutdown\n\nThe tile also exposes EN/PH (or IN1/IN2) control pads (pads 2, 3) for\ndirect GPIO/PWM-based motor control without I²C, and an analog\ncurrent-proportional output on pad 6 (NPROP/IPROPI) that mirrors the\nmotor winding current scaled by the CS_GAIN_SEL setting. Switch the\nbridge control source at runtime with set_control_mode().\n\nThe DRV8214 integrates a sensorless ripple counting algorithm\nthat counts commutation ripples in the motor current waveform\nto estimate rotor position and speed without external encoders\nor Hall sensors. In speed regulation mode (DRIVE_DC_H_MODE_SPEED),\nthe chip's internal PI loop maintains constant motor speed across\nvarying supply voltages and loads. The ripple count and estimated\nspeed can be read at any time via get_ripple_count() / get_speed().\nAccurate ripple counting requires motor-specific tuning of the\nINV_R, KMC, and filter parameters (see DRV8214 datasheet\nsection 9.2.3.1).\n\nDatasheet: https://www.bergsonne.io/tiles/drive/dc-h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv8214.pdf\n\n@studio tile label=Drive.DC.H icon=⚙\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"nSLEEP pin (hardware-gated)\" section=advanced\n  Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)\n  is not routed to any tile pad in the Drive.DC.H rev-a layout\n  (verify in definitions/Drive-DC-H-a.json — pads 1–10 are\n  GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,\n  V+; nSLEEP is strapped active on the PCB). sleep()/wake() only\n  toggle the I²C-side EN_OUT bit; the chip itself can't reach its\n  true quiescent floor. Closing this gap requires a tile hardware\n  revision that routes nSLEEP to a connector pad.\n\n@studio unsupported severity=niche category=\"Address selection (factory variants)\"\n  The DRV8214 derives its 7-bit I²C address from tri-level pins\n  A0/A1, but the Drive.DC.H tile straps these to fixed values per\n  factory variant: A30 (0x30), A31 (0x31), A33 (0x33), A34 (0x34\n  default). Address is chip-gated at order time, not runtime-\n  settable. The 9-entry instance table in this driver covers the\n  full chip address space, but only those four straps are sold —\n  pick a tile variant per Drive.DC.H tile sharing a bus.",
@@ -573,22 +573,22 @@
       "params": [
         {
           "name": "motor_mohm",
-          "description": "[0..65535] mΩ Winding resistance. 0 = leave"
+          "description": "[0..65535] mΩ Winding resistance. 0 = leave chip defaults (no-op for INV_R/KMC)."
         },
         {
           "name": "ripples_per_rev",
-          "description": "[0..255] Commutation ripples per shaft revolution"
+          "description": "[0..255] Commutation ripples per shaft revolution (poles × brush pairs; common: 3, 5, 6, 7, 12). 0 = default (12); clamped to 255."
         },
         {
           "name": "kv_uv_per_rpm",
-          "description": "[0..5000] µV/RPM Back-EMF constant (typical small"
+          "description": "[0..5000] µV/RPM Back-EMF constant (typical small motor: 100-2000). 0 = skip KMC tuning."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Program the motor profile for ripple counting and speed regulation.",
-      "description": "Writes the DRV8214's ripple-counter calibration registers (INV_R,\nKMC and their scale fields) from physical motor parameters, and\ncaches ripples-per-rev for the set_speed_rpm()/get_speed_rpm()\nconversions. Equivalent to supplying `motor_mohm`,\n`ripples_per_rev` and `kv_uv_per_rpm` in the init config — use this\nwhen the driver was initialised with defaults (e.g. from Studio)\nand you want accurate closed-loop speed control.\n\nExample (RS PRO 834-7644, direct drive): motor_mohm=6000,\nripples_per_rev=12, kv_uv_per_rpm=187.\n\n                         chip defaults (no-op for INV_R/KMC).\n                         (poles × brush pairs; common: 3, 5, 6, 7,\n                         12). 0 = default (12); clamped to 255.\n                         motor: 100-2000). 0 = skip KMC tuning.",
+      "description": "Writes the DRV8214's ripple-counter calibration registers (INV_R,\nKMC and their scale fields) from physical motor parameters, and\ncaches ripples-per-rev for the set_speed_rpm()/get_speed_rpm()\nconversions. Equivalent to supplying `motor_mohm`,\n`ripples_per_rev` and `kv_uv_per_rpm` in the init config — use this\nwhen the driver was initialised with defaults (e.g. from Studio)\nand you want accurate closed-loop speed control.\n\nExample (RS PRO 834-7644, direct drive): motor_mohm=6000,\nripples_per_rev=12, kv_uv_per_rpm=187.",
       "name": "tile_drive_dc_h_set_motor_params"
     },
     {

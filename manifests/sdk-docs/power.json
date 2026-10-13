@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
@@ -66,10 +66,11 @@
         {
           "name": "timeout_ms",
           "ctype": "uint32_t",
-          "description": "Longest time to stay asleep, measured on the RTC; 0 waits"
+          "description": "Longest time to stay asleep, measured on the RTC; 0 waits for the edge however long it takes."
         }
       ],
       "studio_exposed": false,
+      "return_desc": "1 = woken by the pad (or it was already at the wake level), 0 = timed out, -1 = the pad can't take an edge interrupt.",
       "layer": "core"
     },
     {
@@ -109,6 +110,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_ERROR if refused because of the watchdog; does not return otherwise.",
       "layer": "core"
     },
     {

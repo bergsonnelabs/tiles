@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@dfa3dbe",
+  "source": "tiles@77fd3f3",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -350,6 +350,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, or HAL_ERROR if resolution is unsupported on this family",
       "layer": "hal"
     },
     {
@@ -605,7 +606,7 @@
       "name": "hal_adc_init_simple",
       "signature": "hal_adc_init_simple(hal_adc_t * adc, ADC_TypeDef * instance)",
       "returns": "hal_status_t",
-      "brief": null,
+      "brief": "Deprecated. Use hal_adc_init(adc, instance, sysclk_hz, HAL_ADC_RES_12BIT)",
       "params": [
         {
           "name": "adc",
@@ -617,13 +618,14 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "hal"
     },
     {
       "name": "hal_adc_read_pad",
       "signature": "hal_adc_read_pad(hal_adc_t * adc, uint8_t pad)",
       "returns": "uint16_t",
-      "brief": null,
+      "brief": "Deprecated. Pad-based read; use hal_pad_analog + hal_adc_add_channel + hal_adc_read",
       "params": [
         {
           "name": "adc",
@@ -635,13 +637,14 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "hal"
     },
     {
       "name": "hal_adc_read_pad_mv",
       "signature": "hal_adc_read_pad_mv(hal_adc_t * adc, uint8_t pad)",
       "returns": "uint32_t",
-      "brief": null,
+      "brief": "Deprecated.",
       "params": [
         {
           "name": "adc",
@@ -653,6 +656,7 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "hal"
     },
     {
@@ -744,6 +748,14 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_adc_t",
+      "kind": "typedef",
+      "brief": "Core-level ADC handle. Alias for hal_adc_t — use this in application code.",
+      "decl": "typedef hal_adc_t core_adc_t;"
     }
   ]
 }

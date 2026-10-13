@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3bcb81b",
+  "source": "tiles@77fd3f3",
   "tile": "Sense.I.6P6",
   "palette": {
     "label": "Sense.I.6P6",
@@ -1902,7 +1902,7 @@
         {
           "name": "config",
           "type": "int",
-          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc. (same"
+          "description": "OR'd flags: ACTIVE_HIGH|PUSH_PULL|LATCHED etc. (same layout as int1_config; the driver shifts the bits into the INT2 positions internally)."
         }
       ],
       "returns": "void",
@@ -2086,7 +2086,7 @@
             0,
             1000
           ],
-          "description": "X-axis threshold in mg (resolution ~3.9 mg; values"
+          "description": "X-axis threshold in mg (resolution ~3.9 mg; values above ~996 mg clamp to the register maximum 255)"
         },
         {
           "name": "y_mg",

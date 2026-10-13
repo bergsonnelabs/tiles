@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -290,6 +290,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The coregen-initialized handle, or NULL.",
       "layer": "core"
     },
     {
@@ -995,6 +996,20 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_i2c_t",
+      "kind": "typedef",
+      "brief": "Core-level I2C handle. Alias for hal_i2c_t — use this in application code.",
+      "decl": "typedef hal_i2c_t core_i2c_t;"
+    },
+    {
+      "name": "core_i2c_target_t",
+      "kind": "typedef",
+      "brief": "Core-level I2C target handle. Alias for hal_i2c_target_t.",
+      "decl": "typedef hal_i2c_target_t core_i2c_target_t;"
     }
   ]
 }

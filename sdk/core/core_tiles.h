@@ -455,11 +455,10 @@ static inline tiles_pal_t *core_tiles_pal2(core_i2c_t *i2c, core_spi_t *spi)
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
 // @studio unsupported tier=1 value=M title="Hard cap of 4 cached PALs per bus type"
-//   The internal slot table is sized to 4. Designs with >4 simultaneous
-//   I2C buses (or >4 SPI buses) will silently route extras to slot 0,
-//   which corrupts the cached function pointers if the bus types
-//   differ. No current Core has that many buses but the cap is
-//   undocumented for future-proofing.
+//   Each bus type keeps its own table of 4 PALs. A fifth distinct bus of
+//   the same type gets the first bus's PAL back, so its tile driver
+//   silently talks to the first bus. No current Core has more than 4
+//   buses of one type.
 //
 // @studio unsupported tier=1 value=L title="No bus / address discovery"
 //   Tile drivers receive a bare tiles_pal_t* and a tile JSON; there's

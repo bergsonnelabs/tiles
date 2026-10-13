@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@8c11e89",
+  "source": "tiles@77fd3f3",
   "file": "tile_sense_mic.h",
   "brief": "Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC). I2C-only, command-based protocol via tiles_pal_t raw I2C.",
   "description": "        I2C-only, command-based protocol via tiles_pal_t raw I2C.\n@version 2.4.0\n\nSignal chain (production schematic):\n  - Same Sky CMM-2718AT-38164W-TR: analog, omnidirectional, top-port MEMS\n    mic. −38 dBV/Pa (±1 dB), 64 dBA SNR, 128 dB SPL overload, 170 Ω\n    output, 0.75 V DC output, 175 µA.\n  - AC-coupled through C2 (100 nF) into the + input of an Analog Devices\n    AD8605 (rail-to-rail CMOS op-amp, 1 mA). C3 (100 nF) also sits from\n    that input to GND, so C2/C3 halve the audio on the way in.\n  - Non-inverting gain 1 + R4/R3 = 1 + 47k/1k = 48x (C4 100 pF across\n    R4: ~34 kHz low-pass). Mic to ADC: 0.5 x 48 = 24x.\n  - The amp output drives the MAX11645's AIN0 and pad 8. AIN1 is not\n    connected.\n  - Maxim MAX11645: 12-bit, 2-channel, up to 94.4 ksps, I2C to 1.7 MHz,\n    internal 2.048 V reference.\n\nBias: the + input is biased from the MAX11645's REF pin through R2/R1\n(330k/330k, with C6 100 nF on REF), and R3 returns to GND with no\nDC-blocking capacitor, so the bias is amplified 48x as well. REF is\ndriven only by SENSE_MIC_REF_INTERNAL_BUF (Table 6); then the bias is\n1.024 V x 48 and the output sits at the V+ rail — no audio. In every\nother mode REF is not connected, the bias is ~0 V, and the output rests\nat 0 V: only the positive half-cycles of the sound reach the ADC. The\ndriver therefore defaults to the VDD reference, measures the resting\nlevel at init(), and corrects its SPL figure for the half-wave signal.\n(A board revision with a capacitor in series with R3 would centre the\nsignal on 1.024 V in the REF_INTERNAL_BUF mode.)\n\nThe MAX11645 uses a command-based I2C protocol (no register addresses).\nAll bus access goes through tiles_pal_t i2c_write_raw / i2c_read_raw.\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\n\n\nDatasheet: Maxim MAX11644/MAX11645, 19-4544; Rev 3, 9/09\n\n@studio tile label=Sense.MIC icon=◉\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"Full-wave audio\" section=runtime\n  Hardware-gated. The amp rests at 0 V in every usable mode (its bias\n  comes from the undriven REF pin and is gained 48x), so only positive\n  half-cycles reach the ADC: fine for levels and events, not for\n  recording a waveform. Needs a board revision (a capacitor in series\n  with R3, then the REF_INTERNAL_BUF mode centres the signal).\n\n@studio unsupported severity=niche category=\"Differential / bipolar input\" section=config\n  Hardware-gated: AIN1 is not connected, so the ADC runs single-ended,\n  where the MAX11645 ignores the bipolar setting.\n\n@studio unsupported severity=advanced category=\"External reference voltage on REF pin\" section=config\n  Hardware-gated. The MAX11645 accepts an external reference on\n  its REF pin, but on this tile REF only feeds the on-board amp\n  bias divider (R2/R1) and its 100 nF decoupling cap (C6); it is\n  not on any pad, and AIN1 is unconnected. Closing this gap needs\n  a tile revision. Until then SENSE_MIC_REF_EXTERNAL configures\n  the chip but has no usable reference source.",
@@ -529,9 +529,9 @@
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "SPL in 0.1 dB units. 300 (30.0 dB) when below the ~45 dB",
+      "return": "SPL in 0.1 dB units. 300 (30.0 dB) when below the ~45 dB measurement floor. Negative values are not produced.",
       "brief": "Read instantaneous SPL in 0.1 dB units.",
-      "description": "Captures a short sample buffer (~64 samples), computes the RMS\namplitude relative to the calibrated resting level, scales it to\n0.1 mV via the configured Vref, then maps to dB SPL: −38 dBV/Pa\n(1 Pa = 94 dB = 12.59 mV RMS at the mic, ~302 mV RMS at the ADC after\nthe 24x chain), +3 dB for the half-wave signal. Integer-only, with a\n32-entry log10 table.\n\nReturns dB SPL in 0.1 dB units (e.g. 700 = 70.0 dB).\n\n        measurement floor. Negative values are not produced.",
+      "description": "Captures a short sample buffer (~64 samples), computes the RMS\namplitude relative to the calibrated resting level, scales it to\n0.1 mV via the configured Vref, then maps to dB SPL: −38 dBV/Pa\n(1 Pa = 94 dB = 12.59 mV RMS at the mic, ~302 mV RMS at the ADC after\nthe 24x chain), +3 dB for the half-wave signal. Integer-only, with a\n32-entry log10 table.\n\nReturns dB SPL in 0.1 dB units (e.g. 700 = 70.0 dB).",
       "name": "tile_sense_mic_read_spl_db"
     },
     {
@@ -593,7 +593,7 @@
         110
       ],
       "unit": "dB",
-      "default": 700
+      "default": 70
     },
     {
       "label": "Sound wait threshold",
@@ -607,7 +607,7 @@
         110
       ],
       "unit": "dB",
-      "default": 700
+      "default": 70
     },
     {
       "label": "Voltage reference",

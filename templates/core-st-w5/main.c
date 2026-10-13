@@ -20,8 +20,9 @@
  * The SDK Makefile reads that key and links the WBA BLE stack in (~200 KB of
  * flash, ~50 KB of RAM), so this works from Studio and the cloud build service
  * too — both only ever write config.json. `make BLE_ENABLED=1` still works as a
- * local override. There are no DSL blocks for BLE yet: drive it from C with the
- * core_ble_* API, and see the ble-* projects under tests/.
+ * local override. Drive it from C with the core_ble_* API (include core_ble.h;
+ * core.h does not), or declare a BLE contract in config.json for DSL blocks;
+ * see the ble-* projects under tests/.
  *
  * "clock": "medium" is 32 MHz from the HSE. Raise it to "high" (64 MHz) or
  * "max" (100 MHz) in config.json when you need the headroom.

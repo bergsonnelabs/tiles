@@ -1,6 +1,6 @@
 # Core.ST.L4 soft-brick recovery — watchdog + strike-counter → ROM DFU
 
-**Status:** proposed (design) · **Scope:** Core.ST.L4 first, Core.ST.H5 fast-follow
+**Status:** shipped on Core.ST.L4 (bench-verified 2026-07-13, `tests/hw-watchdog-recovery`); on Core.ST.H5 compiled in, escalation not yet benched. This page is the original design note. · **Scope:** Core.ST.L4 first, Core.ST.H5 fast-follow
 **Owner:** (firmware) · **Depends on:** existing `core_watchdog`, `hal_dfu`, `core_init` codegen
 
 ## Problem

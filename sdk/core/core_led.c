@@ -47,9 +47,10 @@ extern hal_adc_t core_adc1 __attribute__((weak));
 static uint32_t s_scale_q8 = 0;      /* 0 = not measured yet */
 static uint32_t s_scaled_at_ms = 0;
 
-/* VDD in mV through VREFINT: L0 and L4 (ADC1), W5 (ADC4). The H5's
- * VREFINT read is not working yet and returns a nominal 3300 mV, which
- * gives a scale of 1 (no change). */
+/* VDD in mV through VREFINT: L0 and L4 (ADC1), W5 (ADC4). The H5 is not
+ * wired in yet and returns a nominal 3300 mV, which gives a scale of 1 (no
+ * change). Its VREFINT read itself works (adc.mv verified 2026-09-22); what
+ * is missing is this path on the H5 and a bench check of it. */
 #if defined(STM32WBA55xx)
 #define LED_VDD_ADC  ADC4
 #else

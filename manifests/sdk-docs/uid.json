@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "uid",
   "label": "Core.UID",
   "icon": "🔖",
@@ -18,7 +18,7 @@
         {
           "name": "out",
           "ctype": "uint32_t[3]",
-          "description": "Destination for the three words: out[0] is the first UID word,"
+          "description": "Destination for the three words: out[0] is the first UID word, out[2] the last. Must point to at least 3 uint32_t."
         }
       ],
       "studio_exposed": false,
@@ -31,6 +31,7 @@
       "brief": "Fold the full 96-bit ID into a single stable 32-bit value (the three words XORed together). Better mixed than any single word — use it to derive short tokens (e.g. a 4-hex-digit name suffix) where the raw low bytes might be correlated across a manufacturing batch.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "A 32-bit value, stable for the life of the chip.",
       "layer": "core"
     },
     {
@@ -51,6 +52,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Number of hex characters written (24), or -1 if buf is NULL or buflen is too small.",
       "layer": "core"
     }
   ]

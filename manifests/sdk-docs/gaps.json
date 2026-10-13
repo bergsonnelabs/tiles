@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@bbda61f",
+  "source": "tiles@77fd3f3",
   "subsystems": [
     {
       "id": "adc",
@@ -28,10 +28,10 @@
           "value": "M"
         },
         {
-          "title": "No oversampling / averaging helper",
-          "brief": "STM32 ADCs can hardware-oversample 2×–256× for extra effective resolution. The HAL exposes the registers but core_adc has no convenience wrapper — callers reach into tal_adc / hal_adc to set OVSR/OVSS bits manually.",
-          "tier": 1,
-          "value": "M"
+          "title": "No core_adc / DSL oversampling wrapper",
+          "brief": "Hardware oversampling (2x to 256x; 1024x on Core.ST.H5) works through the HAL on the same handle: hal_adc_set_oversample(&core_adc1, ratio) averages, hal_adc_set_oversample_ex() also widens the result. There is no core_adc_* wrapper or DSL surface for it.",
+          "tier": 2,
+          "value": "L"
         },
         {
           "title": "No injected channels",
@@ -201,7 +201,7 @@
         },
         {
           "title": "Target mode on H5 I2C2 / I2C3",
-          "brief": "startup_stm32h523xx.s carries vectors for I2C1_EV, I2C1_ER and I2C2_EV only. There is no I2C2_ER or I2C3 entry, and slot 58 is labelled as I2C2 Error shared with USART1, so target mode is restricted to I2C1 on Core.ST.H5. I2C1 + I2C3 both work on Core.ST.L4 and Core.ST.W5; Core.ST.L0 has only I2C1.",
+          "brief": "Target mode runs on I2C1 only on Core.ST.H5 (driver-deferred). startup_stm32h523xx.s now has the I2C2 and I2C3 event and error vectors (51-54, 80-81, RM0481 Table 147), but hal_i2c.c registers a target on I2C1 alone there. I2C1 + I2C3 both work on Core.ST.L4 and Core.ST.W5; Core.ST.L0 has only I2C1.",
           "tier": 1,
           "value": "L"
         },
@@ -359,8 +359,8 @@
           "value": "M"
         },
         {
-          "title": "Stop / Standby not bench-verified on Core.ST.L0; Standby not on Core.ST.W5",
-          "brief": "The register maps behind stop_for / standby_for / RTC / backup were corrected against RM0377 and RM0493 on 2026-09-25 (the L0 enabled the LSE instead of the LSI and hung; the WBA wrote CCIPR instead of BDCR1, had no RTC bus clock and a reserved Standby LPMS). The W5's Stop passed tests/hw-sleep-cycle on 2026-09-25; its Standby and all of the L0 are compile-only until they do. Core.ST.L4 passed the same test; Core.ST.H5 keeps its older sleep code until its own fix session.",
+          "title": "Standby not bench-verified on Core.ST.L0 or Core.ST.W5; Core.ST.H5 sleep compile-only",
+          "brief": "The register maps behind stop_for / standby_for / RTC / backup were corrected against RM0377 and RM0493 on 2026-09-25. Stop with the watchdog running passed tests/hw-sleep-cycle on Core.ST.L4 and Core.ST.W5 (2026-09-25) and Core.ST.L0 (2026-09-26). Standby on the L0 and the W5 is compile-only. Core.ST.H5 moved to the same fed, chunked Stop code on 2026-10-13 and has not run it on a board yet; its core_standby_for() still has no watchdog check.",
           "tier": 1,
           "value": "H"
         },
@@ -451,7 +451,7 @@
         },
         {
           "title": "LSE / external crystal not exposed",
-          "brief": "core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift on the L4/WBA; the L0's is 26-56 kHz part to part and is not calibrated against HSI16, so its RTC second can be off by tens of percent). Cores with an LSE crystal need ll_rtc_init(1) — no Tier 2 wrapper that takes a clock-source argument.",
+          "brief": "core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift on the L4/WBA). The L0's LSI is 26-56 kHz part to part; it is measured once against SYSCLK (ll_lsi_hz(), sdk/hal/hal_lsi.c) and the RTC prescaler is set from that, so the second is as good as SYSCLK at that moment (HSI16 at high / max, MSI at low / medium) and drifts with temperature. Cores with an LSE crystal need ll_rtc_init(1) — no Tier 2 wrapper that takes a clock-source argument.",
           "tier": 1,
           "value": "M"
         },
@@ -509,20 +509,20 @@
           "value": "M"
         },
         {
-          "title": "No coregen auto-init for serial",
-          "brief": "Tier 2 wrappers assume the user has called core_serial_init on the matching handle before any send. Coregen doesn't yet read a `serial: { 1: { baud: 115200 } }` block out of config.json and emit the init in core_init(). Until it does, the bus has to be primed by hand even when using Tier 2.",
+          "title": "Coregen sets up USART pads only, not LPUART",
+          "brief": "A USART<n>.TX / .RX pad in config.json makes coregen emit the handle (core_usart<n>) and its init in core_init(), with `baud` and `rx_interrupt` from interfaces.USART<n>. LPUART1 pads get no handle or init: call core_serial_init() on it by hand.",
           "tier": 2,
+          "value": "L"
+        },
+        {
+          "title": "No DMA or interrupt-driven TX",
+          "brief": "TX is polled: core_serial_write() and print return once the last byte is in the data register. RX is interrupt-driven into a ring buffer only when `rx_interrupt` is set (or hal_uart_config_t.rx_interrupt); otherwise reads poll the data register. hal_uart_tx_dma() is a stub that returns HAL_ERROR.",
+          "tier": 1,
           "value": "M"
         },
         {
-          "title": "No interrupt / DMA driven path",
-          "brief": "All calls block. SDK roadmap Tier 1 item: \"UART IRQ + coregen\" for non-blocking serial (GPS, RS-485). Long reads currently stall the main loop until the buffer fills or times out.",
-          "tier": 1,
-          "value": "H"
-        },
-        {
-          "title": "No flow control / parity / 9-bit modes",
-          "brief": "The thin wrappers expose only the basics — RTS/CTS, parity, stop bits, 9-bit data, and inversion are reachable only via the hal_uart_config_t struct passed to init.",
+          "title": "8N1 only: no flow control, parity or 9-bit modes",
+          "brief": "ll_uart_init() sets 8 data bits, no parity, 1 stop bit. hal_uart_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS, parity, other stop bits, 9-bit data and inversion need register writes after init.",
           "tier": 1,
           "value": "M"
         },
@@ -546,18 +546,6 @@
           "brief": "The Tier 2 surface is core_spi_xfer_byte_bus: one byte, CS auto- managed around the call. DSL programs that need to push a multi-byte payload with CS held (display init streams, SD-card sectors, audio frame transfers) drop back to Tier 1 (core_spi_xfer, core_spi_write_read, core_spi_exchange_dma). Bulk variants need the array-IN / array-OUT host-call ABI prototyped on the tile- driver side — track with the DSL Capability Coverage close.",
           "tier": 2,
           "value": "M"
-        },
-        {
-          "title": "Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI still stalls",
-          "brief": "Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3, 1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE sessions, GPDMA) but has not run it on hardware yet; the camera tile's LL half-duplex path is the only W5 SPI use proven on silicon. Core.ST.H5: the kernel clock is now per_ck (the HSI), but on the bench SPI1 still never clocks a frame and a transfer returns HAL_TIMEOUT (2026-09-26, only tried on a board started by the ROM bootloader).",
-          "tier": 1,
-          "value": "M"
-        },
-        {
-          "title": "SPI DMA not on Core.ST.H5",
-          "brief": "core_spi_exchange_dma / core_spi_xfer_dma run on Core.ST.L4 (DMA1) and Core.ST.W5 (GPDMA1 CH6/CH7) and return HAL_ERROR on Core.ST.H5, where polled transfers are the only path.",
-          "tier": 1,
-          "value": "L"
         },
         {
           "title": "8-bit Motorola frames only",
@@ -670,7 +658,7 @@
       "gaps": [
         {
           "title": "Hard cap of 4 cached PALs per bus type",
-          "brief": "The internal slot table is sized to 4. Designs with >4 simultaneous I2C buses (or >4 SPI buses) will silently route extras to slot 0, which corrupts the cached function pointers if the bus types differ. No current Core has that many buses but the cap is undocumented for future-proofing.",
+          "brief": "Each bus type keeps its own table of 4 PALs. A fifth distinct bus of the same type gets the first bus's PAL back, so its tile driver silently talks to the first bus. No current Core has more than 4 buses of one type.",
           "tier": 1,
           "value": "M"
         },

@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@8e95159",
+  "source": "tiles@77fd3f3",
   "category": "stepper",
   "label": "Core.Stepper",
   "icon": "⟳",
@@ -40,6 +40,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK; HAL_ERROR if the STEP pad is not a timer pad in config.json, DIR has no GPIO, or the timer cannot interrupt.",
       "layer": "core"
     },
     {
@@ -87,6 +88,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, or HAL_ERROR if DIR has no GPIO or the timer cannot interrupt.",
       "layer": "core"
     },
     {
@@ -365,6 +367,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "true if not idle.",
       "layer": "core"
     },
     {
@@ -380,6 +383,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "CORE_STEPPER_IDLE / MOVING / RUNNING.",
       "layer": "core"
     },
     {
@@ -395,6 +399,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Position.",
       "layer": "core"
     },
     {
@@ -430,6 +435,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Target position.",
       "layer": "core"
     },
     {
@@ -445,6 +451,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Microsteps per second, negative in the reverse direction, 0 when idle.",
       "layer": "core"
     },
     {
@@ -465,7 +472,132 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Stopping distance in microsteps (0 when accel is 0).",
       "layer": "core"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_stepper_state_t",
+      "kind": "enum",
+      "brief": "Motion state. Read with core_stepper_state(); never write it.",
+      "members": [
+        {
+          "name": "CORE_STEPPER_IDLE",
+          "value": "0",
+          "description": "Timer stopped, no pulses."
+        },
+        {
+          "name": "CORE_STEPPER_MOVING",
+          "description": "Position move in progress (move / move_to)."
+        },
+        {
+          "name": "CORE_STEPPER_RUNNING",
+          "description": "Velocity mode (run), including a ramp to zero."
+        }
+      ]
+    },
+    {
+      "name": "core_stepper_t",
+      "kind": "struct",
+      "brief": "Stepper axis handle. Allocate one per motor; treat the fields as private. Fields tagged ISR are written from the timer interrupt.",
+      "fields": [
+        {
+          "name": "timer",
+          "ctype": "core_timer_t",
+          "description": "Step-clock timer (owned)."
+        },
+        {
+          "name": "channel",
+          "ctype": "uint8_t",
+          "description": "Timer output channel driving STEP (1..4)."
+        },
+        {
+          "name": "step_pad",
+          "ctype": "uint8_t",
+          "description": "STEP pad number."
+        },
+        {
+          "name": "dir_pad",
+          "ctype": "uint8_t",
+          "description": "DIR pad number."
+        },
+        {
+          "name": "en_pad",
+          "ctype": "uint8_t",
+          "description": "ENABLE pad number, 0 = none."
+        },
+        {
+          "name": "dir",
+          "ctype": "core_pad_fast_t",
+          "description": "Resolved DIR pad."
+        },
+        {
+          "name": "en",
+          "ctype": "core_pad_fast_t",
+          "description": "Resolved ENABLE pad (port NULL if none)."
+        },
+        {
+          "name": "step_active_low",
+          "ctype": "uint8_t",
+          "description": "1: STEP idles high, pulses low."
+        },
+        {
+          "name": "dir_invert",
+          "ctype": "uint8_t",
+          "description": "1: DIR high means negative."
+        },
+        {
+          "name": "en_active_low",
+          "ctype": "uint8_t",
+          "description": "1: ENABLE pad low enables the driver."
+        },
+        {
+          "name": "wide",
+          "ctype": "uint8_t",
+          "description": "1: 32-bit counter (long intervals OK)."
+        },
+        {
+          "name": "max_rate",
+          "ctype": "uint32_t",
+          "description": "Cruise rate, steps/s."
+        },
+        {
+          "name": "min_rate",
+          "ctype": "uint32_t",
+          "description": "Start/stop rate, steps/s (>= 1)."
+        },
+        {
+          "name": "accel",
+          "ctype": "uint32_t",
+          "description": "Ramp, steps/s^2. 0 = jump to max_rate."
+        },
+        {
+          "name": "pulse_us",
+          "ctype": "uint32_t",
+          "description": "STEP pulse width, us (>= 1)."
+        },
+        {
+          "name": "position",
+          "ctype": "volatile int32_t",
+          "description": "ISR. Signed microstep count."
+        },
+        {
+          "name": "target",
+          "ctype": "volatile int32_t",
+          "description": "Goal position in MOVING."
+        },
+        {
+          "name": "goal_rate",
+          "ctype": "volatile int32_t",
+          "description": "Signed goal velocity in RUNNING, steps/s."
+        },
+        {
+          "name": "state",
+          "ctype": "volatile uint8_t",
+          "description": "ISR. core_stepper_state_t."
+        }
+      ]
     }
   ]
 }

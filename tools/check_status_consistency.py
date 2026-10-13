@@ -12,8 +12,11 @@ invisible (silently dropped), and a renamed feature silently reads as
 "planned" everywhere. This drift is exactly how the L0/L4/H5 files ended up on
 an older id scheme than features.json + core-w. This check fails the build if:
 
-  1. a core file has a key that isn't a defined feature id (orphan), or
-  2. a feature id appears in no core file at all (dead row).
+  1. a core file has a key that isn't a defined feature id (orphan),
+  2. a core file lacks a defined feature id (the site renders a missing id
+     as "Not implemented", so every Core states every feature), or
+  3. a status is blank ("") or not one of the known values (a blank also
+     rendered as "Not implemented" and hid real code; 2026-10).
 
 It also guards a second, unrelated kind of drift in drivers/: a driver
 header's Doxygen `@version` tag disagreeing with its TILE_*_VERSION_*
@@ -50,6 +53,9 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 STATUS_DIR = Path(__file__).resolve().parent.parent / "sdk" / "status"
+
+# The values the site knows (CLAUDE.md §5). A dict entry carries one in "status".
+VALID_STATUS = {"verified", "compile", "partial", "wip", "none", "na"}
 
 
 DRIVERS_DIR = Path(__file__).resolve().parent.parent / "drivers"
@@ -116,11 +122,27 @@ def main():
                 f"(rename or add them): {orphans}",
                 file=sys.stderr,
             )
+        missing = [i for i in canon if i not in keys]
+        if missing:
+            failed = True
+            print(
+                f"FAIL: {path.name} has no value for {missing} "
+                f"(add each, \"none\" or \"na\" if nothing exists)",
+                file=sys.stderr,
+            )
+        for fid, val in d["features"].items():
+            status = val.get("status") if isinstance(val, dict) else val
+            if status not in VALID_STATUS:
+                failed = True
+                print(
+                    f"FAIL: {path.name} {fid}: status {status!r} is not one of "
+                    f"{sorted(VALID_STATUS)}",
+                    file=sys.stderr,
+                )
 
     dead = sorted(canon_set - used)
     if dead:
-        # Not fatal — a freshly-defined feature legitimately has no Core value
-        # yet — but surface it so dead rows don't accumulate unnoticed.
+        # Unreachable while every Core must list every id; kept as a guard.
         print(f"note: features with no value on any Core: {dead}", file=sys.stderr)
 
     ver_failed, ver_checked = check_driver_version_tags()

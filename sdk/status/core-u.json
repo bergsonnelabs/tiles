@@ -10,9 +10,12 @@
     "system.tick": "verified",
     "system.fault": {
       "status": "verified",
-      "note": "Register dump over polled USB CDC + SOS blink. HardFault verified on Core.ST.L4.2 (projects/fault-test)"
+      "note": "Register dump over polled USB CDC + SOS blink. HardFault verified on Core.ST.L4.2 (tests/fault-test)"
     },
-    "system.uid": "compile",
+    "system.uid": {
+      "status": "verified",
+      "note": "The USB serial number is core_uid_hex(); it read back as the chip UID on Core.ST.L4 (tests/hw-usb-robust, 2026-09-25)."
+    },
     "system.recovery": {
       "status": "verified",
       "note": "Healthy feed, hang, 1-2-3 strikes, SOS, ROM DFU, reflash: bench-verified on Core.ST.L4 (tests/hw-watchdog-recovery, 2026-07-13). Since 2026-09-25 core_watchdog_feed() clears the count after max(10 s, 2x the timeout) of uptime."
@@ -39,6 +42,11 @@
     "gpio.od_pull": "verified",
     "uart.polling": "compile",
     "uart.irq": "compile",
+    "uart.dma": {
+      "status": "none",
+      "note": "hal_uart_tx_dma() is a stub that returns HAL_ERROR; TX is polled."
+    },
+    "uart.flow": "none",
     "uart.lp": {
       "status": "compile",
       "note": "Vector 70 (LPUART1) was 0 in startup_stm32l422xx.s; LPUART1_IRQHandler wired 2026-09-25 (RM0394 Table 51). Awaiting bench"
@@ -49,38 +57,48 @@
       "status": "compile",
       "note": "Fm+ drive set I2C_CR1 bit 24, reserved on the L422; now SYSCFG_CFGR1.I2C1_FMP / I2C3_FMP (bits 20 / 22) with the SYSCFG clock on (RM0394 §9.2.2). 2026-09-25, awaiting bench"
     },
-    "i2c.irq": "",
+    "i2c.irq": {
+      "status": "none",
+      "note": "Controller transfers are polled with timeouts. Target mode (core_i2c_target_*) is interrupt-driven; see i2c.target."
+    },
     "i2c.target": "compile",
-    "i2c.dma": "",
-    "i2c.10bit": "",
-    "i2c.smbus": "",
+    "i2c.dma": "none",
+    "i2c.10bit": {
+      "status": "none",
+      "note": "7-bit addresses only (the API takes uint8_t)."
+    },
+    "i2c.smbus": "none",
     "spi.master": {
       "status": "verified",
       "note": "tests/hw-spi-loopback on a Core.ST.L4, 2026-09-26 (7/7, max and medium clock): full duplex 1-4096 B, modes 0-3, LSB first, /256 to /2 (40 MHz SCK at max), CS-held command + data via core_tiles_pal. Every wait bounded: a forced stall returns HAL_TIMEOUT in ~2 ms and the SPI is reset. L4.2 builds, not benched"
     },
+    "spi.irq": {
+      "status": "none",
+      "note": "Transfers are polled or DMA; the SPI interrupt only ends a DMA transfer."
+    },
     "spi.octo": "na",
     "timer.tick": {
       "status": "verified",
-      "note": "Verified on Core.ST.L4.2 — LED blink via ISR (projects/timer-ticker)"
+      "note": "Verified on Core.ST.L4.2 — LED blink via ISR (a bench project not in this repo)"
     },
     "timer.pwm": {
       "status": "verified",
-      "note": "TIM15 PWM → EXTI loopback verified on Core.ST.L4.2 (projects/timers-pwmg_u2)"
+      "note": "TIM15 PWM → EXTI loopback verified on Core.ST.L4.2 (a bench project not in this repo)"
     },
     "timer.stepdir": {
       "status": "verified",
-      "note": "DM320T + NEMA 11 over STEP/DIR at 3.3 V, 8 us pulses (projects/RealReeler, 2026-09-08)"
+      "note": "DM320T + NEMA 11 over STEP/DIR at 3.3 V, 8 us pulses (a bench project not in this repo, 2026-09-08)"
     },
     "timer.capture": {
       "status": "verified",
-      "note": "TIM2 32-bit capture measuring TIM15 PWM period — 499995 us @ 2 Hz (projects/timers-pwmg_u2)"
+      "note": "TIM2 32-bit capture measuring TIM15 PWM period — 499995 us @ 2 Hz (a bench project not in this repo)"
     },
-    "timer.oneshot": "",
-    "timer.encoder": "",
-    "timer.lptim": "",
+    "timer.oneshot": "none",
+    "timer.encoder": "none",
+    "timer.lptim": "none",
     "timer.wdog": {
       "status": "verified",
-      "note": "2s IWDG resets MCU after starved refresh — USB + PWM ramp test (projects/timers-pwmg_u2)"
+      "note": "2s IWDG resets MCU after starved refresh — USB + PWM ramp test (a bench project not in this repo)"
     },
     "adc.raw": "verified",
     "adc.mv": "verified",
@@ -98,7 +116,7 @@
       "status": "na",
       "note": "No SAI peripheral"
     },
-    "adc.watchdog": "",
+    "adc.watchdog": "none",
     "coregen.gpio": "verified",
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
@@ -114,7 +132,7 @@
     },
     "power.sleep": {
       "status": "verified",
-      "note": "WFI sleep, wakes on SysTick (projects/power-test)"
+      "note": "WFI sleep, wakes on SysTick (tests/power-test)"
     },
     "power.stop": {
       "status": "verified",
@@ -130,11 +148,11 @@
     },
     "power.exti_wake": {
       "status": "compile",
-      "note": "Pad-edge wake from Stop 1 was verified (projects/power-test); core_stop_until_on_change now waits for the edge itself, wakes to feed a running watchdog, returns at once if the pad is already at its wake level, and core_stop_until_on_change_timeout() bounds the wait. 2026-09-25; tests/hw-pin-wake T4/T5 added, not yet run to completion"
+      "note": "Pad-edge wake from Stop 1 was verified (tests/power-test); core_stop_until_on_change now waits for the edge itself, wakes to feed a running watchdog, returns at once if the pad is already at its wake level, and core_stop_until_on_change_timeout() bounds the wait. 2026-09-25; tests/hw-pin-wake T4/T5 added, not yet run to completion"
     },
     "power.wkup_wake": {
       "status": "compile",
-      "note": "core_standby_until_on_change(8, EDGE_FALLING) verified on Core.ST.L4.2 (projects/power-test); its wake-flag clear moved to PWR_SCR 0x18, and it now returns without sleeping while the watchdog runs. Fixed 2026-09-25, awaiting bench"
+      "note": "core_standby_until_on_change(8, EDGE_FALLING) verified on Core.ST.L4.2 (tests/power-test); its wake-flag clear moved to PWR_SCR 0x18, and it now returns without sleeping while the watchdog runs. Fixed 2026-09-25, awaiting bench"
     },
     "power.rtc_alarm": {
       "status": "verified",
@@ -155,7 +173,10 @@
       "status": "verified",
       "note": "Bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-usb-robust, 7/7): text printed before the port opens arrives after it does; serial number = chip UID; 64/128-byte writes arrive without a ZLP wait; a 4 KB host burst to a slow reader arrives intact (EP1 NAKs while the ring is full); DTR drop/raise; host not reading for 30 s: slowest write 49.8 ms (50 ms bound), then drops. EPnR writes race-free, CLEAR_FEATURE(HALT) resets the data toggle, bMaxPower 100 mA"
     },
-    "conn.scope_usb": "compile",
+    "conn.scope_usb": {
+      "status": "verified",
+      "note": "Benched 2026-10-11 on a Core.ST.L4: a DSL program streamed Core.ADC.temp_decidegc() to the scope over USB (a4c2de4)."
+    },
     "conn.scope_ble": "na",
     "conn.usb_hid": {
       "status": "compile",
@@ -165,12 +186,13 @@
       "status": "partial",
       "note": "Reachable while asleep, bench-verified 2026-09-25 on Core.ST.L4 (tests/hw-usb-robust sleep): during core_stop_for(60) a line got PONG in 53 ms and make flash-serial succeeded in 3.0 s. A host awake on the bus keeps the wait in Sleep mode (Stop would stop HSI48). Stop + wake on a real host resume (EXTI 17) not benched: macOS never suspends the bus; the wake chain itself is (forced suspend, W: 5/5 Stops ended by the USB wakeup, CDC fine after)"
     },
-    "conn.usb_msc": "",
+    "conn.usb_msc": "none",
     "conn.dfu": "verified",
     "conn.serial_update": {
       "status": "verified",
       "note": "Bench-verified on Core.ST.L4 (tiles#254, 2026-09-24): 13 x 120 KB and 10 x 15 KB updates, lost-reply resend, abort, and a power pull mid-update. Not yet run on Windows."
     },
+    "conn.ble_update": "na",
     "conn.swd": {
       "status": "none",
       "note": "No SWD flash algorithm for the L4 yet; Studio flashes it over USB (DFU or serial update)"
@@ -179,11 +201,10 @@
     "conn.ble_adv": "na",
     "conn.ble_gatt": "na",
     "conn.fdcan": "na",
-    "adv.i3c_ctrl": "na",
-    "adv.i3c_target": "na",
+    "i3c.target": "na",
     "adv.comp": {
-      "status": "compile",
-      "note": "L422 has COMP1/COMP2; pins available on Core.ST.L4.2"
+      "status": "none",
+      "note": "No comparator code in the SDK."
     },
     "adv.dac": "na",
     "ble.adv": "na",
@@ -204,6 +225,7 @@
       "status": "verified",
       "note": "DMA1 CH2/CH3: core_spi_exchange_dma (blocking) and core_spi_xfer_dma (callback) + core_spi_dma_wait, bounded. tests/hw-spi-loopback, 2026-09-26: 1-4096 B intact, 4.96 MB/s at 40 MHz SCK (polled: 1.77 MB/s)"
     },
+    "spi.slave": "none",
     "i3c.controller": "na",
     "i3c.daa": "na",
     "i3c.ccc": "na",

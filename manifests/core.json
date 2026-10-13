@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@67d1ea0",
+  "source": "tiles@77fd3f3",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -1090,7 +1090,7 @@
       "symbol": "core_delay_ms",
       "header": "core_timing.h",
       "category": "timing",
-      "description": "Blocking delay in milliseconds.",
+      "description": "Blocking delay in milliseconds. Thread builds (Core.ST.W5): the wait runs Thread's scheduler, so Thread callbacks (UDP receive, state changes) can run inside it, and it can end up to ~1 ms late.",
       "params": [
         {
           "name": "ms",
@@ -1294,7 +1294,7 @@
       "symbol": "core_watchdog_feed",
       "header": "core_watchdog.h",
       "category": "watchdog",
-      "description": "Feed the watchdog. Must be called before the timeout expires. On ROM-DFU builds this also retires the brick-recovery strike counter, once, after the app has run for max(10 s, 2 x the timeout) — no call needed.",
+      "description": "Feed the watchdog. Must be called before the timeout expires. On ROM-DFU builds this also retires the brick-recovery strike counter, once, after the app has run for max(10 s, 2 x the timeout) — no call needed. Thread builds (Core.ST.W5): also services Thread (at most one scheduler pass every 5 ms), so Thread callbacks can run inside this call.",
       "params": [],
       "returns": "void"
     }

@@ -508,80 +508,87 @@ def parse_functions(text):
                     func['studio_section'] = sm.group(1)
                 break
 
-        # Parse doc tags
+        # Parse doc tags. A tag's text runs until a blank line or the next
+        # @-tag, as Doxygen reads it: a wrapped @param / @return / @note /
+        # @warning keeps its continuation lines instead of losing them (they
+        # used to leak into the description, and a @warning lost its first
+        # line). @warning is published as a note starting "Warning:".
         brief_lines = []
         desc_lines = []
         in_brief = False
         in_desc = False
-        in_note = False
+        tag = None          # (kind, index) of the tag being continued
+
+        def _append(t, text):
+            kind, idx = t
+            if kind == 'param':
+                func['params'][idx]['description'] += ' ' + text
+            elif kind == 'return':
+                func['return'] += ' ' + text
+            else:                       # note / warning
+                func['notes'][idx] += ' ' + text
 
         for line in doc_body:
+            stripped = line.strip()
+
             # @brief
-            bm = re.match(r'@brief\s+(.*)', line)
+            bm = re.match(r'@brief\s+(.*)', stripped)
             if bm:
                 brief_lines = [bm.group(1).strip()]
-                in_brief = True
-                in_desc = False
-                in_note = False
+                in_brief, in_desc, tag = True, False, None
                 continue
 
             # @param
-            pm = re.match(r'@param\s+(\w+)\s+(.*)', line)
+            pm = re.match(r'@param\s+(\w+)\s*(.*)', stripped)
             if pm:
-                in_brief = False
-                in_desc = False
-                in_note = False
+                in_brief, in_desc = False, False
                 func['params'].append({
                     'name': pm.group(1),
                     'description': pm.group(2).strip(),
                 })
+                tag = ('param', len(func['params']) - 1)
                 continue
 
-            # @return
-            rm = re.match(r'@return\s+(.*)', line)
+            # @return / @returns
+            rm = re.match(r'@returns?\s+(.*)', stripped)
             if rm:
-                in_brief = False
-                in_desc = False
-                in_note = False
+                in_brief, in_desc = False, False
                 func['return'] = rm.group(1).strip()
+                tag = ('return', 0)
                 continue
 
-            # @note
-            nm = re.match(r'@note\s+(.*)', line)
+            # @note / @warning
+            nm = re.match(r'@(note|warning)\s+(.*)', stripped)
             if nm:
-                in_brief = False
-                in_desc = False
-                in_note = True
-                func['notes'].append(nm.group(1).strip())
+                in_brief, in_desc = False, False
+                text = nm.group(2).strip()
+                func['notes'].append(('Warning: ' + text) if nm.group(1) == 'warning' else text)
+                tag = ('note', len(func['notes']) - 1)
                 continue
 
             # Any other @-directive (@code, @studio expose, …) ends prose
-            # collection — @brief/@param/@return/@note are handled above, so
-            # anything reaching here shouldn't leak into the description/notes.
-            if line.strip().startswith('@'):
-                in_brief = False
-                in_desc = False
-                in_note = False
+            # collection, so it doesn't leak into the description/notes.
+            if stripped.startswith('@'):
+                in_brief, in_desc, tag = False, False, None
                 continue
 
-            # Continuation lines
-            if in_note:
-                if line.strip() == '' or line.strip().startswith('@'):
-                    in_note = False
+            # Continuation of a tag
+            if tag is not None:
+                if stripped == '':
+                    tag = None
                 else:
-                    # Append to the last note
-                    func['notes'][-1] += ' ' + line.strip()
+                    _append(tag, stripped)
                 continue
 
             if in_brief:
-                if line.strip() == '':
+                if stripped == '':
                     in_brief = False
                     in_desc = True
                 else:
-                    brief_lines.append(line.strip())
+                    brief_lines.append(stripped)
                 continue
 
-            if in_desc or (not in_brief and line.strip() and not line.startswith('@')):
+            if in_desc or (not in_brief and stripped and not line.startswith('@')):
                 in_desc = True
                 desc_lines.append(line)
                 continue

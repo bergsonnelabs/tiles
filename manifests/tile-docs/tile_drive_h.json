@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "file": "tile_drive_h.h",
   "brief": "LRA/ERM haptic driver for the Drive.H tile (rev a).",
   "description": "Embeds the TI DRV2605 (DEVICE_ID 3 — the non-L part), a haptic\ndriver for LRA (Linear Resonant Actuator) and ERM actuators with\na built-in waveform library of 123 effects. The actuator is\nexternal, connected via the tile's OUT+ / OUT- pads; V_MOTOR\naccepts 2.5-5.5 V.\n\nThe chip regulates output amplitude itself: the supply rail only\nsets headroom. Full-scale drive level comes from RATED_VOLTAGE /\nOD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the\nvoltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply\n(VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's\nminimum load is 8 Ω at VDD = 5.2 V.\n\nV+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).\nPower V+ from a logic rail, or drive pad 3 high from a Core pin:\nwith neither, EN floats, the chip may stay in shutdown, and init()\nfails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ\n(33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The\ntile has no I2C pull-ups.\n\nKey specifications:\n  - Output:       full-bridge, amplitude regulated per config\n  - Waveform lib: 123 haptic effects (6 libraries)\n  - Smart-loop:   automatic resonance tracking for LRA (closed loop)\n  - Modes:        Internal trigger, RTP, PWM, audio-to-vibe\n\nDatasheet: https://www.bergsonne.io/tiles/drive/h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv2605.pdf\n\n\n@studio tile label=Drive.H icon=≋\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"OTP waveform burning\"\n  The DRV2605 can burn custom waveforms into one-time-programmable\n  memory. This is implemented in firmware (tile_drive_h_program_otp())\n  but intentionally NOT exposed to Studio: it permanently and\n  irreversibly modifies the chip. Driver-deferred by policy, not a\n  hardware gap — call it from C if you really need it.\n\n@studio unsupported severity=niche category=\"Minor control bits\"\n  Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),\n  SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /\n  analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,\n  LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and\n  MODE.DEV_RESET have no setter. Reachable only by editing the\n  driver; none is hardware-gated.\n\n@studio unsupported severity=niche category=\"Hardware EN control\"\n  Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a\n  100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the\n  STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core\n  GPIO. With EN low the chip still ACKs its address but ignores\n  reads and writes (SLOS825E §7.4.1.3), so init fails on the\n  device-ID check; registers are kept.",
@@ -629,11 +629,13 @@
           "description": "[300..5000] Overdrive clamp in mV"
         }
       ],
-      "notes": [],
+      "notes": [
+        "Warning: Set rated_mv from the actuator's datasheet. Driving an LRA above its rated voltage for long effects (play_buzz, RTP) heats it and shortens its life. The output never exceeds V_MOTOR, whatever is set here."
+      ],
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the actuator drive levels in millivolts.",
-      "description": "The friendly-units version of tile_drive_h_set_actuator_params():\nconverts voltages to the RATED_VOLTAGE (0x16) and OD_CLAMP (0x17)\nregister values using the DRV2605 datasheet equations (section\n7.5.2, Eq. 2-5), honouring the currently selected actuator type\n(ERM vs LRA) and, for LRAs, the drive frequency currently\nprogrammed via tile_drive_h_set_resonance_hz().\n\n  - rated_mv:     steady-state full-scale level (RMS for LRA,\n                  average for ERM). Closed-loop reference.\n  - overdrive_mv: peak ceiling for overdrive/braking; also the\n                  full-scale reference in open-loop mode. Must be\n                  >= rated_mv; typically 1.3-1.5x for LRAs.\n\nRun tile_drive_h_calibrate() afterwards — the datasheet requires\nrecalibration whenever these references change.\n\n         above its rated voltage for long effects (play_buzz, RTP)\n         heats it and shortens its life. The output never exceeds\n         V_MOTOR, whatever is set here.\n\nThe control defaults (2230 / 2700 mV) reproduce init's 0x56 / 0x8C\nat init's 238 Hz DRIVE_TIME.",
+      "description": "The friendly-units version of tile_drive_h_set_actuator_params():\nconverts voltages to the RATED_VOLTAGE (0x16) and OD_CLAMP (0x17)\nregister values using the DRV2605 datasheet equations (section\n7.5.2, Eq. 2-5), honouring the currently selected actuator type\n(ERM vs LRA) and, for LRAs, the drive frequency currently\nprogrammed via tile_drive_h_set_resonance_hz().\n\n  - rated_mv:     steady-state full-scale level (RMS for LRA,\n                  average for ERM). Closed-loop reference.\n  - overdrive_mv: peak ceiling for overdrive/braking; also the\n                  full-scale reference in open-loop mode. Must be\n                  >= rated_mv; typically 1.3-1.5x for LRAs.\n\nRun tile_drive_h_calibrate() afterwards — the datasheet requires\nrecalibration whenever these references change.\n\nThe control defaults (2230 / 2700 mV) reproduce init's 0x56 / 0x8C\nat init's 238 Hz DRIVE_TIME.",
       "name": "tile_drive_h_set_actuator_voltage"
     },
     {
@@ -957,10 +959,12 @@
     {
       "signature": "uint8_t tile_drive_h_program_otp(tile_t* tile)",
       "params": [],
-      "notes": [],
+      "notes": [
+        "Warning: IRREVERSIBLE. The DRV2605 OTP can be programmed exactly once per device. A bad programming run permanently mistunes the chip. NOT exposed to Studio by design."
+      ],
       "return": "1 on success, 0 on failure / already-programmed",
       "brief": "Burn the current calibration into on-chip OTP.",
-      "description": "Writes the current contents of registers 0x16–0x1A\n(RATED_VOLTAGE, OD_CLAMP, A_CAL_COMP, A_CAL_BEMF, FEEDBACK_CTRL)\nto the DRV2605's nonvolatile OTP cells. After this, those values\nbecome the power-on defaults — the chip skips run-time calibration\non subsequent boots.\n\n         once per device. A bad programming run permanently\n         mistunes the chip. NOT exposed to Studio by design.\n\nPre-conditions:\n  - Run tile_drive_h_calibrate() first and confirm pass.\n  - VDD must be 4.0–4.4 V at the moment of programming\n    (datasheet section 7.5.7). Lower VDD silently corrupts the cells.\n\nReturns 1 if the OTP_STATUS bit reads 1 after programming, 0 if\nthe burn failed or OTP was already programmed.",
+      "description": "Writes the current contents of registers 0x16–0x1A\n(RATED_VOLTAGE, OD_CLAMP, A_CAL_COMP, A_CAL_BEMF, FEEDBACK_CTRL)\nto the DRV2605's nonvolatile OTP cells. After this, those values\nbecome the power-on defaults — the chip skips run-time calibration\non subsequent boots.\n\nPre-conditions:\n  - Run tile_drive_h_calibrate() first and confirm pass.\n  - VDD must be 4.0–4.4 V at the moment of programming\n    (datasheet section 7.5.7). Lower VDD silently corrupts the cells.\n\nReturns 1 if the OTP_STATUS bit reads 1 after programming, 0 if\nthe burn failed or OTP was already programmed.",
       "name": "tile_drive_h_program_otp"
     },
     {
@@ -1069,7 +1073,7 @@
         3.6
       ],
       "unit": "V",
-      "default": 2230
+      "default": 2.23
     },
     {
       "label": "Brake strength",
@@ -1126,7 +1130,7 @@
         5
       ],
       "unit": "V",
-      "default": 2700
+      "default": 2.7
     },
     {
       "label": "LRA resonance",

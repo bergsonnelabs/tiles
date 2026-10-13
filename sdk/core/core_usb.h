@@ -61,7 +61,7 @@ static inline int core_usb_connected(void)
 /**
  * Wait up to `timeout_ms` for a host terminal to open the port (DTR set).
  * Feeds the watchdog while it waits. Not needed just to see early output:
- * on Core.ST.L4 text printed before the port opens is kept (up to
+ * text printed before the port opens is kept (up to
  * HAL_USB_CDC_TX_QUEUE_SIZE bytes) and sent when it does.
  *
  * @param timeout_ms Longest wait in milliseconds; 0 only checks.
@@ -92,7 +92,8 @@ static inline int core_usb_try_write(const uint8_t *buf, uint16_t len)
     return hal_usb_cdc_try_write(buf, len);
 }
 
-/** Printf over USB CDC (blocking). */
+/** Printf over USB CDC: queued like core_usb_write(); waits at most 50 ms for a
+ *  stalled terminal, then drops. Returns the formatted length. */
 #define core_usb_printf  hal_usb_cdc_printf
 
 /**

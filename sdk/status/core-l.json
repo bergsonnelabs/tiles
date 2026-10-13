@@ -45,6 +45,11 @@
     "gpio.od_pull": "verified",
     "uart.polling": "verified",
     "uart.irq": "compile",
+    "uart.dma": {
+      "status": "none",
+      "note": "hal_uart_tx_dma() is a stub that returns HAL_ERROR; TX is polled."
+    },
+    "uart.flow": "none",
     "uart.lp": {
       "status": "compile",
       "note": "LPUART1 bus clock was never enabled (RCC_APB1ENR bit 18, RM0377 §7.3.14). Fixed 2026-09-25, awaiting bench"
@@ -58,11 +63,17 @@
       "note": "400 kHz at the MSI levels (the default project + an I2C tile failed to build: 'requires at least 4 MHz'); HSI16 kernel clock, restarted after Stop. 2026-09-25, awaiting bench"
     },
     "i2c.fmp": "na",
-    "i2c.irq": "",
+    "i2c.irq": {
+      "status": "none",
+      "note": "Controller transfers are polled with timeouts. Target mode (core_i2c_target_*) is interrupt-driven; see i2c.target."
+    },
     "i2c.target": "verified",
-    "i2c.dma": "",
-    "i2c.10bit": "",
-    "i2c.smbus": "",
+    "i2c.dma": "none",
+    "i2c.10bit": {
+      "status": "none",
+      "note": "7-bit addresses only (the API takes uint8_t)."
+    },
+    "i2c.smbus": "none",
     "spi.master": "na",
     "spi.irq": "na",
     "spi.dma": "na",
@@ -79,9 +90,9 @@
     "timer.pwm": "verified",
     "timer.stepdir": "compile",
     "timer.capture": "verified",
-    "timer.oneshot": "",
-    "timer.encoder": "",
-    "timer.lptim": "",
+    "timer.oneshot": "none",
+    "timer.encoder": "none",
+    "timer.lptim": "none",
     "timer.wdog": {
       "status": "verified",
       "note": "Timeout from the measured LSI (ll_lsi_hz(), TIM21 capture against SYSCLK at the first core_watchdog_start) instead of a nominal 37 kHz on a 26-56 kHz part. Bench 2026-09-26 (tests/hw-lsi-cal T4/T5, all four levels): 5 s programmed within 0.2 % of the LSI implied by 10 RTC seconds, and a starved watchdog reset 5004-5014 ms later by the calibrated RTC; tests/hw-sleep-cycle: no resets across chunked Stops."
@@ -111,7 +122,7 @@
       "status": "na",
       "note": "No SAI peripheral"
     },
-    "adc.watchdog": "",
+    "adc.watchdog": "none",
     "coregen.gpio": "verified",
     "coregen.i2c": "compile",
     "coregen.analog": {
@@ -139,7 +150,10 @@
       "status": "compile",
       "note": "core_stop_until_on_change waits for the pad edge itself, wakes to feed a running watchdog, returns at once if the pad is already at its wake level, and core_stop_until_on_change_timeout() bounds the wait (RTC-measured). 2026-09-25, awaiting bench"
     },
-    "power.wkup_wake": "",
+    "power.wkup_wake": {
+      "status": "none",
+      "note": "core_standby_until_on_change() is implemented for Core.ST.L4 only."
+    },
     "power.rtc_alarm": {
       "status": "verified",
       "note": "Alarm A (ALRMAR 0x1C, ALRAWF). Bench 2026-09-26 (tests/hw-sleep-cycle T2): ALRMAR reads back 0x80808003 and the alarm fired 2960 ms after it was set for xx:xx:03."
@@ -163,16 +177,16 @@
       "status": "na",
       "note": "No USB"
     },
+    "conn.ble_update": "na",
     "conn.swd": "none",
     "conn.ble": "na",
     "conn.ble_adv": "na",
     "conn.ble_gatt": "na",
     "conn.fdcan": "na",
-    "adv.i3c_ctrl": "na",
-    "adv.i3c_target": "na",
+    "i3c.target": "na",
     "adv.comp": {
-      "status": "compile",
-      "note": "L011 has COMP1/COMP2 but not routed on Core.ST.L0 pinout"
+      "status": "none",
+      "note": "No comparator code in the SDK."
     },
     "adv.dac": "na",
     "ble.adv": "na",

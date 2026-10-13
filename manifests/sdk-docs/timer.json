@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "timer",
   "label": "Core.Timer",
   "icon": "◷",
@@ -657,6 +657,20 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_timer_t",
+      "kind": "typedef",
+      "brief": "Core-level timer handle. Alias for hal_timer_t — use this in application code.",
+      "decl": "typedef hal_timer_t core_timer_t;"
+    },
+    {
+      "name": "core_callback_t",
+      "kind": "typedef",
+      "brief": "Core-level callback type.",
+      "decl": "typedef hal_callback_t core_callback_t;"
     }
   ]
 }

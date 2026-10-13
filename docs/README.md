@@ -8,6 +8,12 @@ These are the docs that don't fit in a header comment but aren't user-facing tut
 
 - [studio-annotations.md](studio-annotations.md) — `@studio` directive reference. Every annotation the manifest generator understands, with examples. Read this before adding a new `core_*.h` module or tile driver to Studio.
 - [sdk-api-tiers.md](sdk-api-tiers.md) — Tier 1 (handle-based) vs Tier 2 (default-instance) APIs. Explains why generated Studio C looks different from SDK examples and lists which functions live on which tier.
+- [serial-update-protocol.md](serial-update-protocol.md): `make flash-serial`: reflashing a running Core.ST.L4 / H5 over its USB serial port.
+- [ble-update-protocol.md](ble-update-protocol.md): firmware updates over Bluetooth on Core.ST.W5 (Studio Link, full and delta images).
+- [ble-contract-design.md](ble-contract-design.md): design note behind the BLE contract (`ble.contract` in config.json); implemented.
+- [thread-provisioning-protocol.md](thread-provisioning-protocol.md): setting a Core.ST.W5's Thread network at run time over BLE (development only).
+- [scope-protocol.md](scope-protocol.md): the Scope wire format `core_scope` streams to Studio or any host.
+- [l4-brick-recovery.md](l4-brick-recovery.md): the watchdog strike counter that parks a hung Core in ROM DFU (design note; shipped on Core.ST.L4).
 
 ## Where else docs live
 

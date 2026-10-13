@@ -133,6 +133,9 @@ void core_thread_service_tick(void);   /* sdk/core/core_thread.c */
  * On ROM-DFU builds this also retires the brick-recovery strike counter, once,
  * after the app has run for max(10 s, 2 x the timeout) — no call needed.
  *
+ * Thread builds (Core.ST.W5): also services Thread (at most one scheduler
+ * pass every 5 ms), so Thread callbacks can run inside this call.
+ *
  * @studio expose category=watchdog name=feed
  * @studio twin full
  */

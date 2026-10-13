@@ -261,11 +261,11 @@ static inline int core_adc_dma_slot(core_adc_t *adc, uint8_t pad)
 //   JSON before coregen can emit the dispatch. Until then DSL programs
 //   are limited to whichever pads coregen routed to ADC1.
 //
-// @studio unsupported tier=1 value=M title="No oversampling / averaging helper"
-//   STM32 ADCs can hardware-oversample 2×–256× for extra effective
-//   resolution. The HAL exposes the registers but core_adc has no
-//   convenience wrapper — callers reach into tal_adc / hal_adc to set
-//   OVSR/OVSS bits manually.
+// @studio unsupported tier=2 value=L title="No core_adc / DSL oversampling wrapper"
+//   Hardware oversampling (2x to 256x; 1024x on Core.ST.H5) works through
+//   the HAL on the same handle: hal_adc_set_oversample(&core_adc1, ratio)
+//   averages, hal_adc_set_oversample_ex() also widens the result. There is
+//   no core_adc_* wrapper or DSL surface for it.
 //
 // @studio unsupported tier=1 value=L title="No injected channels"
 //   Regular-group external triggers ARE supported: core_adc_set_trigger()

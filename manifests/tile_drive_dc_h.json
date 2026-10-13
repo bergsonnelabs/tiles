@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@3edc9ed",
+  "source": "tiles@77fd3f3",
   "tile": "Drive.DC.H",
   "palette": {
     "label": "Drive.DC.H",
@@ -580,7 +580,7 @@
             0,
             65535
           ],
-          "description": "mΩ Winding resistance. 0 = leave"
+          "description": "mΩ Winding resistance. 0 = leave chip defaults (no-op for INV_R/KMC)."
         },
         {
           "name": "ripples_per_rev",
@@ -589,7 +589,7 @@
             0,
             255
           ],
-          "description": "Commutation ripples per shaft revolution"
+          "description": "Commutation ripples per shaft revolution (poles × brush pairs; common: 3, 5, 6, 7, 12). 0 = default (12); clamped to 255."
         },
         {
           "name": "kv_uv_per_rpm",
@@ -598,7 +598,7 @@
             0,
             5000
           ],
-          "description": "µV/RPM Back-EMF constant (typical small"
+          "description": "µV/RPM Back-EMF constant (typical small motor: 100-2000). 0 = skip KMC tuning."
         }
       ],
       "returns": "void",
