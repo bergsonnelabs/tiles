@@ -196,6 +196,23 @@ const RESET_STATE: Partial<State> = {
   ...cancelHelper,
 };
 
+// What tile_display_rgbw_init() writes: CHIP_EN 1, Dev_Config_12 = 0x0B
+// (lod_action 1 / lsd_action 0 / threshold 3), boost ramped to 4.5 V, MC 51 mA,
+// all four LEDs enabled, Manual and Auto DC = 5. PWM, autonomous mode and the
+// animation engine are left as they are (0 after a RESET).
+const INIT_REGS: Partial<State> = {
+  enabled: 1,
+  max_current_mode: 1,
+  boost_mv: VOUT_INIT_MV,
+  r_curr: DC_DEFAULT,
+  g_curr: DC_DEFAULT,
+  b_curr: DC_DEFAULT,
+  w_curr: DC_DEFAULT,
+  lsd_threshold: 3,
+  lsd_shutdown: 0,
+  lod_shutdown: 1,
+};
+
 const sim: TileSim<State> = {
   tile: 'Display.RGBW',
 
@@ -264,7 +281,7 @@ const sim: TileSim<State> = {
   hostCalls: {
     // ── lifecycle ──
     tile_display_rgbw_find: () => ({ scalar: 1 }),
-    tile_display_rgbw_init: () => ({ scalar: 0 }),
+    tile_display_rgbw_init: () => ({ nextState: INIT_REGS }),
     tile_display_rgbw_sleep: () => ({ nextState: { enabled: 0, ...cancelHelper } }),
     tile_display_rgbw_wake: () => ({ nextState: { enabled: 1 } }),
     tile_display_rgbw_reset: () => ({ nextState: RESET_STATE }),
@@ -477,7 +494,7 @@ const sim: TileSim<State> = {
     tile_display_rgbw_animate_stop: 'canonical',
     tile_display_rgbw_animate_pause: 'canonical',
     tile_display_rgbw_animate_continue: 'canonical',
-    tile_display_rgbw_breathe_auto: 'inferred', // AEU program modeled as a triangle, loops forever
+    tile_display_rgbw_breathe_auto: 'inferred', // AEU program modeled as a triangle, loops forever (the driver now counts `repeats` breaths; the twin does not)
     power: 'inferred', // ISD / ISTB / INOR canonical; boost efficiency 90 % (datasheet guidance); EN pull-up from tile schematic
   },
 
@@ -534,7 +551,9 @@ const sim: TileSim<State> = {
 
   // Electrical: V+ (pad 10) feeds the boost; EN (pad 8) is read so a grounded EN
   // shuts the chip down. LED current comes out of VOUT, so the input pays for it
-  // at the boost ratio.
+  // at the boost ratio; with V+ at or above the boost setting the converter is in
+  // pass-through (datasheet §1 features, §6.5 INOR) and the input carries the LED
+  // current 1:1.
   power(state, ctx) {
     const { vin, enHigh } = supplies(state, ctx);
     const ledMa = CH.reduce((sum, ch) => sum + level(state, ch) * fullScaleMa(state), 0);
@@ -550,8 +569,10 @@ const sim: TileSim<State> = {
       draw = ISTB_UA;
       note = state.enabled !== 1 ? 'standby (CHIP_EN = 0)' : 'standby (no LED on)';
     } else {
-      const vout = Math.max(state.boost_mv, vin);
-      draw = Math.round(INOR_UA + (ledMa * 1000 * vout) / (BOOST_EFF * vin));
+      const passThrough = vin >= state.boost_mv;
+      draw = passThrough
+        ? Math.round(INOR_UA + ledMa * 1000)
+        : Math.round(INOR_UA + (ledMa * 1000 * state.boost_mv) / (BOOST_EFF * vin));
       // Peak die current (PWM aside) above the LED's 5 mA continuous rating.
       const over = CH.filter(
         (ch) =>

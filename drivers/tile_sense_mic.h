@@ -2,7 +2,7 @@
  * @file   tile_sense_mic.h
  * @brief  Complete driver for the Sense.MIC tile (analog MEMS mic + amp + ADC).
  *         I2C-only, command-based protocol via tiles_pal_t raw I2C.
- * @version 2.4.0
+ * @version 2.4.1
  *
  * Signal chain (production schematic):
  *   - Same Sky CMM-2718AT-38164W-TR: analog, omnidirectional, top-port MEMS
@@ -99,9 +99,12 @@
  * Driver version
  * ================================================================ */
 
+/* v2.4.1: set_reference() keeps init's cfg.vref_mv (it reverted to 3300);
+ *         wait_for_sound() and detect_clap() count the capture time, so
+ *         timeouts and clap windows run at their documented lengths. */
 #define TILE_SENSE_MIC_VERSION_MAJOR  2
 #define TILE_SENSE_MIC_VERSION_MINOR  4
-#define TILE_SENSE_MIC_VERSION_PATCH  0
+#define TILE_SENSE_MIC_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -296,7 +299,7 @@ typedef struct {
     uint8_t  scan;      /**< Scan mode (sense_mic_scan_t). 0 = default, SENSE_MIC_SCAN_SINGLE. */
     uint8_t  clock;     /**< Conversion clock (sense_mic_clock_t). Default: SENSE_MIC_CLOCK_INTERNAL. */
     uint8_t  polarity;  /**< Output coding (sense_mic_polarity_t). Default: SENSE_MIC_POLARITY_UNIPOLAR. */
-    uint16_t vref_mv;   /**< Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set it to the real supply when using the VDD reference off 3.3 V. */
+    uint16_t vref_mv;   /**< Reference voltage in mV. 0 = auto (3300 for VDD, 2048 for internal). Set it to the real supply when using the VDD reference off 3.3 V. Kept across set_reference(). */
 } sense_mic_cfg_t;
 
 /* ================================================================
@@ -426,8 +429,9 @@ void tile_sense_mic_set_polarity(tile_t *tile, sense_mic_polarity_t pol);
 /**
  * @brief  Get the currently configured reference voltage in millivolts.
  *
- * Returns the Vref used for millivolt conversions (3300 for VDD, 2048
- * for internal, or the user-specified value for external).
+ * Returns the Vref used for millivolt conversions: 3300 for VDD or
+ * external, 2048 for internal, unless init's cfg.vref_mv overrides it.
+ * The override is kept across set_reference().
  *
  * @studio expose category=tile name=get_vref_mv returns=int section=runtime
  */
@@ -633,9 +637,10 @@ int16_t tile_sense_mic_read_spl_db(tile_t *tile);
  *
  * @studio expose category=tile name=wait_for_sound returns=bool section=runtime
  *
- * Polls @ref tile_sense_mic_read_spl_db every ~5 ms until the
- * computed SPL (in 0.1 dB units) exceeds `threshold_db`, or the
- * elapsed time exceeds `timeout_ms`. Useful for "wake on sound"
+ * Polls @ref tile_sense_mic_read_spl_db about every 10 ms (a ~5 ms
+ * capture plus a 5 ms wait, both counted) until the computed SPL (in
+ * 0.1 dB units) exceeds `threshold_db`, or about `timeout_ms` has
+ * elapsed. Useful for "wake on sound"
  * patterns — e.g., wait for a door slam, then fire an action.
  *
  * @note  Blocking until threshold or timeout.
@@ -656,13 +661,15 @@ uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db,
  *
  * Watches the SPL stream looking for the canonical clap signature:
  *   1. Quiet bracket (≥100 ms below ~50 dB SPL) — establishes baseline
- *   2. First peak  (>~70 dB SPL spike, <50 ms wide)
+ *   2. First peak  (>~70 dB SPL spike, up to ~100 ms wide)
  *   3. Quiet gap   (50–500 ms below threshold)
- *   4. Second peak (>~70 dB SPL spike, <50 ms wide)
+ *   4. Second peak (>~70 dB SPL spike, followed straight away by quiet)
  *   5. Quiet bracket (≥100 ms below threshold) — ensures it's really a clap-clap
  *
  * Thresholds are integer-fixed: peak ≈ 700 (70.0 dB), quiet floor
- * ≈ 500 (50.0 dB). The pattern detector samples SPL every ~5 ms.
+ * ≈ 500 (50.0 dB). The pattern detector samples SPL about every
+ * 10 ms (a ~5 ms capture plus a 5 ms wait); the windows and the
+ * timeout count both.
  *
  * @note  Blocking until pattern detected or timeout. False positives
  *        on door knocks / drawer slams are expected — this is a

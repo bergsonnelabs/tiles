@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_sense_i_9.h",
   "brief": "9-DOF IMU driver for the Sense.I.9 tile (rev c).",
-  "description": "@version 3.2.0\n\nRetirement: the ICM-20948 is obsolete and Sense.I.9 is moving to a Bosch\ntwo-chip design, so this revision will not be built in new panels. This\ndriver stays for the boards already made.\n\nEmbeds the TDK InvenSense ICM-20948: 6-DOF IMU (accel + gyro)\nwith co-packaged AK09916 3-DOF magnetometer (accessed via the\nICM's I2C bypass).\n\nSensor specifications:\n  - Accelerometer:  16-bit, ±2/4/8/16 G, up to 4.5 kHz ODR\n  - Gyroscope:      16-bit, ±250/500/1000/2000 DPS, up to 9 kHz ODR\n  - Magnetometer:   16-bit, ±4900 µT, up to 100 Hz ODR (0.15 µT/LSB)\n  - Temperature:    on-chip sensor\n  - FIFO:           512-byte buffer, accel + gyro + temp packets\n  - Wake-on-Motion: 4 mg/LSB threshold, INT routable\n\nDatasheet: https://www.bergsonne.io/tiles/sense/i9\n\n@studio tile label=Sense.I.9 icon=⊙\n@studio event name=data_ready mask=ICM20948_INT_RAW_DATA_RDY\n@studio event name=fifo_watermark mask=ICM20948_INT_FIFO_WM\n@studio event name=fifo_overflow mask=ICM20948_INT_FIFO_OVF\n@studio event name=wake_on_motion mask=ICM20948_INT_WOM\n\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"DMP3 — extended outputs\" section=advanced\n  Phase 1 (firmware load + verify) and Phase 2 (9-axis quaternion /\n  ROTATION_VECTOR) are now exposed via dmp_load / dmp_start_quat9 /\n  dmp_read_quat9. Still unimplemented: 6-axis quaternion (no-mag),\n  geomagnetic rotation vector, pedometer + step detector, BAC activity\n  classification, tap / double-tap, significant-motion detection,\n  pickup, tilt, fsync timestamping, and the multi-sensor accumulator\n  that lets several DMP outputs share one stream. Phase 4 plans\n  dmp_read_orientation (yaw/pitch/roll) on top of Quat9.\n\n@studio unsupported severity=niche category=\"AK09916 FUSE ROM sensitivity adjustment\"\n  Not applicable to this chip. Earlier AKM parts (e.g. AK8963) shipped\n  per-axis ASA codes in FUSE ROM that required `raw × (ASA + 128) / 256`\n  correction. The AK09916 in the ICM-20948 has no FUSE ROM and no ASA\n  registers (datasheet rev 015007392-E-02 §11) — sensitivity is\n  factory-trimmed to a fixed 0.15 µT/LSB across all axes. Driver\n  correctly returns raw counts at that scale; no per-axis correction\n  is needed or possible. Annotation kept to document the verification.\n\n@studio unsupported severity=advanced category=\"Sensor hub for external aux sensors\" section=advanced\n  Driver uses INT_PIN_CFG.BYPASS_EN by default so the AK09916 is on\n  the host bus directly (simpler + faster than routing through the\n  ICM's internal I2C master). dmp_start_quat9() now drives the master\n  internally — claiming slots 0 + 1 — but slots 2 + 3 remain unused\n  and there is no public API for attaching user aux sensors to them.\n  Closing this gap means promoting the I2C-master configuration into\n  a public surface and reserving DMP's slot use behind it.\n\n@studio unsupported severity=advanced category=\"FSYNC external-clock / timestamping\"\n  Hardware-gated. Chip can take a 31–50 kHz FSYNC input and stamp\n  samples against external timing. The Sense.I.9-c tile does not\n  expose the FSYNC pin on any pad (verified in tile JSON: pads 6, 7,\n  and 8 carry no function). Closing this gap requires a tile\n  hardware revision.\n\n@studio unsupported severity=advanced category=\"Alternate bus modes (SPI / I3C)\"\n  Ecosystem-gated. Tile JSON straps support I²C (default) or SPI 4-wire\n  on the same pads (AD0 = MISO, EN = CS), and the ICM-20948 is also\n  I3C electrically compliant. The driver framework currently uses\n  tiles_pal I²C calls only; closing requires extending the bus\n  abstraction (see Sense.I.6P6 v1.0+ for the SPI pattern). Defer to\n  a multi-bus driver framework pass.",
+  "description": "@version 3.3.0\n\nRetirement: the ICM-20948 is obsolete and Sense.I.9 is moving to a Bosch\ntwo-chip design, so this revision will not be built in new panels. This\ndriver stays for the boards already made.\n\nEmbeds the TDK InvenSense ICM-20948: 6-DOF IMU (accel + gyro)\nwith co-packaged AK09916 3-DOF magnetometer (accessed via the\nICM's I2C bypass).\n\nSensor specifications:\n  - Accelerometer:  16-bit, ±2/4/8/16 G, up to 4.5 kHz ODR\n  - Gyroscope:      16-bit, ±250/500/1000/2000 DPS, up to 9 kHz ODR\n  - Magnetometer:   16-bit, ±4900 µT, up to 100 Hz ODR (0.15 µT/LSB)\n  - Temperature:    on-chip sensor\n  - FIFO:           512-byte buffer, accel + gyro + temp packets\n  - Wake-on-Motion: 4 mg/LSB threshold, INT routable\n\nDatasheet: https://www.bergsonne.io/tiles/sense/i9\n\n@studio tile label=Sense.I.9 icon=⊙\n\nNo Studio events: the driver has no process() / on_event() (the tile is\nretiring, so none will be added). Poll get_int_status() or\nwait_for_motion() instead.\n\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"DMP3 — extended outputs\" section=advanced\n  Phase 1 (firmware load + verify) and Phase 2 (9-axis quaternion /\n  ROTATION_VECTOR) are now exposed via dmp_load / dmp_start_quat9 /\n  dmp_read_quat9. Still unimplemented: 6-axis quaternion (no-mag),\n  geomagnetic rotation vector, pedometer + step detector, BAC activity\n  classification, tap / double-tap, significant-motion detection,\n  pickup, tilt, fsync timestamping, and the multi-sensor accumulator\n  that lets several DMP outputs share one stream. Phase 4 plans\n  dmp_read_orientation (yaw/pitch/roll) on top of Quat9.\n\n@studio unsupported severity=niche category=\"AK09916 FUSE ROM sensitivity adjustment\"\n  Not applicable to this chip. Earlier AKM parts (e.g. AK8963) shipped\n  per-axis ASA codes in FUSE ROM that required `raw × (ASA + 128) / 256`\n  correction. The AK09916 in the ICM-20948 has no FUSE ROM and no ASA\n  registers (datasheet rev 015007392-E-02 §11) — sensitivity is\n  factory-trimmed to a fixed 0.15 µT/LSB across all axes. Driver\n  correctly returns raw counts at that scale; no per-axis correction\n  is needed or possible. Annotation kept to document the verification.\n\n@studio unsupported severity=advanced category=\"Sensor hub for external aux sensors\" section=advanced\n  Driver uses INT_PIN_CFG.BYPASS_EN by default so the AK09916 is on\n  the host bus directly (simpler + faster than routing through the\n  ICM's internal I2C master). dmp_start_quat9() now drives the master\n  internally — claiming slots 0 + 1 — but slots 2 + 3 remain unused\n  and there is no public API for attaching user aux sensors to them.\n  Closing this gap means promoting the I2C-master configuration into\n  a public surface and reserving DMP's slot use behind it.\n\n@studio unsupported severity=advanced category=\"FSYNC external-clock / timestamping\"\n  Hardware-gated. Chip can take a 31–50 kHz FSYNC input and stamp\n  samples against external timing. The Sense.I.9-c tile does not\n  expose the FSYNC pin on any pad (verified in tile JSON: pads 6, 7,\n  and 8 carry no function). Closing this gap requires a tile\n  hardware revision.\n\n@studio unsupported severity=advanced category=\"Alternate bus modes (SPI / I3C)\"\n  Ecosystem-gated. Tile JSON straps support I²C (default) or SPI 4-wire\n  on the same pads (AD0 = MISO, EN = CS), and the ICM-20948 is also\n  I3C electrically compliant. The driver framework currently uses\n  tiles_pal I²C calls only; closing requires extending the bus\n  abstraction (see Sense.I.6P6 v1.0+ for the SPI pattern). Defer to\n  a multi-bus driver framework pass.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -15,20 +15,6 @@
     }
   ],
   "studio_ready": true,
-  "studio_events": [
-    {
-      "name": "data_ready"
-    },
-    {
-      "name": "fifo_watermark"
-    },
-    {
-      "name": "fifo_overflow"
-    },
-    {
-      "name": "wake_on_motion"
-    }
-  ],
   "studio_unsupported": [
     {
       "severity": "common",
@@ -67,7 +53,7 @@
     },
     {
       "name": "TILE_SENSE_I_9_VERSION_MINOR",
-      "value": "2",
+      "value": "3",
       "description": "",
       "section": ""
     },
@@ -1054,7 +1040,7 @@
     }
   ],
   "source_file": "tile_sense_i_9.h",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "tile_family": "Sense",
   "tile_name": "I.9",
   "display_name": "Sense.I.9"

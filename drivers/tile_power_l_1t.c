@@ -134,7 +134,7 @@ void tile_power_l_1t_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     /* Battery undervoltage lockout: 2.6 V */
     bq_write(tile, BQ25150_REG_BUVLO, 0x04);
 
-    /* Enable all 6 ADC channels (IIN/PMID/ICHG/VIN/VBAT/TS/ADCIN).
+    /* Enable all 7 ADC channels (IIN/PMID/ICHG/VIN/VBAT/TS/ADCIN).
      * Bit 0 is RESERVED, leave 0. */
     bq_write(tile, BQ25150_REG_ADC_READ_EN, 0xFE);
 
@@ -487,7 +487,7 @@ void tile_power_l_1t_enter_ship_mode(tile_t* tile)
 
     /* Set bit 7 EN_SHIP_MODE; preserve other bits. Once set, the
      * chip enters ship mode when VIN is removed. Recovery requires
-     * MR press or VIN insertion. */
+     * VIN (SUPPLY+) insertion; /MR is not routed on this tile. */
     uint8_t cur = bq_read(tile, BQ25150_REG_ICCTRL0);
     bq_write(tile, BQ25150_REG_ICCTRL0, cur | 0x80);
 }

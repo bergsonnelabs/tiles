@@ -10,7 +10,8 @@
 // the LDO through 220 kΩ. When the LDO is off (SW→GND, ship mode, no power) the
 // MOSFET opens and the downstream system's ground floats: a true soft off. The
 // SI8806's VGS(th) is 0.4–1.0 V, so an LDO set below 1.0 V can't be counted on
-// to close it either.
+// to close it either, and its RDS(on) is only specified from 1.8 V (the header
+// warns below ~1.8 V).
 //
 // NO BATTERY THERMISTOR: TS is strapped to a fixed 5 kΩ (the datasheet's "TS
 // not used" connection), so the TS pin sits at 5 kΩ × 80 µA = 400 mV, inside the
@@ -51,7 +52,11 @@ const IBAT_ACTIVE_LDO_UA = 21; // active battery mode, LDO enabled
 // note and V+ rail `max_current` agree since 2026-10-09; its application note says 150 mA).
 const LDO_LIMIT_UA = 100_000;
 // SI8806 ground switch: gate = V+ via 220 kΩ; VGS(th) max 1.0 V (SI8806DB §Specs).
+// The twin closes it from 1.0 V. RDS(on) is only specified from 1.8 V, so the
+// header warns the ground is not reliably closed below ~1.8 V; between the two
+// the V+ rail note says "marginal".
 const GND_SWITCH_VTH_MV = 1000;
+const GND_SWITCH_SPEC_MV = 1800;
 // TS pin: fixed 5 kΩ strap × 80 µA ITS_BIAS (datasheet §7.5, pin table "TS").
 const TS_STRAP_MV = 400;
 
@@ -88,7 +93,8 @@ interface State {
   charging_enabled: number; // ICCTRL2.CHARGER_DISABLE inverted
   charge_current_ma: number; // ICHG
   charge_voltage_mv: number; // VBATREG
-  pre_charge_cma: number; // IPRECHG, centi-mA (1.25 mA steps)
+  pre_charge_cma: number; // IPRECHG, centi-mA (1.25 mA steps in range 0, 2.5 mA in range 1)
+  ichg_range1: number; // PCHRGCTRL.ICHARGE_RANGE: 1 when set_charge_current_ma asked for > 318 mA
   termination_pct: number; // ITERM, % of ICHG; 0 = termination disabled
   input_current_limit_ma: number; // ILIM
   batt_uvlo_mv: number; // BUVLO
@@ -260,6 +266,20 @@ function quantizeIchg(ma: number): number {
   return Math.floor((Math.min(255, Math.floor((m * 4) / 5)) * 5) / 4);
 }
 
+// set_charge_current_ma: ICHG plus the range bit. The driver keeps the IPRECHG
+// code when it flips ICHARGE_RANGE, and the code's step doubles (1.25 → 2.5 mA)
+// or halves with it, so the pre-charge current doubles or halves too (the
+// header's set_charge_current_ma note).
+function setIchg(s: State, requestedMa: number): Partial<State> {
+  const range1 = Math.min(500, Math.max(0, requestedMa)) > 318 ? 1 : 0;
+  const next: Partial<State> = { charge_current_ma: quantizeIchg(requestedMa), ichg_range1: range1 };
+  if (range1 !== s.ichg_range1) {
+    const code = Math.floor(s.pre_charge_cma / (s.ichg_range1 ? 250 : 125)) & 0x1f;
+    next.pre_charge_cma = code * (range1 ? 250 : 125);
+  }
+  return next;
+}
+
 const sim: TileSim<State> = {
   tile: 'Power.L.1T',
 
@@ -282,6 +302,7 @@ const sim: TileSim<State> = {
     charge_current_ma: 80,
     charge_voltage_mv: 4200,
     pre_charge_cma: 1875,
+    ichg_range1: 0,
     termination_pct: 10,
     input_current_limit_ma: 100,
     batt_uvlo_mv: 2600,
@@ -348,6 +369,7 @@ const sim: TileSim<State> = {
       nextState: {
         charge_current_ma: 80,
         pre_charge_cma: 1875,
+        ichg_range1: 0,
         charge_voltage_mv: 4200,
         batt_uvlo_mv: 2600,
         ts_enabled: 1,
@@ -357,8 +379,8 @@ const sim: TileSim<State> = {
     }),
 
     // ── charge config ──
-    tile_power_l_1t_set_charge_current_ma: ({ args }) => ({
-      nextState: { charge_current_ma: quantizeIchg(num(args, 0, 80)) },
+    tile_power_l_1t_set_charge_current_ma: ({ state, args }) => ({
+      nextState: setIchg(state, num(args, 0, 80)),
     }),
     tile_power_l_1t_set_charge_voltage_mv: ({ args }) => {
       const mv = clamp(num(args, 0, 4200), 3600, 4600);
@@ -366,7 +388,7 @@ const sim: TileSim<State> = {
     },
     tile_power_l_1t_set_pre_charge_ma: ({ state, args }) => {
       // IPRECHG step follows ICHARGE_RANGE (set when ICHG > 318 mA).
-      const range1 = state.charge_current_ma > 318;
+      const range1 = state.ichg_range1 === 1;
       const ma = Math.max(0, num(args, 0, 18) & 0xff);
       const code = range1
         ? Math.min(31, Math.floor((Math.min(ma, 77) * 2) / 5))
@@ -473,7 +495,7 @@ const sim: TileSim<State> = {
     tile_power_l_1t_read_status: ({ state, args }) => {
       const i = resolveInputs(state);
       if (!i2cAlive(state, i)) return { scalar: 0 };
-      const r1 = state.charge_current_ma > 318;
+      const r1 = state.ichg_range1 === 1;
       const regs: Record<number, number> = {
         0x00: stat0(state, i),
         0x01: stat1(state, i),
@@ -668,9 +690,10 @@ const sim: TileSim<State> = {
       pads: ['10'],
       limit_ua: LDO_LIMIT_UA,
       note: ldoEn
-        ? state.ldo_mode === LDO_MODE_LOAD_SWITCH
-          ? 'load switch (ground via pad 1 switch)'
-          : 'LDO (ground via pad 1 switch)'
+        ? (state.ldo_mode === LDO_MODE_LOAD_SWITCH
+            ? 'load switch (ground via pad 1 switch)'
+            : 'LDO (ground via pad 1 switch)') +
+          (vout < GND_SWITCH_SPEC_MV ? '; marginal: pad 1 switch below its 1.8 V RDS(on) spec' : '')
         : 'LDO off — pad 1 ground also open',
     });
 

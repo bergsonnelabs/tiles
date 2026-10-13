@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_drive_p.h",
   "brief": "Piezoelectric haptic driver for the Drive.P tile (rev a).",
-  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential (high range, ±95 V), up to 820 nF\n                 capacitive load. The driver STARTS IN THE LOW RANGE\n                 (±13.28 V); ±95 V needs an explicit\n                 tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V).\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth\n  - Sample rate:  8 ksps – 1024 ksps (configurable)\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - INIT STARTS IN THE LOW RANGE (±13.28 V, CONFIG.GAIND = 1) since v3.6.\n    Before v3.6 init left the chip's reset value GAIND = 0, i.e. ±95 V. Firmware\n    that drives a high-voltage actuator must now call\n    tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V) after init.\n\n  - EVERY OUTPUT SAMPLE IS VOLTAGE-LIMITED (since v3.6), separately per\n    polarity: by default +the range's maximum / -10 V, because PowerHap\n    actuators take a high positive voltage but only ~10 V negative. A\n    waveform that exceeds a limit still plays, flattened at it; read\n    tile_drive_p_read_clamp_count() to find out it happened. Widen the\n    negative limit only for an actuator rated for it\n    (tile_drive_p_set_voltage_limits). The limits are not applied to RAM\n    Playback / RAM Synthesis waveforms (WFS commands), see wfs_write().\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to\n    1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.\n    Account for that in teardown / discharge timing (don't switch to SENSE or\n    read status assuming playback is done). Streaming paces on FIFO_SPACE\n    and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)\n    bus — at 100 kHz two bytes per sample top out near 5.5 ksps.\n\n  - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on\n    the output (datasheet §6.6). The click / sine / buzz / pulse-train\n    helpers end at exactly 0 V; play_samples() plays the caller's buffer\n    as-is, so make its last sample 0.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
+  "description": "Embeds the Boréas Technologies BOS1921, a piezoelectric driver\nwith integrated high-voltage boost (190 Vpp differential),\nwaveform synthesizer, 1024-sample FIFO, and piezo sensing.\n\nKey specifications:\n  - Output:      190 Vpp differential (high range, ±95 V), up to 820 nF\n                 capacitive load. The driver STARTS IN THE LOW RANGE\n                 (±13.28 V); ±95 V needs an explicit\n                 tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V).\n  - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)\n  - Play modes:  Direct, FIFO, RAM, RAM Synth (the driver exposes Direct,\n                 FIFO and RAM Synth; see the gaps below)\n  - Sample rate:  8 ksps – 1024 ksps on the chip; the driver plays FIFO at\n                 8 ksps only\n\nDatasheet: https://www.bergsonne.io/tiles/drive/p\nIC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf\n\n@studio tile label=Drive.P icon=♪\n\n\nOperating notes / gotchas (learned bringing up Drive.P haptics on Ring):\n\n  - UPI IS MANDATORY ON BATTERY / NON-SINKING SUPPLIES. The BOS1921 recovers\n    piezo-discharge energy back toward VDD (bidirectional power). If the PDN\n    can't sink that current, recovered charge piles onto CVDD and VDDP climbs\n    (must stay < 5.5 V), skewing the Rsense current sense → MXPWR/IDAC faults.\n    Call tile_drive_p_set_upi(tile, 1) right after init on such boards\n    (datasheet §6.2.13). Leave UPI = 0 only when the supply can sink current.\n\n  - DISCHARGE TO 0 V BEFORE PLAYING into possible residual charge. Output-bridge\n    protection (§6.2.18) blocks a polarity change when > 4.4 V of the OPPOSITE\n    sign sits on the piezo, and can play the waveform in the wrong polarity —\n    with or WITHOUT setting an IDAC error (so it just feels like \"nothing\n    happened\"). Residual builds from a prior effect AND from sensing (the\n    ceramic self-generates voltage when deformed). Prepend a few 0 V samples\n    (or a small ramp to 0) to each waveform.\n\n  - IDAC FAULT DOES NOT SELF-CLEAR. Current-detection / over-current (MXPWR→IDAC)\n    latches the chip in ERROR until a software reset. Call\n    tile_drive_p_check_and_recover(tile, mode) after effects (or on any ERROR)\n    to reset + restore; otherwise the driver stays dead until a power cycle.\n\n  - INIT STARTS IN THE LOW RANGE (±13.28 V, CONFIG.GAIND = 1) since v3.6.\n    Before v3.6 init left the chip's reset value GAIND = 0, i.e. ±95 V. Firmware\n    that drives a high-voltage actuator must now call\n    tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V) after init.\n\n  - EVERY OUTPUT SAMPLE IS VOLTAGE-LIMITED (since v3.6), separately per\n    polarity: by default +the range's maximum / -10 V, because PowerHap\n    actuators take a high positive voltage but only ~10 V negative. A\n    waveform that exceeds a limit still plays, flattened at it; read\n    tile_drive_p_read_clamp_count() to find out it happened. Widen the\n    negative limit only for an actuator rated for it\n    (tile_drive_p_set_voltage_limits). The limits are not applied to RAM\n    Playback / RAM Synthesis waveforms (WFS commands), see wfs_write().\n\n  - THE CURRENT LIMIT IS COMPONENT-DEPENDENT. The parcap / SUP_RISE values set\n    in init are tuned for a 260 nF piezo, L1 = 10 µH, Rsense = 0.2 Ω. A board\n    with different components hits MXPWR/IDAC far below the rated ±95 V (Ring\n    faulted ~33 V). If you see early MXPWR/IDAC at low voltage, suspect sizing:\n    retune parcap / SUP_RISE and the Rsense current limit (§7.5.3) to the actual\n    BOM, or cap the drive amplitude.\n\n  - play_samples() RETURNS WHEN THE LAST SAMPLE IS QUEUED, NOT PLAYED — up to\n    1024 samples (128 ms at 8 ksps) are still in the FIFO when it returns.\n    Account for that in teardown / discharge timing (don't switch to SENSE or\n    read status assuming playback is done). Streaming paces on FIFO_SPACE\n    and writes 32-sample bursts; gapless 8 ksps needs a 400 kHz (or faster)\n    bus — at 100 kHz two bytes per sample top out near 5.5 ksps.\n\n  - END EVERY WAVEFORM AT 0. When the FIFO drains, the last sample stays on\n    the output (datasheet §6.6). The click / sine / buzz / pulse-train\n    helpers end at exactly 0 V; play_samples() plays the caller's buffer\n    as-is, so make its last sample 0.\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Multi-device SYNC pin\" section=advanced\n  SYNC pin coordinates phase between cascaded BOS1921s\n  (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±,\n  GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed\n  to a pad, so multi-tile cascading is hardware-gated to a\n  future tile rev.\n\n@studio unsupported severity=advanced category=\"RAM Playback mode\"\n  Driver-deferred. The BOS1921 can play a waveform stored in its RAM\n  (PLAY_MODE RAM Playback). drive_p_mode_t has Direct, FIFO and RAM\n  Synthesis, but no RAM Playback mode, and no call loads a waveform\n  into RAM for it.\n\n@studio unsupported severity=advanced category=\"FIFO sample rate (PLAY_SRATE)\"\n  Driver-deferred. The chip plays the FIFO at 8 to 1024 ksps\n  (CONFIG.PLAY_SRATE). The driver always selects 8 ksps and has no\n  setter, so play_samples() and the helpers run at 8 ksps.\n\n@studio unsupported severity=advanced category=\"I3C alternate bus mode\"\n  Pads 4/5 are bus-shared between I²C (default) and I3C SDR\n  (≤12.5 Mbps with in-band interrupts). The cores tile-driver\n  framework only ships an I²C PAL; I3C support is an\n  ecosystem-wide gap, not BOS1921-specific.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -17,6 +17,16 @@
       "category": "Multi-device SYNC pin",
       "brief": "SYNC pin coordinates phase between cascaded BOS1921s (< 2 µs delay). The Drive.P tile has 10 pads (I2C/I3C, OUT±, GPIO, V+, V_DRIVE, GND); the SYNC pin on the IC is not routed to a pad, so multi-tile cascading is hardware-gated to a future tile rev.",
       "section": "advanced"
+    },
+    {
+      "severity": "advanced",
+      "category": "RAM Playback mode",
+      "brief": "Driver-deferred. The BOS1921 can play a waveform stored in its RAM (PLAY_MODE RAM Playback). drive_p_mode_t has Direct, FIFO and RAM Synthesis, but no RAM Playback mode, and no call loads a waveform into RAM for it."
+    },
+    {
+      "severity": "advanced",
+      "category": "FIFO sample rate (PLAY_SRATE)",
+      "brief": "Driver-deferred. The chip plays the FIFO at 8 to 1024 ksps (CONFIG.PLAY_SRATE). The driver always selects 8 ksps and has no setter, so play_samples() and the helpers run at 8 ksps."
     },
     {
       "severity": "advanced",
@@ -39,7 +49,7 @@
     },
     {
       "name": "TILE_DRIVE_P_VERSION_PATCH",
-      "value": "1",
+      "value": "2",
       "description": "",
       "section": ""
     },
@@ -551,7 +561,7 @@
         }
       ],
       "notes": [
-        "After a timeout-triggered sleep, PLAY_SRATE is reset to 0x7 (8 ksps) — re-set the sample rate before the next playback if you were using a faster rate. The driver's tile state stays READY; the first I2C write after the timeout only wakes the chip and is discarded, so call @ref tile_drive_p_wake before the next command."
+        "After a timeout-triggered sleep, PLAY_SRATE is reset to 0x7 (8 ksps), which is the rate the driver always uses. The driver's tile state stays READY; the first I2C write after the timeout only wakes the chip and is discarded, so call @ref tile_drive_p_wake before the next command."
       ],
       "studio_exposed": true,
       "studio_section": "config",
@@ -714,10 +724,12 @@
           "description": "Absolute sense voltage threshold in mV"
         }
       ],
-      "notes": [],
+      "notes": [
+        "Blocks ~5 ms: every call re-enters sense mode, which waits 5 ms. To poll quickly, call set_mode(DRIVE_P_MODE_SENSE_FINE) once and read_sense() in the loop."
+      ],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "1 if sense > threshold (touched), 0 otherwise",
+      "return": "1 if |sense| >= threshold (touched), 0 otherwise",
       "brief": "Check whether the piezo is being touched / pressed.",
       "description": "Switches into sense mode (fine resolution), reads one sense\nsample, compares the absolute value against `threshold_mv`, and\nreturns the boolean result. Leaves the chip in sense mode after\nthe call — call `tile_drive_p_set_mode(tile, DRIVE_P_MODE_IDLE)`\n(or any play mode) to return to driving the actuator.",
       "name": "tile_drive_p_is_touched"
@@ -743,7 +755,7 @@
       "studio_section": "runtime",
       "return": "1 if a touch fired the click, 0 on timeout",
       "brief": "Block until touch detected, then fire a click.",
-      "description": "Polls the sense channel until `threshold_mv` is exceeded, then\nswitches into FIFO mode and plays a click via @ref\ntile_drive_p_play_click. The classic closed-loop tactile-feedback\nidiom — press the piezo, feel the click. Polling polls every\n~1 ms; returns 0 if `timeout_ms` elapses without detection.",
+      "description": "Polls the sense channel until `threshold_mv` is exceeded, then\nswitches into FIFO mode and plays a click via @ref\ntile_drive_p_play_click. The classic closed-loop tactile-feedback\nidiom — press the piezo, feel the click. Enters sense mode once\n(~5 ms), then reads the sense value about every 1 ms; returns 0\nonce about `timeout_ms` has elapsed without detection. Leaves the\nchip in sense mode on a timeout.",
       "name": "tile_drive_p_play_on_touch"
     },
     {
@@ -781,12 +793,12 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Read a buffer of sense samples.",
-      "description": "Switches into fine-resolution sense mode (if not already there)\nand reads `count` consecutive samples into the caller's buffer.\nEach sample takes ~125 µs to acquire (8 ksps native). Use for\nimpedance characterisation, multi-touch pattern detection, or\npiezo-as-mic experiments beyond the simple `is_touched` API.",
+      "description": "Switches into fine-resolution sense mode (~5 ms) and reads `count`\nsamples into the caller's buffer, back to back with no pacing.\nThe chip updates SENSE_VALUE continuously (datasheet §6.4.1), so\nthe sample rate is set by the bus (each read is a register write\nplus a read) and consecutive samples can repeat a value. Use for\nimpedance characterisation, multi-touch pattern detection, or\npiezo-as-mic experiments beyond the simple `is_touched` API.",
       "name": "tile_drive_p_read_sense_samples"
     }
   ],
   "source_file": "tile_drive_p.h",
-  "version": "3.6.1",
+  "version": "3.6.2",
   "tile_family": "Drive",
   "tile_name": "P",
   "display_name": "Drive.P",

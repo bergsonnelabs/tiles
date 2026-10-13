@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_sense_tof.h",
   "brief": "TMF8806 time-of-flight distance sensor.",
-  "description": "Platform-agnostic driver for the AMS/Sciosense TMF8806 direct time-of-flight\n(dToF) sensor with integrated VCSEL emitter and SPAD detector array.\n\nKey specifications:\n - Distance measurement up to 5000 mm (short-range, 2.5 m, and 5 m modes)\n - 16-bit distance output in millimeters\n - Configurable measurement period (30 ms to 2000 ms, or single-shot)\n - Configurable iteration count for accuracy vs. speed trade-off\n - 6-bit reliability indicator: 0 = no object; 1 / 10 = short-range\n   algorithm result (uncalibrated / calibrated); other values 2..63 =\n   long-range result, 63 best (datasheet Table 42)\n - On-chip factory calibration with host-side storage and reload\n - Algorithm state save/restore for ultra-low-power resume\n - Embedded 8-bit temperature sensor\n\n\nDatasheet: https://ams.com/tmf8806\n\n@studio tile label=Sense.TOF icon=◊\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"10 m extended-range mode\" section=advanced\n  Deferred to a dedicated session. TMF8806 App0 firmware supports\n  up to 5 m range out of ROM; 10 m mode requires downloading a\n  binary RAM patch from AMS via the bootloader's W_RAM +\n  RAMREMAP_RESET protocol — non-trivial firmware-loading flow not\n  in scope for this driver-coverage pass.\n\n@studio unsupported severity=niche category=\"GPIO0 / GPIO1 runtime control\"\n  GPIO0 is routed to tile pad 3 but is consumed as a hardware\n  strap: a 100 k on-board pull-up (R2) to V+ holds GPIO0 high at\n  startup, selecting the 1.8-3.3 V digital-I/O level required by\n  this tile's 2.7-3.5 V rail (TMF8806 datasheet §6.7, Table 4).\n  The chip's EN pin is tied to V+ on the board and is not on a pad,\n  so the sensor cannot be power-cycled from the Core. It is NOT\n  an I2C-address strap (the address is fixed at 0x41, changed only\n  via command 0x49). Driver-deferred: after startup GPIO0 is a\n  normal GPIO (§6.7), and its open-drain object-detect modes\n  (cmd 0x02 cmd_data5 gpio0 = 8 / 9) would work with the on-board\n  pull-up as a second \"object present\" line on pad 3; push-pull\n  modes would fight R2 and are best avoided. Not exposed yet. GPIO1 is not routed to a pad (held\n  low by a 100 k pull-down, R3).\n\n@studio unsupported severity=niche category=\"I2C address change / several sensors on one bus\"\n  Hardware-gated in part. Command 0x49 can move the sensor off 0x41, but\n  giving several sensors their own addresses means releasing them one at\n  a time through EN, and EN is tied to V+ on the tile. A GPIO0-conditioned\n  change through pad 3 is possible but not exposed (driver-deferred).\n\n@studio unsupported severity=advanced category=\"Optical stack / cover glass tuning\"\n  Driver-deferred. spadSelect (cmd_data7[7:6]) and the SPAD dead time\n  (cmd_data7[5:3], fixed at the datasheet default of 4) tune the sensor\n  for a cover glass or strong sunlight (datasheet §6.5).\n\n@studio unsupported severity=niche category=\"Spread spectrum, algKeepReady, immediate interrupt\"\n  Driver-deferred. The VCSEL / SPAD charge-pump spread spectrum\n  (cmd_data9/8), algKeepReady and algImmediateInterrupt are left off.\n\n@studio unsupported severity=niche category=\"Ultra-low-power shutdown\"\n  Hardware-gated. With EN tied to V+ the chip can't be put in its\n  0.04 µA shutdown; sleep() (PON off) is the floor, about 85 µA standby.\n\n@studio unsupported severity=niche category=\"Oscillator drift correction, calibration per mode\"\n  Driver-deferred. get_sys_clock_ticks() gives the raw clock, but the\n  host-side drift correction and re-trim (host-driver note §10 / §11) are\n  not done, and the driver keeps one calibration at a time (switching\n  into or out of 5 m drops it) rather than a set per mode.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
+  "description": "Platform-agnostic driver for the AMS/Sciosense TMF8806 direct time-of-flight\n(dToF) sensor with integrated VCSEL emitter and SPAD detector array.\n\nKey specifications:\n - Distance measurement up to 5000 mm (short-range, 2.5 m, and 5 m modes)\n - 16-bit distance output in millimeters\n - Configurable measurement period (30 ms to 2000 ms, or single-shot)\n - Configurable iteration count for accuracy vs. speed trade-off\n - 6-bit reliability indicator: 0 = no object; 1 / 10 = short-range\n   algorithm result (uncalibrated / calibrated); other values 2..63 =\n   long-range result, 63 best (datasheet Table 42)\n - On-chip factory calibration with host-side storage and reload\n - Algorithm state save/restore for ultra-low-power resume\n - Embedded 8-bit temperature sensor\n\n\nDatasheet: https://ams.com/tmf8806\n\n@studio tile label=Sense.TOF icon=◊\n\n@studio usage\n  Call start() once when the program begins: init does not start\n  ranging, and until start() get_distance_mm() reads as nothing in range\n  (the max range). After start() it returns the latest reading, updated\n  every 30 ms by default. is_object_within(), wait_for_object() and\n  measure_single() take their own single shots and need no start().\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=common category=\"10 m extended-range mode\" section=advanced\n  Deferred to a dedicated session. TMF8806 App0 firmware supports\n  up to 5 m range out of ROM; 10 m mode requires downloading a\n  binary RAM patch from AMS via the bootloader's W_RAM +\n  RAMREMAP_RESET protocol — non-trivial firmware-loading flow not\n  in scope for this driver-coverage pass.\n\n@studio unsupported severity=niche category=\"GPIO0 / GPIO1 runtime control\"\n  GPIO0 is routed to tile pad 3 but is consumed as a hardware\n  strap: a 100 k on-board pull-up (R2) to V+ holds GPIO0 high at\n  startup, selecting the 1.8-3.3 V digital-I/O level required by\n  this tile's 2.7-3.5 V rail (TMF8806 datasheet §6.7, Table 4).\n  The chip's EN pin is tied to V+ on the board and is not on a pad,\n  so the sensor cannot be power-cycled from the Core. It is NOT\n  an I2C-address strap (the address is fixed at 0x41, changed only\n  via command 0x49). Driver-deferred: after startup GPIO0 is a\n  normal GPIO (§6.7), and its open-drain object-detect modes\n  (cmd 0x02 cmd_data5 gpio0 = 8 / 9) would work with the on-board\n  pull-up as a second \"object present\" line on pad 3; push-pull\n  modes would fight R2 and are best avoided. Not exposed yet. GPIO1 is not routed to a pad (held\n  low by a 100 k pull-down, R3).\n\n@studio unsupported severity=niche category=\"I2C address change / several sensors on one bus\"\n  Hardware-gated in part. Command 0x49 can move the sensor off 0x41, but\n  giving several sensors their own addresses means releasing them one at\n  a time through EN, and EN is tied to V+ on the tile. A GPIO0-conditioned\n  change through pad 3 is possible but not exposed (driver-deferred).\n\n@studio unsupported severity=advanced category=\"Optical stack / cover glass tuning\"\n  Driver-deferred. spadSelect (cmd_data7[7:6]) and the SPAD dead time\n  (cmd_data7[5:3], fixed at the datasheet default of 4) tune the sensor\n  for a cover glass or strong sunlight (datasheet §6.5).\n\n@studio unsupported severity=niche category=\"Spread spectrum, algKeepReady, immediate interrupt\"\n  Driver-deferred. The VCSEL / SPAD charge-pump spread spectrum\n  (cmd_data9/8), algKeepReady and algImmediateInterrupt are left off.\n\n@studio unsupported severity=niche category=\"Ultra-low-power shutdown\"\n  Hardware-gated. With EN tied to V+ the chip can't be put in its\n  0.04 µA shutdown; sleep() (PON off) is the floor, about 85 µA standby.\n\n@studio unsupported severity=niche category=\"Oscillator drift correction, calibration per mode\"\n  Driver-deferred. get_sys_clock_ticks() gives the raw clock, but the\n  host-side drift correction and re-trim (host-driver note §10 / §11) are\n  not done, and the driver keeps one calibration at a time (switching\n  into or out of 5 m drops it) rather than a set per mode.\n\n@note All bus I/O is routed through tiles_pal_t function pointers.\n      This driver contains no platform-specific code.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -11,6 +11,7 @@
     }
   ],
   "studio_ready": true,
+  "usage": "Call start() once when the program begins: init does not start ranging, and until start() get_distance_mm() reads as nothing in range (the max range). After start() it returns the latest reading, updated every 30 ms by default. is_object_within(), wait_for_object() and measure_single() take their own single shots and need no start().",
   "studio_unsupported": [
     {
       "severity": "common",
@@ -64,7 +65,7 @@
     },
     {
       "name": "TILE_SENSE_TOF_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -426,7 +427,7 @@
       ],
       "notes": [],
       "brief": "Initialise a Sense.TOF tile.",
-      "description": "Performs the full TMF8806 boot sequence:\n 1. Waits for bootloader to enter sleep (ENABLE == 0x00)\n 2. Wakes the bootloader (PON = 1)\n 3. Waits for CPU ready (ENABLE == 0x41)\n 4. Requests App0 measurement application\n 5. Waits for App0 to start (APPID == 0xC0)\n 6. Enables result interrupt\n\nDoes NOT start measurements — call tile_sense_tof_start() after init.\nDoes NOT software-reset to preserve any existing calibration data.",
+      "description": "Performs the TMF8806 boot sequence:\n 1. Sets PON only if the CPU is not already ready (a cold part comes\n    up with ENABLE == 0x41), then waits for CPU ready (ENABLE == 0x41)\n 2. If App0 is already running (APPID == 0xC0, e.g. after a warm MCU\n    reset), stops there\n 3. Otherwise requests App0 and waits for it to start (APPID == 0xC0)\n 4. Enables the result interrupt\n\nDoes NOT start measurements — call tile_sense_tof_start() after init.\nDoes NOT software-reset to preserve any existing calibration data.",
       "name": "tile_sense_tof_init"
     },
     {
@@ -466,7 +467,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Start continuous or single-shot measurement.",
-      "description": "Writes the factory calibration data (if loaded), configures the\nmeasurement command payload from the current cfg, and issues the\nmeasurement command. Results are signaled via the result interrupt.\n\nIf period_ms == 0x00 in the config, a single measurement is taken.\nOtherwise measurements repeat at the configured period.",
+      "description": "Writes the factory calibration data (if loaded), configures the\nmeasurement command payload from the current cfg, and issues the\nmeasurement command. Results are signaled via the result interrupt.\n\nMeasurements repeat at the configured period. A cfg period of 0 means\nthe 30 ms default at init, so for a single shot use set_period(0) or\nmeasure_single().",
       "name": "tile_sense_tof_start"
     },
     {
@@ -503,9 +504,9 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "Distance in millimeters, saturating at the configured max range.",
+      "return": "Distance in millimeters, saturating at the configured max range; 0 if not READY or the read failed.",
       "brief": "Read the distance from the most recent result.",
-      "description": "Returns the peak distance in millimeters. Does not check whether\nnew data is available — call tile_sense_tof_result_ready() first\nor use tile_sense_tof_get_result() for full status.\n\nWhen nothing is in range the sensor reports 0; this SATURATES that to\ntile_sense_tof_max_range_mm()\nrather than returning 0, so `if (distance < threshold)` behaves correctly\nwith no special case — \"out of range\" reads as \"very far away\", which is\nwhat it physically means. Use tile_sense_tof_get_result() when you need to\ntell \"no target\" from \"target at max range\"; that reports the raw value.",
+      "description": "Returns the peak distance in millimeters. Does not check whether\nnew data is available — call tile_sense_tof_result_ready() first\nor use tile_sense_tof_get_result() for full status. Returns 0 when\nthe tile is not READY or the I2C read fails.\n\nWhen nothing is in range the sensor reports 0; this SATURATES that to\ntile_sense_tof_max_range_mm()\nrather than returning 0, so `if (distance < threshold)` behaves correctly\nwith no special case — \"out of range\" reads as \"very far away\", which is\nwhat it physically means. Use tile_sense_tof_get_result() when you need to\ntell \"no target\" from \"target at max range\"; that reports the raw value.",
       "name": "tile_sense_tof_get_distance_mm"
     },
     {
@@ -636,8 +637,8 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "advanced",
-      "brief": "Read the current factory calibration data from the sensor.",
-      "description": "Reads 14 bytes of calibration data from the sensor's calibration\nregisters. Typically called after tile_sense_tof_factory_calibrate()\nto save the data for later reloading via set_calibration().",
+      "brief": "Copy out the factory calibration data the driver holds.",
+      "description": "Returns the driver's 14-byte copy (from factory_calibrate() or\nset_calibration()), not a live read of the sensor; all zeros when\nnone is held. Typically called after tile_sense_tof_factory_calibrate()\nto save the data for later reloading via set_calibration().",
       "name": "tile_sense_tof_get_calibration"
     },
     {
@@ -747,7 +748,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Change the per-measurement iteration count on the fly.",
-      "description": "Iterations (in thousands) trade power for SNR/range: more iterations\ngive a stronger return and longer reach at higher current draw.\nTypical range 10-4000 (10k-4M); the ranging default is 900. Stops any\nactive measurement, updates the cached value, and restarts.",
+      "description": "Iterations (in thousands) trade power for SNR/range: more iterations\ngive a stronger return and longer reach at higher current draw.\nValid range 10-4000 (10k-4M; values outside are clamped); the ranging\ndefault is 900. Stops any active measurement, updates the cached\nvalue, and restarts.",
       "name": "tile_sense_tof_set_kilo_iters"
     },
     {
@@ -824,11 +825,13 @@
           "description": "Pointer to 11 bytes of previously saved state data."
         }
       ],
-      "notes": [],
+      "notes": [
+        "Needs factory calibration (factory_calibrate() or set_calibration()): algState requires factoryCal, so without calibration start() drops the state silently. The state is used for one start() only."
+      ],
       "studio_exposed": true,
       "studio_section": "advanced",
-      "brief": "Restore algorithm state to the sensor.",
-      "description": "Writes 11 bytes of previously saved algorithm state to the sensor\n(registers 0x2E-0x38). Call this after wake() and before start()\nto resume from the saved algorithm state.\n\nThe calibration data bitmask in the measurement command (cmd_data7)\nis automatically updated to include algState when state data has\nbeen restored.",
+      "brief": "Hand saved algorithm state back to the driver for the next start().",
+      "description": "Stores 11 bytes of previously saved algorithm state; nothing is written\nyet. The next start() writes them to the sensor (registers 0x2E-0x38)\nright after the calibration and sets algState in the measurement\ncommand (cmd_data7). Call this after wake() and before start().",
       "name": "tile_sense_tof_restore_state"
     },
     {
@@ -852,7 +855,7 @@
       "studio_section": "config",
       "return": "1 on success, 0 on bus / command-execution timeout.",
       "brief": "Configure threshold-based interrupt suppression.",
-      "description": "Without this configured, the chip fires INT on every measurement\ncompletion. With it: INT only fires when an object is detected in\nthe [low_mm, high_mm] range for `persistence` consecutive\nmeasurements. Lets a sleeping host stay asleep until something\ngets close.\n\nPer HostDriverCommunication §8.12 (cmd 0x08 = WR_ADD_CONFIG):\n  - persistence = 0  → interrupt every measurement (default)\n  - persistence = N  → require N consecutive in-range hits\n  - low_mm > high_mm → no interrupts (no valid range)",
+      "description": "Without this configured, the chip fires INT on every measurement\ncompletion. With it: INT only fires when an object is detected in\nthe [low_mm, high_mm] range for `persistence` consecutive\nmeasurements. Lets a sleeping host stay asleep until something\ngets close.\n\nThe chip refuses commands while ranging runs, so this stops ranging,\nsends the command, waits for it to complete and restarts ranging.\n\nPer HostDriverCommunication §8.12 (cmd 0x08 = WR_ADD_CONFIG):\n  - persistence = 0  → interrupt every measurement (default)\n  - persistence = N  → require N consecutive in-range hits\n  - low_mm > high_mm → no interrupts (no valid range)",
       "name": "tile_sense_tof_set_threshold_interrupt"
     },
     {
@@ -876,7 +879,7 @@
       "studio_section": "advanced",
       "return": "1 on success, 0 on timeout.",
       "brief": "Read back the current threshold-interrupt configuration.",
-      "description": "Per HostDriverCommunication §8.12.2 (cmd 0x09 = RD_ADD_CONFIG).",
+      "description": "Per HostDriverCommunication §8.12.2 (cmd 0x09 = RD_ADD_CONFIG). Stops\nranging for the command and restarts it, as set_threshold_interrupt().",
       "name": "tile_sense_tof_get_threshold_interrupt"
     },
     {
@@ -964,7 +967,7 @@
         }
       ],
       "notes": [
-        "v1 implementation polls — keeps the helper self-contained and avoids the need to wire the chip's INT pin into the tile pad map. A future revision could swap to the chip's threshold-INT (see @ref tile_sense_tof_set_threshold_interrupt) to let a sleeping host stay asleep until proximity wakes it."
+        "v1 implementation polls — keeps the helper self-contained and needs no Core pin wired to the chip's INT (pad 9). A future revision could swap to the chip's threshold-INT (see @ref tile_sense_tof_set_threshold_interrupt) to let a sleeping host stay asleep until proximity wakes it."
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -995,7 +998,7 @@
     }
   ],
   "source_file": "tile_sense_tof.h",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "tile_family": "Sense",
   "tile_name": "TOF",
   "display_name": "Sense.TOF",

@@ -323,10 +323,23 @@ void tile_sense_i_6p6_process(tile_t *tile)
         return;
     s->int1_flag = 0;
 
-    /* Read and clear INT_STATUS */
-    uint8_t status = icm_read(tile, ICM42686P_REG_INT_STATUS);
-    if (status && s->on_event) {
-        s->on_event(tile, status, s->event_ctx);
+    /* Read and clear all three status registers (each bit clears on read,
+     * DS-000639 §14.21 / §14.31 / §14.32), then compose the event word. */
+    uint8_t st1 = icm_read(tile, ICM42686P_REG_INT_STATUS);
+    uint8_t st2 = icm_read(tile, ICM42686P_REG_INT_STATUS2);
+    uint8_t st3 = icm_read(tile, ICM42686P_REG_INT_STATUS3);
+
+    uint8_t events = (uint8_t)(st1 & (SENSE_I_6P6_EV_DATA_RDY |
+                                      SENSE_I_6P6_EV_FIFO_THS |
+                                      SENSE_I_6P6_EV_FIFO_FULL));
+    if (st2 & ICM42686P_INT_STATUS2_WOM_ANY)    events |= SENSE_I_6P6_EV_WOM;
+    if (st2 & ICM42686P_INT_STATUS2_SMD)        events |= SENSE_I_6P6_EV_SMD;
+    if (st3 & ICM42686P_INT_STATUS3_TAP_DET)    events |= SENSE_I_6P6_EV_TAP;
+    if (st3 & ICM42686P_INT_STATUS3_TILT_DET)   events |= SENSE_I_6P6_EV_TILT;
+    if (st3 & ICM42686P_INT_STATUS3_STEP_DET)   events |= SENSE_I_6P6_EV_STEP;
+
+    if (events && s->on_event) {
+        s->on_event(tile, events, s->event_ctx);
     }
 }
 
@@ -511,12 +524,14 @@ void tile_sense_i_6p6_fifo_config(tile_t *tile, sense_i_6p6_fifo_mode_t mode,
     /* FIFO_CONFIG: mode in bits [7:6] */
     icm_write(tile, ICM42686P_REG_FIFO_CONFIG, (uint8_t)mode << 6);
 
-    /* FIFO_CONFIG1: data selection */
+    /* FIFO_CONFIG1: data selection. The read path parses only the 16-byte
+     * packet (header + accel + gyro + temp + timestamp), which needs both
+     * FIFO_ACCEL_EN and FIFO_GYRO_EN with FIFO_HIRES_EN clear (DS-000639
+     * §6.4). So `hires` is ignored and accel / gyro go in together. */
+    (void)hires;
     uint8_t cfg1 = 0;
-    if (hires) cfg1 |= (1 << 4);
-    if (temp)  cfg1 |= (1 << 2);
-    if (gyro)  cfg1 |= (1 << 1);
-    if (accel) cfg1 |= (1 << 0);
+    if (temp)          cfg1 |= (1 << 2);
+    if (accel || gyro) cfg1 |= (1 << 1) | (1 << 0);
     icm_write(tile, ICM42686P_REG_FIFO_CONFIG1, cfg1);
 }
 
@@ -1001,11 +1016,27 @@ void tile_sense_i_6p6_set_accel_offset(tile_t *tile,
  * Advanced: Self-test
  * ================================================================ */
 
+/* Wait for DATA_RDY, bounded: up to ~20 ms (20 samples at the 1 kHz test
+ * rate). Returns 0 if it never comes. */
+static uint8_t self_test_wait_drdy(tile_t *tile)
+{
+    for (uint8_t i = 0; i < 20; i++) {
+        if (tile_sense_i_6p6_data_ready(tile)) return 1;
+        tile->hal->delay_ms(1);
+    }
+    return tile_sense_i_6p6_data_ready(tile);
+}
+
 /** @brief Perform self-test for both accel and gyro. */
 uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *gyro_pass)
 {
-    /* Save current state */
-    uint8_t pwr_save = icm_read(tile, ICM42686P_REG_PWR_MGMT0);
+    /* Save current state: power mode, and range + ODR of both sensors */
+    uint8_t pwr_save   = icm_read(tile, ICM42686P_REG_PWR_MGMT0);
+    uint8_t accel_save = icm_read(tile, ICM42686P_REG_ACCEL_CONFIG0);
+    uint8_t gyro_save  = icm_read(tile, ICM42686P_REG_GYRO_CONFIG0);
+    uint8_t ok = 1;
+    *accel_pass = 0;
+    *gyro_pass  = 0;
 
     /* Configure for self-test: ±4g accel, ±250 dps gyro, LN mode */
     icm_write(tile, ICM42686P_REG_ACCEL_CONFIG0,
@@ -1019,8 +1050,8 @@ uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *g
     /* Read baseline (average of 200 samples at 1 kHz) */
     int32_t ax0 = 0, ay0 = 0, az0 = 0;
     int32_t gx0 = 0, gy0 = 0, gz0 = 0;
-    for (int i = 0; i < 200; i++) {
-        while (!tile_sense_i_6p6_data_ready(tile)) ;
+    for (int i = 0; ok && i < 200; i++) {
+        if (!self_test_wait_drdy(tile)) { ok = 0; break; }
         int16_t a[3], g[3];
         tile_sense_i_6p6_get_raw_accels(tile, a);
         tile_sense_i_6p6_get_raw_gyros(tile, g);
@@ -1038,8 +1069,8 @@ uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *g
     /* Read self-test values */
     int32_t ax1 = 0, ay1 = 0, az1 = 0;
     int32_t gx1 = 0, gy1 = 0, gz1 = 0;
-    for (int i = 0; i < 200; i++) {
-        while (!tile_sense_i_6p6_data_ready(tile)) ;
+    for (int i = 0; ok && i < 200; i++) {
+        if (!self_test_wait_drdy(tile)) { ok = 0; break; }
         int16_t a[3], g[3];
         tile_sense_i_6p6_get_raw_accels(tile, a);
         tile_sense_i_6p6_get_raw_gyros(tile, g);
@@ -1051,6 +1082,14 @@ uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *g
 
     /* Disable self-test */
     icm_write(tile, ICM42686P_REG_SELF_TEST_CONFIG, 0x00);
+
+    if (!ok) {
+        /* No data-ready: restore and report failure. */
+        icm_write(tile, ICM42686P_REG_ACCEL_CONFIG0, accel_save);
+        icm_write(tile, ICM42686P_REG_GYRO_CONFIG0, gyro_save);
+        icm_write(tile, ICM42686P_REG_PWR_MGMT0, pwr_save);
+        return 0;
+    }
 
     /* Calculate self-test response */
     int32_t a_resp[3] = { ax1 - ax0, ay1 - ay0, az1 - az0 };
@@ -1071,7 +1110,9 @@ uint8_t tile_sense_i_6p6_self_test(tile_t *tile, uint8_t *accel_pass, uint8_t *g
         if (g_resp[i] < 7860) *gyro_pass = 0;
     }
 
-    /* Restore previous state */
+    /* Restore previous state: ranges and ODRs, then the power mode */
+    icm_write(tile, ICM42686P_REG_ACCEL_CONFIG0, accel_save);
+    icm_write(tile, ICM42686P_REG_GYRO_CONFIG0, gyro_save);
     icm_write(tile, ICM42686P_REG_PWR_MGMT0, pwr_save);
 
     return (*accel_pass && *gyro_pass) ? 1 : 0;
@@ -1153,17 +1194,19 @@ uint8_t tile_sense_i_6p6_is_moving(tile_t *tile, uint16_t threshold_mg)
     tile_sense_i_6p6_get_raw_accels(tile, a);
     int32_t lsb = accel_lsb_per_g(tile);
     /* Squared magnitude of measured vector, in LSB^2. */
-    int32_t mag2 = (int32_t)a[0]*a[0] + (int32_t)a[1]*a[1] + (int32_t)a[2]*a[2];
-    /* Squared 1-g reference, also LSB^2. */
+    /* int64: three full-scale squares (3 × 32768²) and (1 g + 32 g)² both
+     * overflow int32. */
+    int64_t mag2 = (int64_t)a[0]*a[0] + (int64_t)a[1]*a[1] + (int64_t)a[2]*a[2];
+    /* 1-g reference in LSB. */
     int32_t one_g_lsb = lsb;
     /* Squared bands: (1g + thr)^2 and (1g - thr)^2 for symmetric trigger.
      * thr_lsb = lsb * threshold_mg / 1000 */
     int32_t thr_lsb = ((int32_t)lsb * (int32_t)threshold_mg) / 1000;
-    int32_t hi = one_g_lsb + thr_lsb;
-    int32_t lo = one_g_lsb - thr_lsb;
+    int64_t hi = (int64_t)one_g_lsb + thr_lsb;
+    int64_t lo = (int64_t)one_g_lsb - thr_lsb;
     if (lo < 0) lo = 0;
-    int32_t hi_sq = hi * hi;
-    int32_t lo_sq = lo * lo;
+    int64_t hi_sq = hi * hi;
+    int64_t lo_sq = lo * lo;
     return (mag2 > hi_sq || mag2 < lo_sq) ? 1 : 0;
 }
 

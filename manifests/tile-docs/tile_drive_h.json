@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_drive_h.h",
   "brief": "LRA/ERM haptic driver for the Drive.H tile (rev a).",
   "description": "Embeds the TI DRV2605 (DEVICE_ID 3 — the non-L part), a haptic\ndriver for LRA (Linear Resonant Actuator) and ERM actuators with\na built-in waveform library of 123 effects. The actuator is\nexternal, connected via the tile's OUT+ / OUT- pads; V_MOTOR\naccepts 2.5-5.5 V.\n\nThe chip regulates output amplitude itself: the supply rail only\nsets headroom. Full-scale drive level comes from RATED_VOLTAGE /\nOD_CLAMP (see tile_drive_h_set_actuator_voltage()), NOT from the\nvoltage applied to V_MOTOR. V_MOTOR is the DRV2605's only supply\n(VDD, 2.5-5.5 V); the output cannot exceed it. The datasheet's\nminimum load is 8 Ω at VDD = 5.2 V.\n\nV+ (pad 10) powers nothing but R2, a 100 kΩ pull-up on EN (pad 3).\nPower V+ from a logic rail, or drive pad 3 high from a Core pin:\nwith neither, EN floats, the chip may stay in shutdown, and init()\nfails its device-ID check. Holding pad 3 low draws V+ / 100 kΩ\n(33 µA at 3.3 V). TRIG (pad 2) has a 100 kΩ pull-down (R1). The\ntile has no I2C pull-ups.\n\nKey specifications:\n  - Output:       full-bridge, amplitude regulated per config\n  - Waveform lib: 123 haptic effects (6 libraries)\n  - Smart-loop:   automatic resonance tracking for LRA (closed loop)\n  - Modes:        Internal trigger, RTP, PWM, audio-to-vibe\n\nDatasheet: https://www.bergsonne.io/tiles/drive/h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv2605.pdf\n\n\n@studio tile label=Drive.H icon=≋\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"OTP waveform burning\"\n  The DRV2605 can burn custom waveforms into one-time-programmable\n  memory. This is implemented in firmware (tile_drive_h_program_otp())\n  but intentionally NOT exposed to Studio: it permanently and\n  irreversibly modifies the chip. Driver-deferred by policy, not a\n  hardware gap — call it from C if you really need it.\n\n@studio unsupported severity=niche category=\"Minor control bits\"\n  Driver-deferred: LRA_DRIVE_MODE (drive once or twice per cycle),\n  SUPPLY_COMP_DIS (supply-voltage compensation), NG_THRESH (PWM /\n  analog noise gate), BRAKE_STABILIZER, STARTUP_BOOST, BEMF_GAIN,\n  LIBRARY_SEL.HI_Z (outputs high-impedance while idle) and\n  MODE.DEV_RESET have no setter. Reachable only by editing the\n  driver; none is hardware-gated.\n\n@studio unsupported severity=niche category=\"Hardware EN control\"\n  Hardware-gated in part: the DRV2605 EN pin is on pad 3 with a\n  100 kΩ pull-up to V+ (pad 10), so the driver cannot toggle it over I2C. Use the\n  STANDBY bit (tile_drive_h_standby()) or drive pad 3 from a Core\n  GPIO. With EN low the chip still ACKs its address but ignores\n  reads and writes (SLOS825E §7.4.1.3), so init fails on the\n  device-ID check; registers are kept.",
@@ -43,7 +43,7 @@
     },
     {
       "name": "TILE_DRIVE_H_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -431,11 +431,13 @@
           "description": "[1..20] Number of times to play (1 = once)."
         }
       ],
-      "notes": [],
+      "notes": [
+        "Blocks for (repeats - 1) × (effect length + 200 ms); the last play runs on after the call returns. repeats = 1 does not block."
+      ],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Play a waveform effect from the built-in library.",
-      "description": "Loads the effect index into sequence slot 0, terminates\nthe sequence, and triggers playback. For repeats > 1,\nre-triggers with a 200ms gap between plays.",
+      "description": "Loads the effect index into sequence slot 0, terminates\nthe sequence, and triggers playback. For repeats > 1, waits\nfor each play to finish (GO self-clears), leaves a 200 ms gap,\nthen triggers again.",
       "name": "tile_drive_h_play"
     },
     {
@@ -771,7 +773,7 @@
       ],
       "studio_exposed": true,
       "brief": "Drive the actuator from an analog voltage on pad 2 (TRIG).",
-      "description": "Sets MODE=3 with N_PWM_ANALOG=1. Reference voltage is 1.8 V:\n0 V → 0 % drive, 0.9 V → 50 %, 1.8 V → 100 %. Useful for waveform\nsynthesis from a DAC or analog signal source.",
+      "description": "Sets MODE=3 with N_PWM_ANALOG=1. The 1.8 V reference makes the input\npercentage: 0 V = 0 %, 0.9 V = 50 %, 1.8 V = 100 %. init() leaves the\nengine in bidirectional mode (CONTROL2 BIDIR_INPUT = 1), as for PWM:\n50 % input (0.9 V) is zero drive, 100 % is full drive (RATED_VOLTAGE),\nand anything below 50 % also gives zero drive (SLOS825E 7.5.8.1.3). Call\ntile_drive_h_set_rtp_format() first for the unidirectional mapping\n(0 V = no drive, 1.8 V = full). Useful for waveform synthesis from a DAC\nor analog signal source.",
       "name": "tile_drive_h_analog_input_start"
     },
     {
@@ -911,7 +913,7 @@
       "studio_section": "runtime",
       "return": "1 if calibration passed, 0 if it failed to converge",
       "brief": "Run auto-calibration for the connected actuator.",
-      "description": "Enters calibration mode (MODE=7) with datasheet-recommended\nparameters, triggers GO, and polls for completion. On success,\nthe DRV2605 stores optimized A_CAL_COMP and A_CAL_BEMF values\nthat improve playback fidelity.",
+      "description": "Enters calibration mode (MODE=7) with datasheet-recommended\nparameters, triggers GO, and polls for completion. On success,\nthe DRV2605 stores optimized A_CAL_COMP and A_CAL_BEMF values\nthat improve playback fidelity, and the driver keeps the\nBEMF_GAIN the engine chose; the brake factor and loop gain are\nrestored to their earlier settings. The result is kept for\ntile_drive_h_is_calibrated().",
       "name": "tile_drive_h_calibrate"
     },
     {
@@ -1027,19 +1029,17 @@
     {
       "signature": "uint8_t tile_drive_h_is_calibrated(tile_t* tile)",
       "params": [],
-      "notes": [
-        "STATUS bits clear on read, so the result reflects the most recent calibration / diagnostic run."
-      ],
+      "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "1 if calibration converged, 0 otherwise",
+      "return": "1 if the last calibration converged, 0 otherwise (or not READY)",
       "brief": "Check whether smart-loop calibration converged.",
-      "description": "Reads the STATUS register's DIAG_RESULT bit, which the auto-\ncalibration engine populates on completion: 0 = converged\n(calibration produced valid A_CAL_COMP / A_CAL_BEMF values),\n1 = failed. Only meaningful after a prior call to @ref\ntile_drive_h_calibrate.",
+      "description": "Reports the result of the last @ref tile_drive_h_calibrate since\ninit: 1 if it converged (valid A_CAL_COMP / A_CAL_BEMF values),\n0 if it failed, timed out or has not run. The chip's DIAG_RESULT\nbit clears on read and calibrate() reads it, so the driver keeps\nthat result rather than reading STATUS again. diagnose() does not\nchange it.",
       "name": "tile_drive_h_is_calibrated"
     }
   ],
   "source_file": "tile_drive_h.h",
-  "version": "4.4.0",
+  "version": "4.4.1",
   "tile_family": "Drive",
   "tile_name": "H",
   "display_name": "Drive.H",

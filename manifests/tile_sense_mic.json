@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@6f27e78",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.MIC",
   "palette": {
     "label": "Sense.MIC",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_mic",
     "header": "tile_sense_mic.h",
-    "version": "2.4.0"
+    "version": "2.4.1"
   },
   "handle": {
     "type": "tile_t",

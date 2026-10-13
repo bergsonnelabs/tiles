@@ -70,8 +70,10 @@
 TILES_CHECK_VERSION(1, 0);
 
 /* ---- Driver version ---- */
+/* v1.2.0: any SPI instance (CS index) is accepted, not just 0, so the tile
+ *         can share a bus with other SPI tiles. */
 #define TILE_STORE_O_128_VERSION_MAJOR  1
-#define TILE_STORE_O_128_VERSION_MINOR  1
+#define TILE_STORE_O_128_VERSION_MINOR  2
 #define TILE_STORE_O_128_VERSION_PATCH  0
 
 /* ---- Device geometry ---- */
@@ -109,10 +111,13 @@ typedef struct {
     uint8_t reserved;
 } store_o_128_cfg_t;
 
-/** Probe instance `instance`: reads the JEDEC ID, returns 1 if it matches. */
+/** Probe instance `instance` (the SPI chip-select index, any value but
+ *  0xFF): reads the JEDEC ID, returns 1 if it matches. */
 uint8_t tile_store_o_128_find(tiles_pal_t* hal, uint8_t instance);
 
-/** Initialize: verify JEDEC identity, wake from deep power-down. */
+/** Initialize: verify JEDEC identity, wake from deep power-down. `instance`
+ *  is the SPI chip-select index (any value but 0xFF), so several SPI tiles
+ *  can share one bus. */
 void tile_store_o_128_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
                            const store_o_128_cfg_t* cfg);
 

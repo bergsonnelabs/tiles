@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_i_9.h
  * @brief  9-DOF IMU driver for the Sense.I.9 tile (rev c).
- * @version 3.2.0
+ * @version 3.3.0
  *
  * Retirement: the ICM-20948 is obsolete and Sense.I.9 is moving to a Bosch
  * two-chip design, so this revision will not be built in new panels. This
@@ -22,10 +22,10 @@
  * Datasheet: https://www.bergsonne.io/tiles/sense/i9
  *
  * @studio tile label=Sense.I.9 icon=⊙
- * @studio event name=data_ready mask=ICM20948_INT_RAW_DATA_RDY
- * @studio event name=fifo_watermark mask=ICM20948_INT_FIFO_WM
- * @studio event name=fifo_overflow mask=ICM20948_INT_FIFO_OVF
- * @studio event name=wake_on_motion mask=ICM20948_INT_WOM
+ *
+ * No Studio events: the driver has no process() / on_event() (the tile is
+ * retiring, so none will be added). Poll get_int_status() or
+ * wait_for_motion() instead.
  *
  * Quick start:
  * @code
@@ -105,8 +105,12 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v3.3.0: the four Studio events (data_ready, fifo_watermark, fifo_overflow,
+ *         wake_on_motion) are removed, as nothing produced them and a program
+ *         using one failed to link; dmp_read_quat9() computes q0 with an exact
+ *         integer square root (it read ~2.0 for most orientations). */
 #define TILE_SENSE_I_9_VERSION_MAJOR  3
-#define TILE_SENSE_I_9_VERSION_MINOR  2
+#define TILE_SENSE_I_9_VERSION_MINOR  3
 #define TILE_SENSE_I_9_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -250,11 +254,14 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 #define ICM20948_INTE_DMP_INT1_EN     (1 << 1)
 #define ICM20948_INTE_I2C_MST_INT_EN  (1 << 0)
 
-/* INT_STATUS event masks (mapped to single byte for studio events) */
-#define ICM20948_INT_RAW_DATA_RDY     (1 << 0)  /**< INT_STATUS_1 bit 0 */
-#define ICM20948_INT_FIFO_OVF         (1 << 1)  /**< INT_STATUS_2 any bit (collapsed) */
-#define ICM20948_INT_FIFO_WM          (1 << 2)  /**< INT_STATUS_3 any bit (collapsed) */
-#define ICM20948_INT_WOM              (1 << 3)  /**< INT_STATUS bit 3 */
+/* Interrupt masks. Only ICM20948_INT_WOM matches a bit get_int_status()
+ * returns (INT_STATUS bit 3). The other three were "collapsed" masks for
+ * Studio events that never had a producer; nothing returns them, and they
+ * stay only so existing code still compiles. */
+#define ICM20948_INT_RAW_DATA_RDY     (1 << 0)  /**< Unused (no producer) */
+#define ICM20948_INT_FIFO_OVF         (1 << 1)  /**< Unused (no producer) */
+#define ICM20948_INT_FIFO_WM          (1 << 2)  /**< Unused (no producer) */
+#define ICM20948_INT_WOM              (1 << 3)  /**< INT_STATUS bit 3 (WOM_INT) */
 
 /* Chip ID */
 #define ICM20948_WHOAMI_DEFAULT     0xEA

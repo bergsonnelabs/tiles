@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_drive_dc_h.h",
   "brief": "H-bridge DC motor driver for the Drive.DC.H tile (rev a).",
-  "description": "Embeds the TI DRV8214, a full H-bridge motor driver with integrated\ncurrent sensing, stall detection, and voltage/speed regulation.\n\nKey specifications:\n  - Output:        full H-bridge, 4 A peak / 2 A RMS continuous\n  - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)\n  - R_DS(on):      240 mOhm (high + low side total)\n  - Regulation:    voltage or speed, via internal PI loop\n  - Current sense: internal current mirror (IPROPI), 3 gain settings\n  - Stall detect:  hardware, configurable via IPROPI/VREF threshold\n  - Ripple count:  sensorless position/speed via commutation ripples\n  - Protection:    UVLO, OCP, OVP, thermal shutdown\n\nThe tile also exposes EN/PH (or IN1/IN2) control pads (pads 2, 3) for\ndirect GPIO/PWM-based motor control without I²C, and an analog\ncurrent-proportional output on pad 6 (NPROP/IPROPI) that mirrors the\nmotor winding current scaled by the CS_GAIN_SEL setting. Switch the\nbridge control source at runtime with set_control_mode().\n\nThe DRV8214 integrates a sensorless ripple counting algorithm\nthat counts commutation ripples in the motor current waveform\nto estimate rotor position and speed without external encoders\nor Hall sensors. In speed regulation mode (DRIVE_DC_H_MODE_SPEED),\nthe chip's internal PI loop maintains constant motor speed across\nvarying supply voltages and loads. The ripple count and estimated\nspeed can be read at any time via get_ripple_count() / get_speed().\nAccurate ripple counting requires motor-specific tuning of the\nINV_R, KMC, and filter parameters (see DRV8214 datasheet\nsection 9.2.3.1).\n\nDatasheet: https://www.bergsonne.io/tiles/drive/dc-h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv8214.pdf\n\n@studio tile label=Drive.DC.H icon=⚙\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"nSLEEP pin (hardware-gated)\" section=advanced\n  Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)\n  is not routed to any tile pad in the Drive.DC.H rev-a layout\n  (verify in definitions/Drive-DC-H-a.json — pads 1–10 are\n  GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,\n  V+; nSLEEP is strapped active on the PCB). sleep()/wake() only\n  toggle the I²C-side EN_OUT bit; the chip itself can't reach its\n  true quiescent floor. Closing this gap requires a tile hardware\n  revision that routes nSLEEP to a connector pad.\n\n@studio unsupported severity=niche category=\"Address selection (factory variants)\"\n  The DRV8214 derives its 7-bit I²C address from tri-level pins\n  A0/A1, but the Drive.DC.H tile straps these to fixed values per\n  factory variant: A30 (0x30), A31 (0x31), A33 (0x33), A34 (0x34\n  default). Address is chip-gated at order time, not runtime-\n  settable. The 9-entry instance table in this driver covers the\n  full chip address space, but only those four straps are sold —\n  pick a tile variant per Drive.DC.H tile sharing a bus.",
+  "description": "Embeds the TI DRV8214, a full H-bridge motor driver with integrated\ncurrent sensing, stall detection, and voltage/speed regulation.\n\nKey specifications:\n  - Output:        full H-bridge, 4 A peak / 2 A RMS continuous\n  - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)\n  - R_DS(on):      240 mOhm (high + low side total)\n  - Regulation:    voltage or speed, via internal PI loop\n  - Current sense: internal current mirror (IPROPI), 6 gain settings\n  - Stall detect:  hardware, configurable via IPROPI/VREF threshold\n  - Ripple count:  sensorless position/speed via commutation ripples\n  - Protection:    UVLO, OCP, OVP, thermal shutdown\n\nThe tile also exposes EN/PH (or IN1/IN2) control pads (pads 2, 3) for\ndirect GPIO/PWM-based motor control without I²C, and an analog\ncurrent-proportional output on pad 6 (NPROP/IPROPI) that mirrors the\nmotor winding current scaled by the CS_GAIN_SEL setting. Switch the\nbridge control source at runtime with set_control_mode().\n\nThe DRV8214 integrates a sensorless ripple counting algorithm\nthat counts commutation ripples in the motor current waveform\nto estimate rotor position and speed without external encoders\nor Hall sensors. In speed regulation mode (DRIVE_DC_H_MODE_SPEED),\nthe chip's internal PI loop maintains constant motor speed across\nvarying supply voltages and loads. The ripple count and estimated\nspeed can be read at any time via get_ripple_count() / get_speed().\nAccurate ripple counting requires motor-specific tuning of the\nINV_R, KMC, and filter parameters (see DRV8214 datasheet\nsection 9.2.3.1).\n\nDatasheet: https://www.bergsonne.io/tiles/drive/dc-h\nIC datasheet: https://www.ti.com/lit/ds/symlink/drv8214.pdf\n\n@studio tile label=Drive.DC.H icon=⚙\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"nSLEEP pin (hardware-gated)\" section=advanced\n  Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)\n  is not routed to any tile pad in the Drive.DC.H rev-a layout\n  (verify in definitions/Drive-DC-H-a.json — pads 1–10 are\n  GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT2, OUT1, VM,\n  V+; nSLEEP is strapped active on the PCB). sleep()/wake() only\n  toggle the I²C-side EN_OUT bit; the chip itself can't reach its\n  true quiescent floor. Closing this gap requires a tile hardware\n  revision that routes nSLEEP to a connector pad.\n\n@studio unsupported severity=niche category=\"Address selection (factory variants)\"\n  The DRV8214 derives its 7-bit I²C address from tri-level pins\n  A0/A1, but the Drive.DC.H tile straps these to fixed values per\n  factory variant: A30 (0x30), A31 (0x31), A33 (0x33), A34 (0x34\n  default). Address is chip-gated at order time, not runtime-\n  settable. The 9-entry instance table in this driver covers the\n  full chip address space, but only those four straps are sold —\n  pick a tile variant per Drive.DC.H tile sharing a bus.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -15,7 +15,7 @@
     {
       "severity": "advanced",
       "category": "nSLEEP pin (hardware-gated)",
-      "brief": "Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active) is not routed to any tile pad in the Drive.DC.H rev-a layout (verify in definitions/Drive-DC-H-a.json — pads 1–10 are GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM, V+; nSLEEP is strapped active on the PCB). sleep()/wake() only toggle the I²C-side EN_OUT bit; the chip itself can't reach its true quiescent floor. Closing this gap requires a tile hardware revision that routes nSLEEP to a connector pad.",
+      "brief": "Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active) is not routed to any tile pad in the Drive.DC.H rev-a layout (verify in definitions/Drive-DC-H-a.json — pads 1–10 are GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT2, OUT1, VM, V+; nSLEEP is strapped active on the PCB). sleep()/wake() only toggle the I²C-side EN_OUT bit; the chip itself can't reach its true quiescent floor. Closing this gap requires a tile hardware revision that routes nSLEEP to a connector pad.",
       "section": "advanced"
     },
     {
@@ -39,7 +39,7 @@
     },
     {
       "name": "TILE_DRIVE_DC_H_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -88,7 +88,7 @@
     {
       "name": "DRV8214_FAULT_NPOR",
       "value": "0x02",
-      "description": "Bit 1 — power-on reset",
+      "description": "Bit 1 — active low: 1 = no power-on reset since the last clear_fault() (init clears it)",
       "section": ""
     },
     {
@@ -435,9 +435,9 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "Raw fault byte (0 = no faults)",
+      "return": "Raw fault byte (0x02 with no faults; see NPOR above)",
       "brief": "Read the raw FAULT register (0x00).",
-      "description": "Contains FAULT[7], STALL[5], OCP[4], OVP[3], TSD[2],\nNPOR[1], CNT_DONE[0]. Use the DRV8214_FAULT_* masks to\ndecode individual bits.",
+      "description": "Contains FAULT[7], STALL[5], OCP[4], OVP[3], TSD[2],\nNPOR[1], CNT_DONE[0]. Use the DRV8214_FAULT_* masks to\ndecode individual bits.\n\nNPOR is active low: it resets to 0 at power-up and clear_fault()\n(which init() runs) sets it to 1 (SLVSH04 §8.3.8.3).\nSo a healthy chip reads 0x02, not 0, and NPOR = 0 means the chip\nhas reset since the last clear. To test for faults, mask NPOR out\n(`fault & ~DRV8214_FAULT_NPOR`) or test DRV8214_FAULT_FAULT.",
       "name": "tile_drive_dc_h_get_fault"
     },
     {
@@ -447,7 +447,7 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Clear all latched faults.",
-      "description": "Sets CLR_FLT in CONFIG0. Clears FAULT, OCP, OVP, TSD,\nand NPOR bits. The CLR_FLT bit is self-clearing.",
+      "description": "Sets CLR_FLT in CONFIG0. Clears FAULT, OCP, OVP and TSD, and\nsets NPOR (active low, so 1 = no reset since this clear). The\nCLR_FLT bit is self-clearing.",
       "name": "tile_drive_dc_h_clear_fault"
     },
     {
@@ -606,7 +606,8 @@
       "notes": [
         "This call BLOCKS until the move completes or the motor stalls. Worst-case wall-time depends on motor speed + load; budget accordingly. There is no built-in timeout beyond the chip's own stall detector — use a separate watchdog or @ref tile_drive_dc_h_wait_for_stop with a timeout if you need a hard upper bound.",
         "On completion the bridge is left in BRAKE (slow decay, both low-side FETs on). Call @ref tile_drive_dc_h_coast afterwards if you'd rather let the motor freewheel.",
-        "Ripple counts are coarse (integer commutation ticks, not encoder counts). Resolution = 1/ripples_per_rev of a revolution — typically 1/12 turn. Don't expect sub-degree positioning."
+        "Ripple counts are coarse (integer commutation ticks, not encoder counts). Resolution = 1/ripples_per_rev of a revolution — typically 1/12 turn. Don't expect sub-degree positioning.",
+        "The count is quantized: it goes through set_ripple_threshold(), which programs RC_THR × scale and rounds DOWN to a multiple of 2 (up to 2046), 8 (up to 8184), 16 (up to 16368) or 64 (above). An odd count moves one ripple short, large counts up to 63 short, and ripples = 1 programs a threshold of 0."
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -638,12 +639,12 @@
       "studio_section": "runtime",
       "return": "1 if the rotor settled before timeout, 0 on timeout",
       "brief": "Block until the ripple counter stops advancing or `timeout_ms` elapses.",
-      "description": "Polls the 16-bit ripple counter at ~10 ms cadence. Returns 1\nwhen two successive samples (≥30 ms apart) report the same\ncount — i.e., the rotor is mechanically stationary. Returns 0\nif `timeout_ms` elapses first. Useful after @ref\ntile_drive_dc_h_brake when you want to know the motor has\nactually settled rather than just \"the bridge has been\ncommanded to brake\".",
+      "description": "Polls the 16-bit ripple counter at ~10 ms cadence. Returns 1\nonce the count has stayed the same for three samples in a row\n(30 ms) — i.e., the rotor is mechanically stationary. Returns 0\nif `timeout_ms` elapses first. Useful after @ref\ntile_drive_dc_h_brake when you want to know the motor has\nactually settled rather than just \"the bridge has been\ncommanded to brake\".",
       "name": "tile_drive_dc_h_wait_for_stop"
     }
   ],
   "source_file": "tile_drive_dc_h.h",
-  "version": "4.3.0",
+  "version": "4.3.1",
   "tile_family": "Drive",
   "tile_name": "DC.H",
   "display_name": "Drive.DC.H",

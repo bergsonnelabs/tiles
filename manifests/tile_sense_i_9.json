@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.I.9",
   "palette": {
     "label": "Sense.I.9",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_i_9",
     "header": "tile_sense_i_9.h",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "handle": {
     "type": "tile_t",
@@ -897,28 +897,7 @@
       "receiver": "tile_t*"
     }
   ],
-  "events": [
-    {
-      "name": "data_ready",
-      "payload": [],
-      "mask": "ICM20948_INT_RAW_DATA_RDY"
-    },
-    {
-      "name": "fifo_watermark",
-      "payload": [],
-      "mask": "ICM20948_INT_FIFO_WM"
-    },
-    {
-      "name": "fifo_overflow",
-      "payload": [],
-      "mask": "ICM20948_INT_FIFO_OVF"
-    },
-    {
-      "name": "wake_on_motion",
-      "payload": [],
-      "mask": "ICM20948_INT_WOM"
-    }
-  ],
+  "events": [],
   "bus_addresses": {
     "I2C": [
       {

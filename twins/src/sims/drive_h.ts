@@ -9,7 +9,7 @@
 //
 // Registers modeled (DRV2605 SLOS825E):
 //   STATUS 0x00   DEVICE_ID[7:5]=3, DIAG_RESULT[3], OVER_TEMP[1], OC_DETECT[0]
-//                 (flags sticky until read — driver tile_drive_h.c:112-114)
+//                 (flags sticky until read; see tile_drive_h_init)
 //   MODE   0x01   STANDBY[6], MODE[2:0]
 //   RTP    0x02   amplitude (signed unless CONTROL3 DATA_FORMAT_RTP)
 //   GO     0x0C   bit 0; self-clears when the sequencer drains
@@ -21,7 +21,7 @@
 // own monotonic clock and clears GO / RTP when it passes.
 import type { TileSim } from '../tileSim';
 
-// MODE[2:0] (tile_drive_h.h:137-145).
+// MODE[2:0] (DRV2605L_MODE_* in tile_drive_h.h).
 const MODE_INTERNAL_TRIG = 0;
 const MODE_EXT_EDGE = 1;
 const MODE_EXT_LEVEL = 2;
@@ -29,7 +29,7 @@ const MODE_PWM_ANALOG = 3;
 const MODE_AUDIO = 4;
 const MODE_RTP = 5;
 
-const STATUS_DEVICE_ID = 0x60; // DEVICE_ID = 3 (tile_drive_h.h:122)
+const STATUS_DEVICE_ID = 0x60; // DEVICE_ID = 3 (DRV2605L_STATUS_DEVICE_ID)
 
 // Nominal library-effect length (ms). The ROM effects run tens to hundreds of
 // ms; the twin only needs GO to drop in a plausible time.
@@ -55,7 +55,7 @@ interface State {
   oc_detect: number; // STATUS[0], latched, clears on read
 
   // ── results / sampled registers ──
-  calibrated: number; // last calibrate() converged (observability)
+  calibrated: number; // last calibrate() since init converged (the driver's cached result)
   diag_result: number; // STATUS[3]: 1 = last diag/cal failed
   vbat_reg: number; // VBAT 0x21 last sample (0 until first drive)
   lra_period_reg: number; // LRA_PERIOD 0x22 last sample (0 until first LRA drive)
@@ -152,7 +152,7 @@ function fullScaleMv(s: State): number {
   return s.od_clamp * 21.32 * Math.sqrt(Math.max(0.1, 1 - f * 800e-6));
 }
 
-// Integer sqrt (floor), as the driver's isqrt32 (tile_drive_h.c:42-57).
+// Integer sqrt (floor), as the driver's isqrt32.
 function isqrt(x: number): number {
   return Math.floor(Math.sqrt(x));
 }
@@ -283,9 +283,16 @@ const sim: TileSim<State> = {
     // ── lifecycle ──
     tile_drive_h_find: () => ({ scalar: 1 }),
     tile_drive_h_init: () => ({
-      nextState: { ...INIT_CONFIG, go: 0, rtp_amplitude: 0, play_ms: 0, playing_until_ms: 0 },
+      nextState: {
+        ...INIT_CONFIG,
+        go: 0,
+        rtp_amplitude: 0,
+        play_ms: 0,
+        playing_until_ms: 0,
+        calibrated: 0,
+      },
     }),
-    // MODE = 0x40 (STANDBY, mode bits 0); READY-gated (tile_drive_h.c:440-445).
+    // MODE = 0x40 (STANDBY, mode bits 0); READY-gated (tile_drive_h_standby).
     tile_drive_h_standby: ({ state }) =>
       ready(state)
         ? {
@@ -303,8 +310,9 @@ const sim: TileSim<State> = {
       state.standby ? { nextState: { standby: 0, mode_reg: MODE_INTERNAL_TRIG } } : {},
 
     // ── waveform sequencer ──
-    // Slot 0 = index, slot 1 = stop, GO; each extra repeat re-fires GO after
-    // 200 ms (tile_drive_h.c:195-214). Does not touch MODE.
+    // Slot 0 = index, slot 1 = stop, GO; each extra repeat waits for GO to
+    // clear, then 200 ms, then re-fires GO (tile_drive_h_play). Does not
+    // touch MODE.
     tile_drive_h_play: ({ state, args }) => {
       if (!ready(state)) return {};
       const effect = (args[0] ?? 0) & 0xff;
@@ -316,7 +324,7 @@ const sim: TileSim<State> = {
           last_sequence: String(effect),
           go: 1,
           currently_playing: `effect ${effect}`,
-          play_ms: EFFECT_MS + 200 * Math.max(0, repeats - 1),
+          play_ms: EFFECT_MS * Math.max(1, repeats) + 200 * Math.max(0, repeats - 1),
           playing_until_ms: 0,
           ...(state.mode_reg <= MODE_EXT_LEVEL ? sampled(state) : {}),
         },
@@ -332,7 +340,7 @@ const sim: TileSim<State> = {
         nextState: { last_effect: first, effect_repeats: 0, last_sequence: slots.join(',') },
       };
     },
-    // Slot byte = 0x80 | steps (×10 ms); slot >= 8 ignored (tile_drive_h.c:459-472).
+    // Slot byte = 0x80 | steps (×10 ms); slot >= 8 ignored (tile_drive_h_set_sequence_wait).
     tile_drive_h_set_sequence_wait: ({ state, args }) => {
       const slot = args[0] ?? 0;
       if (!ready(state) || slot < 0 || slot >= 8) return {};
@@ -343,7 +351,7 @@ const sim: TileSim<State> = {
       return { nextState: { last_sequence: parts.join(',') } };
     },
     // DRIVE_H_TRIG_EDGE → MODE 1, LEVEL → 2, anything else → internal
-    // (tile_drive_h.c:259-279).
+    // (tile_drive_h_set_trigger).
     tile_drive_h_set_trigger: ({ state, args }) => {
       if (!ready(state)) return {};
       const m = args[0] ?? 0;
@@ -354,7 +362,7 @@ const sim: TileSim<State> = {
       };
     },
     tile_drive_h_is_playing: ({ state }) => ({ scalar: state.go ? 1 : 0 }),
-    // GO = 0 only (tile_drive_h.c:286-289).
+    // GO = 0 only (tile_drive_h_stop).
     tile_drive_h_stop: () => ({
       nextState: { go: 0, currently_playing: '', play_ms: 0, playing_until_ms: 0 },
     }),
@@ -367,7 +375,7 @@ const sim: TileSim<State> = {
         nextState: { library: lib, ...(lib !== 0 ? { n_erm_lra: lib === 6 ? 1 : 0 } : {}) },
       };
     },
-    // 0 leaves RATED/OD untouched; 0xFF leaves brake/gain (tile_drive_h.c:505-535).
+    // 0 leaves RATED/OD untouched; 0xFF leaves brake/gain (tile_drive_h_set_actuator_params).
     tile_drive_h_set_actuator_params: ({ state, args }) => {
       if (!ready(state)) return {};
       const rv = (args[0] ?? 0) & 0xff;
@@ -394,7 +402,7 @@ const sim: TileSim<State> = {
     tile_drive_h_set_loop_mode: ({ state, args }) =>
       ready(state) ? { nextState: { closed_loop: args[0] ? 1 : 0 } } : {},
     // mV → RATED_VOLTAGE / OD_CLAMP, DRV2605 §7.5.2 Eq 2-5, integer math as the
-    // driver (tile_drive_h.c:556-609): f from DRIVE_TIME, t_sample from CONTROL2.
+    // driver (tile_drive_h_set_actuator_voltage): f from DRIVE_TIME, t_sample from CONTROL2.
     tile_drive_h_set_actuator_voltage: ({ state, args }) => {
       if (!ready(state)) return {};
       const rated = Math.min(3600, Math.max(300, (args[0] ?? 0) & 0xffff));
@@ -419,7 +427,7 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // DRIVE_TIME = (half-period − 0.5 ms) / 0.1 ms (tile_drive_h.c:611-628).
+    // DRIVE_TIME = (half-period − 0.5 ms) / 0.1 ms (tile_drive_h_set_resonance_hz).
     tile_drive_h_set_resonance_hz: ({ state, args }) => {
       if (!ready(state)) return {};
       const hz = Math.min(300, Math.max(125, args[0] ?? 0));
@@ -450,7 +458,7 @@ const sim: TileSim<State> = {
         : {},
 
     // ── real-time playback (MODE 5) ──
-    // MODE = RTP, RTP = 0; GO is not used in RTP mode (tile_drive_h.c:291-299).
+    // MODE = RTP, RTP = 0; GO is not used in RTP mode (tile_drive_h_rtp_start).
     tile_drive_h_rtp_start: ({ state }) =>
       ready(state) ? { nextState: { mode_reg: MODE_RTP, rtp_amplitude: 0 } } : {},
     tile_drive_h_rtp_write: ({ state, args }) => {
@@ -478,7 +486,7 @@ const sim: TileSim<State> = {
     tile_drive_h_pwm_input_stop: () => ({ nextState: { mode_reg: MODE_INTERNAL_TRIG } }),
     tile_drive_h_audio_start: ({ state }) =>
       ready(state) ? { nextState: { mode_reg: MODE_AUDIO } } : {},
-    // 0xFF leaves a field untouched (tile_drive_h.c:779-814).
+    // 0xFF leaves a field untouched (tile_drive_h_set_audio_params).
     tile_drive_h_set_audio_params: ({ state, args }) => {
       if (!ready(state)) return {};
       const v = (i: number) => (args[i] ?? 0xff) & 0xff;
@@ -511,7 +519,7 @@ const sim: TileSim<State> = {
     tile_drive_h_audio_stop: () => ({ nextState: { mode_reg: MODE_INTERNAL_TRIG } }),
 
     // ── status / diagnostics ──
-    // STATUS read; the latched flags clear on read (tile_drive_h.c:112-114).
+    // STATUS read; the latched flags clear on read.
     tile_drive_h_get_status: ({ state }) => ({
       scalar:
         STATUS_DEVICE_ID |
@@ -521,18 +529,21 @@ const sim: TileSim<State> = {
       nextState: { diag_result: 0, over_temp: 0, oc_detect: 0 },
     }),
     // Blocking in the driver: MODE 6 + GO, wait, read DIAG_RESULT, restore
-    // MODE 0. Returns 1 = pass (tile_drive_h.c:317-365).
+    // MODE 0. Returns 1 = pass (tile_drive_h_diagnose). That STATUS read
+    // clears DIAG_RESULT, so it reads 0 afterwards.
     tile_drive_h_diagnose: ({ state }) => {
       if (!ready(state)) return { scalar: 0 };
       const ok = engineOk(state);
       return {
         scalar: ok ? 1 : 0,
-        nextState: { diag_result: ok ? 0 : 1, mode_reg: MODE_INTERNAL_TRIG, go: 0 },
+        nextState: { diag_result: 0, mode_reg: MODE_INTERNAL_TRIG, go: 0 },
       };
     },
     // Blocking: MODE 7 + GO, wait, DIAG_RESULT 0 = converged; FEEDBACK_CTRL and
-    // loop mode are restored, MODE back to 0 (tile_drive_h.c:367-418). The cal
-    // drives the actuator, so VBAT/LRA_PERIOD get sampled.
+    // loop mode are restored (BEMF gain kept on a pass), MODE back to 0
+    // (tile_drive_h_calibrate). Its STATUS read clears DIAG_RESULT; the driver
+    // caches the result for is_calibrated(). The cal drives the actuator, so
+    // VBAT/LRA_PERIOD get sampled.
     tile_drive_h_calibrate: ({ state }) => {
       if (!ready(state)) return { scalar: 0 };
       const ok = engineOk(state);
@@ -540,16 +551,17 @@ const sim: TileSim<State> = {
         scalar: ok ? 1 : 0,
         nextState: {
           calibrated: ok ? 1 : 0,
-          diag_result: ok ? 0 : 1,
+          diag_result: 0,
           mode_reg: MODE_INTERNAL_TRIG,
           go: 0,
           ...sampled(state),
         },
       };
     },
-    // !DIAG_RESULT while READY (tile_drive_h.c:907-913).
+    // The last calibrate() result since init, while READY (the driver's cache:
+    // DIAG_RESULT itself was cleared by calibrate()'s read).
     tile_drive_h_is_calibrated: ({ state }) => ({
-      scalar: ready(state) && !state.diag_result ? 1 : 0,
+      scalar: ready(state) && state.calibrated ? 1 : 0,
     }),
     // VBAT: live while driving, else the last sample; raw 0 → 0.
     tile_drive_h_get_vbat_mv: ({ state }) => {
@@ -584,7 +596,7 @@ const sim: TileSim<State> = {
       ready(state)
         ? { nextState: { ...startSequence(state, [14, 56, 14, 0], 'alert'), play_ms: 1200 } }
         : {},
-    // RTP at 0x7F for `ms`, then RTP 0 + MODE 0 (tile_drive_h.c:893-905). The
+    // RTP at 0x7F for `ms`, then RTP 0 + MODE 0 (tile_drive_h_play_buzz). The
     // driver blocks; the twin plays it out on deriveState's clock.
     tile_drive_h_play_buzz: ({ state, args }) => {
       if (!ready(state)) return {};
@@ -628,7 +640,7 @@ const sim: TileSim<State> = {
     tile_drive_h_set_actuator_voltage: 'canonical', // §7.5.2 Eq 2-5, driver integer math
     tile_drive_h_set_resonance_hz: 'canonical', // CONTROL1 DRIVE_TIME
     tile_drive_h_set_resonance_params: 'canonical', // CONTROL2 fields (stored only)
-    tile_drive_h_is_calibrated: 'canonical', // !DIAG_RESULT
+    tile_drive_h_is_calibrated: 'canonical', // calibrate()'s cached DIAG_RESULT
     // pass/fail is a proxy (supply in spec, no over-current), not back-EMF
     tile_drive_h_diagnose: 'inferred',
     tile_drive_h_calibrate: 'inferred',

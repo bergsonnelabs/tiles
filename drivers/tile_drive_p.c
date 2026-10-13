@@ -1115,10 +1115,17 @@ uint8_t tile_drive_p_play_on_touch(tile_t* tile, uint8_t intensity_pct,
                                    uint16_t threshold_mv,
                                    uint32_t timeout_ms)
 {
-    /* Poll sense at 1 ms cadence. is_touched() leaves the chip in
-     * sense mode; play_click() switches to FIFO mode. */
+    /* Enter sense mode once (it costs 5 ms; is_touched() pays it on every
+     * call), then poll the sense value at ~1 ms and count elapsed ms.
+     * play_click() switches to FIFO mode. */
+    if (timeout_ms == 0) return 0;
+    tile_drive_p_set_mode(tile, DRIVE_P_MODE_SENSE_FINE);
+    if (tile->state != TILE_STATE_READY) return 0;
     for (uint32_t elapsed = 0; elapsed < timeout_ms; elapsed++) {
-        if (tile_drive_p_is_touched(tile, threshold_mv)) {
+        int16_t raw = tile_drive_p_read_sense(tile);
+        int32_t mv  = ((int32_t)raw * 76) / 10;  /* 7.6 mV/LSB (fine) */
+        if (mv < 0) mv = -mv;
+        if (mv >= (int32_t)threshold_mv) {
             tile_drive_p_play_click(tile, intensity_pct);
             return 1;
         }

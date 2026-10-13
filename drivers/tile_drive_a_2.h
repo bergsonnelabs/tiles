@@ -3,7 +3,7 @@
  * @brief  Dual-channel audio output driver for the Drive.A.2 tile
  *         (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).
  *         Supports I2C and SPI bus access via tiles_pal_t.
- * @version 3.3.0
+ * @version 3.3.1
  *
  * The Drive.A.2 tile provides two independent audio output channels,
  * each consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.
@@ -28,8 +28,8 @@
  * into 8 ohm at 3.3 V), enough to burn a small speaker. Raise or
  * disable it with tile_drive_a_2_amp_set_limiter().
  *
- * In SPI mode, only the DAC is controllable; amplifier functions
- * become no-ops since the I2C bus pins are repurposed for SPI.
+ * In SPI mode only the DAC is reachable; amplifier functions become
+ * no-ops since the I2C bus pins are repurposed for SPI.
  * The DAC's SPI is 3-wire (write-only) until INTERFACE-CONFIG.SDO-EN
  * is set, and a read takes two access cycles (SLASF73A §6.5.1), so
  * the DEVICE-ID check in init and every read-modify-write setter
@@ -48,15 +48,10 @@
  *   }
  * @endcode
  *
- * Quick start (SPI — DAC only, no amplifier control):
- * @code
- *   #include "core_tiles.h"
- *
- *   tile_t dac;
- *   tiles_pal_t *hal = core_tiles_pal(&core_spi1);
- *   tile_drive_a_2_init(hal, 0, &dac, NULL);  // instance = CS index
- *   tile_drive_a_2_set_mv(&dac, 0, 1500);     // 1.5 V on channel 0
- * @endcode
+ * SPI does not work yet: init() and find() read DEVICE-ID, which needs
+ * the 4-wire readback above, so over SPI find() does not detect the
+ * part and init() leaves the tile in TILE_STATE_ERROR. Use I2C (see the "SPI readback"
+ * gap below).
  *
  * Datasheet (DAC): https://www.ti.com/product/DAC63202W
  * Datasheet (Amp): https://www.ti.com/product/TPA2028D1
@@ -74,6 +69,14 @@
  *   so even if the driver enabled PWM mode, no Core GPIO could
  *   observe or use the output. Closing this gap requires a tile
  *   hardware revision that breaks FBx out to a pad.
+ *
+ * @studio unsupported severity=advanced category="SPI readback (SDO-EN)"
+ *   Driver-deferred. The DAC63202W's SPI is write-only (3-wire) until
+ *   INTERFACE-CONFIG.SDO-EN is set, and a read then takes two access
+ *   cycles (SLASF73A §6.5.1). The driver never sets SDO-EN, so the
+ *   DEVICE-ID check in find() / init() and every read-modify-write setter
+ *   fail over SPI. Closing it means enabling SDO-EN (a write-only first
+ *   step) and two-cycle reads in the SPI path.
  *
  * @studio unsupported severity=niche category="Per-amp independent control"
  *   The tile carries 2× TPA2028D1 amps wired to a single shared I²C
@@ -94,9 +97,12 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v3.3.1: amp_enable() clears the mute, as documented; SPI is documented as
+ *         not working yet (no 4-wire readback); "(default)" moves to
+ *         GAIN_1X_EXT; play_chirp() documents its bus-limited rate. */
 #define TILE_DRIVE_A_2_VERSION_MAJOR  3
 #define TILE_DRIVE_A_2_VERSION_MINOR  3
-#define TILE_DRIVE_A_2_VERSION_PATCH  0
+#define TILE_DRIVE_A_2_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -207,8 +213,8 @@ TILES_CHECK_VERSION(1, 0);
  * Internal reference gains require EN-INT-REF = 1 in COMMON-CONFIG.
  */
 typedef enum {
-    DRIVE_A_2_GAIN_1X_EXT   = 0,  /**< 1x, external VREF pin */
-    DRIVE_A_2_GAIN_1X_VDD   = 1,  /**< 1x, VDD as reference (default) */
+    DRIVE_A_2_GAIN_1X_EXT   = 0,  /**< 1x, external VREF pin (default) */
+    DRIVE_A_2_GAIN_1X_VDD   = 1,  /**< 1x, VDD as reference */
     DRIVE_A_2_GAIN_1P5X_INT = 2,  /**< 1.5x, internal 1.21V → 0–1.815V */
     DRIVE_A_2_GAIN_2X_INT   = 3,  /**< 2x, internal 1.21V → 0–2.42V */
     DRIVE_A_2_GAIN_3X_INT   = 4,  /**< 3x, internal 1.21V → 0–3.63V */
@@ -385,7 +391,9 @@ typedef struct {
  *
  * @param  hal       Platform HAL handle
  * @param  instance  Instance index (see mapping table)
- * @return 1 if device ACKs (I2C) or responds to WHO_AM_I (SPI), 0 otherwise
+ * @return 1 if the device ACKs (I2C), 0 otherwise. Over SPI it reads
+ *         DEVICE-ID, which needs the 4-wire readback the driver does not
+ *         enable yet, so over SPI it does not detect the part.
  */
 uint8_t tile_drive_a_2_find(tiles_pal_t *hal, uint8_t instance);
 
@@ -866,13 +874,19 @@ void tile_drive_a_2_play_silence(tile_t *tile, drive_a_2_channel_t channel,
  * @brief  Linear frequency sweep on `channel` from `start_hz` to `end_hz`.
  * @studio expose category=tile name=play_chirp section=runtime
  *
- * Software sine-LUT chirp delivered through `set` (raw DAC code)
- * at ~8 kHz update rate. Frequency advances linearly across `ms`.
+ * Software sine-LUT chirp delivered through `set` (raw DAC code).
+ * The phase math assumes 8 kHz: 8 DAC writes, then delay_ms(1), per
+ * millisecond. The writes are not timed, so each millisecond also
+ * carries their bus time (16 writes with DRIVE_A_2_CH_BOTH): on a
+ * 400 kHz I2C bus roughly 1.8 ms per slot. Pitches then come out
+ * proportionally lower than start_hz / end_hz, and a faster bus
+ * brings them closer. Frequency advances linearly across the sweep.
  * For ascending sweeps pass start < end; for descending, start >
  * end. The amp is unmuted for the duration and restored to its
  * prior mute state on return.
  *
- * @note  Blocks for `ms` milliseconds via `hal->delay_ms`.
+ * @note  Blocks for longer than `ms` (`ms` plus the I2C time of
+ *        8 × `ms` writes, or 16 × `ms` with CH_BOTH).
  *
  * @param  channel   DRIVE_A_2_CH_LEFT, _RIGHT, or _BOTH
  * @param  start_hz  Initial frequency in Hz

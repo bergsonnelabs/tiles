@@ -100,7 +100,7 @@ const ODR_25HZ = 6;
 const AVG_4 = 2;
 const EN_XYZ = 0x07;
 const FULL_SCALE_NT = 2_000_000; // ±2000 µT per axis (datasheet Table 2)
-const SENSORTIME_TICKS_PER_MS = 25; // 40 µs per tick
+const SENSORTIME_TICKS_PER_MS = 25; // 40 µs per tick (datasheet; ~39.06 µs in the driver's gap math)
 /** In pulsed mode INT_STATUS.drdy clears itself after 1.25 ms (datasheet §5.5). */
 const PULSE_MS = 1.25;
 
@@ -378,10 +378,11 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // Bit reset then flip-gain reset from suspend; normal mode is restored.
-    tile_sense_m_3g_magnetic_reset: () => ({
+    // Bit reset then flip-gain reset from suspend; from normal mode the driver
+    // re-issues NM afterwards, so that is the last PMU command.
+    tile_sense_m_3g_magnetic_reset: ({ state }) => ({
       scalar: 1,
-      nextState: { last_pmu_cmd: CMD_FGR },
+      nextState: { last_pmu_cmd: state.mode === 1 ? CMD_NM : CMD_FGR },
     }),
 
     // ── configuration ──

@@ -71,7 +71,7 @@ interface State {
   // ── latched status bytes (clear on read) ──
   int_status: number; // bit3 DATA_RDY, bit2 FIFO_THS, bit1 FIFO_FULL
   int_status2: number; // bits 0..2 WOM_X/Y/Z
-  int_status3: number; // bit5 TAP, bit3 TILT, bit1 STEP_DET
+  int_status3: number; // bit5 STEP_DET, bit4 STEP_CNT_OVF, bit3 TILT, bit0 TAP
   /** Clock (deriveState `t`) of the last DATA_RDY. */
   last_drdy_ms: number;
 
@@ -319,7 +319,7 @@ const sim: TileSim<State> = {
     temp_c: 25,
     tap_axis: 0,
 
-    // tile_sense_i_6p6_init with a NULL cfg (driver .c:204-213)
+    // tile_sense_i_6p6_init with a NULL cfg
     accel_range: 2, // ±8 g
     gyro_range: 2, // ±1000 dps
     accel_odr: 0x08, // 100 Hz
@@ -565,7 +565,7 @@ const sim: TileSim<State> = {
 
   hostCalls: {
     // ── lifecycle ──
-    // find() returns 1 when the part ACKs (driver .c:120), not an address.
+    // find() returns 1 when the part ACKs (tile_sense_i_6p6_find), not an address.
     tile_sense_i_6p6_find: () => ({ scalar: 1 }),
     tile_sense_i_6p6_init: () => ({
       nextState: {
@@ -578,8 +578,11 @@ const sim: TileSim<State> = {
         sleeping: 0,
       },
     }),
-    // process() reads INT_STATUS (clearing it) and hands it to the C callback.
-    tile_sense_i_6p6_process: () => ({ nextState: { int_status: 0 } }),
+    // process() reads INT_STATUS, INT_STATUS2 and INT_STATUS3 (clearing all
+    // three) and hands the composed event word to the C callback.
+    tile_sense_i_6p6_process: () => ({
+      nextState: { int_status: 0, int_status2: 0, int_status3: 0 },
+    }),
     tile_sense_i_6p6_on_event: () => undefined,
     tile_sense_i_6p6_sleep: () => ({
       nextState: { power_accel: 0, power_gyro: 0, sleeping: 1 },
@@ -715,7 +718,7 @@ const sim: TileSim<State> = {
       array: [...accelRaw(state), ...gyroRaw(state)],
     }),
     tile_sense_i_6p6_get_temperature: ({ state }) => ({ scalar: tempRaw(state) }),
-    // [Temp, AX, AY, AZ, GX, GY, GZ] (driver .c:402)
+    // [Temp, AX, AY, AZ, GX, GY, GZ] (tile_sense_i_6p6_get_raw_all)
     tile_sense_i_6p6_get_raw_all: ({ state }) => ({
       array: [tempRaw(state), ...accelRaw(state), ...gyroRaw(state)],
     }),
@@ -768,16 +771,21 @@ const sim: TileSim<State> = {
     }),
 
     // ── FIFO ──
-    tile_sense_i_6p6_fifo_config: ({ args }) => ({
-      nextState: {
-        fifo_mode: (args[0] ?? 0) & 0x03,
-        fifo_accel_en: args[1] ? 1 : 0,
-        fifo_gyro_en: args[2] ? 1 : 0,
-        fifo_temp_en: args[3] ? 1 : 0,
-        fifo_hires: args[4] ? 1 : 0,
-        last_fifo_ms: -1,
-      },
-    }),
+    // The driver ignores `hires` and enables accel and gyro together, so the
+    // FIFO only ever holds 16-byte packets (or nothing).
+    tile_sense_i_6p6_fifo_config: ({ args }) => {
+      const both = args[1] || args[2] ? 1 : 0;
+      return {
+        nextState: {
+          fifo_mode: (args[0] ?? 0) & 0x03,
+          fifo_accel_en: both,
+          fifo_gyro_en: both,
+          fifo_temp_en: args[3] ? 1 : 0,
+          fifo_hires: 0,
+          last_fifo_ms: -1,
+        },
+      };
+    },
     // 0 is invalid per datasheet → the driver writes 1. 12-bit register.
     tile_sense_i_6p6_fifo_set_watermark: ({ args }) => ({
       nextState: { fifo_watermark: Math.max(1, (args[0] ?? 0) & 0xffff) & 0xfff },
@@ -793,7 +801,7 @@ const sim: TileSim<State> = {
       scalar: state.fifo_lost & 0xffff,
     }),
     // One packet [ax ay az gx gy gz temp8 timestamp]; an empty FIFO leaves the
-    // caller's array untouched (driver .c:490).
+    // caller's array untouched (tile_sense_i_6p6_fifo_read_packet_flat).
     tile_sense_i_6p6_fifo_read_packet_flat: ({ state }) =>
       state.fifo_packets > 0
         ? { array: fifoPacket(state), nextState: { fifo_packets: state.fifo_packets - 1 } }
@@ -950,13 +958,11 @@ const sim: TileSim<State> = {
         gyro_off_z_dps16: s12(args[2] ?? 0),
       },
     }),
-    // A healthy part passes. The driver reconfigures ±4 g / ±250 dps at 1 kHz
-    // for the test and restores ONLY PWR_MGMT0 (driver .c:904-981), so the
-    // ranges and ODRs stay changed afterwards.
+    // A healthy part passes. The driver runs the test at ±4 g / ±250 dps,
+    // 1 kHz, then restores the ranges, ODRs and power mode, so nothing changes.
     tile_sense_i_6p6_self_test: () => ({
       scalar: 1,
       outScalars: { accel_pass: 1, gyro_pass: 1 },
-      nextState: { accel_range: 3, gyro_range: 4, accel_odr: 0x06, gyro_odr: 0x06 },
     }),
     // Only WHO_AM_I (bank 0, 0x75) is modeled.
     tile_sense_i_6p6_read_reg: ({ args }) => ({
@@ -967,7 +973,7 @@ const sim: TileSim<State> = {
 
   provenance: {
     tile_sense_i_6p6_find: 'canonical',
-    tile_sense_i_6p6_init: 'canonical', // driver .c:204-213
+    tile_sense_i_6p6_init: 'canonical', // tile_sense_i_6p6_init, NULL cfg
     tile_sense_i_6p6_reset: 'canonical', // register reset values
     tile_sense_i_6p6_sleep: 'canonical',
     tile_sense_i_6p6_wake: 'canonical',

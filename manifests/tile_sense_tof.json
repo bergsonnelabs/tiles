@@ -1,15 +1,16 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@65a4fd8",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.TOF",
   "palette": {
     "label": "Sense.TOF",
     "icon": "◊"
   },
+  "usage": "Call start() once when the program begins: init does not start ranging, and until start() get_distance_mm() reads as nothing in range (the max range). After start() it returns the latest reading, updated every 30 ms by default. is_object_within(), wait_for_object() and measure_single() take their own single shots and need no start().",
   "driver": {
     "prefix": "tile_sense_tof",
     "header": "tile_sense_tof.h",
-    "version": "1.6.0"
+    "version": "1.6.1"
   },
   "handle": {
     "type": "tile_t",
@@ -265,7 +266,7 @@
       "symbol": "tile_sense_tof_get_calibration",
       "header": "tile_sense_tof.h",
       "category": "tile",
-      "description": "Read the current factory calibration data from the sensor.",
+      "description": "Copy out the factory calibration data the driver holds.",
       "params": [],
       "returns": "void",
       "dsl_returns": "int[14]",
@@ -587,7 +588,7 @@
       "symbol": "tile_sense_tof_restore_state",
       "header": "tile_sense_tof.h",
       "category": "tile",
-      "description": "Restore algorithm state to the sensor.",
+      "description": "Hand saved algorithm state back to the driver for the next start().",
       "params": [
         {
           "name": "data",

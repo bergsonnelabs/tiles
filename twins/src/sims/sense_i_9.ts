@@ -17,7 +17,7 @@
 //     answering until init() runs again.
 //   - INT_STATUS (WOM) and INT_STATUS_1 (RAW_DATA_RDY) clear on read.
 //   - The face / motion helpers compare raw counts against constants fixed for
-//     ±2 g (driver .c:666-676), so after `set_accel_range` they drift — the twin
+//     ±2 g (SENSE_I_9_LSB_PER_G_2G etc. in the driver), so after `set_accel_range` they drift — the twin
 //     does the same.
 //
 // Pads (Sense-I-9-c.json): INT = pad 9, V+ = pad 10 (1.71–1.95 V), GND = pad 1.
@@ -129,7 +129,7 @@ const MAG_HZ: Record<number, number> = {
   0x08: 100,
 };
 
-// Driver's tier-2 constants, fixed for ±2 g (driver .c:666-676).
+// Driver's tier-2 constants, fixed for ±2 g (SENSE_I_9_LSB_PER_G_2G etc.).
 const LSB_PER_G_2G = 16384;
 const FACE_Z_MIN = 13926;
 const FACE_XY_MAX = 8192;
@@ -432,7 +432,7 @@ const sim: TileSim<State> = {
 
   hostCalls: {
     // ── lifecycle ──
-    tile_sense_i_9_find: () => ({ scalar: 1 }), // 1 when the part ACKs (driver .c:141)
+    tile_sense_i_9_find: () => ({ scalar: 1 }), // 1 when the part ACKs (tile_sense_i_9_find)
     tile_sense_i_9_init: () => ({
       nextState: { sleeping: 0, int_pin_cfg: 0x02, mag_mode: 0x08 },
     }),
@@ -613,7 +613,7 @@ const sim: TileSim<State> = {
 
     // ── self-test ──
     // Per-axis pass bits (bit0 X … bit2 Y/Z). The driver leaves the part at
-    // ±2 g / ±250 dps, dividers 0 afterwards (driver .c:551-590).
+    // ±2 g / ±250 dps, dividers 0 afterwards (tile_sense_i_9_self_test).
     tile_sense_i_9_self_test: ({ state }) => {
       const pass = state.fault_inject ? 0 : 0x07;
       return {
@@ -677,7 +677,7 @@ const sim: TileSim<State> = {
     },
 
     // ── DMP ──
-    // dmp_start_quat9 needs dmp_load() first (driver .c:1333), which no program
+    // dmp_start_quat9 needs dmp_load() first (tile_sense_i_9_dmp_start_quat9), which no program
     // can call (it isn't in the manifest) — so, as on the hardware, the DMP
     // never starts and its reads report nothing.
     tile_sense_i_9_dmp_start_quat9: () => ({ scalar: 0 }),

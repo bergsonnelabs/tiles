@@ -211,7 +211,7 @@ const sim: TileSim<State> = {
   // / max 30 dB, limiter ON at level 19 (AGC_CTRL1 0x33), attack / release /
   // hold at chip defaults, amps on (FUNC_CTRL 0xC2).
   defaultState: {
-    vplus_mv: 3300, // the driver's VDD assumption (resolve_vref)
+    vplus_mv: 3300, // the driver's VDD assumption (full_scale_mv)
     amp_fault: 0,
     amp_thermal: 0,
 
@@ -374,7 +374,7 @@ const sim: TileSim<State> = {
       onCh(args, (c) => patch([c], { slew: (args[1] ?? 0) & 0x0f })),
     tile_drive_a_2_set_code_step: ({ args }) =>
       onCh(args, (c) => patch([c], { step: (args[1] ?? 0) & 0x07 })),
-    // Clamped and swapped so high > low (tile_drive_a_2.c:440-455).
+    // Clamped and swapped so high > low (tile_drive_a_2_set_margins).
     tile_drive_a_2_set_margins: ({ args }) =>
       onCh(args, (c) => {
         const a = Math.min(DAC_MAX, (args[1] ?? 0) & 0xffff);
@@ -383,7 +383,7 @@ const sim: TileSim<State> = {
       }),
     tile_drive_a_2_set_phase: ({ args }) =>
       onCh(args, (c) => patch([c], { phase: (args[1] ?? 0) & 0x03 })),
-    // Margins to full scale + wave/step/slew (tile_drive_a_2.c:467-486).
+    // Margins to full scale + wave/step/slew (tile_drive_a_2_set_waveform_params).
     tile_drive_a_2_set_waveform_params: ({ args }) =>
       onCh(args, (c) =>
         patch([c], {
@@ -404,8 +404,11 @@ const sim: TileSim<State> = {
       };
     },
     tile_drive_a_2_amp_get_gain: ({ state }) => ({ scalar: state.amp_gain_db }),
-    // EN = 1, SWS = 0 (deferred to wake() while asleep); the mute shadow is untouched.
-    tile_drive_a_2_amp_enable: ({ state }) => ({ nextState: enableState(state) }),
+    // EN = 1, SWS = 0 (deferred to wake() while asleep); clears the mute shadow,
+    // as the header promises (the chip gain is already current).
+    tile_drive_a_2_amp_enable: ({ state }) => ({
+      nextState: { ...enableState(state), amp_muted: 0 },
+    }),
     tile_drive_a_2_amp_disable: () => ({ nextState: disableState }),
     // The config is a struct pointer the host call can't read; no state change.
     tile_drive_a_2_amp_set_agc: () => ({}),
@@ -463,7 +466,7 @@ const sim: TileSim<State> = {
     },
 
     // ── blocking helpers (played out on deriveState's clock) ──
-    // stop_waveform + mid-scale, then delay (tile_drive_a_2.c:676-691).
+    // stop_waveform + mid-scale, then delay (tile_drive_a_2_play_silence).
     tile_drive_a_2_play_silence: ({ args }) => {
       const cs = chans(args[0] ?? 0);
       return {
@@ -498,8 +501,9 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // Software sine sweep at 8 ksps, full swing, then mid-scale
-    // (tile_drive_a_2.c:771-834).
+    // Software sine sweep, full swing, then mid-scale (tile_drive_a_2_play_chirp).
+    // Modeled at the nominal 8 ksps and `ms`; on hardware the I2C writes slow
+    // it, so pitches come out lower and the call runs longer.
     tile_drive_a_2_play_chirp: ({ state, args }) => {
       const start = (args[1] ?? 0) & 0xffff;
       const end = (args[2] ?? 0) & 0xffff;

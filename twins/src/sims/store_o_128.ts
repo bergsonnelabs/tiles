@@ -11,9 +11,12 @@
 // Per-mode supply currents are the AT25QL128A typical figures (datasheet Table 24
 // and feature list); read current rises with SCK (7 mA max at 1 MHz, 20 mA max
 // at 104 MHz), so the read figure is the 5 mA typical. Program/erase calls block in the driver: each does
-// write_enable → command → wait_ready before returning (tile_store_o_128.c:162-220),
-// so by the time the firmware sees the call return the part is idle again (WIP and
-// WEL both clear on completion). Only write_enable leaves a latched state.
+// write_enable → command → wait_ready before returning (page_program, write and
+// the erase calls), so by the time the firmware sees the call return the part is
+// idle again (WIP and WEL both clear on completion). Only write_enable leaves a
+// latched state. In deep power-down the part ignores every command but release
+// (header), and the driver's tile is SLEEPING, so read / program / erase do
+// nothing; the ID and status reads see nothing driven and are modeled as 0.
 import type { TileSim } from '../tileSim';
 
 const JEDEC_ID = 0x1f4218; // mfr 0x1F, type 0x42, capacity 0x18 (128 Mbit)
@@ -27,6 +30,13 @@ const MODE_READ = 1;
 const MODE_PROGRAM = 2;
 const MODE_ERASE = 3;
 const MODE_DPD = 4;
+
+// A blocking program / erase has finished by the time the call returns.
+const DONE = { mode: MODE_STANDBY, busy: 0, wel: 0 };
+// The part ignores everything but release in deep power-down (the driver's
+// tile is SLEEPING then), so a command changes nothing.
+const awake = <S extends { mode: number }>(s: S, next: Record<string, number>) =>
+  s.mode === MODE_DPD ? {} : { nextState: next };
 
 const UVLO_MV = 1710;
 
@@ -82,26 +92,29 @@ const sim: TileSim<State> = {
     }),
 
     // ── identity / status ──
-    tile_store_o_128_read_jedec_id: () => ({ scalar: JEDEC_ID }),
-    tile_store_o_128_read_status: ({ state }) => ({
-      scalar: (state.busy ? SR_WIP : 0) | (state.wel ? SR_WEL : 0),
+    tile_store_o_128_read_jedec_id: ({ state }) => ({
+      scalar: state.mode === MODE_DPD ? 0 : JEDEC_ID,
     }),
-    tile_store_o_128_is_busy: ({ state }) => ({ scalar: state.busy }),
+    tile_store_o_128_read_status: ({ state }) => ({
+      scalar: state.mode === MODE_DPD ? 0 : (state.busy ? SR_WIP : 0) | (state.wel ? SR_WEL : 0),
+    }),
+    tile_store_o_128_is_busy: ({ state }) => ({ scalar: state.mode === MODE_DPD ? 0 : state.busy }),
     tile_store_o_128_get_capacity: () => ({ scalar: CAPACITY }),
 
     // ── read (data bytes not modeled) ──
-    tile_store_o_128_read: () => ({ nextState: { mode: MODE_STANDBY } }),
-    tile_store_o_128_fast_read: () => ({ nextState: { mode: MODE_STANDBY } }),
+    tile_store_o_128_read: ({ state }) => awake(state, { mode: MODE_STANDBY }),
+    tile_store_o_128_fast_read: ({ state }) => awake(state, { mode: MODE_STANDBY }),
 
     // ── write / erase ──
-    tile_store_o_128_write_enable: () => ({ nextState: { wel: 1 } }),
+    tile_store_o_128_write_enable: ({ state }) => awake(state, { wel: 1 }),
     // blocking in the driver: returns once WIP clears (WEL auto-clears too)
-    tile_store_o_128_page_program: () => ({ nextState: { mode: MODE_STANDBY, busy: 0, wel: 0 } }),
-    tile_store_o_128_write: () => ({ nextState: { mode: MODE_STANDBY, busy: 0, wel: 0 } }),
-    tile_store_o_128_erase_sector: () => ({ nextState: { mode: MODE_STANDBY, busy: 0, wel: 0 } }),
-    tile_store_o_128_erase_block: () => ({ nextState: { mode: MODE_STANDBY, busy: 0, wel: 0 } }),
-    tile_store_o_128_erase_chip: () => ({ nextState: { mode: MODE_STANDBY, busy: 0, wel: 0 } }),
-    tile_store_o_128_wait_ready: () => ({ scalar: 1, nextState: { busy: 0, mode: MODE_STANDBY } }),
+    tile_store_o_128_page_program: ({ state }) => awake(state, DONE),
+    tile_store_o_128_write: ({ state }) => awake(state, DONE),
+    tile_store_o_128_erase_sector: ({ state }) => awake(state, DONE),
+    tile_store_o_128_erase_block: ({ state }) => awake(state, DONE),
+    tile_store_o_128_erase_chip: ({ state }) => awake(state, DONE),
+    tile_store_o_128_wait_ready: ({ state }) =>
+      state.mode === MODE_DPD ? { scalar: 1 } : { scalar: 1, nextState: { busy: 0, mode: MODE_STANDBY } },
 
     // ── power ──
     tile_store_o_128_deep_power_down: () => ({ nextState: { mode: MODE_DPD } }),
@@ -110,8 +123,8 @@ const sim: TileSim<State> = {
 
   provenance: {
     tile_store_o_128_find: 'canonical', // JEDEC ID 0x1F4218
-    tile_store_o_128_read_jedec_id: 'canonical',
-    tile_store_o_128_read_status: 'canonical', // WIP/WEL bits
+    tile_store_o_128_read_jedec_id: 'canonical', // 0 in deep power-down is inferred (nothing drives MISO)
+    tile_store_o_128_read_status: 'canonical', // WIP/WEL bits (0 in deep power-down, inferred)
     tile_store_o_128_is_busy: 'canonical',
     tile_store_o_128_get_capacity: 'canonical', // 16 MB
     tile_store_o_128_write_enable: 'canonical', // WEL set

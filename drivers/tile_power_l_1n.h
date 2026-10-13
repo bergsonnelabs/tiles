@@ -49,7 +49,15 @@
  *
  * @studio tile label=Power.L.1N icon=🔋
  * @studio event name=charge_complete mask=NPM1300_CHG_COMPLETED
- * @studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT
+ * @studio event name=charging mask=NPM1300_CHG_CHARGING
+ *
+ * @studio usage
+ *   Call process() on every pass of the main loop (Studio's event loop does
+ *   this for you). It reads the charge status and fires charge_complete when
+ *   the battery becomes full and charging when a charge starts (trickle, CC or
+ *   CV). Events fire once per change, not on every poll; the first process()
+ *   after init reports a state already in force (e.g. a battery that is
+ *   already charging).
  *
  * Unsupported capabilities (gating noted per item — a HARDWARE gap means the
  * chip can do it but the tile doesn't wire the pin out, NOT a driver omission):
@@ -92,8 +100,10 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v1.4.0: process() and on_event() added, so the charge_complete and
+ *         charging events have a producer; charging covers trickle, CC and CV. */
 #define TILE_POWER_L_1N_VERSION_MAJOR  1
-#define TILE_POWER_L_1N_VERSION_MINOR  3
+#define TILE_POWER_L_1N_VERSION_MINOR  4
 #define TILE_POWER_L_1N_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
@@ -127,6 +137,11 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 #define NPM1300_CHG_RECHARGE            (1 << 5)  /**< Recharge (top-up) in progress*/
 #define NPM1300_CHG_DIETEMPHIGHPAUSED   (1 << 6)  /**< Paused: die too hot          */
 #define NPM1300_CHG_SUPPLEMENTACTIVE    (1 << 7)  /**< Battery supplementing VSYS    */
+/** Any charging phase (trickle, CC or CV): the `charging` event mask, and what
+ *  is_charging() tests. */
+#define NPM1300_CHG_CHARGING            (NPM1300_CHG_TRICKLECHARGE | \
+                                         NPM1300_CHG_CONSTANTCURRENT | \
+                                         NPM1300_CHG_CONSTANTVOLTAGE)
 
 /* ── bucks (BUCK, base 0x04) ───────────────────────────────────────────────── */
 #define NPM1300_REG_BUCK1ENASET         0x0400
@@ -183,6 +198,16 @@ typedef enum {
     NPM1300_USBC_3A      = 3,  /**< Type-C Current 3.0 A                                */
 } power_l_1n_usbc_t;
 
+/**
+ * Event callback fired by tile_power_l_1n_process() when the charge state
+ * changes. `events` uses the NPM1300_CHG_* bits: NPM1300_CHG_COMPLETED when
+ * the battery has just become full, and the current phase bit (inside
+ * NPM1300_CHG_CHARGING) when a charge has just started.
+ *
+ * Runs in main-loop context (from process()). I2C is safe to call.
+ */
+typedef void (*power_l_1n_event_cb_t)(tile_t* tile, uint8_t events, void* ctx);
+
 /** Optional init config (pass NULL for defaults: 500 mA USB input limit, 100 mA
  *  charge, 4.20 V, charging on, USB-C auto limit off). New fields go at the END,
  *  so an existing initialiser keeps meaning what it meant. */
@@ -232,6 +257,30 @@ uint8_t tile_power_l_1n_find(tiles_pal_t* hal, uint8_t instance);
 void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
                           const power_l_1n_cfg_t* cfg);
 
+/* ── events ────────────────────────────────────────────────────────────────── */
+
+/**
+ * @brief  Poll the charger and fire the event callback on a change. Call from
+ *         your main loop.
+ *
+ * Reads BCHGCHARGESTATUS (one I2C read) and compares it with the previous
+ * call. Fires the callback with NPM1300_CHG_COMPLETED when COMPLETED turns on,
+ * and with the phase bit when the charger goes from not charging to charging
+ * (trickle, CC or CV). A phase change inside one charge (trickle to CC to CV)
+ * does not fire again. The tile's INT pin is not used; this is polled.
+ *
+ * @studio expose category=tile name=process section=events
+ */
+void tile_power_l_1n_process(tile_t* tile);
+
+/**
+ * @brief  Register or change the event callback.
+ * @studio expose category=tile name=on_event section=events
+ * @param  cb    Callback to fire on a charge-state change. NULL to clear.
+ * @param  ctx   Opaque user pointer passed to the callback.
+ */
+void tile_power_l_1n_on_event(tile_t* tile, power_l_1n_event_cb_t cb, void* ctx);
+
 /* ── charger ───────────────────────────────────────────────────────────────── */
 
 /**
@@ -248,7 +297,7 @@ void tile_power_l_1n_charger_enable(tile_t* tile, uint8_t on);
  * The nPM1300 powers up with a 100 mA input limit; init() raises it to 500 mA
  * (what any USB port gives) unless the config says otherwise. The limit caps
  * what is drawn from USB for the system AND the charger together. It does not
- * regulate VSYS: with a battery attached, asking for more than the limit gives
+ * regulate VSYS: with a battery attached, asking for more than the limit
  * cuts the charge back and lets VSYS fall to just above the battery voltage
  * (measured: a 100 mA charge on the 100 mA limit took VSYS from 5.15 V to
  * ~3.65 V; both bucks held, but with only ~350 mV of headroom on 3.3 V, which a

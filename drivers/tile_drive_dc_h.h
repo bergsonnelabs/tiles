@@ -10,7 +10,7 @@
  *   - Supply:        1.65-11 V motor supply (VM), 1.65-5.5 V logic (VCC)
  *   - R_DS(on):      240 mOhm (high + low side total)
  *   - Regulation:    voltage or speed, via internal PI loop
- *   - Current sense: internal current mirror (IPROPI), 3 gain settings
+ *   - Current sense: internal current mirror (IPROPI), 6 gain settings
  *   - Stall detect:  hardware, configurable via IPROPI/VREF threshold
  *   - Ripple count:  sensorless position/speed via commutation ripples
  *   - Protection:    UVLO, OCP, OVP, thermal shutdown
@@ -56,7 +56,7 @@
  *   Chip's nSLEEP pin (~100 nA quiescent in sleep, ~1.3 mA active)
  *   is not routed to any tile pad in the Drive.DC.H rev-a layout
  *   (verify in definitions/Drive-DC-H-a.json — pads 1–10 are
- *   GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT1, OUT2, VM,
+ *   GND, EN/IN1, PH/IN2, I²C.CLK, I²C.DAT, NPROP, OUT2, OUT1, VM,
  *   V+; nSLEEP is strapped active on the PCB). sleep()/wake() only
  *   toggle the I²C-side EN_OUT bit; the chip itself can't reach its
  *   true quiescent floor. Closing this gap requires a tile hardware
@@ -82,9 +82,12 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v4.3.1: wait_for_stop() waits the documented 30 ms; docs: NPOR is active
+ *         low (a healthy chip reads 0x02), move_distance() quantization,
+ *         pad order in the nSLEEP gap, six CS gain codes. */
 #define TILE_DRIVE_DC_H_VERSION_MAJOR  4
 #define TILE_DRIVE_DC_H_VERSION_MINOR  3
-#define TILE_DRIVE_DC_H_VERSION_PATCH  0
+#define TILE_DRIVE_DC_H_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -156,7 +159,7 @@ TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 #define DRV8214_FAULT_OCP           0x10  /**< Bit 4 — overcurrent */
 #define DRV8214_FAULT_OVP           0x08  /**< Bit 3 — overvoltage */
 #define DRV8214_FAULT_TSD           0x04  /**< Bit 2 — thermal shutdown */
-#define DRV8214_FAULT_NPOR          0x02  /**< Bit 1 — power-on reset */
+#define DRV8214_FAULT_NPOR          0x02  /**< Bit 1 — active low: 1 = no power-on reset since the last clear_fault() (init clears it) */
 #define DRV8214_FAULT_CNT_DONE      0x01  /**< Bit 0 — ripple count done */
 
 /* -------------------------------------------------------------- */
@@ -521,7 +524,13 @@ void tile_drive_dc_h_set_ripple_filter_gain(tile_t* tile, uint8_t code);
  * NPOR[1], CNT_DONE[0]. Use the DRV8214_FAULT_* masks to
  * decode individual bits.
  *
- * @return Raw fault byte (0 = no faults)
+ * NPOR is active low: it resets to 0 at power-up and clear_fault()
+ * (which init() runs) sets it to 1 (SLVSH04 §8.3.8.3).
+ * So a healthy chip reads 0x02, not 0, and NPOR = 0 means the chip
+ * has reset since the last clear. To test for faults, mask NPOR out
+ * (`fault & ~DRV8214_FAULT_NPOR`) or test DRV8214_FAULT_FAULT.
+ *
+ * @return Raw fault byte (0x02 with no faults; see NPOR above)
  */
 uint8_t tile_drive_dc_h_get_fault(tile_t* tile);
 
@@ -529,8 +538,9 @@ uint8_t tile_drive_dc_h_get_fault(tile_t* tile);
  * @brief  Clear all latched faults.
  * @studio expose category=tile name=clear_fault section=runtime
  *
- * Sets CLR_FLT in CONFIG0. Clears FAULT, OCP, OVP, TSD,
- * and NPOR bits. The CLR_FLT bit is self-clearing.
+ * Sets CLR_FLT in CONFIG0. Clears FAULT, OCP, OVP and TSD, and
+ * sets NPOR (active low, so 1 = no reset since this clear). The
+ * CLR_FLT bit is self-clearing.
  *
  */
 void tile_drive_dc_h_clear_fault(tile_t* tile);
@@ -752,6 +762,13 @@ void tile_drive_dc_h_set_motor_params(tile_t* tile, uint16_t motor_mohm,
  *        revolution — typically 1/12 turn. Don't expect sub-degree
  *        positioning.
  *
+ * @note  The count is quantized: it goes through
+ *        set_ripple_threshold(), which programs RC_THR × scale and
+ *        rounds DOWN to a multiple of 2 (up to 2046), 8 (up to
+ *        8184), 16 (up to 16368) or 64 (above). An odd count moves
+ *        one ripple short, large counts up to 63 short, and
+ *        ripples = 1 programs a threshold of 0.
+ *
  * @param  ripples    Number of ripples to advance (0–65472)
  * @param  direction  DRIVE_DC_H_DIR_FORWARD or DRIVE_DC_H_DIR_REVERSE
  */
@@ -778,8 +795,8 @@ uint8_t tile_drive_dc_h_is_running(tile_t* tile);
  * @studio expose category=tile name=wait_for_stop returns=bool section=runtime
  *
  * Polls the 16-bit ripple counter at ~10 ms cadence. Returns 1
- * when two successive samples (≥30 ms apart) report the same
- * count — i.e., the rotor is mechanically stationary. Returns 0
+ * once the count has stayed the same for three samples in a row
+ * (30 ms) — i.e., the rotor is mechanically stationary. Returns 0
  * if `timeout_ms` elapses first. Useful after @ref
  * tile_drive_dc_h_brake when you want to know the motor has
  * actually settled rather than just "the bridge has been

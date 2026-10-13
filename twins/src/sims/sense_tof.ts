@@ -9,9 +9,9 @@
 // stop / sleep / set_period / set_kilo_iters / set_distance_mode) land in the same
 // fields `power()` reads, so the supply current follows the program.
 //
-// Pads (Sense-TOF-a.json): INT is pad 9 (output), V+ pad 10, GND pad 1. Pad 3:
-// the definition calls it EN, but the tile schematic routes it to the chip's
-// GPIO0 with a 100k pull-up (R2) to V+, and ties the chip's EN pin to V+. GPIO0
+// Pads (Sense-TOF-a.json): INT is pad 9 (output), V+ pad 10, GND pad 1. Pad 3
+// is GPIO in the definition: the tile schematic routes it to the chip's GPIO0
+// with a 100k pull-up (R2) to V+, and ties the chip's EN pin to V+. GPIO0
 // is the I/O-level strap at startup and is left disabled by the driver, so pad 3
 // is not driven by the twin and holding it low is not modeled.
 import type { PowerCtx, TileSim } from '../tileSim';
@@ -159,8 +159,10 @@ function status(s: State): number {
 }
 /** `tile_sense_tof_get_distance_mm`: 0 SATURATES to the mode's max range so
  * `distance < threshold` stays quiet on an empty room. That is the ONLY
- * transformation — no reliability gate (tile_sense_tof.c get_distance_mm). */
+ * transformation — no reliability gate (tile_sense_tof_get_distance_mm). A
+ * tile that is not READY (asleep) reads 0, as the driver returns then. */
 function saturatedDistance(s: State): number {
+  if (s.sleeping === 1) return 0;
   return rawDistance(s) || maxRangeMm(s.distance_mode);
 }
 /** The presence question (is_object_within): a detection and a real target.
@@ -411,13 +413,13 @@ const sim: TileSim<State> = {
         state.result_number,
       ],
     }),
-    // One single-shot measurement; returns 1 once the result interrupt fires
-    // (an error STATUS is still a completed measurement). The real call blocks
+    // One single-shot measurement; returns 1 for a valid result and 0 for an
+    // error STATUS (>= 0x10), as the driver does. The real call blocks
     // ~30-200 ms; the twin answers at once.
     tile_sense_tof_measure_single_flat: ({ state }) => {
       const seq = nextResult(state);
       return {
-        scalar: 1,
+        scalar: status(state) >= 0x10 ? 0 : 1,
         outScalars: {
           mm: rawDistance(state),
           status: status(state),
@@ -446,7 +448,7 @@ const sim: TileSim<State> = {
     }),
     // Raw distance (no saturation) + reliability*100/63, integer.
     tile_sense_tof_read_distance_with_confidence: ({ state }) => ({
-      scalar: 1,
+      scalar: status(state) >= 0x10 ? 0 : 1,
       outScalars: {
         mm: rawDistance(state),
         confidence_pct: confidencePct(rawReliability(state)),
@@ -460,8 +462,9 @@ const sim: TileSim<State> = {
     }),
 
     // ── threshold interrupt ──
-    // The chip accepts any window (low > high just means nothing is reported);
-    // the driver returns whether App0 echoed the command.
+    // The chip accepts any window (low > high just means nothing is reported).
+    // The driver stops ranging, sends the command, waits for it to complete
+    // and restarts; it returns whether the command completed.
     tile_sense_tof_set_threshold_interrupt: ({ args }) => ({
       scalar: 1,
       nextState: {
@@ -612,14 +615,15 @@ const sim: TileSim<State> = {
     };
   },
 
-  // INT (pad 9; active-low on hardware, 1 = asserted here). Persistence 0: a
-  // result interrupt every measurement, object or not. Persistence n: only once
-  // n consecutive results fall inside [low, high], then every in-window period.
+  // INT (pad 9) at its real level: active low, so 0 = asserted, 1 = idle.
+  // Persistence 0: a result interrupt every measurement, object or not.
+  // Persistence n: only once n consecutive results fall inside [low, high],
+  // then every in-window period.
   padOutputs(state) {
-    if (state.sleeping === 1 || state.measuring !== 1) return { '9': 0 };
-    if (state.threshold_persistence === 0) return { '9': 1 };
+    if (state.sleeping === 1 || state.measuring !== 1) return { '9': 1 };
+    if (state.threshold_persistence === 0) return { '9': 0 };
     return {
-      '9': inWindow(state) && state.in_band_streak >= state.threshold_persistence ? 1 : 0,
+      '9': inWindow(state) && state.in_band_streak >= state.threshold_persistence ? 0 : 1,
     };
   },
 

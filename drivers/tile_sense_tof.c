@@ -256,6 +256,14 @@ static void tof_apply_defaults(sense_tof_cfg_t *cfg)
     cfg->threshold  = 6;
 }
 
+/** kIters valid range [10..4000]: the datasheet's "allowed iterations range" (10k-4000k). */
+static uint16_t clamp_kilo_iters(uint16_t k)
+{
+    if (k < 10)   return 10;
+    if (k > 4000) return 4000;
+    return k;
+}
+
 /* ---- Lifecycle ---- */
 
 uint8_t tile_sense_tof_find(tiles_pal_t *hal, uint8_t instance)
@@ -306,7 +314,7 @@ void tile_sense_tof_init(tiles_pal_t *hal, uint8_t instance,
     if (cfg) {
         s->cfg.mode       = cfg->mode;
         s->cfg.period_ms  = cfg->period_ms ? cfg->period_ms : 0x1E;
-        s->cfg.kilo_iters = cfg->kilo_iters ? cfg->kilo_iters : 900;
+        s->cfg.kilo_iters = cfg->kilo_iters ? clamp_kilo_iters(cfg->kilo_iters) : 900;
         s->cfg.threshold  = cfg->threshold ? cfg->threshold : 6;
     } else {
         tof_apply_defaults(&s->cfg);
@@ -480,8 +488,14 @@ uint16_t tile_sense_tof_get_distance_mm(tile_t *tile)
      * reading from 0x1D" rule made the short read return zeros — it does not;
      * the all-zeros bug was init never starting App0. The burst is kept
      * because it matches get_result() and yields reliability for free.) */
+    /* A tile that is not READY, or a read that fails, has no distance: 0, not
+     * the saturated "nothing in range" value, which would look like a valid
+     * reading (a W5 once sat at 2500 this way). */
+    if (tile->state != TILE_STATE_READY) return 0;
     uint8_t buf[7] = {0};
-    tof_read_regs(tile, TMF8806_REG_STATUS, buf, 7);
+    if (tile->hal->i2c_read(tile->hal->handle, tile->id, TMF8806_REG_STATUS,
+                            buf, 7) != 0)
+        return 0;
 
     /* Clear result interrupt */
     tof_write_reg(tile, TMF8806_REG_INT_STATUS, TMF8806_INT_RESULT);
@@ -706,7 +720,7 @@ void tile_sense_tof_set_kilo_iters(tile_t *tile, uint16_t kilo_iters)
     if (was_measuring)
         tile_sense_tof_stop(tile);
 
-    s->cfg.kilo_iters = kilo_iters;
+    s->cfg.kilo_iters = clamp_kilo_iters(kilo_iters);
 
     if (was_measuring)
         tile_sense_tof_start(tile);
@@ -829,6 +843,10 @@ uint8_t tile_sense_tof_set_threshold_interrupt(tile_t *tile,
                                                uint16_t low_mm,
                                                uint16_t high_mm)
 {
+    /* The chip refuses a command while ranging runs (InvalCmd 0x1c), so stop
+     * first and restart afterwards, like the other commands. */
+    uint8_t was_measuring = tof_pause(tile);
+
     /* Per HostDriverCommunication §8.12.1 example:
      *   S 41 W 0b <pers> <low_lo> <low_hi> <high_lo> <high_hi> 08 P
      * 6 bytes starting at 0x0B (cmd_data4), wrapping into 0x10 (CMD). */
@@ -842,10 +860,11 @@ uint8_t tile_sense_tof_set_threshold_interrupt(tile_t *tile,
     };
     tof_write_regs(tile, TMF8806_REG_CMD_DATA4, buf, sizeof(buf));
 
-    /* Wait for PREVIOUS register to echo the command — confirms
-     * App0 has consumed it. */
-    return tof_poll_reg(tile, TMF8806_REG_PREVIOUS,
-                        TMF8806_CMD_WR_ADD_CONFIG, 0xFF, 50);
+    /* Done = COMMAND 0x00 with PREVIOUS 0x08. Checking COMMAND too means a
+     * PREVIOUS left from an earlier call can't pass for this one. */
+    uint8_t ok = tof_wait_cmd_done(tile, TMF8806_CMD_WR_ADD_CONFIG, 50);
+    if (was_measuring) tile_sense_tof_start(tile);
+    return ok;
 }
 
 uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
@@ -856,13 +875,18 @@ uint8_t tile_sense_tof_get_threshold_interrupt(tile_t *tile,
     /* Command 0x09: "persistence, low_threshold and high_threshold are
      * stored in registers 0x20 to 0x24" (datasheet Table 25; the cmd_data
      * registers are write-only). Done = COMMAND 0x00 with PREVIOUS 0x09, so a
-     * PREVIOUS left over from an earlier call can't pass for this one. */
+     * PREVIOUS left over from an earlier call can't pass for this one.
+     * Ranging is stopped first (a command is refused while it runs) and
+     * restarted after the read, as ranging results also land at 0x20. */
+    uint8_t was_measuring = tof_pause(tile);
     tof_write_reg(tile, TMF8806_REG_COMMAND, TMF8806_CMD_RD_ADD_CONFIG);
     if (!tof_wait_cmd_done(tile, TMF8806_CMD_RD_ADD_CONFIG, 50)) {
+        if (was_measuring) tile_sense_tof_start(tile);
         return 0;
     }
     uint8_t buf[5];
     tof_read_regs(tile, TMF8806_REG_FACTORY_CALIB /* 0x20 */, buf, sizeof(buf));
+    if (was_measuring) tile_sense_tof_start(tile);
 
     if (persistence) *persistence = buf[0];
     if (low_mm)      *low_mm  = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);

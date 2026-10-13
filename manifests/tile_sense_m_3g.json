@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@80443b5",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.M.3G",
   "palette": {
     "label": "Sense.M.3G",
@@ -10,7 +10,7 @@
   "driver": {
     "prefix": "tile_sense_m_3g",
     "header": "tile_sense_m_3g.h",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "handle": {
     "type": "tile_t",
@@ -576,7 +576,7 @@
       "symbol": "tile_sense_m_3g_get_raw",
       "header": "tile_sense_m_3g.h",
       "category": "tile",
-      "description": "Read the uncompensated 21-bit signed counts for one axis.",
+      "description": "Read the uncompensated signed counts for one axis: 24-bit signed (the datasheet calls the payload 21-bit).",
       "params": [
         {
           "name": "axis",

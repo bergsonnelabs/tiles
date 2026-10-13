@@ -48,7 +48,7 @@ interface State {
   scan: number; // sense_mic_scan_t (stored; conversion model is single-channel)
   clock: number; // 0 internal, 1 external (stored)
   polarity: number; // 0 unipolar, 1 bipolar (stored; samples modeled unipolar)
-  sleeping: number; // sleep() — resets the config register only; see power()
+  sleeping: number; // sleep(): the chip runs on the VDD reference (internal one off) until wake(); see power()
 
   /** Position in the synthesized sample stream: every conversion advances it,
    * so consecutive reads walk along the waveform. */
@@ -90,17 +90,21 @@ function acPeakMv(s: State): number {
 /** The amp output (= pad 8 and AIN0) at stream position `i`, mV: 48x the REF
  * bias plus the audio, clamped to the rails (AD8605 is rail to rail). */
 function ampOutMv(s: State, i: number): number {
-  const bias = refDriven(s.ref_sel) ? REF_BIAS_MV * AMP_GAIN : 0;
+  const bias = refDriven(chipRef(s)) ? REF_BIAS_MV * AMP_GAIN : 0;
   const ac = acPeakMv(s) * Math.sin((2 * Math.PI * i) / SAMPLES_PER_CYCLE);
   return Math.max(0, Math.min(RAIL_MV, bias + ac));
 }
+
+/** The reference the chip is running on: asleep it is on VDD (sleep() selects
+ * it to turn the internal one off); wake() restores the host's `ref_sel`. */
+const chipRef = (s: State) => (s.sleeping ? 0x00 : s.ref_sel);
 
 /** One conversion: sample `i` of the stream, in counts, with the CHIP's
  * reference; the ADC clips at its full scale. AIN1 is not connected on this
  * tile and reads 0. */
 function sampleAt(s: State, i: number): number {
   if (s.channel !== 0) return 0;
-  return Math.max(0, Math.min(ADC_MAX, Math.floor((ampOutMv(s, i) * 4096) / refMv(s.ref_sel))));
+  return Math.max(0, Math.min(ADC_MAX, Math.floor((ampOutMv(s, i) * 4096) / refMv(chipRef(s)))));
 }
 function samples(s: State, n: number): number[] {
   return Array.from({ length: n }, (_, k) => sampleAt(s, s.sample_idx + k));

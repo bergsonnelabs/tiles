@@ -74,8 +74,9 @@ static uint8_t resolve_id(uint8_t instance)
 #define IQS_STEP_MARGIN_MS     2     /* step_cap(): added to the Active report period */
 #define IQS_STEP_WAIT_MAX_MS   20    /* step_cap() ceiling, whatever the rates */
 
-/* Reset. The datasheet gives no boot time; 100 ms is what v0.x used, the
- * ring waits 150 ms, so wait 100 ms and then poll for the product number. */
+/* Reset. The datasheet gives no boot time. 100 ms is what v0.x used, and
+ * another bench port used 150 ms, so wait 100 ms and then poll for the
+ * product number, up to IQS_BOOT_TIMEOUT_MS. */
 #define IQS_BOOT_MIN_MS        100
 #define IQS_BOOT_TIMEOUT_MS    600
 #define IQS_MCLR_LOW_MS        2     /* >= 250 ns needed (Table 4.2); the tile RC is ~0.5 ms */
@@ -85,7 +86,7 @@ static uint8_t resolve_id(uint8_t instance)
 #define ATI_QUIET_MS           100   /* no bus traffic after queuing */
 #define ATI_POLL_MS            50    /* gap between completion checks */
 #define ATI_ROUND_TIMEOUT_MS   4000
-#define ATI_TP_ROUNDS          3     /* a cold part often needs a second round (ring, 2026-09) */
+#define ATI_TP_ROUNDS          3     /* a cold part often needed a second round on the bench (2026-09) */
 #define ATI_ALP_ROUNDS         2
 
 /* Jobs */
@@ -2128,8 +2129,8 @@ uint8_t tile_sense_cap_find(tiles_pal_t *hal, uint8_t instance)
     uint32_t waited = 0;
     if (!addr || !hal || !hal->i2c_read) return 0;
 
-    /* A bare address probe goes unanswered outside a window (ring bench,
-     * 2026-09), so read the product number, asking for a window whenever
+    /* A bare address probe goes unanswered outside a window (seen on the
+     * bench, 2026-09), so read the product number, asking for a window whenever
      * the chip answers 0xEEEE or does not answer. */
     while (waited < IQS_FIND_TIMEOUT_MS) {
         buf[0] = buf[1] = 0xEE;
@@ -2434,8 +2435,8 @@ uint16_t tile_sense_cap_get_settings_version(tile_t *tile)
 
 /**
  * Show Reset in a data read. If an Ack Reset has ever been seen to clear
- * the flag, it is a real reset. Otherwise (the ack may not take on this
- * silicon, ring NOTES 2026-09-22) check whether our Config Settings
+ * the flag, it is a real reset. Otherwise (on the bench on 2026-09-22 an
+ * Ack Reset did not clear Show Reset on this silicon) check whether our Config Settings
  * survived: a reset returns them to the chip defaults.
  */
 static uint8_t reset_is_real(tile_t *tile, iqs7211a_state_t *s)
@@ -2496,7 +2497,7 @@ sense_cap_result_t tile_sense_cap_process(tile_t *tile)
         uint8_t real = s->ack_verified;
         s->step = 1;
         if (!real && now - s->reset_t >= IQS_RESET_ACK_RETRY_MS) {
-            /* Stale (the ack may not take on this silicon, ring NOTES
+            /* Stale (an Ack Reset did not clear Show Reset on the bench,
              * 2026-09-22): re-ack now and then, and use the data. One
              * slice; an ack that misses its window is retried next time. */
             s->reset_t = now;
