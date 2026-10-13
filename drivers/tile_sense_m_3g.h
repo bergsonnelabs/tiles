@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_m_3g.h
  * @brief  Triaxial geomagnetic magnetometer driver for Sense.M.3G (BMM350).
- * @version 1.1.0
+ * @version 1.1.1
  *
  * Bosch Sensortec BMM350: 3-axis magnetometer, +/-2000 uT range, ODR from
  * 1.5625 Hz to 400 Hz, on-chip magnetic reset, data-ready interrupt, and a
@@ -152,9 +152,11 @@
  * Driver version
  * ================================================================ */
 
+/* v1.1.1: docs only. process() carries the pulsed data-ready caveat;
+ *         get_raw() is 24-bit signed; the sensortime tick is ~39 µs. */
 #define TILE_SENSE_M_3G_VERSION_MAJOR  1
 #define TILE_SENSE_M_3G_VERSION_MINOR  1
-#define TILE_SENSE_M_3G_VERSION_PATCH  0
+#define TILE_SENSE_M_3G_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -398,6 +400,12 @@ uint8_t tile_sense_m_3g_read(tile_t *tile);
  * INT pin is configured), and on a new sample calls read() and fires the
  * callback. Cheap when nothing is ready.
  *
+ * @note  Polled (no INT pin), it goes by data_ready(), and init sets the
+ *        interrupt PULSED: the flag clears itself ~1.25 ms after each
+ *        sample (datasheet §5.5). A loop that waits between calls then
+ *        seldom fires on_data. Call configure_interrupt(tile, 0, 0, 1, 1)
+ *        once to latch the flag until read, or give process() an INT pin.
+ *
  */
 void tile_sense_m_3g_process(tile_t *tile);
 
@@ -483,7 +491,8 @@ uint8_t tile_sense_m_3g_data_ready(tile_t *tile);
 /**
  * @brief  Read the 24-bit sensor-time counter.
  *
- * Ticks at 40 µs resolution and marks when the last sample was generated,
+ * Ticks at ~39 µs (the datasheet says 40 µs; its ODR timing works out to
+ * 39.0625 µs) and marks when the last sample was generated,
  * not when you read it. Only advances in normal mode unless sensor-time
  * always-on is enabled. Wraps at 24 bits without saturating.
  *
@@ -676,7 +685,8 @@ uint8_t tile_sense_m_3g_get_pmu_status(tile_t *tile);
 uint16_t tile_sense_m_3g_get_otp_word(tile_t *tile, uint8_t word);
 
 /**
- * @brief  Read the uncompensated 21-bit signed counts for one axis.
+ * @brief  Read the uncompensated signed counts for one axis: 24-bit
+ *         signed (the datasheet calls the payload 21-bit).
  *
  * Straight from the data registers with no compensation applied — the
  * input to the compensation chain. For debugging only; these are not

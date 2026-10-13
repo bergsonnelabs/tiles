@@ -1458,6 +1458,26 @@ uint8_t tile_sense_i_9_dmp_data_ready(tile_t* tile)
     return (tile_sense_i_9_fifo_count(tile) >= DMP_QUAT9_TOTAL_BYTES) ? 1 : 0;
 }
 
+/* Exact floor(sqrt(v)) for a 64-bit value, bit by bit: 32 rounds of shifts,
+ * adds and compares, no division (so no 64-bit divide helper on a Cortex-M0+).
+ * Used by dmp_read_quat9 to recover q0 from the Q60 radicand. */
+static uint32_t isqrt_u64(uint64_t v)
+{
+    uint64_t res = 0;
+    uint64_t bit = (uint64_t)1 << 62;   /* highest power of 4 in 64 bits */
+    while (bit > v) bit >>= 2;
+    while (bit != 0) {
+        if (v >= res + bit) {
+            v  -= res + bit;
+            res = (res >> 1) + bit;
+        } else {
+            res >>= 1;
+        }
+        bit >>= 2;
+    }
+    return (uint32_t)res;
+}
+
 uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t* out_q,
                                       uint16_t* out_accuracy)
 {
@@ -1511,7 +1531,7 @@ uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t* out_q,
      * 1.0 corresponds to (1<<30). Square-and-sum in Q60 (int64). If the
      * three components are jointly above the unit sphere (rounding
      * noise can put them slightly over) clamp the radicand to 0 so
-     * sqrt doesn't barf. Newton's iteration on int64. */
+     * sqrt doesn't barf. */
     const int64_t one_q30  = (int64_t)1 << 30;
     const int64_t one_q60  = one_q30 * one_q30;
     int64_t q1q1 = (int64_t)q1 * (int64_t)q1;
@@ -1520,24 +1540,8 @@ uint8_t tile_sense_i_9_dmp_read_quat9(tile_t* tile, int32_t* out_q,
     int64_t rad  = one_q60 - q1q1 - q2q2 - q3q3;
     if (rad < 0) rad = 0;
 
-    /* Integer sqrt of `rad` (a non-negative int64). Result fits in
-     * int32 because rad <= 2^60 → sqrt(rad) <= 2^30. */
-    int32_t q0 = 0;
-    if (rad > 0) {
-        /* Initial guess: the high half of `rad` shifted right gives
-         * a sqrt-order approximation; ensures Newton converges fast. */
-        uint64_t r = (uint64_t)rad;
-        uint64_t x = r;
-        /* Bit-tricks initial estimate — start at `r >> 1` clamped above 1. */
-        if (x > 1) x >>= 1;
-        for (uint8_t i = 0; i < 24; i++) {
-            uint64_t y = (x + r / x) >> 1;
-            if (y >= x) break;
-            x = y;
-        }
-        if (x > (uint64_t)0x7FFFFFFFU) x = 0x7FFFFFFFU;
-        q0 = (int32_t)x;
-    }
+    /* q0 = floor(sqrt(rad)), exact. rad <= 2^60, so q0 <= 2^30 fits int32. */
+    int32_t q0 = (int32_t)isqrt_u64((uint64_t)rad);
 
     out_q[0] = q0;
     out_q[1] = q1;

@@ -1,7 +1,7 @@
 /**
  * @file   tile_display_rgbw.h
  * @brief  RGBW LED driver for the Display.RGBW tile (LP5811).
- * @version 2.5.0
+ * @version 2.5.1
  *
  * 4-channel LED driver with independent PWM + current control.
  * Channels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives
@@ -18,6 +18,14 @@
  * @endcode
  *
  * Version history:
+ *   v2.5.1 — breathe_auto() honors `repeats`: it set the AEU's own playback
+ *            to 3, which is infinite, so the pattern count never completed
+ *            and every breathe ran forever. It now plays `repeats` breaths
+ *            (15 = forever). Not bench-verified.
+ *   v2.5.0 — Blue and white were swapped (OUT1 drives white, OUT3 blue,
+ *            confirmed on the board 2026-09-24). init() also sets the
+ *            Auto_DC registers, which reset to 0, so AEU animations
+ *            (breathe_auto etc.) no longer run dark.
  *   v2.4.1 — Documentation only, no behavior change. init()'s own doc
  *            block still claimed "current limits to 50%" after v2.4.0
  *            changed it to ~1 mA; @version had been stale at 2.1.0
@@ -79,7 +87,7 @@
 
 #define TILE_DISP_RGBW_VERSION_MAJOR  2
 #define TILE_DISP_RGBW_VERSION_MINOR  5
-#define TILE_DISP_RGBW_VERSION_PATCH  0
+#define TILE_DISP_RGBW_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -713,7 +721,7 @@ void tile_display_rgbw_animate_continue(tile_t *tile);
  * @param  channel    0-3 (R, W, G, B).
  * @param  peak       Peak brightness 0-255.
  * @param  period_ms  Full breathe period (up+down) in ms.
- * @param  repeats    Whole-pattern repeat: 0-14, 15 = infinite.
+ * @param  repeats    Number of breaths: 1-14, 15 = forever (0 plays none).
  */
 void tile_display_rgbw_breathe_auto(tile_t *tile, uint8_t channel, uint8_t peak,
                                     uint16_t period_ms, uint8_t repeats);

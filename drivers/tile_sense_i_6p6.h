@@ -2,7 +2,7 @@
  * @file   tile_sense_i_6p6.h
  * @brief  Complete driver for the Sense.I.6P6 tile (ICM-42686-P).
  *         Supports I2C, I3C (Core.ST.H5) and SPI bus access via tiles_pal_t.
- * @version 1.4.0
+ * @version 1.5.0
  *
  * 1.4.0: I3C (Core.ST.H5) through the core_tiles_pal I3C bridge; on I2C the
  * datasheet's I2C driver setting (I3C slave off, so the chip's I2C glitch
@@ -64,9 +64,9 @@
  * @studio tile label=Sense.I.6P6 icon=triad
  * @studio event name=data_ready mask=ICM42686P_INT_DATA_RDY
  * @studio event name=fifo_watermark mask=ICM42686P_INT_FIFO_THS
- * @studio event name=tilt mask=ICM42686P_INT_STATUS3_TILT_DET
- * @studio event name=tap mask=ICM42686P_INT_STATUS3_TAP_DET payload=count:int,axis:int,direction:int read=tile_sense_i_6p6_get_tap_result read_type=sense_i_6p6_tap_result_t
- * @studio event name=wake_on_motion mask=ICM42686P_INT_STATUS2_WOM_ANY
+ * @studio event name=tilt mask=SENSE_I_6P6_EV_TILT
+ * @studio event name=tap mask=SENSE_I_6P6_EV_TAP payload=count:int,axis:int,direction:int read=tile_sense_i_6p6_get_tap_result read_type=sense_i_6p6_tap_result_t
+ * @studio event name=wake_on_motion mask=SENSE_I_6P6_EV_WOM
  *
  * Unsupported capabilities (gating noted per item — a HARDWARE gap means the
  * chip can do it but the tile doesn't wire the pin out, NOT a driver omission):
@@ -123,8 +123,12 @@
  * Driver version
  * ================================================================ */
 
+/* v1.5.0: process() hands the callback a composed event word (SENSE_I_6P6_EV_*)
+ *         built from INT_STATUS, INT_STATUS2 and INT_STATUS3, so tilt, tap
+ *         and wake_on_motion fire on their own bits (before, tilt fired on
+ *         every sample and the three real events never fired). */
 #define TILE_SENSE_I_6P6_VERSION_MAJOR  1
-#define TILE_SENSE_I_6P6_VERSION_MINOR  4
+#define TILE_SENSE_I_6P6_VERSION_MINOR  5
 #define TILE_SENSE_I_6P6_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -329,6 +333,24 @@ TILES_CHECK_VERSION(1, 0);
 #define ICM42686P_INT_STATUS3_STEP_CNT_OVF (1 << 4) /**< Step count wrapped past 65535 */
 #define ICM42686P_INT_STATUS3_TILT_DET    (1 << 3)  /**< Tilt detected */
 #define ICM42686P_INT_STATUS3_TAP_DET     (1 << 0)  /**< Tap detected */
+
+/* ================================================================
+ * Event word (the `events` argument of the process() callback)
+ *
+ * One byte composed from three clear-on-read status registers
+ * (DS-000639 §14.21, §14.31, §14.32). The INT_STATUS bits keep their
+ * register positions (bits 1-3); the rest are moved to free bits.
+ * Not reported: AGC_RDY, RESET_DONE, PLL_RDY, UI_FSYNC and STEP_CNT_OVF.
+ * ================================================================ */
+
+#define SENSE_I_6P6_EV_TAP        (1 << 0)  /**< INT_STATUS3 TAP_DET_INT */
+#define SENSE_I_6P6_EV_FIFO_FULL  ICM42686P_INT_FIFO_FULL  /**< INT_STATUS FIFO_FULL_INT (bit 1) */
+#define SENSE_I_6P6_EV_FIFO_THS   ICM42686P_INT_FIFO_THS   /**< INT_STATUS FIFO_THS_INT (bit 2) */
+#define SENSE_I_6P6_EV_DATA_RDY   ICM42686P_INT_DATA_RDY   /**< INT_STATUS DATA_RDY_INT (bit 3) */
+#define SENSE_I_6P6_EV_WOM        (1 << 4)  /**< INT_STATUS2 WOM_X/Y/Z_INT, any axis */
+#define SENSE_I_6P6_EV_TILT       (1 << 5)  /**< INT_STATUS3 TILT_DET_INT */
+#define SENSE_I_6P6_EV_SMD        (1 << 6)  /**< INT_STATUS2 SMD_INT */
+#define SENSE_I_6P6_EV_STEP       (1 << 7)  /**< INT_STATUS3 STEP_DET_INT */
 
 /* ================================================================
  * SIGNAL_PATH_RESET bits
@@ -557,8 +579,10 @@ typedef struct {
 
 /**
  * Event callback fired by tile_sense_i_6p6_process() when an interrupt
- * event is detected. The events parameter is a bitmask of INT_STATUS
- * register bits (DATA_RDY, FIFO_THS, FIFO_FULL, etc.).
+ * event is detected. `events` is the composed event word: test it with the
+ * SENSE_I_6P6_EV_* masks (DATA_RDY, FIFO_THS and FIFO_FULL keep their
+ * INT_STATUS positions, so the ICM42686P_INT_* masks still work for those
+ * three).
  *
  * Always runs in main-loop context (never ISR). I2C is safe to call.
  */
@@ -577,15 +601,18 @@ typedef struct {
      * INT2 (tile pad 8): secondary interrupt output.
      * Set to 0 for polled mode (no interrupt wiring needed). */
     uint8_t int1_pin;             /**< Core pad number for INT1. 0 = polled. */
-    uint8_t int2_pin;             /**< Core pad number for INT2. 0 = unused. */
+    uint8_t int2_pin;             /**< Reserved: stored but not used (INT2 is not wired up by the driver). */
 
     /* Event callback — fired by process() when interrupt events are detected */
     sense_i_6p6_event_cb_t on_event;  /**< Callback. NULL = no callback. */
     void *event_ctx;              /**< User context passed to callback. */
 
-    /* Initial sensor config (0 = use defaults: ±8g, ±1000dps, 100Hz) */
-    uint8_t accel_range;          /**< sense_i_6p6_accel_range_t. 0 = default. */
-    uint8_t gyro_range;           /**< sense_i_6p6_gyro_range_t. 0 = default. */
+    /* Initial sensor config (0 = use defaults: ±8g, ±1000dps, 100Hz).
+     * SENSE_I_6P6_ACCEL_32G and SENSE_I_6P6_GYRO_4000DPS are code 0, so they
+     * also mean "default" here: for ±32 g or ±4000 dps call
+     * set_accel_range() / set_gyro_range() after init. */
+    uint8_t accel_range;          /**< sense_i_6p6_accel_range_t. 0 = default (±8 g; ±32 g unreachable here). */
+    uint8_t gyro_range;           /**< sense_i_6p6_gyro_range_t. 0 = default (±1000 dps; ±4000 dps unreachable here). */
     uint8_t odr;                  /**< sense_i_6p6_odr_t. 0 = default (100Hz). */
 } sense_i_6p6_cfg_t;
 
@@ -619,9 +646,15 @@ void tile_sense_i_6p6_init(tiles_pal_t *hal, uint8_t instance,
 /**
  * @brief  Process pending interrupt events. Call from your main loop.
  *
- * In interrupt mode: returns immediately if no INT1 interrupt fired;
- * reads INT_STATUS and fires callback only when events are pending.
- * In polled mode: reads INT_STATUS every call, fires callback if set.
+ * Reads INT_STATUS, INT_STATUS2 and INT_STATUS3, composes the event word
+ * (SENSE_I_6P6_EV_*) and fires the callback when it is non-zero.
+ * In interrupt mode: returns immediately if no INT1 interrupt fired.
+ * In polled mode: reads the three registers every call.
+ *
+ * All three registers clear on read, so process() consumes the WOM, SMD,
+ * step, tilt and tap flags. Don't mix it with get_int_status2(),
+ * get_int_status3(), wait_for_tap() or wait_for_motion(): whichever reads
+ * first takes the flag.
  *
  * @studio expose category=tile name=process section=events
  */
@@ -666,6 +699,7 @@ void tile_sense_i_6p6_reset(tile_t *tile);
  *
  * @studio expose category=tile name=set_accel_range section=runtime
  * @studio control range label="Accel range" tier=basic default=SENSE_I_6P6_ACCEL_8G when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
+ * @param  range  Full-scale range (sense_i_6p6_accel_range_t).
  */
 void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t range);
 
@@ -674,6 +708,7 @@ void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t ra
  *
  * @studio expose category=tile name=set_gyro_range section=runtime
  * @studio control range label="Gyro range" tier=basic default=SENSE_I_6P6_GYRO_1000DPS when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
+ * @param  range  Full-scale range (sense_i_6p6_gyro_range_t).
  */
 void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t range);
 
@@ -684,6 +719,7 @@ void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t rang
  * @studio control odr label="Accel data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  * @studio require expr="value(odr) >= 12.5" when="set_power_mode.accel == SENSE_I_6P6_MODE_LN" message="Below 12.5 Hz the accelerometer only runs in low-power mode. Switch the accel power mode to low-power first."
  * @studio require expr="value(odr) <= 500" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accelerometer tops out at 500 Hz. Switch the accel power mode to low-noise for faster rates."
+ * @param  odr  Output data rate (sense_i_6p6_odr_t).
  */
 void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr);
 
@@ -692,6 +728,7 @@ void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr);
  *
  * @studio expose category=tile name=set_gyro_odr section=runtime
  * @studio control odr label="Gyro data rate" tier=basic default=SENSE_I_6P6_ODR_100HZ role=sample_rate allow=SENSE_I_6P6_ODR_32KHZ,SENSE_I_6P6_ODR_16KHZ,SENSE_I_6P6_ODR_8KHZ,SENSE_I_6P6_ODR_4KHZ,SENSE_I_6P6_ODR_2KHZ,SENSE_I_6P6_ODR_1KHZ,SENSE_I_6P6_ODR_500HZ,SENSE_I_6P6_ODR_200HZ,SENSE_I_6P6_ODR_100HZ,SENSE_I_6P6_ODR_50HZ,SENSE_I_6P6_ODR_25HZ,SENSE_I_6P6_ODR_12_5HZ when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
+ * @param  odr  Output data rate (sense_i_6p6_odr_t).
  */
 void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr);
 
@@ -702,6 +739,8 @@ void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr);
  * @studio control accel label="Accel power mode" tier=advanced default=SENSE_I_6P6_MODE_LN allow=SENSE_I_6P6_MODE_OFF,SENSE_I_6P6_MODE_LP,SENSE_I_6P6_MODE_LN
  * @studio control gyro label="Gyro power mode" tier=advanced default=SENSE_I_6P6_MODE_LN allow=SENSE_I_6P6_MODE_OFF,SENSE_I_6P6_MODE_STANDBY,SENSE_I_6P6_MODE_LN
  * @note   Wait 200 µs after changing mode before accessing other registers.
+ * @param  accel  Accel power mode (off, low-power or low-noise).
+ * @param  gyro   Gyro power mode (off, standby or low-noise).
  */
 void tile_sense_i_6p6_set_power_mode(tile_t *tile,
                                       sense_i_6p6_power_mode_t accel,
@@ -714,6 +753,8 @@ void tile_sense_i_6p6_set_power_mode(tile_t *tile,
  * @studio control accel_bw label="Accel filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="accel_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_accel_odr.odr) / 2 : max(400, value(set_accel_odr.odr)) / value(accel_bw)" unit=Hz when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  * @studio require expr="accel_bw == SENSE_I_6P6_FILT_BW_ODR_4 || accel_bw == SENSE_I_6P6_FILT_BW_ODR_20" when="set_power_mode.accel == SENSE_I_6P6_MODE_LP" message="In low-power mode the accel filter averages instead of low-passing: only the /4 setting (1x averaging) and the /20 setting (16x averaging) are valid."
  * @studio control gyro_bw label="Gyro filter bandwidth" tier=advanced default=SENSE_I_6P6_FILT_BW_ODR_4 allow=SENSE_I_6P6_FILT_BW_ODR_2,SENSE_I_6P6_FILT_BW_ODR_4,SENSE_I_6P6_FILT_BW_ODR_5,SENSE_I_6P6_FILT_BW_ODR_8,SENSE_I_6P6_FILT_BW_ODR_10,SENSE_I_6P6_FILT_BW_ODR_16,SENSE_I_6P6_FILT_BW_ODR_20,SENSE_I_6P6_FILT_BW_ODR_40 show="gyro_bw == SENSE_I_6P6_FILT_BW_ODR_2 ? value(set_gyro_odr.odr) / 2 : max(400, value(set_gyro_odr.odr)) / value(gyro_bw)" unit=Hz when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
+ * @param  accel_bw  Accel UI filter bandwidth.
+ * @param  gyro_bw   Gyro UI filter bandwidth.
  */
 void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
                                      sense_i_6p6_filter_bw_t accel_bw,
@@ -725,6 +766,8 @@ void tile_sense_i_6p6_set_filter_bw(tile_t *tile,
  * @studio expose category=tile name=set_filter_order section=config
  * @studio control accel_order label="Accel filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND when="set_power_mode.accel != SENSE_I_6P6_MODE_OFF"
  * @studio control gyro_order label="Gyro filter order" tier=advanced default=SENSE_I_6P6_FILT_ORDER_2ND when="set_power_mode.gyro != SENSE_I_6P6_MODE_OFF"
+ * @param  accel_order  Accel UI filter order.
+ * @param  gyro_order   Gyro UI filter order.
  */
 void tile_sense_i_6p6_set_filter_order(tile_t *tile,
                                         sense_i_6p6_filter_order_t accel_order,
@@ -735,6 +778,7 @@ void tile_sense_i_6p6_set_filter_order(tile_t *tile,
  *
  * @studio expose category=tile name=set_temp_filter section=config
  * @studio control bw label="Temperature filter" tier=advanced default=SENSE_I_6P6_TEMP_FILT_4000HZ when="set_temp_enabled.enabled == 1"
+ * @param  bw  Temperature filter bandwidth.
  */
 void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw);
 
@@ -763,6 +807,7 @@ uint8_t tile_sense_i_6p6_data_ready(tile_t *tile);
  *
  * @studio expose category=tile name=get_raw_accels returns=int[3] section=runtime
  * @studio out_buffer buffer type=int16_t length=3
+ * @param  buffer  Output: 3 raw accel counts [X, Y, Z].
  */
 void tile_sense_i_6p6_get_raw_accels(tile_t *tile, int16_t *buffer);
 
@@ -771,6 +816,7 @@ void tile_sense_i_6p6_get_raw_accels(tile_t *tile, int16_t *buffer);
  *
  * @studio expose category=tile name=get_raw_gyros returns=int[3] section=runtime
  * @studio out_buffer buffer type=int16_t length=3
+ * @param  buffer  Output: 3 raw gyro counts [X, Y, Z].
  */
 void tile_sense_i_6p6_get_raw_gyros(tile_t *tile, int16_t *buffer);
 
@@ -779,6 +825,7 @@ void tile_sense_i_6p6_get_raw_gyros(tile_t *tile, int16_t *buffer);
  *
  * @studio expose category=tile name=get_raw_6dof returns=int[6] section=runtime
  * @studio out_buffer buffer type=int16_t length=6
+ * @param  buffer  Output: 6 raw counts [AX, AY, AZ, GX, GY, GZ].
  */
 void tile_sense_i_6p6_get_raw_6dof(tile_t *tile, int16_t *buffer);
 
@@ -794,6 +841,7 @@ int16_t tile_sense_i_6p6_get_temperature(tile_t *tile);
  *
  * @studio expose category=tile name=get_raw_all returns=int[7] section=runtime
  * @studio out_buffer buffer type=int16_t length=7
+ * @param  buffer  Output: 7 raw counts [Temp, AX, AY, AZ, GX, GY, GZ].
  */
 void tile_sense_i_6p6_get_raw_all(tile_t *tile, int16_t *buffer);
 
@@ -867,7 +915,6 @@ uint8_t tile_sense_i_6p6_read_tilt_centi_degrees(tile_t *tile,
  *
  * @studio expose category=tile name=read_tilt_centi_degrees returns=bool section=runtime
  * @studio out_scalar out_centi_deg type=int32_t
- * @param  tile           Initialised tile handle.
  * @param  axis           [0..2] 0 = X, 1 = Y, 2 = Z.
  * @param  out_centi_deg  Output: elevation of the axis in 0.01° (−9000..+9000).
  * @return 1 on success, 0 on bad axis or zero vector.
@@ -917,7 +964,13 @@ uint8_t tile_sense_i_6p6_wait_for_motion(tile_t *tile, uint32_t timeout_ms);
  * @param  accel      Include accel data in FIFO packets
  * @param  gyro       Include gyro data in FIFO packets
  * @param  temp       Include temperature in FIFO packets
- * @param  hires      Enable 20-bit high-resolution mode (forces ±32g/±4000dps)
+ * @param  hires      Reserved, ignored. 20-bit packets are not supported (see
+ *                    the "FIFO 20-bit hi-res mode" gap); FIFO_HIRES_EN stays 0.
+ *
+ * Accel and gyro are enabled together: if either is requested, both go in,
+ * so every packet is the 16-byte accel + gyro + temp + timestamp format that
+ * fifo_read_packet() parses (an accel-only or gyro-only stream would be
+ * 8-byte packets, DS-000639 §6.4). Both 0 stops FIFO writes.
  */
 void tile_sense_i_6p6_fifo_config(tile_t *tile, sense_i_6p6_fifo_mode_t mode,
                                    uint8_t accel, uint8_t gyro,
@@ -962,7 +1015,6 @@ uint8_t tile_sense_i_6p6_fifo_read_packet(tile_t *tile, sense_i_6p6_fifo_packet_
  * @studio expose category=tile name=fifo_read_packet returns=int[8] section=fifo
  * @studio out_buffer out type=int32_t length=8
  *
- * @param  tile  Initialised tile handle.
  * @param  out   Output buffer (8 int32_t slots).
  */
 void tile_sense_i_6p6_fifo_read_packet_flat(tile_t *tile, int32_t *out);
@@ -992,7 +1044,6 @@ uint16_t tile_sense_i_6p6_fifo_read_packets(tile_t *tile,
  * @studio expose category=tile name=fifo_read_packets returns=int section=fifo
  * @studio out_buffer out type=int32_t cap_param=cap_ints
  *
- * @param  tile      Initialised tile handle.
  * @param  out       Output buffer; must be sized N × 8 ints.
  * @param  cap_ints  Buffer capacity in int slots (= packets × 8).
  * @return Number of packets actually drained from the FIFO.
@@ -1105,7 +1156,6 @@ typedef enum {
  * INT_CONFIG1 bit 6). Only affects pulse-mode interrupts; in latched
  * mode the line stays asserted until the status register is read.
  *
- * @param  tile   Initialised tile handle
  * @param  pulse  Pulse-width selector
  */
 void tile_sense_i_6p6_set_int_pulse_duration(tile_t *tile,
@@ -1133,7 +1183,6 @@ typedef enum {
  *   - TEMP: does nothing. SIGNAL_PATH_RESET has no temperature bit on
  *           this part; kept only for source compatibility.
  *
- * @param  tile   Initialised tile handle
  * @param  which  Subsystem to reset
  */
 void tile_sense_i_6p6_subsystem_reset(tile_t *tile,
@@ -1211,6 +1260,7 @@ void tile_sense_i_6p6_wom_disable(tile_t *tile);
  *
  * @studio expose category=tile name=smd_config section=smd
  * @studio control mode label="Significant motion" tier=advanced default=SENSE_I_6P6_SMD_DISABLED scope=usage
+ * @param  mode  SMD mode (sense_i_6p6_smd_mode_t); disabled turns it off.
  */
 void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode);
 
@@ -1252,7 +1302,9 @@ uint16_t tile_sense_i_6p6_get_step_count(tile_t *tile);
  * @brief  Read the step cadence.
  *
  * @studio expose category=tile name=get_step_cadence returns=int section=pedometer
- * @return Steps per second in u6.2 fixed-point (divide by 4.0 for float)
+ * @return Cadence in samples per step, u6.2 fixed point (divide by 4 for
+ *         samples; DS-000639 §14.27). At 50 Hz ODR and 2 steps/s it reads
+ *         100 (25 samples). Steps per second = ODR × 4 / value.
  */
 uint8_t tile_sense_i_6p6_get_step_cadence(tile_t *tile);
 
@@ -1335,7 +1387,6 @@ void tile_sense_i_6p6_get_tap_result(tile_t *tile, sense_i_6p6_tap_result_t *res
  * @studio out_scalar direction type=int32_t
  * @studio out_scalar timing type=int32_t
  *
- * @param  tile       Initialised tile handle.
  * @param  count      Output: 0 = none, 1 = single tap, 2 = double.
  * @param  axis       Output: 0 = X, 1 = Y, 2 = Z.
  * @param  direction  Output: 0 = positive, 1 = negative.
@@ -1355,9 +1406,9 @@ void tile_sense_i_6p6_get_tap_result_flat(tile_t *tile,
  * @brief  Set user-programmable gyro offset.
  *
  * @studio expose category=tile name=set_gyro_offset section=advanced
- * @param  x_dps  X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)
- * @param  y_dps  Y offset
- * @param  z_dps  Z offset
+ * @param  x_dps16  X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)
+ * @param  y_dps16  Y offset in dps × 16
+ * @param  z_dps16  Z offset in dps × 16
  */
 void tile_sense_i_6p6_set_gyro_offset(tile_t *tile,
                                        int16_t x_dps16, int16_t y_dps16, int16_t z_dps16);
@@ -1376,7 +1427,10 @@ void tile_sense_i_6p6_set_accel_offset(tile_t *tile,
 /**
  * @brief  Perform self-test.
  *
- * Runs the built-in self-test for both accel and gyro.
+ * Runs the built-in self-test for both accel and gyro. Switches to ±4 g,
+ * ±250 dps, 1 kHz and low-noise for the test (~0.6 s), then restores the
+ * previous ranges, data rates and power mode. Returns 0 (both outputs 0) if
+ * the sensor stops reporting data-ready for 20 ms.
  *
  * @studio expose category=tile name=self_test returns=bool section=advanced
  * @studio out_scalar accel_pass type=uint8_t

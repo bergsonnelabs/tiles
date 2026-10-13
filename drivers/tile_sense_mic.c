@@ -39,6 +39,7 @@ typedef struct {
     uint8_t  clock_sel;     /* Cached clock selection (sense_mic_clock_t) */
     uint8_t  polarity_sel;  /* Cached output coding (sense_mic_polarity_t) */
     uint16_t vref_mv;       /* Reference voltage in mV (for conversions) */
+    uint16_t user_vref_mv;  /* cfg->vref_mv from init (0 = auto), kept for set_reference() */
     uint16_t dc_offset;     /* Measured DC bias point (auto-calibrated at init) */
 } mic_state_t;
 
@@ -195,7 +196,8 @@ void tile_sense_mic_init(tiles_pal_t *hal, uint8_t instance,
     s->polarity_sel = polarity;
     s->setup_byte   = build_setup(ref_sel, clock, polarity);
     s->config_byte  = build_config(scan, channel);
-    s->vref_mv      = resolve_vref(ref_sel, cfg ? cfg->vref_mv : 0);
+    s->user_vref_mv = cfg ? cfg->vref_mv : 0;
+    s->vref_mv      = resolve_vref(ref_sel, s->user_vref_mv);
 
     /* Send setup byte — configures Vref, clock, polarity */
     mic_write_cmd(tile, s->setup_byte);
@@ -281,7 +283,7 @@ void tile_sense_mic_set_reference(tile_t *tile, sense_mic_ref_t ref)
     /* Rebuild setup byte with new reference, preserving clock + polarity */
     s->ref_sel    = (uint8_t)ref;
     s->setup_byte = build_setup((uint8_t)ref, s->clock_sel, s->polarity_sel);
-    s->vref_mv    = resolve_vref((uint8_t)ref, 0);
+    s->vref_mv    = resolve_vref((uint8_t)ref, s->user_vref_mv);  /* keep init's override */
 
     mic_write_cmd(tile, s->setup_byte);
     /* The internal reference takes 10 ms to wake; VDD needs nothing. */
@@ -505,6 +507,11 @@ uint16_t tile_sense_mic_amplitude_mv(tile_t *tile, uint16_t pp_raw)
 
 /* SPL polling interval used by wait_for_sound / detect_clap. */
 #define MIC_TIER2_POLL_MS  5
+/* read_spl_db() itself takes ~5 ms (64 samples at ~12.5 ksps), so one
+ * poll of wait_for_sound() / detect_clap() lasts ~10 ms. Timeouts and the
+ * clap windows count both, so they run at their documented lengths. */
+#define MIC_SPL_CAPTURE_MS 5
+#define MIC_TIER2_STEP_MS  (MIC_TIER2_POLL_MS + MIC_SPL_CAPTURE_MS)
 
 /* 94 dB − 20·log10(12.59 mV/Pa) − 20·log10(24), in 0.1 dB: the mV→SPL
  * offset for this chain. */
@@ -589,7 +596,7 @@ uint8_t tile_sense_mic_wait_for_sound(tile_t *tile, int16_t threshold_db,
         int16_t spl = tile_sense_mic_read_spl_db(tile);
         if (spl > threshold_db) return 1;
         tile->hal->delay_ms(MIC_TIER2_POLL_MS);
-        elapsed += MIC_TIER2_POLL_MS;
+        elapsed += MIC_TIER2_STEP_MS;
     }
     return 0;
 }
@@ -612,7 +619,8 @@ uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)
      *   pre-quiet:   >= 100  (need a calm baseline)
      *   gap:         50..500 (between peaks)
      *   post-quiet:  >= 100
-     *   peak width:  any single sample crossing
+     *   peak width:  first peak up to 100 ms; the second must be
+     *                followed straight away by quiet
      */
     const int16_t peak_thr  = 700;
     const int16_t quiet_thr = 500;
@@ -637,7 +645,7 @@ uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)
         switch (st) {
             case 0:
                 if (spl < quiet_thr) {
-                    state_ms += MIC_TIER2_POLL_MS;
+                    state_ms += MIC_TIER2_STEP_MS;
                     if (state_ms >= pre_quiet_ms) { st = 1; state_ms = 0; }
                 } else {
                     state_ms = 0;  /* not quiet — restart */
@@ -647,12 +655,12 @@ uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)
                 if (spl > peak_thr) { st = 2; state_ms = 0; }
                 break;
             case 2:
-                if (spl < quiet_thr) { st = 3; state_ms = MIC_TIER2_POLL_MS; }
-                else { state_ms += MIC_TIER2_POLL_MS;
+                if (spl < quiet_thr) { st = 3; state_ms = MIC_TIER2_STEP_MS; }
+                else { state_ms += MIC_TIER2_STEP_MS;
                        if (state_ms > 100) { st = 1; state_ms = 0; } /* peak too long */ }
                 break;
             case 3:
-                state_ms += MIC_TIER2_POLL_MS;
+                state_ms += MIC_TIER2_STEP_MS;
                 if (spl > peak_thr) {
                     if (state_ms >= gap_min_ms && state_ms <= gap_max_ms) {
                         st = 4; state_ms = 0;
@@ -667,7 +675,7 @@ uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)
                 break;
             case 4:
                 if (spl < quiet_thr) {
-                    state_ms += MIC_TIER2_POLL_MS;
+                    state_ms += MIC_TIER2_STEP_MS;
                     if (state_ms >= post_quiet_ms) return 1;  /* clap! */
                 } else {
                     /* second peak echoed by more sound — not a clean clap. */
@@ -679,7 +687,7 @@ uint8_t tile_sense_mic_detect_clap(tile_t *tile, uint32_t timeout_ms)
                 break;
         }
         tile->hal->delay_ms(MIC_TIER2_POLL_MS);
-        elapsed += MIC_TIER2_POLL_MS;
+        elapsed += MIC_TIER2_STEP_MS;
     }
     return 0;
 }

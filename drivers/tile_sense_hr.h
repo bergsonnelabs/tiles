@@ -73,6 +73,13 @@
  * @studio event name=exposure_overflow mask=MAX86174A_STATUS1_EXP_OVF
  * @studio event name=proximity mask=MAX86174A_STATUS1_THRESH1_HILO
  *
+ * @studio usage
+ *   Call auto_gain() and then start() once when the program begins: init
+ *   configures the sensor but leaves measurements stopped, so read_ppg()
+ *   and the other readings return nothing new until start(). The events
+ *   need process() on every pass of the main loop (Studio's event loop
+ *   does this for you).
+ *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
  * @studio unsupported severity=advanced category="SPI bus mode"
@@ -134,9 +141,12 @@
 
 /* ---- Driver version ---- */
 
+/* v1.0.1: docs only. @studio usage (auto_gain + start at program start);
+ *         auto_gain() restarts running measurements; set_slot() keeps the
+ *         slot's own settings. */
 #define TILE_SENSE_HR_VERSION_MAJOR  1
 #define TILE_SENSE_HR_VERSION_MINOR  0
-#define TILE_SENSE_HR_VERSION_PATCH  0
+#define TILE_SENSE_HR_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -486,9 +496,11 @@ uint16_t tile_sense_hr_get_frame_rate(tile_t *tile);
 /**
  * @brief  Configure and enable a measurement slot with one emitter.
  *
- * Writes the slot's emitter select and LED current, inherits the
- * tile-wide integration / averaging / ADC range / photodiode routing,
- * and enables the slot in SYS_CFG2. Takes effect on the next start()
+ * Writes the slot's emitter select and LED current, keeps the slot's
+ * current integration / averaging / ADC range / photodiode routing
+ * (init() sets every slot to the tile-wide defaults; an earlier
+ * set_integration() or auto_gain() on the slot persists), and enables
+ * the slot in SYS_CFG2. Takes effect on the next start()
  * (or immediately if already running). Slot 0 is the one init() set up.
  *
  * @studio expose category=tile name=set_slot section=config
@@ -622,8 +634,9 @@ void tile_sense_hr_set_ppg2_enabled(tile_t *tile, uint8_t enable);
  *     the residual under ~70 % of full scale;
  *  3. verifies, and unwinds one step at a time if that overflowed.
  *
- * Other slots' enables are restored on return; measurements are left
- * stopped. Call tile_sense_hr_start() afterwards. Re-run whenever the
+ * Other slots' enables are restored on return. Measurements are
+ * restarted if they were running, otherwise left stopped (call
+ * tile_sense_hr_start() afterwards). Re-run whenever the
  * optical situation changes (finger placed or removed).
  *
  * @studio expose category=tile name=auto_gain returns=bool section=runtime

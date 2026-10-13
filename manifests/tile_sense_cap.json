@@ -1,15 +1,16 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@58298c3",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.CAP",
   "palette": {
     "label": "Sense.CAP",
     "icon": "⬚"
   },
+  "usage": "Call set_layout() once when the program begins (init leaves the surface at NONE, so nothing is sensed), and process() on every pass of the main loop (Studio's event loop does this for you). process() finishes the layout and its ATI, then refreshes the finger and touch getters and raises the events; without it the getters never change.",
   "driver": {
     "prefix": "tile_sense_cap",
     "header": "tile_sense_cap.h",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "handle": {
     "type": "tile_t",

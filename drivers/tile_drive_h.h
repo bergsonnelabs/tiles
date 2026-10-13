@@ -80,9 +80,12 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v4.4.1: is_calibrated() reports the last calibrate() result (it always
+ *         returned 1, as DIAG_RESULT clears on read); calibrate() keeps the
+ *         BEMF gain it finds; play() repeats wait for each effect to end. */
 #define TILE_DRIVE_H_VERSION_MAJOR  4
 #define TILE_DRIVE_H_VERSION_MINOR  4
-#define TILE_DRIVE_H_VERSION_PATCH  0
+#define TILE_DRIVE_H_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -341,8 +344,13 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
  * @brief  Play a waveform effect from the built-in library.
  *
  * Loads the effect index into sequence slot 0, terminates
- * the sequence, and triggers playback. For repeats > 1,
- * re-triggers with a 200ms gap between plays.
+ * the sequence, and triggers playback. For repeats > 1, waits
+ * for each play to finish (GO self-clears), leaves a 200 ms gap,
+ * then triggers again.
+ *
+ * @note  Blocks for (repeats - 1) × (effect length + 200 ms); the
+ *        last play runs on after the call returns. repeats = 1
+ *        does not block.
  *
  * @studio expose category=tile name=play section=runtime
  * @param  index    [1..123] Library effect index (see datasheet).
@@ -717,9 +725,14 @@ void tile_drive_h_pwm_input_start(tile_t* tile);
 /**
  * @brief  Drive the actuator from an analog voltage on pad 2 (TRIG).
  *
- * Sets MODE=3 with N_PWM_ANALOG=1. Reference voltage is 1.8 V:
- * 0 V → 0 % drive, 0.9 V → 50 %, 1.8 V → 100 %. Useful for waveform
- * synthesis from a DAC or analog signal source.
+ * Sets MODE=3 with N_PWM_ANALOG=1. The 1.8 V reference makes the input
+ * percentage: 0 V = 0 %, 0.9 V = 50 %, 1.8 V = 100 %. init() leaves the
+ * engine in bidirectional mode (CONTROL2 BIDIR_INPUT = 1), as for PWM:
+ * 50 % input (0.9 V) is zero drive, 100 % is full drive (RATED_VOLTAGE),
+ * and anything below 50 % also gives zero drive (SLOS825E 7.5.8.1.3). Call
+ * tile_drive_h_set_rtp_format() first for the unidirectional mapping
+ * (0 V = no drive, 1.8 V = full). Useful for waveform synthesis from a DAC
+ * or analog signal source.
  *
  * @note Pad 2 (TRIG) is a digital pad on the tile. The chip pin
  *       itself accepts 0–1.8 V analog, but the driving Core must
@@ -867,7 +880,10 @@ uint8_t tile_drive_h_diagnose(tile_t* tile);
  * Enters calibration mode (MODE=7) with datasheet-recommended
  * parameters, triggers GO, and polls for completion. On success,
  * the DRV2605 stores optimized A_CAL_COMP and A_CAL_BEMF values
- * that improve playback fidelity.
+ * that improve playback fidelity, and the driver keeps the
+ * BEMF_GAIN the engine chose; the brake factor and loop gain are
+ * restored to their earlier settings. The result is kept for
+ * tile_drive_h_is_calibrated().
  *
  * @studio expose category=tile name=calibrate returns=bool section=runtime
  * @return 1 if calibration passed, 0 if it failed to converge
@@ -1029,16 +1045,15 @@ void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms);
  *
  * @studio expose category=tile name=is_calibrated returns=bool section=runtime
  *
- * Reads the STATUS register's DIAG_RESULT bit, which the auto-
- * calibration engine populates on completion: 0 = converged
- * (calibration produced valid A_CAL_COMP / A_CAL_BEMF values),
- * 1 = failed. Only meaningful after a prior call to @ref
- * tile_drive_h_calibrate.
+ * Reports the result of the last @ref tile_drive_h_calibrate since
+ * init: 1 if it converged (valid A_CAL_COMP / A_CAL_BEMF values),
+ * 0 if it failed, timed out or has not run. The chip's DIAG_RESULT
+ * bit clears on read and calibrate() reads it, so the driver keeps
+ * that result rather than reading STATUS again. diagnose() does not
+ * change it.
  *
- * @note  STATUS bits clear on read, so the result reflects the
- *        most recent calibration / diagnostic run.
- *
- * @return 1 if calibration converged, 0 otherwise
+ * @return 1 if the last calibration converged, 0 otherwise (or not
+ *         READY)
  */
 uint8_t tile_drive_h_is_calibrated(tile_t* tile);
 

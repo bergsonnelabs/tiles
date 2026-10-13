@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_t_c.h
  * @brief  Capacitive touch/proximity driver for the Sense.T.C tile (IQS323).
- * @version 1.4.0
+ * @version 1.4.1
  *
  * Azoteq IQS323 ProxFusion controller with self-capacitive touch sensing.
  * The tile's entire top surface is a touch electrode (CH1/CRx1), and a
@@ -130,9 +130,11 @@
  * Driver version
  * ================================================================ */
 
+/* v1.4.1: docs only. The callback fires on every successful read;
+ *         get_counts() / get_lta() can return 0xEEEE. */
 #define TILE_SENSE_T_C_VERSION_MAJOR  1
 #define TILE_SENSE_T_C_VERSION_MINOR  4
-#define TILE_SENSE_T_C_VERSION_PATCH  0
+#define TILE_SENSE_T_C_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -315,8 +317,9 @@ typedef enum {
  * ================================================================ */
 
 /**
- * Event callback fired by tile_sense_t_c_process() when the device
- * reports new touch, proximity, or gesture events.
+ * Event callback fired by tile_sense_t_c_process() on every successful
+ * status read, whether or not a touch, proximity or gesture bit is set:
+ * test `status` for the events you want.
  *
  * @param tile    The tile instance
  * @param status  System Status register value (use SENSE_T_C_SURFACE_TOUCH etc.)
@@ -394,9 +397,10 @@ void tile_sense_t_c_init(tiles_pal_t *hal, uint8_t instance,
  * @studio expose category=tile name=process section=events
  *
  * Call from your main loop.
- * In polled mode: reads status register, fires callback if events present.
- * In RDY mode: returns immediately if no RDY interrupt; reads + fires
- * callback only when the device has new data.
+ * In polled mode: reads the status register and fires the callback on
+ * every successful read (events or not).
+ * In RDY mode: returns immediately if no RDY interrupt; otherwise reads
+ * and fires the callback the same way.
  *
  */
 void tile_sense_t_c_process(tile_t *tile);
@@ -482,7 +486,8 @@ uint8_t  tile_sense_t_c_is_prox(tile_t *tile, uint8_t channel);
  * Self-capacitance counts DROP when a finger approaches.
  *
  * @param  channel  [0..2] Channel
- * @return Filtered counts, or 0 for a bad channel
+ * @return Filtered counts, 0 for a bad channel, or 0xEEEE when no
+ *         communication window opened (the chip's "no data" reply)
  */
 uint16_t tile_sense_t_c_get_counts(tile_t *tile, uint8_t channel);
 
@@ -490,7 +495,8 @@ uint16_t tile_sense_t_c_get_counts(tile_t *tile, uint8_t channel);
  * @brief  Read the long-term average (LTA) for a channel.
  * @studio expose category=tile name=get_lta returns=int section=runtime
  * @param  channel  [0..2] Channel
- * @return LTA baseline in counts
+ * @return LTA baseline in counts, 0 for a bad channel, or 0xEEEE when
+ *         no communication window opened (the chip's "no data" reply)
  */
 uint16_t tile_sense_t_c_get_lta(tile_t *tile, uint8_t channel);
 

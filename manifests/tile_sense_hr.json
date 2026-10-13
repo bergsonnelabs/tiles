@@ -1,15 +1,16 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@0adc73d",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.HR",
   "palette": {
     "label": "Sense.HR",
     "icon": "♥"
   },
+  "usage": "Call auto_gain() and then start() once when the program begins: init configures the sensor but leaves measurements stopped, so read_ppg() and the other readings return nothing new until start(). The events need process() on every pass of the main loop (Studio's event loop does this for you).",
   "driver": {
     "prefix": "tile_sense_hr",
     "header": "tile_sense_hr.h",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "handle": {
     "type": "tile_t",

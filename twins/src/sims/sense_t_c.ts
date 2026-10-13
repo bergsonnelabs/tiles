@@ -699,14 +699,15 @@ const sim: TileSim<State> = {
     return update;
   },
 
-  // RDY (pad 3): open-drain, asserted LOW (shown 1 = asserted). In event mode
-  // (the driver's init) it asserts only for an enabled event, until the host
-  // reads status; in streaming mode the chip opens a window every report cycle,
-  // so RDY pulses continuously. Halt / not-ready: quiet.
+  // RDY (pad 3) at its real level: open-drain, active low, with the on-tile
+  // 4.7k pull-up, so 0 = asserted and 1 = idle. In event mode (the driver's
+  // init) it asserts only for an enabled event, until the host reads status;
+  // in streaming mode the chip opens a window every report cycle, so RDY pulses
+  // continuously (shown asserted). Halt / not-ready: idle high.
   padOutputs(state) {
-    if (state.sleeping) return { '3': 0 };
-    if (state.comm_mode === 0) return { '3': 1 };
-    return { '3': state.int_latched ? 1 : 0 };
+    if (state.sleeping) return { '3': 1 };
+    if (state.comm_mode === 0) return { '3': 0 };
+    return { '3': state.int_latched ? 0 : 1 };
   },
 
   // Electrical: a pure load on V+ (pad 10) / GND (pad 1). Draw follows the

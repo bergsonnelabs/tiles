@@ -464,7 +464,10 @@ void tile_display_rgbw_breathe_auto(tile_t *tile, uint8_t channel, uint8_t peak,
     display_rgbw_aeu_t prog = {
         .pwm = { 0, (uint8_t)(peak / 2), peak, (uint8_t)(peak / 2), 0 },
         .t   = { leg, leg, leg, leg },
-        .repeats = 3,  /* AEU loops infinitely; whole-pattern repeat gates it */
+        .repeats = 1,  /* one breath per pattern pass; the pattern count PT
+                        * (`repeats`) sets how many breaths. 3 here would be
+                        * infinite (SNVU925 Table 2-55) and the pattern would
+                        * never finish. */
     };
 
     tile_display_rgbw_set_aeu(tile, channel, 1, &prog);

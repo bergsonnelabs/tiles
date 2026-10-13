@@ -85,7 +85,7 @@ interface State {
   ripple_threshold: number; // RC_THR × RC_THR_SCALE
   ripple_filter_gain: number; // FLT_GAIN_SEL
   rc_enabled: number; // EN_RC — ripple counter / speed estimator running
-  w_scale: number; // W_SCALE (24/40/64/128)
+  w_scale: number; // W_SCALE (16/32/64/128)
   ripples_per_rev: number; // the driver's cached motor profile
 
   // ── chip status ──
@@ -172,12 +172,46 @@ function quantizeThreshold(count: number): number {
   return 0x3ff * 64;
 }
 
-// Engage the bridge; a fresh start re-arms the TINRUSH stall blanking.
+// Stall blanking after a fresh start. With soft-start on (EN_SS, which init
+// sets) and voltage or speed regulation, the chip stretches it to
+// TINRUSH × WSET_VSET (datasheet §8.3.7.3.1; the set_inrush_time_ms note):
+// ~25 s at init's target of 255. Otherwise it is TINRUSH.
+const blankingMs = (s: State) =>
+  s.regulation_mode === REG_VOLTAGE || s.regulation_mode === REG_SPEED
+    ? s.inrush_time_ms * Math.max(1, s.target)
+    : s.inrush_time_ms;
+
+// Engage the bridge; a fresh start re-arms the stall blanking.
 function drive(s: State, dir: number): Partial<State> {
   return s.direction === dir
     ? { direction: dir }
-    : { direction: dir, inrush_remaining_ms: s.inrush_time_ms };
+    : { direction: dir, inrush_remaining_ms: blankingMs(s) };
 }
+
+// What tile_drive_dc_h_init() (NULL cfg) leaves in the chip: the
+// defaultState's register fields. The stimuli and the ripple count are left
+// alone (init does not set CLR_CNT).
+const INIT_FIELDS: Partial<State> = {
+  direction: COAST,
+  target: 0xff,
+  enabled: 1,
+  control_mode: CTRL_I2C,
+  regulation_mode: REG_VOLTAGE,
+  current_imode: 1,
+  vm_gain: 1,
+  cs_gain: 0,
+  stall_enabled: 1,
+  stall_recovery: 1,
+  inrush_time_ms: 100,
+  ripple_threshold: 0,
+  ripple_filter_gain: 1,
+  rc_enabled: 0,
+  w_scale: 128,
+  ripples_per_rev: 12,
+  fault_byte: FLT_NPOR,
+  inrush_remaining_ms: 0,
+  move_target: 0,
+};
 
 // Stand the electrical ctx in for the supply stimuli when the twin is wired.
 function withSupplies(s: State, ctx?: PowerCtx): State {
@@ -281,7 +315,7 @@ const sim: TileSim<State> = {
   hostCalls: {
     // ── lifecycle ──
     tile_drive_dc_h_find: ({ state }) => ({ scalar: chipOn(state) ? 1 : 0 }),
-    tile_drive_dc_h_init: () => ({ scalar: 0 }),
+    tile_drive_dc_h_init: () => ({ nextState: INIT_FIELDS }),
     tile_drive_dc_h_sleep: ({ state }) => (ready(state) ? { nextState: { enabled: 0 } } : {}),
     tile_drive_dc_h_wake: ({ state }) =>
       chipOn(state) && state.enabled === 0 ? { nextState: { enabled: 1 } } : {},

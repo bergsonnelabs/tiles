@@ -301,7 +301,7 @@ void tile_drive_dc_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
      * [7]   EN_OUT       = 0   (set last, below, once the locked fields
      *                           are written)
      * [6]   EN_OVP       = 1   (overvoltage protection on)
-     * [5]   EN_STALL     = mode-dependent (off for pad control)
+     * [5]   EN_STALL     = 1   (stall detection on, in every mode)
      * [4]   VSNS_SEL     = 0   (analog output filter)
      * [3]   VM_GAIN_SEL  = cfg (voltage range selection)
      * [2]   CLR_CNT      = 0
@@ -882,9 +882,9 @@ uint8_t tile_drive_dc_h_wait_for_stop(tile_t *tile, uint32_t timeout_ms)
     if (tile->state != TILE_STATE_READY) return 0;
 
     /* Sample the ripple counter at 10 ms intervals. The rotor is
-     * declared "stopped" when two consecutive 10 ms-spaced samples
-     * (≥30 ms total observation) report the same count — well below
-     * mechanical settling time even for fast unloaded motors. */
+     * declared "stopped" when three consecutive 10 ms-spaced samples
+     * (30 ms) report the same count — well below mechanical settling
+     * time even for fast unloaded motors. */
     uint16_t prev = tile_drive_dc_h_get_ripple_count(tile);
     uint8_t  stable_runs = 0;
 
@@ -893,7 +893,7 @@ uint8_t tile_drive_dc_h_wait_for_stop(tile_t *tile, uint32_t timeout_ms)
         uint16_t cur = tile_drive_dc_h_get_ripple_count(tile);
         if (cur == prev) {
             stable_runs++;
-            if (stable_runs >= 2) return 1;
+            if (stable_runs >= 3) return 1;
         } else {
             stable_runs = 0;
             prev = cur;

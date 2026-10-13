@@ -40,6 +40,13 @@
  *
  * @studio tile label=Sense.TOF icon=◊
  *
+ * @studio usage
+ *   Call start() once when the program begins: init does not start
+ *   ranging, and until start() get_distance_mm() reads as nothing in range
+ *   (the max range). After start() it returns the latest reading, updated
+ *   every 30 ms by default. is_object_within(), wait_for_object() and
+ *   measure_single() take their own single shots and need no start().
+ *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
  * @studio unsupported severity=common category="10 m extended-range mode" section=advanced
@@ -100,9 +107,13 @@
 
 /* ---- Driver version ---- */
 
+/* v1.6.1: get_distance_mm() returns 0 (not the 2500 mm "nothing there") when
+ *         not READY or the read fails; set/get_threshold_interrupt stop ranging
+ *         first and wait for completion; set_kilo_iters clamps to 10-4000;
+ *         doc fixes (boot steps, get_calibration, restore_state, start). */
 #define TILE_SENSE_TOF_VERSION_MAJOR  1
 #define TILE_SENSE_TOF_VERSION_MINOR  6
-#define TILE_SENSE_TOF_VERSION_PATCH  0
+#define TILE_SENSE_TOF_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -317,13 +328,13 @@ uint8_t tile_sense_tof_find(tiles_pal_t *hal, uint8_t instance);
 /**
  * @brief  Initialise a Sense.TOF tile.
  *
- * Performs the full TMF8806 boot sequence:
- *  1. Waits for bootloader to enter sleep (ENABLE == 0x00)
- *  2. Wakes the bootloader (PON = 1)
- *  3. Waits for CPU ready (ENABLE == 0x41)
- *  4. Requests App0 measurement application
- *  5. Waits for App0 to start (APPID == 0xC0)
- *  6. Enables result interrupt
+ * Performs the TMF8806 boot sequence:
+ *  1. Sets PON only if the CPU is not already ready (a cold part comes
+ *     up with ENABLE == 0x41), then waits for CPU ready (ENABLE == 0x41)
+ *  2. If App0 is already running (APPID == 0xC0, e.g. after a warm MCU
+ *     reset), stops there
+ *  3. Otherwise requests App0 and waits for it to start (APPID == 0xC0)
+ *  4. Enables the result interrupt
  *
  * Does NOT start measurements — call tile_sense_tof_start() after init.
  * Does NOT software-reset to preserve any existing calibration data.
@@ -378,8 +389,9 @@ void tile_sense_tof_reset(tile_t *tile);
  * measurement command payload from the current cfg, and issues the
  * measurement command. Results are signaled via the result interrupt.
  *
- * If period_ms == 0x00 in the config, a single measurement is taken.
- * Otherwise measurements repeat at the configured period.
+ * Measurements repeat at the configured period. A cfg period of 0 means
+ * the 30 ms default at init, so for a single shot use set_period(0) or
+ * measure_single().
  *
  */
 void tile_sense_tof_start(tile_t *tile);
@@ -416,7 +428,8 @@ uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result,
  *
  * Returns the peak distance in millimeters. Does not check whether
  * new data is available — call tile_sense_tof_result_ready() first
- * or use tile_sense_tof_get_result() for full status.
+ * or use tile_sense_tof_get_result() for full status. Returns 0 when
+ * the tile is not READY or the I2C read fails.
  *
  * When nothing is in range the sensor reports 0; this SATURATES that to
  * tile_sense_tof_max_range_mm()
@@ -425,7 +438,8 @@ uint8_t tile_sense_tof_measure_single(tile_t *tile, sense_tof_result_t *result,
  * what it physically means. Use tile_sense_tof_get_result() when you need to
  * tell "no target" from "target at max range"; that reports the raw value.
  *
- * @return Distance in millimeters, saturating at the configured max range.
+ * @return Distance in millimeters, saturating at the configured max range;
+ *         0 if not READY or the read failed.
  */
 uint16_t tile_sense_tof_get_distance_mm(tile_t *tile);
 
@@ -549,10 +563,11 @@ uint8_t tile_sense_tof_factory_calibrate(tile_t *tile, uint32_t timeout_ms);
 void tile_sense_tof_set_calibration(tile_t *tile, const uint8_t *data);
 
 /**
- * @brief  Read the current factory calibration data from the sensor.
+ * @brief  Copy out the factory calibration data the driver holds.
  *
- * Reads 14 bytes of calibration data from the sensor's calibration
- * registers. Typically called after tile_sense_tof_factory_calibrate()
+ * Returns the driver's 14-byte copy (from factory_calibrate() or
+ * set_calibration()), not a live read of the sensor; all zeros when
+ * none is held. Typically called after tile_sense_tof_factory_calibrate()
  * to save the data for later reloading via set_calibration().
  *
  * @studio expose category=tile name=get_calibration returns=int[14] section=advanced
@@ -657,8 +672,9 @@ void tile_sense_tof_set_period(tile_t *tile, sense_tof_period_t period);
  *
  * Iterations (in thousands) trade power for SNR/range: more iterations
  * give a stronger return and longer reach at higher current draw.
- * Typical range 10-4000 (10k-4M); the ranging default is 900. Stops any
- * active measurement, updates the cached value, and restarts.
+ * Valid range 10-4000 (10k-4M; values outside are clamped); the ranging
+ * default is 900. Stops any active measurement, updates the cached
+ * value, and restarts.
  *
  * @param  kilo_iters   [10..4000] Iterations in thousands (e.g. 900 = 900k).
  */
@@ -733,15 +749,17 @@ void tile_sense_tof_get_signal_quality_flat(tile_t *tile,
 void tile_sense_tof_save_state(tile_t *tile, uint8_t *data);
 
 /**
- * @brief  Restore algorithm state to the sensor.
+ * @brief  Hand saved algorithm state back to the driver for the next start().
  *
- * Writes 11 bytes of previously saved algorithm state to the sensor
- * (registers 0x2E-0x38). Call this after wake() and before start()
- * to resume from the saved algorithm state.
+ * Stores 11 bytes of previously saved algorithm state; nothing is written
+ * yet. The next start() writes them to the sensor (registers 0x2E-0x38)
+ * right after the calibration and sets algState in the measurement
+ * command (cmd_data7). Call this after wake() and before start().
  *
- * The calibration data bitmask in the measurement command (cmd_data7)
- * is automatically updated to include algState when state data has
- * been restored.
+ * @note  Needs factory calibration (factory_calibrate() or
+ *        set_calibration()): algState requires factoryCal, so without
+ *        calibration start() drops the state silently. The state is used
+ *        for one start() only.
  *
  * @studio expose category=tile name=restore_state section=advanced
  * @studio in_buffer data type=uint8_t length=11
@@ -760,6 +778,9 @@ void tile_sense_tof_restore_state(tile_t *tile, const uint8_t *data);
  * the [low_mm, high_mm] range for `persistence` consecutive
  * measurements. Lets a sleeping host stay asleep until something
  * gets close.
+ *
+ * The chip refuses commands while ranging runs, so this stops ranging,
+ * sends the command, waits for it to complete and restarts ranging.
  *
  * @studio expose category=tile name=set_threshold_interrupt section=config
  *
@@ -781,7 +802,8 @@ uint8_t tile_sense_tof_set_threshold_interrupt(tile_t *tile,
 /**
  * @brief  Read back the current threshold-interrupt configuration.
  *
- * Per HostDriverCommunication §8.12.2 (cmd 0x09 = RD_ADD_CONFIG).
+ * Per HostDriverCommunication §8.12.2 (cmd 0x09 = RD_ADD_CONFIG). Stops
+ * ranging for the command and restarts it, as set_threshold_interrupt().
  *
  * @studio expose category=tile name=get_threshold_interrupt returns=bool section=advanced
  * @studio out_scalar persistence type=uint8_t
@@ -889,7 +911,7 @@ void tile_sense_tof_read_histogram_flat(tile_t *tile,
 #define SENSE_TOF_PRESENCE_RELIABILITY_MIN  32
 
 /**
- * @brief  Reliability cutoff used by `wait_for_object` polling, in ms.
+ * @brief  Poll interval used by `wait_for_object`, in ms.
  *
  * Polls every 10 ms by default. At a 30 ms measurement period the
  * loop sees a fresh result roughly every other poll; tighter polls
@@ -929,8 +951,8 @@ uint8_t tile_sense_tof_is_object_within(tile_t *tile, uint16_t mm);
  * single-shot measurement adds ~30 ms of its own.
  *
  * @note v1 implementation polls — keeps the helper self-contained
- *       and avoids the need to wire the chip's INT pin into the
- *       tile pad map. A future revision could swap to the chip's
+ *       and needs no Core pin wired to the chip's INT (pad 9). A
+ *       future revision could swap to the chip's
  *       threshold-INT (see @ref tile_sense_tof_set_threshold_interrupt)
  *       to let a sleeping host stay asleep until proximity wakes it.
  *

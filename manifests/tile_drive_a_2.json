@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f70bca2",
+  "source": "tiles@20ee3f3",
   "tile": "Drive.A.2",
   "palette": {
     "label": "Drive.A.2",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_a_2",
     "header": "tile_drive_a_2.h",
-    "version": "3.3.0"
+    "version": "3.3.1"
   },
   "handle": {
     "type": "tile_t",
@@ -133,12 +133,12 @@
             {
               "name": "DRIVE_A_2_GAIN_1X_EXT",
               "value": 0,
-              "label": "1x, external VREF pin"
+              "label": "1x, external VREF pin (default)"
             },
             {
               "name": "DRIVE_A_2_GAIN_1X_VDD",
               "value": 1,
-              "label": "1x, VDD as reference (default)"
+              "label": "1x, VDD as reference"
             },
             {
               "name": "DRIVE_A_2_GAIN_1P5X_INT",

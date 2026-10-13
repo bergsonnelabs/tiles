@@ -11,7 +11,8 @@
  *   - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)
  *   - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V
  *                       programmable, 100 mA max (datasheet 7.3 ILDO)
- *   - ADC:              12-bit, 6 input channels
+ *   - ADC:              12-bit, 7 input channels (IIN, PMID, ICHG, VIN,
+ *                       VBAT, TS, ADCIN)
  *   - Charge current:   1.25–500 mA programmable
  *   - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)
  *
@@ -76,9 +77,12 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v3.4.1: docs only. get_charge_status names the registers it reads (most
+ *         faults are live STAT1 bits), 7 ADC channels, the pre-charge range,
+ *         and ship mode is left only by applying SUPPLY+ (/MR is not routed). */
 #define TILE_POWER_L_1T_VERSION_MAJOR  3
 #define TILE_POWER_L_1T_VERSION_MINOR  4
-#define TILE_POWER_L_1T_VERSION_PATCH  0
+#define TILE_POWER_L_1T_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);  /* requires tiles.h >= 1.0 */
 
@@ -195,10 +199,10 @@ typedef enum {
 /**
  * @brief  Snapshot of the BQ25150's current state and latched faults.
  *
- * Populated by tile_power_l_1t_get_charge_status(). Mixes live state
- * (vin_pgood, charging, *_active) and clear-on-read event flags
- * (faults). Reading the flags clears them — call once per polling
- * cycle, not multiple times.
+ * Populated by tile_power_l_1t_get_charge_status(). Mostly live state
+ * (STAT0 / STAT1, including vin_ovp, bat_ocp, bat_uvlo and the TS bits);
+ * only safety_timer and watchdog are latched FLAG3 flags, which the read
+ * clears — call once per polling cycle, not multiple times.
  */
 typedef struct {
     /* Live state (from STAT0 / STAT1) */
@@ -209,13 +213,14 @@ typedef struct {
     uint16_t iinlim_active   : 1;  /**< 1 = input current limit reducing charge */
     uint16_t vindpm_active   : 1;  /**< 1 = VIN dynamic power management active */
     uint16_t thermreg_active : 1;  /**< 1 = thermal regulation foldback active */
-    /* Faults (from FLAG1 / FLAG3 — clear on read) */
+    /* Faults: vin_ovp, bat_ocp, bat_uvlo are live STAT1 bits; safety_timer
+     * and watchdog are FLAG3 bits, which clear on read */
     uint16_t vin_ovp         : 1;  /**< VIN above OVP threshold */
     uint16_t bat_ocp         : 1;  /**< Battery over-current detected */
     uint16_t bat_uvlo        : 1;  /**< Battery under-voltage lockout */
     uint16_t safety_timer    : 1;  /**< Charge safety timer expired */
     uint16_t watchdog        : 1;  /**< I²C watchdog expired (init disables WD, so should be 0) */
-    /* TS thresholds (from STAT1 / FLAG1) */
+    /* TS thresholds (live STAT1 bits) */
     uint16_t ts_cold         : 1;  /**< NTC reads below TS_COLD (charging paused) */
     uint16_t ts_cool         : 1;  /**< NTC in cool band (reduced charge current) */
     uint16_t ts_warm         : 1;  /**< NTC in warm band (reduced charge voltage) */
@@ -248,7 +253,7 @@ typedef struct {
  *
  * Verifies the device ID, disables the I²C watchdog (the chip
  * otherwise resets all charge parameters every 50 s), enables all
- * 6 ADC channels, configures charge defaults (80 mA fast charge,
+ * 7 ADC channels, configures charge defaults (80 mA fast charge,
  * 18.75 mA pre-charge, 4.20 V regulation, 2.6 V battery UVLO, TS on,
  * 6 h safety timer) and clears the ship-mode request. Input limit,
  * termination, LDO and charger-enable are left as the chip holds them.
@@ -299,7 +304,9 @@ void tile_power_l_1t_set_charge_voltage_mv(tile_t* tile, uint16_t mv);
  * @brief  Set the pre-charge current (used when VBAT < VLOW).
  *
  * Pre-charge applies to deeply-discharged cells; usually 10–20 % of
- * the fast-charge rate. Values clamp to 1.25–77.5 mA.
+ * the fast-charge rate. Settable 0–75 mA in 2.5 mA steps, or 0–37.5 mA in
+ * 1.25 mA steps at or below a 318 mA fast charge; requests round down to
+ * a step and clamp to that range (below one step gives 0 mA).
  *
  * @studio expose category=tile name=set_pre_charge_ma section=config
  * @param  ma   [2..77] mA Target pre-charge current (38 mA max below 318 mA fast charge).
@@ -535,9 +542,11 @@ void tile_power_l_1t_set_ldo_enabled(tile_t* tile, uint8_t enabled);
 /**
  * @brief  Snapshot the chip's current state + latched faults.
  *
- * Reads STAT0/STAT1 (live state) and FLAG0/FLAG1/FLAG3 (event flags
- * which clear on read) into the supplied struct. Call once per
- * polling cycle — multiple reads will lose flag transitions.
+ * Reads STAT0 and STAT1 (live state, including the VIN_OVP, BAT_OCP,
+ * BAT_UVLO and TS bits), FLAG3 (safety-timer and watchdog flags, which
+ * clear on read) and ICCTRL1/2 (for the derived `charging` bit) into the
+ * supplied struct. Call once per polling cycle — a second read loses the
+ * FLAG3 events.
  *
  * @studio expose category=tile name=get_charge_status section=runtime
  * @param  out   Caller-allocated status struct (zeroed on entry)
@@ -556,8 +565,8 @@ void tile_power_l_1t_get_charge_status(tile_t* tile,
  * output (pad 10, and the pad 1 ground) stays off until then. Registers
  * return to reset values on exit. Use only for storage / shipping.
  *
- * @warning Destructive: requires physical user action (MR press or VIN
- * re-insertion) to recover. Marked `section=advanced` for the same
+ * @warning Destructive: requires physical user action (applying SUPPLY+
+ * again) to recover. Marked `section=advanced` for the same
  * posture as other one-way / hardware-gated operations.
  *
  * @studio expose category=tile name=enter_ship_mode section=advanced

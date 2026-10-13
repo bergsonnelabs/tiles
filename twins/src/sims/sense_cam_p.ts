@@ -104,7 +104,7 @@ const sim: TileSim<State> = {
       field: 'readout_too_slow',
       label: 'Readout too slow',
       description:
-        'Each 4800-byte buffer must be read within ~3.4 ms or FB_Ovf voids the frame; capture() then returns 0.',
+        'Each 4800-byte buffer must be read within ~6.8 ms at 160x120 (~3.4 ms at 320x240) or FB_Ovf voids the frame; capture() then returns 0.',
     },
   ],
 

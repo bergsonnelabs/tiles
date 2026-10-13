@@ -1,21 +1,59 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@f82b284",
+  "source": "tiles@20ee3f3",
   "tile": "Power.L.1N",
   "palette": {
     "label": "Power.L.1N",
     "icon": "🔋"
   },
+  "usage": "Call process() on every pass of the main loop (Studio's event loop does this for you). It reads the charge status and fires charge_complete when the battery becomes full and charging when a charge starts (trickle, CC or CV). Events fire once per change, not on every poll; the first process() after init reports a state already in force (e.g. a battery that is already charging).",
   "driver": {
     "prefix": "tile_power_l_1n",
     "header": "tile_power_l_1n.h",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "handle": {
     "type": "tile_t",
     "init": "tile_power_l_1n_init"
   },
   "hosts": [
+    {
+      "qname": [
+        "$slot",
+        "process"
+      ],
+      "symbol": "tile_power_l_1n_process",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Poll the charger and fire the event callback on a change. Call from your main loop.",
+      "params": [],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
+    {
+      "qname": [
+        "$slot",
+        "on_event"
+      ],
+      "symbol": "tile_power_l_1n_on_event",
+      "header": "tile_power_l_1n.h",
+      "category": "tile",
+      "description": "Register or change the event callback.",
+      "params": [
+        {
+          "name": "cb",
+          "type": "?power_l_1n_event_cb_t",
+          "description": "Callback to fire on a charge-state change. NULL to clear."
+        },
+        {
+          "name": "ctx",
+          "type": "?void*",
+          "description": "Opaque user pointer passed to the callback."
+        }
+      ],
+      "returns": "void",
+      "receiver": "tile_t*"
+    },
     {
       "qname": [
         "$slot",
@@ -469,7 +507,7 @@
     {
       "name": "charging",
       "payload": [],
-      "mask": "NPM1300_CHG_CONSTANTCURRENT"
+      "mask": "NPM1300_CHG_CHARGING"
     }
   ],
   "bus_addresses": {

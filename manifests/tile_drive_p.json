@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@2bfe22e",
+  "source": "tiles@20ee3f3",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_p",
     "header": "tile_drive_p.h",
-    "version": "3.6.1"
+    "version": "3.6.2"
   },
   "handle": {
     "type": "tile_t",

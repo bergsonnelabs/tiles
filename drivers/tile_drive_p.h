@@ -12,8 +12,10 @@
  *                  (±13.28 V); ±95 V needs an explicit
  *                  tile_drive_p_set_output_range(tile, DRIVE_P_OUTPUT_HIGH_V).
  *   - Sensing:     7.6 mV resolution (fine), 54.5 mV (coarse)
- *   - Play modes:  Direct, FIFO, RAM, RAM Synth
- *   - Sample rate:  8 ksps – 1024 ksps (configurable)
+ *   - Play modes:  Direct, FIFO, RAM, RAM Synth (the driver exposes Direct,
+ *                  FIFO and RAM Synth; see the gaps below)
+ *   - Sample rate:  8 ksps – 1024 ksps on the chip; the driver plays FIFO at
+ *                  8 ksps only
  *
  * Datasheet: https://www.bergsonne.io/tiles/drive/p
  * IC datasheet: https://mosaic-component-datasheets.s3.eu-north-1.amazonaws.com/5/Bor_as_Technologies-BOS1921.pdf
@@ -100,6 +102,17 @@
  *   to a pad, so multi-tile cascading is hardware-gated to a
  *   future tile rev.
  *
+ * @studio unsupported severity=advanced category="RAM Playback mode"
+ *   Driver-deferred. The BOS1921 can play a waveform stored in its RAM
+ *   (PLAY_MODE RAM Playback). drive_p_mode_t has Direct, FIFO and RAM
+ *   Synthesis, but no RAM Playback mode, and no call loads a waveform
+ *   into RAM for it.
+ *
+ * @studio unsupported severity=advanced category="FIFO sample rate (PLAY_SRATE)"
+ *   Driver-deferred. The chip plays the FIFO at 8 to 1024 ksps
+ *   (CONFIG.PLAY_SRATE). The driver always selects 8 ksps and has no
+ *   setter, so play_samples() and the helpers run at 8 ksps.
+ *
  * @studio unsupported severity=advanced category="I3C alternate bus mode"
  *   Pads 4/5 are bus-shared between I²C (default) and I3C SDR
  *   (≤12.5 Mbps with in-band interrupts). The cores tile-driver
@@ -117,9 +130,13 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
+/* v3.6.2: play_on_touch() enters sense mode once and honors its timeout (a
+ *         1000 ms timeout waited ~6 s); docs: is_touched() blocks ~5 ms and
+ *         compares with >=, read_sense_samples() is bus-paced, and the RAM
+ *         Playback and PLAY_SRATE gaps are listed. */
 #define TILE_DRIVE_P_VERSION_MAJOR  3
 #define TILE_DRIVE_P_VERSION_MINOR  6
-#define TILE_DRIVE_P_VERSION_PATCH  1
+#define TILE_DRIVE_P_VERSION_PATCH  2
 
 /**
  * Power-up settle, in ms, at the end of tile_drive_p_init(). The BOS1921 is
@@ -598,8 +615,8 @@ void tile_drive_p_set_sleep_retention(tile_t* tile, uint8_t retain);
  * a host gap would unexpectedly stop the output.
  *
  * @note  After a timeout-triggered sleep, PLAY_SRATE is reset to
- *        0x7 (8 ksps) — re-set the sample rate before the next
- *        playback if you were using a faster rate. The driver's tile
+ *        0x7 (8 ksps), which is the rate the driver always uses. The
+ *        driver's tile
  *        state stays READY; the first I2C write after the timeout only
  *        wakes the chip and is discarded, so call @ref tile_drive_p_wake
  *        before the next command.
@@ -787,8 +804,12 @@ void tile_drive_p_play_pulse_train(tile_t* tile, uint8_t intensity_pct,
  * the call — call `tile_drive_p_set_mode(tile, DRIVE_P_MODE_IDLE)`
  * (or any play mode) to return to driving the actuator.
  *
+ * @note  Blocks ~5 ms: every call re-enters sense mode, which waits
+ *        5 ms. To poll quickly, call set_mode(DRIVE_P_MODE_SENSE_FINE)
+ *        once and read_sense() in the loop.
+ *
  * @param  threshold_mv  Absolute sense voltage threshold in mV
- * @return 1 if sense > threshold (touched), 0 otherwise
+ * @return 1 if |sense| >= threshold (touched), 0 otherwise
  */
 uint8_t tile_drive_p_is_touched(tile_t* tile, uint16_t threshold_mv);
 
@@ -800,8 +821,10 @@ uint8_t tile_drive_p_is_touched(tile_t* tile, uint16_t threshold_mv);
  * Polls the sense channel until `threshold_mv` is exceeded, then
  * switches into FIFO mode and plays a click via @ref
  * tile_drive_p_play_click. The classic closed-loop tactile-feedback
- * idiom — press the piezo, feel the click. Polling polls every
- * ~1 ms; returns 0 if `timeout_ms` elapses without detection.
+ * idiom — press the piezo, feel the click. Enters sense mode once
+ * (~5 ms), then reads the sense value about every 1 ms; returns 0
+ * once about `timeout_ms` has elapsed without detection. Leaves the
+ * chip in sense mode on a timeout.
  *
  * @param  intensity_pct  [0..100] Percent of full-scale output (100 = ±95 V, or ±13.28 V in the low range), clamped to the voltage limits
  * @param  threshold_mv   Touch threshold in mV
@@ -847,9 +870,11 @@ void tile_drive_p_play_samples(tile_t* tile, const int16_t* samples,
  * @studio expose category=tile name=read_sense_samples section=runtime
  * @studio out_buffer buf type=int16_t cap_param=count
  *
- * Switches into fine-resolution sense mode (if not already there)
- * and reads `count` consecutive samples into the caller's buffer.
- * Each sample takes ~125 µs to acquire (8 ksps native). Use for
+ * Switches into fine-resolution sense mode (~5 ms) and reads `count`
+ * samples into the caller's buffer, back to back with no pacing.
+ * The chip updates SENSE_VALUE continuously (datasheet §6.4.1), so
+ * the sample rate is set by the bus (each read is a register write
+ * plus a read) and consecutive samples can repeat a value. Use for
  * impedance characterisation, multi-touch pattern detection, or
  * piezo-as-mic experiments beyond the simple `is_touched` API.
  *

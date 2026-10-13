@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "tile": "Sense.I.6P6",
   "palette": {
     "label": "Sense.I.6P6",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_sense_i_6p6",
     "header": "tile_sense_i_6p6.h",
-    "version": "1.4.0"
+    "version": "1.5.0"
   },
   "handle": {
     "type": "tile_t",
@@ -105,6 +105,7 @@
         {
           "name": "range",
           "type": "int",
+          "description": "Full-scale range (sense_i_6p6_accel_range_t).",
           "choices": [
             {
               "name": "SENSE_I_6P6_ACCEL_32G",
@@ -171,6 +172,7 @@
         {
           "name": "range",
           "type": "int",
+          "description": "Full-scale range (sense_i_6p6_gyro_range_t).",
           "choices": [
             {
               "name": "SENSE_I_6P6_GYRO_4000DPS",
@@ -252,6 +254,7 @@
         {
           "name": "odr",
           "type": "int",
+          "description": "Output data rate (sense_i_6p6_odr_t).",
           "choices": [
             {
               "name": "SENSE_I_6P6_ODR_32KHZ",
@@ -438,6 +441,7 @@
         {
           "name": "odr",
           "type": "int",
+          "description": "Output data rate (sense_i_6p6_odr_t).",
           "choices": [
             {
               "name": "SENSE_I_6P6_ODR_32KHZ",
@@ -644,6 +648,7 @@
         {
           "name": "accel",
           "type": "int",
+          "description": "Accel power mode (off, low-power or low-noise).",
           "choices": [
             {
               "name": "SENSE_I_6P6_MODE_OFF",
@@ -670,6 +675,7 @@
         {
           "name": "gyro",
           "type": "int",
+          "description": "Gyro power mode (off, standby or low-noise).",
           "choices": [
             {
               "name": "SENSE_I_6P6_MODE_OFF",
@@ -760,6 +766,7 @@
         {
           "name": "accel_bw",
           "type": "int",
+          "description": "Accel UI filter bandwidth.",
           "choices": [
             {
               "name": "SENSE_I_6P6_FILT_BW_ODR_2",
@@ -824,6 +831,7 @@
         {
           "name": "gyro_bw",
           "type": "int",
+          "description": "Gyro UI filter bandwidth.",
           "choices": [
             {
               "name": "SENSE_I_6P6_FILT_BW_ODR_2",
@@ -1182,6 +1190,7 @@
         {
           "name": "accel_order",
           "type": "int",
+          "description": "Accel UI filter order.",
           "choices": [
             {
               "name": "SENSE_I_6P6_FILT_ORDER_1ST",
@@ -1203,6 +1212,7 @@
         {
           "name": "gyro_order",
           "type": "int",
+          "description": "Gyro UI filter order.",
           "choices": [
             {
               "name": "SENSE_I_6P6_FILT_ORDER_1ST",
@@ -1278,6 +1288,7 @@
         {
           "name": "bw",
           "type": "int",
+          "description": "Temperature filter bandwidth.",
           "choices": [
             {
               "name": "SENSE_I_6P6_TEMP_FILT_4000HZ",
@@ -1692,7 +1703,7 @@
         {
           "name": "hires",
           "type": "int",
-          "description": "Enable 20-bit high-resolution mode (forces ±32g/±4000dps)"
+          "description": "Reserved, ignored. 20-bit packets are not supported (see the \"FIFO 20-bit hi-res mode\" gap); FIFO_HIRES_EN stays 0."
         }
       ],
       "returns": "void",
@@ -2193,6 +2204,7 @@
         {
           "name": "mode",
           "type": "int",
+          "description": "SMD mode (sense_i_6p6_smd_mode_t); disabled turns it off.",
           "choices": [
             {
               "name": "SENSE_I_6P6_SMD_DISABLED",
@@ -2456,19 +2468,19 @@
       "description": "Set user-programmable gyro offset.",
       "params": [
         {
-          "name": "x_dps",
+          "name": "x_dps16",
           "type": "int",
           "description": "X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)"
         },
         {
-          "name": "y_dps",
+          "name": "y_dps16",
           "type": "int",
-          "description": "Y offset"
+          "description": "Y offset in dps × 16"
         },
         {
-          "name": "z_dps",
+          "name": "z_dps16",
           "type": "int",
-          "description": "Z offset"
+          "description": "Z offset in dps × 16"
         }
       ],
       "returns": "void",
@@ -2609,7 +2621,7 @@
     {
       "name": "tilt",
       "payload": [],
-      "mask": "ICM42686P_INT_STATUS3_TILT_DET"
+      "mask": "SENSE_I_6P6_EV_TILT"
     },
     {
       "name": "tap",
@@ -2627,14 +2639,14 @@
           "type": "int"
         }
       ],
-      "mask": "ICM42686P_INT_STATUS3_TAP_DET",
+      "mask": "SENSE_I_6P6_EV_TAP",
       "read": "tile_sense_i_6p6_get_tap_result",
       "read_type": "sense_i_6p6_tap_result_t"
     },
     {
       "name": "wake_on_motion",
       "payload": [],
-      "mask": "ICM42686P_INT_STATUS2_WOM_ANY"
+      "mask": "SENSE_I_6P6_EV_WOM"
     }
   ],
   "bus_addresses": {

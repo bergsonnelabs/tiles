@@ -70,6 +70,9 @@ interface State {
   led1_host: number;
   led2_host: number;
 
+  // ── events ──
+  ev_prev: number; // charge status process() saw last (0 after init)
+
   [field: string]: number;
 }
 
@@ -193,7 +196,8 @@ function complete(s: State, inp: Inputs): boolean {
 function chargeStatus(s: State, inp: Inputs): number {
   let b = 0;
   // BATTERYDETECTED is a charger-domain bit: it reads 0 while charging is
-  // disabled, cell fitted or not (tile_power_l_1n.h:303-310, bench-measured).
+  // disabled, cell fitted or not (battery_present's @warning in the header,
+  // bench-measured).
   if (inp.batteryPresent && s.charging_enabled === 1) b |= CHG_BATTERYDETECTED;
   if (complete(s, inp)) b |= CHG_COMPLETED;
   if (charging(s, inp)) {
@@ -207,13 +211,13 @@ function chargeStatus(s: State, inp: Inputs): number {
 }
 
 // A 10-bit ADC reading as the driver converts it: raw = mV·1023/FS, then back
-// with integer math (tile_power_l_1n.c:234-248). VBAT FS 5.0 V, VSYS 6.375 V.
+// with integer math (get_vbat_mv / get_vsys_mv). VBAT FS 5.0 V, VSYS 6.375 V.
 function adcMv(mv: number, fullScaleMv: number): number {
   const raw = clamp(Math.round((mv * 1023) / fullScaleMv), 0, 1023);
   return Math.floor((raw * fullScaleMv) / 1023);
 }
 
-// BCHGVTERM quantization (vterm_code, tile_power_l_1n.c:62): 3.50-3.65 V and
+// BCHGVTERM quantization (vterm_code in the driver): 3.50-3.65 V and
 // 4.00-4.45 V in 50 mV steps, rounded down; the 3.65-4.00 V gap reads 3.65 V.
 function quantizeTermMv(mv: number): number {
   const v = clamp(mv, 3500, 4450);
@@ -221,9 +225,10 @@ function quantizeTermMv(mv: number): number {
   return 4000 + Math.floor((v - 4000) / 50) * 50;
 }
 
-// VSYS ≈ the higher input, gated on at least one input being live.
+// VSYS ≈ the higher input, gated on at least one input being live. Clamped
+// to the ADC's 6.375 V full scale (the header cites a measured 5.15 V on USB).
 function vsys(inp: Inputs): number {
-  return inp.inputOk ? clamp(inp.vinMv, 0, 5000) : 0;
+  return inp.inputOk ? clamp(inp.vinMv, 0, 6375) : 0;
 }
 
 // Resolve an indicator LED to on/off given its mode + the auto signals.
@@ -265,6 +270,8 @@ const sim: TileSim<State> = {
     led0_host: 0,
     led1_host: 0,
     led2_host: 0,
+
+    ev_prev: 0,
   },
 
   // USB presence (CHG) and the battery now come from the WIRING — drive them with
@@ -331,10 +338,10 @@ const sim: TileSim<State> = {
 
   hostCalls: {
     // ── lifecycle ──
-    // 1 if the PMIC ACKs at 0x6B (tile_power_l_1n.c:75)
+    // 1 if the PMIC ACKs at 0x6B (tile_power_l_1n_find)
     tile_power_l_1n_find: () => ({ scalar: 1 }),
-    // init (tile_power_l_1n.c:82-144): LED modes, then 500 mA input limit,
-    // 100 mA charge, 4.20 V termination, charging on.
+    // tile_power_l_1n_init: LED modes, then 500 mA input limit, 100 mA charge,
+    // 4.20 V termination, charging on; the event history starts empty.
     tile_power_l_1n_init: () => ({
       nextState: {
         led0_mode: LED_ERROR,
@@ -345,8 +352,17 @@ const sim: TileSim<State> = {
         charge_current_ma: 100,
         term_mv: 4200,
         charging_enabled: 1,
+        ev_prev: 0,
       },
     }),
+
+    // ── events (the callback itself is not modeled) ──
+    // process() reads the charge status and remembers it; the driver fires
+    // the callback on the edges (COMPLETED on, or charging on).
+    tile_power_l_1n_process: ({ state }) => ({
+      nextState: { ev_prev: chargeStatus(state, resolveInputs(state)) },
+    }),
+    tile_power_l_1n_on_event: () => undefined,
 
     // ── charger ──
     tile_power_l_1n_charger_enable: ({ args }) => ({
@@ -392,8 +408,9 @@ const sim: TileSim<State> = {
     tile_power_l_1n_is_charge_complete: ({ state }) => ({
       scalar: complete(state, resolveInputs(state)) ? 1 : 0,
     }),
+    // BATTERYDETECTED, so 0 while charging is disabled (as chargeStatus())
     tile_power_l_1n_battery_present: ({ state }) => ({
-      scalar: resolveInputs(state).batteryPresent ? 1 : 0,
+      scalar: chargeStatus(state, resolveInputs(state)) & CHG_BATTERYDETECTED ? 1 : 0,
     }),
 
     // ── measurements ──
@@ -468,6 +485,8 @@ const sim: TileSim<State> = {
     tile_power_l_1n_buck_enable: 'inferred',
     tile_power_l_1n_led_set: 'inferred',
     tile_power_l_1n_get_charge_error: 'inferred', // fault → nonzero code (reason bits not modeled)
+    tile_power_l_1n_process: 'inferred', // status snapshot; the callback is not modeled
+    tile_power_l_1n_on_event: 'inferred',
     // hallucinated — not really modeled
     tile_power_l_1n_get_reset_cause: 'hallucinated', // always reports 0
     power: 'inferred', // voltages/topology canonical; current split is a modeling choice

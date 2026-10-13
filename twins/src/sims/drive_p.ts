@@ -37,7 +37,7 @@
 //     after idle/play set_mode, SENSE_VAL after sense set_mode.
 import type { TileSim } from '../tileSim';
 
-// drive_p_mode_t (tile_drive_p.h:189-194)
+// drive_p_mode_t (tile_drive_p.h)
 const MODE_IDLE = 0;
 const MODE_SENSE_FINE = 1;
 const MODE_SENSE_COARSE = 2;
@@ -45,7 +45,7 @@ const MODE_PLAY_DIRECT = 3;
 const MODE_PLAY_FIFO = 4;
 const MODE_PLAY_RAM_SYNTH = 5;
 
-// COMM.RDADDR targets (tile_drive_p.h:139-144)
+// COMM.RDADDR targets (BOS1921_REG_* in tile_drive_p.h)
 const REG_IC_STATUS = 0x10;
 const REG_SENSE_VAL = 0x18;
 const REG_CHIP_ID = 0x1e;
@@ -645,7 +645,8 @@ const sim: TileSim<State> = {
         },
       };
     },
-    // Polls is_touched every 1 ms up to timeout_ms, then clicks
+    // Enters sense mode once, polls the sense value every ~1 ms up to
+    // timeout_ms, then clicks
     // (tile_drive_p_play_on_touch). Collapsed to one look at the present state.
     tile_drive_p_play_on_touch: ({ state, args }) => {
       const pct = pctArg(args[0]);

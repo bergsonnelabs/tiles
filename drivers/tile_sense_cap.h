@@ -1,7 +1,7 @@
 /**
  * @file   tile_sense_cap.h
  * @brief  Capacitive trackpad driver for the Sense.CAP tile (IQS7211A).
- * @version 1.0.0
+ * @version 1.0.1
  *
  * Azoteq IQS7211A mutual-capacitance trackpad controller: up to 2-finger
  * absolute XY tracking, relative XY, per-channel touch status, an
@@ -105,6 +105,13 @@
  * @studio event name=drag mask=SENSE_CAP_EV_DRAG
  * @studio event name=reset mask=SENSE_CAP_EV_RESET
  *
+ * @studio usage
+ *   Call set_layout() once when the program begins (init leaves the
+ *   surface at NONE, so nothing is sensed), and process() on every pass of
+ *   the main loop (Studio's event loop does this for you). process()
+ *   finishes the layout and its ATI, then refreshes the finger and touch
+ *   getters and raises the events; without it the getters never change.
+ *
  * Driver gaps (chip capabilities not exposed by this driver):
  *
  * @studio unsupported severity=advanced category="RDY / event-driven operation" section=lifecycle
@@ -175,9 +182,11 @@
  * Driver version
  * ================================================================ */
 
+/* v1.0.1: docs only. @studio usage (set_layout at start, process() every
+ *         pass); reset() / hw_reset() list ERR_VERIFY; ati_poll round counts. */
 #define TILE_SENSE_CAP_VERSION_MAJOR  1
 #define TILE_SENSE_CAP_VERSION_MINOR  0
-#define TILE_SENSE_CAP_VERSION_PATCH  0
+#define TILE_SENSE_CAP_VERSION_PATCH  1
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -930,7 +939,8 @@ sense_cap_result_t tile_sense_cap_ati_start(tile_t *tile, sense_cap_ati_target_t
  * Stays off the bus for 100 ms after queuing, then checks at most every
  * 50 ms whether the re-ATI bit has cleared (the chip clears it when the
  * algorithm completes, §5.6.3), so it never starves the ATI. The verdict
- * is every sensed channel within 25% of the target; up to three rounds.
+ * is every sensed channel within 25% of the target; up to three trackpad
+ * rounds and two ALP rounds.
  * One register transaction per call, like surface_poll().
  *
  * @return SENSE_CAP_OK, SENSE_CAP_BUSY, SENSE_CAP_ERR_ATI or another error.
@@ -948,8 +958,10 @@ sense_cap_result_t tile_sense_cap_ati_poll(tile_t *tile);
  * I2C. Needs a tile that init() has seen (READY, or ERROR after a failed
  * init); to reset before init, set cfg.reset_on_init.
  *
- * @return SENSE_CAP_OK once the chip is back, SENSE_CAP_ERR_NO_CALLBACK
- *         without cfg.mclr, SENSE_CAP_ERR_STATE before init(), or
+ * @return SENSE_CAP_OK once the chip is back, SENSE_CAP_ERR_VERIFY if it
+ *         answers but Show Reset was not seen (the chip is working; the
+ *         reset may not have taken), SENSE_CAP_ERR_NO_CALLBACK without
+ *         cfg.mclr, SENSE_CAP_ERR_STATE before init(), or
  *         SENSE_CAP_ERR_NOT_FOUND.
  */
 sense_cap_result_t tile_sense_cap_hw_reset(tile_t *tile);
@@ -962,7 +974,9 @@ sense_cap_result_t tile_sense_cap_hw_reset(tile_t *tile);
  * clears the cached data, then starts re-applying the baseline and the
  * stored surface (finish with surface_poll() or process()).
  *
- * @return SENSE_CAP_OK once the chip is back, or an error.
+ * @return SENSE_CAP_OK once the chip is back, SENSE_CAP_ERR_VERIFY if it
+ *         answers but Show Reset was not seen (the chip is working; the
+ *         reset may not have taken), or another error.
  */
 sense_cap_result_t tile_sense_cap_reset(tile_t *tile);
 

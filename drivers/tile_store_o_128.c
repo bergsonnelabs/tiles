@@ -8,13 +8,12 @@
 
 /* ---- Instance → chip-select mapping ----
  * For an SPI tile, tile->id carries the chip-select identifier (not an I2C
- * address). Instance 0 = the tile's default CS. */
-static const uint8_t cs_table[] = { 0 };
-#define NUM_INSTANCES  (sizeof(cs_table) / sizeof(cs_table[0]))
-
+ * address). The instance IS the CS index, as for the other SPI tiles, so
+ * several SPI tiles can share a bus, each on its own CS (tiles#294). The
+ * driver keeps no per-instance state. 0xFF is reserved (invalid). */
 static uint8_t resolve_cs(uint8_t instance)
 {
-    return (instance < NUM_INSTANCES) ? cs_table[instance] : 0xFF;
+    return instance;
 }
 
 /* ---- Low-level SPI helpers (all go through spi_transfer) ---- */

@@ -596,6 +596,10 @@ void tile_drive_a_2_amp_enable(tile_t *tile)
 {
     drive_a_2_state_t *s = state_for(tile);
     s->amp_shutdown = 0;
+    /* Enabling ends a mute (header: unmute(), amp_enable() or init() clear
+     * it). The gain register is already current: mute() never changes it,
+     * and set_volume_pct() writes it while muted. */
+    s->is_muted = 0;
     /* Asleep: the DAC outputs are Hi-Z, so waking the amp now would
      * break the startup rule. wake() applies the request. */
     if (tile->state == TILE_STATE_SLEEPING) return;
@@ -913,11 +917,12 @@ void tile_drive_a_2_play_chirp(tile_t *tile, drive_a_2_channel_t channel,
         tile_drive_a_2_stop_waveform(tile, (uint8_t)channel);
     }
 
-    /* Sample rate is fixed at DRIVE_A_2_SW_SAMPLE_RATE_HZ. We update
-     * the DAC each ~125 µs; on a 4 MHz I²C bus a 4-byte write is
-     * <40 µs so this fits with margin. The hal->delay_ms granularity
-     * limits us to 1 ms slots — we batch SAMPLES_PER_MS writes per
-     * tick. */
+    /* Phase advances as if samples ran at DRIVE_A_2_SW_SAMPLE_RATE_HZ
+     * (8 kHz): SAMPLES_PER_MS DAC writes, then delay_ms(1). The writes
+     * are not paced, so each 1 ms slot really lasts 1 ms plus the bus
+     * time of 8 writes (16 with CH_BOTH): roughly 1.8 ms on a 400 kHz
+     * I2C bus. Pitches therefore come out low by the same factor and the
+     * call runs longer than `ms` (see the header). */
     const uint32_t SAMPLES_PER_MS = DRIVE_A_2_SW_SAMPLE_RATE_HZ / 1000u;
     uint32_t total_samples = (uint32_t)ms * SAMPLES_PER_MS;
     if (total_samples == 0) return;
@@ -941,8 +946,8 @@ void tile_drive_a_2_play_chirp(tile_t *tile, drive_a_2_channel_t channel,
         }
         phase = (phase + step) & 0xFFFF;
 
-        /* Pace ~1 ms of samples per delay_ms(1) — the bus + delay
-         * together approximate the 8 kHz update cadence. */
+        /* One delay_ms(1) per SAMPLES_PER_MS writes (not a true 8 kHz
+         * pace; the bus time adds to it). */
         if ((i + 1) % SAMPLES_PER_MS == 0) {
             tile->hal->delay_ms(DRIVE_A_2_SW_SAMPLE_PERIOD_MS);
         }

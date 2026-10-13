@@ -11,6 +11,11 @@
 #include "core_tiles.h"
 #include "tile_power_l_1n.h"
 
+static void on_charge_event(tile_t *tile, uint8_t events, void *ctx)
+{
+    (void)tile; (void)events; (void)ctx;
+}
+
 int main(void)
 {
     core_init();
@@ -33,6 +38,11 @@ int main(void)
         .vbus_limit_auto   = 1,
     };
     tile_power_l_1n_init(hal, 0, &pmic, &cfg);
+
+    /* ---- Events ---- */
+    tile_power_l_1n_on_event(&pmic, on_charge_event, NULL);
+    tile_power_l_1n_process(&pmic);
+    tile_power_l_1n_on_event(&pmic, NULL, NULL);
 
     /* ---- Charger ---- */
     tile_power_l_1n_charger_enable(&pmic, 0);

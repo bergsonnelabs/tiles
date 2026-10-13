@@ -1,17 +1,13 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_drive_a_2.h",
   "brief": "Dual-channel audio output driver for the Drive.A.2 tile (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers). Supports I2C and SPI bus access via tiles_pal_t.",
-  "description": "        (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).\n        Supports I2C and SPI bus access via tiles_pal_t.\n@version 3.3.0\n\nThe Drive.A.2 tile provides two independent audio output channels,\neach consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.\n\nDAC features (DAC63202W):\n  - 12-bit resolution, dual channel\n  - Voltage output with configurable gain (1x, 1.5x, 2x, 3x, 4x)\n  - Internal 1.21V reference or VDD/external reference\n  - Built-in waveform generation: sine, triangle, sawtooth\n  - I2C (up to 1 MHz) or SPI (up to 50 MHz), auto-detected at boot\n\nAmplifier features (TPA2028D1, x2):\n  - 3W into 4 ohm, 880 mW into 8 ohm per channel\n  - I2C-programmable gain: -28 dB to +30 dB in 1 dB steps\n  - AGC with configurable compression, attack/release/hold times\n  - Both amplifiers share I2C address 0x58 — writes affect both\n\nSpeaker safety: init() leaves the TPA2028D1 output limiter ON at\nDRIVE_A_2_LIMITER_DEFAULT (3 dBV, 2.0 V peak, 0.25 W into 8 ohm),\nwith AGC compression off. Without it, +30 dB of gain on a full-scale\nDAC signal drives a clipped square wave at the V+ rail (about 1.4 W\ninto 8 ohm at 3.3 V), enough to burn a small speaker. Raise or\ndisable it with tile_drive_a_2_amp_set_limiter().\n\nIn SPI mode, only the DAC is controllable; amplifier functions\nbecome no-ops since the I2C bus pins are repurposed for SPI.\nThe DAC's SPI is 3-wire (write-only) until INTERFACE-CONFIG.SDO-EN\nis set, and a read takes two access cycles (SLASF73A §6.5.1), so\nthe DEVICE-ID check in init and every read-modify-write setter\nneed that 4-wire readback; this driver does not enable it yet.\n\n\n\nDatasheet (DAC): https://www.ti.com/product/DAC63202W\nDatasheet (Amp): https://www.ti.com/product/TPA2028D1\n\n@studio tile label=Drive.A.2 icon=♬\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"DAC PWM-output mode (FBx pins)\"\n  The DAC63202W FB0 / FB1 pins (package balls B2 / C2) can be\n  configured as comparator / PWM outputs for driving external\n  power-stage gates. On the Drive.A.2 tile these pins are tied\n  to the on-board TPA2028D1 amplifier inputs (closed-loop voltage-\n  output feedback) and are NOT routed to any tile-connector pad —\n  so even if the driver enabled PWM mode, no Core GPIO could\n  observe or use the output. Closing this gap requires a tile\n  hardware revision that breaks FBx out to a pad.\n\n@studio unsupported severity=niche category=\"Per-amp independent control\"\n  The tile carries 2× TPA2028D1 amps wired to a single shared I²C\n  bus, and the TPA2028D1 has a fixed factory I²C address (0x58) —\n  any write at 0x58 is acknowledged by both amps simultaneously.\n  Independent left / right gain, AGC, or shutdown therefore can't\n  be achieved in software; closing this gap requires either an\n  I²C-mux on the tile or amp ICs with selectable addresses.",
+  "description": "        (DAC63202W smart DAC + 2x TPA2028D1 Class-D amplifiers).\n        Supports I2C and SPI bus access via tiles_pal_t.\n@version 3.3.1\n\nThe Drive.A.2 tile provides two independent audio output channels,\neach consisting of a 12-bit DAC channel feeding a 3W Class-D amplifier.\n\nDAC features (DAC63202W):\n  - 12-bit resolution, dual channel\n  - Voltage output with configurable gain (1x, 1.5x, 2x, 3x, 4x)\n  - Internal 1.21V reference or VDD/external reference\n  - Built-in waveform generation: sine, triangle, sawtooth\n  - I2C (up to 1 MHz) or SPI (up to 50 MHz), auto-detected at boot\n\nAmplifier features (TPA2028D1, x2):\n  - 3W into 4 ohm, 880 mW into 8 ohm per channel\n  - I2C-programmable gain: -28 dB to +30 dB in 1 dB steps\n  - AGC with configurable compression, attack/release/hold times\n  - Both amplifiers share I2C address 0x58 — writes affect both\n\nSpeaker safety: init() leaves the TPA2028D1 output limiter ON at\nDRIVE_A_2_LIMITER_DEFAULT (3 dBV, 2.0 V peak, 0.25 W into 8 ohm),\nwith AGC compression off. Without it, +30 dB of gain on a full-scale\nDAC signal drives a clipped square wave at the V+ rail (about 1.4 W\ninto 8 ohm at 3.3 V), enough to burn a small speaker. Raise or\ndisable it with tile_drive_a_2_amp_set_limiter().\n\nIn SPI mode only the DAC is reachable; amplifier functions become\nno-ops since the I2C bus pins are repurposed for SPI.\nThe DAC's SPI is 3-wire (write-only) until INTERFACE-CONFIG.SDO-EN\nis set, and a read takes two access cycles (SLASF73A §6.5.1), so\nthe DEVICE-ID check in init and every read-modify-write setter\nneed that 4-wire readback; this driver does not enable it yet.\n\n\nSPI does not work yet: init() and find() read DEVICE-ID, which needs\nthe 4-wire readback above, so over SPI find() does not detect the\npart and init() leaves the tile in TILE_STATE_ERROR. Use I2C (see the \"SPI readback\"\ngap below).\n\nDatasheet (DAC): https://www.ti.com/product/DAC63202W\nDatasheet (Amp): https://www.ti.com/product/TPA2028D1\n\n@studio tile label=Drive.A.2 icon=♬\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"DAC PWM-output mode (FBx pins)\"\n  The DAC63202W FB0 / FB1 pins (package balls B2 / C2) can be\n  configured as comparator / PWM outputs for driving external\n  power-stage gates. On the Drive.A.2 tile these pins are tied\n  to the on-board TPA2028D1 amplifier inputs (closed-loop voltage-\n  output feedback) and are NOT routed to any tile-connector pad —\n  so even if the driver enabled PWM mode, no Core GPIO could\n  observe or use the output. Closing this gap requires a tile\n  hardware revision that breaks FBx out to a pad.\n\n@studio unsupported severity=advanced category=\"SPI readback (SDO-EN)\"\n  Driver-deferred. The DAC63202W's SPI is write-only (3-wire) until\n  INTERFACE-CONFIG.SDO-EN is set, and a read then takes two access\n  cycles (SLASF73A §6.5.1). The driver never sets SDO-EN, so the\n  DEVICE-ID check in find() / init() and every read-modify-write setter\n  fail over SPI. Closing it means enabling SDO-EN (a write-only first\n  step) and two-cycle reads in the SPI path.\n\n@studio unsupported severity=niche category=\"Per-amp independent control\"\n  The tile carries 2× TPA2028D1 amps wired to a single shared I²C\n  bus, and the TPA2028D1 has a fixed factory I²C address (0x58) —\n  any write at 0x58 is acknowledged by both amps simultaneously.\n  Independent left / right gain, AGC, or shutdown therefore can't\n  be achieved in software; closing this gap requires either an\n  I²C-mux on the tile or amp ICs with selectable addresses.",
   "code_examples": [
     {
       "label": "Quick start (I2C — DAC + amplifiers)",
       "code": "  #include \"core_tiles.h\"  // provides core_tiles_pal()\n\n  tile_t dac;\n  tiles_pal_t *hal = core_tiles_pal(&core_i2c1);\n  tile_drive_a_2_init(hal, 0, &dac, NULL);\n  if (tile_is_ready(&dac)) {\n      tile_drive_a_2_set(&dac, 0, 2048);       // Ch 0 mid-scale\n      tile_drive_a_2_amp_set_gain(&dac, 12);    // +12 dB both amps\n  }"
-    },
-    {
-      "label": "Quick start (SPI — DAC only, no amplifier control)",
-      "code": "  #include \"core_tiles.h\"\n\n  tile_t dac;\n  tiles_pal_t *hal = core_tiles_pal(&core_spi1);\n  tile_drive_a_2_init(hal, 0, &dac, NULL);  // instance = CS index\n  tile_drive_a_2_set_mv(&dac, 0, 1500);     // 1.5 V on channel 0"
     }
   ],
   "studio_ready": true,
@@ -20,6 +16,11 @@
       "severity": "advanced",
       "category": "DAC PWM-output mode (FBx pins)",
       "brief": "The DAC63202W FB0 / FB1 pins (package balls B2 / C2) can be configured as comparator / PWM outputs for driving external power-stage gates. On the Drive.A.2 tile these pins are tied to the on-board TPA2028D1 amplifier inputs (closed-loop voltage- output feedback) and are NOT routed to any tile-connector pad — so even if the driver enabled PWM mode, no Core GPIO could observe or use the output. Closing this gap requires a tile hardware revision that breaks FBx out to a pad."
+    },
+    {
+      "severity": "advanced",
+      "category": "SPI readback (SDO-EN)",
+      "brief": "Driver-deferred. The DAC63202W's SPI is write-only (3-wire) until INTERFACE-CONFIG.SDO-EN is set, and a read then takes two access cycles (SLASF73A §6.5.1). The driver never sets SDO-EN, so the DEVICE-ID check in find() / init() and every read-modify-write setter fail over SPI. Closing it means enabling SDO-EN (a write-only first step) and two-cycle reads in the SPI path."
     },
     {
       "severity": "niche",
@@ -42,7 +43,7 @@
     },
     {
       "name": "TILE_DRIVE_A_2_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -98,12 +99,12 @@
         {
           "name": "DRIVE_A_2_GAIN_1X_EXT",
           "value": "0",
-          "description": "1x, external VREF pin"
+          "description": "1x, external VREF pin (default)"
         },
         {
           "name": "DRIVE_A_2_GAIN_1X_VDD",
           "value": "1",
-          "description": "1x, VDD as reference (default)"
+          "description": "1x, VDD as reference"
         },
         {
           "name": "DRIVE_A_2_GAIN_1P5X_INT",
@@ -460,7 +461,7 @@
         }
       ],
       "notes": [],
-      "return": "1 if device ACKs (I2C) or responds to WHO_AM_I (SPI), 0 otherwise",
+      "return": "1 if the device ACKs (I2C), 0 otherwise. Over SPI it reads DEVICE-ID, which needs the 4-wire readback the driver does not enable yet, so over SPI it does not detect the part.",
       "brief": "Check whether a DAC63202W is present on the bus.",
       "description": "",
       "name": "tile_drive_a_2_find"
@@ -990,12 +991,12 @@
         }
       ],
       "notes": [
-        "Blocks for `ms` milliseconds via `hal->delay_ms`."
+        "Blocks for longer than `ms` (`ms` plus the I2C time of 8 × `ms` writes, or 16 × `ms` with CH_BOTH)."
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Linear frequency sweep on `channel` from `start_hz` to `end_hz`.",
-      "description": "Software sine-LUT chirp delivered through `set` (raw DAC code)\nat ~8 kHz update rate. Frequency advances linearly across `ms`.\nFor ascending sweeps pass start < end; for descending, start >\nend. The amp is unmuted for the duration and restored to its\nprior mute state on return.",
+      "description": "Software sine-LUT chirp delivered through `set` (raw DAC code).\nThe phase math assumes 8 kHz: 8 DAC writes, then delay_ms(1), per\nmillisecond. The writes are not timed, so each millisecond also\ncarries their bus time (16 writes with DRIVE_A_2_CH_BOTH): on a\n400 kHz I2C bus roughly 1.8 ms per slot. Pitches then come out\nproportionally lower than start_hz / end_hz, and a faster bus\nbrings them closer. Frequency advances linearly across the sweep.\nFor ascending sweeps pass start < end; for descending, start >\nend. The amp is unmuted for the duration and restored to its\nprior mute state on return.",
       "name": "tile_drive_a_2_play_chirp"
     },
     {
@@ -1049,7 +1050,7 @@
     }
   ],
   "source_file": "tile_drive_a_2.h",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "tile_family": "Drive",
   "tile_name": "A.2",
   "display_name": "Drive.A.2",

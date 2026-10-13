@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "tile": "Drive.DC.H",
   "palette": {
     "label": "Drive.DC.H",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_dc_h",
     "header": "tile_drive_dc_h.h",
-    "version": "4.3.0"
+    "version": "4.3.1"
   },
   "handle": {
     "type": "tile_t",

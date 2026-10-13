@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@afe442f",
+  "source": "tiles@20ee3f3",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_display_rgbw",
     "header": "tile_display_rgbw.h",
-    "version": "2.5.0"
+    "version": "2.5.1"
   },
   "handle": {
     "type": "tile_t",
@@ -995,7 +995,7 @@
         {
           "name": "repeats",
           "type": "int",
-          "description": "Whole-pattern repeat: 0-14, 15 = infinite."
+          "description": "Number of breaths: 1-14, 15 = forever (0 plays none)."
         }
       ],
       "returns": "void",

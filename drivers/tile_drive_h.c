@@ -16,6 +16,12 @@ static const uint8_t id_table[] = {
 
 #define ID_TABLE_LEN  (sizeof(id_table) / sizeof(id_table[0]))
 
+/* Result of the last calibrate() since init: 1 = converged. DIAG_RESULT
+ * clears on read (SLOS825E STATUS), and calibrate() is the one that reads
+ * it, so is_calibrated() reports this cached copy. One entry: the part has
+ * one fixed address. */
+static uint8_t cal_converged[ID_TABLE_LEN];
+
 static uint8_t resolve_id(uint8_t instance)
 {
     if (instance >= ID_TABLE_LEN) return 0x00;
@@ -101,6 +107,7 @@ void tile_drive_h_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
 
     tile->hal = hal;
     tile->id  = id;
+    cal_converged[instance] = 0;
 
     /* Verify device is on bus */
     if (hal->i2c_is_ready(hal->handle, id) != 0) {
@@ -207,8 +214,11 @@ void tile_drive_h_play(tile_t* tile, uint8_t index, uint8_t repeats)
     /* Trigger */
     drv_write(tile, DRV2605L_REG_GO, 0x01);
 
-    /* Repeat with gap */
+    /* Repeat: wait for the effect to finish (GO self-clears when the
+     * sequence ends), leave a 200 ms gap, then trigger again. The last
+     * play is not waited for. */
     for (uint8_t i = 1; i < repeats; i++) {
+        (void)drv_wait_go(tile, 3000);
         tile->hal->delay_ms(200);
         drv_write(tile, DRV2605L_REG_GO, 0x01);
     }
@@ -401,16 +411,25 @@ uint8_t tile_drive_h_calibrate(tile_t* tile)
         drv_write(tile, DRV2605L_REG_FEEDBACK_CTRL, fb_saved);
         drv_write(tile, DRV2605L_REG_CONTROL3, ctrl3_saved);
         drv_write(tile, DRV2605L_REG_MODE, DRV2605L_MODE_INTERNAL_TRIG);
+        cal_converged[0] = 0;
         return 0;
     }
 
-    /* Check DIAG_RESULT: 0 = converged (pass), 1 = failed */
+    /* Check DIAG_RESULT: 0 = converged (pass), 1 = failed. The read clears
+     * it, so keep the result for is_calibrated(). */
     uint8_t status = drv_read(tile, DRV2605L_REG_STATUS);
     uint8_t passed = (status & DRV2605L_STATUS_DIAG_RESULT) ? 0 : 1;
+    cal_converged[0] = passed;
 
-    /* Restore feedback control and open/closed-loop setting.
-     * Note: A_CAL_COMP and A_CAL_BEMF are now populated by the
-     * cal engine and persist until reset. */
+    /* Restore feedback control and open/closed-loop setting, but keep the
+     * BEMF_GAIN[1:0] a converged calibration chose: the cal engine writes
+     * the best value for the actuator there (SLOS825E 7.3.2.4.5).
+     * A_CAL_COMP and A_CAL_BEMF are also populated by the cal engine and
+     * persist until reset. */
+    if (passed) {
+        uint8_t fb_now = drv_read(tile, DRV2605L_REG_FEEDBACK_CTRL);
+        fb_saved = (uint8_t)((fb_saved & ~0x03) | (fb_now & 0x03));
+    }
     drv_write(tile, DRV2605L_REG_FEEDBACK_CTRL, fb_saved);
     drv_write(tile, DRV2605L_REG_CONTROL3, ctrl3_saved);
     drv_write(tile, DRV2605L_REG_MODE, DRV2605L_MODE_INTERNAL_TRIG);
@@ -964,7 +983,8 @@ void tile_drive_h_play_buzz(tile_t* tile, uint16_t ms)
 uint8_t tile_drive_h_is_calibrated(tile_t* tile)
 {
     if (tile->state != TILE_STATE_READY) return 0;
-    /* DIAG_RESULT is set by the cal engine: 0 = converged, 1 = failed. */
-    uint8_t status = drv_read(tile, DRV2605L_REG_STATUS);
-    return (status & DRV2605L_STATUS_DIAG_RESULT) ? 0 : 1;
+    /* DIAG_RESULT clears on read and calibrate() already read it, so a
+     * fresh STATUS read here would always say "converged". Report the
+     * result calibrate() cached instead. */
+    return cal_converged[0];
 }

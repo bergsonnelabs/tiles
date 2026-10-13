@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@4c565e2",
+  "source": "tiles@20ee3f3",
   "file": "tile_sense_t_c.h",
   "brief": "Capacitive touch/proximity driver for the Sense.T.C tile (IQS323).",
-  "description": "@version 1.4.0\n\nAzoteq IQS323 ProxFusion controller with self-capacitive touch sensing.\nThe tile's entire top surface is a touch electrode (CH1/CRx1), and a\nsecond channel (CH0/CRx0) is available via pad 8 for external sensors.\n\ninit() soft-resets the chip and configures it: CH1 on the surface\nelectrode (CRx1/CTx1) and CH0 on pad 8 (CRx0/CTx0), self-capacitance,\nprox 20 / touch 40, Azoteq's EV-kit filters and report rates (NP 16 ms,\nLP 60, ULP 160, Halt 3000, auto step-down after 2 s), AUTO power, ATI,\nthen I2C event mode. The chip's own reset values leave every threshold,\nrate and filter at 0 and point all three channels at CRx0, so none of\nthis is optional. If the chip resets later (brown-out, watchdog),\nprocess() sees the reset event and configures it again.\n\nTwo ways to drive process():\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. Each call forces a communication\n    window (about 15 ms).\n  - **RDY mode**: provide a rdy_pin in config. EXTI falling-edge ISR\n    sets a flag; process() only does I2C when the flag is set, which in\n    event mode means a touch or prox change. Lower latency, far less\n    I2C traffic.\n\nEvent callback: register an on_event callback to be notified of\ntouch, proximity, slider, and gesture changes without polling\nindividual status functions.\n\n\n\n\nSlider note: a slider needs at least two channels on the SAME IQS323\n(the surface CH1 plus an electrode on pad 8 / CH0; CH2 is not routed),\nconfigured through the slider registers (0x90-0x98) with write_reg.\nTwo separate tiles cannot form one slider: each has its own controller.\nA single tile surface alone cannot produce a slider output.\n\nDatasheet: Azoteq IQS323, Rev v1.11, August 2025\n\n@studio tile label=Sense.T.C icon=◕\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Per-gesture threshold tuning\" section=config\n  IQS323 gesture timing (tap touch/release time, hold duration,\n  swipe distance, flick velocity) is packed across several\n  GESTURE_* registers with chip-specific encodings. The driver\n  reports gesture events but doesn't surface a typed API for\n  timing / threshold tuning — closing this properly needs a\n  dedicated pass with Azoteq's gesture-config guide. Raw\n  write_reg works for advanced users in the interim.\n\n@studio unsupported severity=niche category=\"Per-channel timeout / OutA event-indicator\" section=advanced\n  Channel-timeout disable bits (auto-reseed on timeout) and the\n  OutA pin's event-indicator output mode aren't exposed. Most\n  applications don't need them; raw write_reg covers the niche\n  cases that do. OutA is also not routed on this tile (HW-gated).\n\n@studio unsupported severity=niche category=\"Mutual-capacitance / inductive sensing\" section=advanced\n  The chip can run mutual-capacitance (Tx/Rx pairs) and inductive\n  channels. HW-gated: the tile routes one self-cap electrode per\n  channel (surface on CRx1, pad 8 on CRx0) and no TxA; CRx2 is not\n  routed. The driver configures self-capacitance only.\n\n@studio unsupported severity=niche category=\"Hardware reset (MCLR)\" section=advanced\n  Pad 3 is RDY/MCLR: pulling it low outside a window hard-resets the\n  chip. Driver-deferred: the driver uses the soft reset and the pad\n  only as the RDY input. The on-tile 100 nF on the pin slows any\n  host-driven pulse.\n\n@studio unsupported severity=advanced category=\"Release UI (long-touch release)\" section=advanced\n  The tile's IQS323-001 includes the Release UI: an activation LTA\n  that lets a long-held touch or prox release cleanly (registers\n  0x20-0x25, 0xD4, Sensor Setup bit 6). Driver-deferred; write_reg\n  reaches it. The Movement UI is a different build (IQS323-A01), not\n  on this tile.",
+  "description": "@version 1.4.1\n\nAzoteq IQS323 ProxFusion controller with self-capacitive touch sensing.\nThe tile's entire top surface is a touch electrode (CH1/CRx1), and a\nsecond channel (CH0/CRx0) is available via pad 8 for external sensors.\n\ninit() soft-resets the chip and configures it: CH1 on the surface\nelectrode (CRx1/CTx1) and CH0 on pad 8 (CRx0/CTx0), self-capacitance,\nprox 20 / touch 40, Azoteq's EV-kit filters and report rates (NP 16 ms,\nLP 60, ULP 160, Halt 3000, auto step-down after 2 s), AUTO power, ATI,\nthen I2C event mode. The chip's own reset values leave every threshold,\nrate and filter at 0 and point all three channels at CRx0, so none of\nthis is optional. If the chip resets later (brown-out, watchdog),\nprocess() sees the reset event and configures it again.\n\nTwo ways to drive process():\n  - **Polled mode** (default): call process() from your main loop.\n    No RDY pin wiring required. Each call forces a communication\n    window (about 15 ms).\n  - **RDY mode**: provide a rdy_pin in config. EXTI falling-edge ISR\n    sets a flag; process() only does I2C when the flag is set, which in\n    event mode means a touch or prox change. Lower latency, far less\n    I2C traffic.\n\nEvent callback: register an on_event callback to be notified of\ntouch, proximity, slider, and gesture changes without polling\nindividual status functions.\n\n\n\n\nSlider note: a slider needs at least two channels on the SAME IQS323\n(the surface CH1 plus an electrode on pad 8 / CH0; CH2 is not routed),\nconfigured through the slider registers (0x90-0x98) with write_reg.\nTwo separate tiles cannot form one slider: each has its own controller.\nA single tile surface alone cannot produce a slider output.\n\nDatasheet: Azoteq IQS323, Rev v1.11, August 2025\n\n@studio tile label=Sense.T.C icon=◕\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Per-gesture threshold tuning\" section=config\n  IQS323 gesture timing (tap touch/release time, hold duration,\n  swipe distance, flick velocity) is packed across several\n  GESTURE_* registers with chip-specific encodings. The driver\n  reports gesture events but doesn't surface a typed API for\n  timing / threshold tuning — closing this properly needs a\n  dedicated pass with Azoteq's gesture-config guide. Raw\n  write_reg works for advanced users in the interim.\n\n@studio unsupported severity=niche category=\"Per-channel timeout / OutA event-indicator\" section=advanced\n  Channel-timeout disable bits (auto-reseed on timeout) and the\n  OutA pin's event-indicator output mode aren't exposed. Most\n  applications don't need them; raw write_reg covers the niche\n  cases that do. OutA is also not routed on this tile (HW-gated).\n\n@studio unsupported severity=niche category=\"Mutual-capacitance / inductive sensing\" section=advanced\n  The chip can run mutual-capacitance (Tx/Rx pairs) and inductive\n  channels. HW-gated: the tile routes one self-cap electrode per\n  channel (surface on CRx1, pad 8 on CRx0) and no TxA; CRx2 is not\n  routed. The driver configures self-capacitance only.\n\n@studio unsupported severity=niche category=\"Hardware reset (MCLR)\" section=advanced\n  Pad 3 is RDY/MCLR: pulling it low outside a window hard-resets the\n  chip. Driver-deferred: the driver uses the soft reset and the pad\n  only as the RDY input. The on-tile 100 nF on the pin slows any\n  host-driven pulse.\n\n@studio unsupported severity=advanced category=\"Release UI (long-touch release)\" section=advanced\n  The tile's IQS323-001 includes the Release UI: an activation LTA\n  that lets a long-held touch or prox release cleanly (registers\n  0x20-0x25, 0xD4, Sensor Setup bit 6). Driver-deferred; write_reg\n  reaches it. The Movement UI is a different build (IQS323-A01), not\n  on this tile.",
   "code_examples": [
     {
       "label": "Simple polling example (Cores SDK)",
@@ -66,7 +66,7 @@
     },
     {
       "name": "TILE_SENSE_T_C_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -269,7 +269,7 @@
       "studio_exposed": true,
       "studio_section": "events",
       "brief": "Read pending touch/proximity events and update internal state.",
-      "description": "Call from your main loop.\nIn polled mode: reads status register, fires callback if events present.\nIn RDY mode: returns immediately if no RDY interrupt; reads + fires\ncallback only when the device has new data.",
+      "description": "Call from your main loop.\nIn polled mode: reads the status register and fires the callback on\nevery successful read (events or not).\nIn RDY mode: returns immediately if no RDY interrupt; otherwise reads\nand fires the callback the same way.",
       "name": "tile_sense_t_c_process"
     },
     {
@@ -382,7 +382,7 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "Filtered counts, or 0 for a bad channel",
+      "return": "Filtered counts, 0 for a bad channel, or 0xEEEE when no communication window opened (the chip's \"no data\" reply)",
       "brief": "Read the filtered counts value for a channel (0x13/0x15/0x17).",
       "description": "Self-capacitance counts DROP when a finger approaches.",
       "name": "tile_sense_t_c_get_counts"
@@ -398,7 +398,7 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "return": "LTA baseline in counts",
+      "return": "LTA baseline in counts, 0 for a bad channel, or 0xEEEE when no communication window opened (the chip's \"no data\" reply)",
       "brief": "Read the long-term average (LTA) for a channel.",
       "description": "",
       "name": "tile_sense_t_c_get_lta"
@@ -793,7 +793,7 @@
     }
   ],
   "source_file": "tile_sense_t_c.h",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "tile_family": "Sense",
   "tile_name": "T.C",
   "display_name": "Sense.T.C",

@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_power_l_1t.h",
   "brief": "Li-Ion charge controller driver for the Power.L.1T tile (rev b).",
-  "description": "Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge\ncontroller with programmable 1.8 V LDO output and 12-bit ADC for\nbattery and system monitoring.\n\nKey specifications:\n  - Charge input:     3.4–5.5 V (VUVLO / VOVP), input limit 50–600 mA\n  - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)\n  - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V\n                      programmable, 100 mA max (datasheet 7.3 ILDO)\n  - ADC:              12-bit, 6 input channels\n  - Charge current:   1.25–500 mA programmable\n  - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)\n\nTile wiring that matters to firmware (Power-L-1T-b schematic):\n  - I²C only answers on battery when LP (pad 2) is driven > 1.35 V; with\n    LP low (its 900 kΩ default) and no SUPPLY+, the chip is in low-power\n    mode with I²C and the ADC off. With SUPPLY+ present LP has no effect.\n  - GND (pad 1) is a SWITCHED ground: an SI8806 N-FET joins it to\n    BATT-/SUPPLY- (pads 6/9), its gate fed from V+ through 220 kΩ. SW\n    (pad 3) to ground, LDO disabled, PMID off or ship mode all open it.\n  - IMAX = 10 kΩ (no hardware charge-current cap below 500 mA).\n  - /CE, /MR, /PG and INT are not routed (/CE's internal pull-down keeps\n    charging enabled).\n\nDatasheet: https://www.bergsonne.io/tiles/power/l1t\nIC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf\n\n@studio tile label=Power.L.1T icon=☷\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Battery NTC / JEITA\"\n  Hardware-gated (not a driver gap). The BQ25150 can pause or derate\n  charging from a battery thermistor on TS, but Power-L-1T-b straps TS to\n  a fixed 5 kΩ resistor (the datasheet's \"TS not used\" connection), which\n  reads a constant ~0.40 V: always the normal band. Battery temperature is\n  therefore NOT monitored; set_ts_* and set_ts_enabled have no practical\n  effect. The chip's die thermal foldback (80 °C) still applies.\n\n@studio unsupported severity=advanced category=\"MR button + INT pin handling\"\n  The chip's MR (push-button) and INT (interrupt) pins aren't\n  routed to tile pads on the current revision — nothing for a\n  Core GPIO to attach to. Closing this gap requires a tile\n  hardware revision that routes at least INT to a connector\n  pad. Until then, MASK0–3 / MRCTRL register writes have no\n  external effect.",
+  "description": "Embeds the Texas Instruments BQ25150, a single-cell Li-Ion charge\ncontroller with programmable 1.8 V LDO output and 12-bit ADC for\nbattery and system monitoring.\n\nKey specifications:\n  - Charge input:     3.4–5.5 V (VUVLO / VOVP), input limit 50–600 mA\n  - Battery voltage:  3.6–4.6 V regulation (programmable in 10 mV steps)\n  - LDO output:       V+ (pad 10), 1.8 V at power-on, 0.6–3.7 V\n                      programmable, 100 mA max (datasheet 7.3 ILDO)\n  - ADC:              12-bit, 7 input channels (IIN, PMID, ICHG, VIN,\n                      VBAT, TS, ADCIN)\n  - Charge current:   1.25–500 mA programmable\n  - No battery NTC:   TS is strapped to a fixed 5 kΩ (see below)\n\nTile wiring that matters to firmware (Power-L-1T-b schematic):\n  - I²C only answers on battery when LP (pad 2) is driven > 1.35 V; with\n    LP low (its 900 kΩ default) and no SUPPLY+, the chip is in low-power\n    mode with I²C and the ADC off. With SUPPLY+ present LP has no effect.\n  - GND (pad 1) is a SWITCHED ground: an SI8806 N-FET joins it to\n    BATT-/SUPPLY- (pads 6/9), its gate fed from V+ through 220 kΩ. SW\n    (pad 3) to ground, LDO disabled, PMID off or ship mode all open it.\n  - IMAX = 10 kΩ (no hardware charge-current cap below 500 mA).\n  - /CE, /MR, /PG and INT are not routed (/CE's internal pull-down keeps\n    charging enabled).\n\nDatasheet: https://www.bergsonne.io/tiles/power/l1t\nIC datasheet: https://www.ti.com/lit/ds/symlink/bq25150.pdf\n\n@studio tile label=Power.L.1T icon=☷\n\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=advanced category=\"Battery NTC / JEITA\"\n  Hardware-gated (not a driver gap). The BQ25150 can pause or derate\n  charging from a battery thermistor on TS, but Power-L-1T-b straps TS to\n  a fixed 5 kΩ resistor (the datasheet's \"TS not used\" connection), which\n  reads a constant ~0.40 V: always the normal band. Battery temperature is\n  therefore NOT monitored; set_ts_* and set_ts_enabled have no practical\n  effect. The chip's die thermal foldback (80 °C) still applies.\n\n@studio unsupported severity=advanced category=\"MR button + INT pin handling\"\n  The chip's MR (push-button) and INT (interrupt) pins aren't\n  routed to tile pads on the current revision — nothing for a\n  Core GPIO to attach to. Closing this gap requires a tile\n  hardware revision that routes at least INT to a connector\n  pad. Until then, MASK0–3 / MRCTRL register writes have no\n  external effect.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -38,7 +38,7 @@
     },
     {
       "name": "TILE_POWER_L_1T_VERSION_PATCH",
-      "value": "0",
+      "value": "1",
       "description": "",
       "section": ""
     },
@@ -227,8 +227,14 @@
     {
       "name": "power_l_1t_status_t",
       "brief": "Snapshot of the BQ25150's current state and latched faults.",
-      "description": "Populated by tile_power_l_1t_get_charge_status(). Mixes live state\n(vin_pgood, charging, *_active) and clear-on-read event flags\n(faults). Reading the flags clears them — call once per polling\ncycle, not multiple times.",
-      "fields": []
+      "description": "Populated by tile_power_l_1t_get_charge_status(). Mostly live state\n(STAT0 / STAT1, including vin_ovp, bat_ocp, bat_uvlo and the TS bits);\nonly safety_timer and watchdog are latched FLAG3 flags, which the read\nclears — call once per polling cycle, not multiple times.",
+      "fields": [
+        {
+          "type": "bat_uvlo are live STAT1",
+          "name": "bits",
+          "description": ""
+        }
+      ]
     },
     {
       "name": "power_l_1t_cfg_t",
@@ -284,7 +290,7 @@
       ],
       "notes": [],
       "brief": "Initialize the BQ25150 charge controller.",
-      "description": "Verifies the device ID, disables the I²C watchdog (the chip\notherwise resets all charge parameters every 50 s), enables all\n6 ADC channels, configures charge defaults (80 mA fast charge,\n18.75 mA pre-charge, 4.20 V regulation, 2.6 V battery UVLO, TS on,\n6 h safety timer) and clears the ship-mode request. Input limit,\ntermination, LDO and charger-enable are left as the chip holds them.\nPass cfg=NULL for defaults.\n\nOn battery alone, LP (pad 2) must be high for this to find the chip\n(I²C is off in low-power mode).",
+      "description": "Verifies the device ID, disables the I²C watchdog (the chip\notherwise resets all charge parameters every 50 s), enables all\n7 ADC channels, configures charge defaults (80 mA fast charge,\n18.75 mA pre-charge, 4.20 V regulation, 2.6 V battery UVLO, TS on,\n6 h safety timer) and clears the ship-mode request. Input limit,\ntermination, LDO and charger-enable are left as the chip holds them.\nPass cfg=NULL for defaults.\n\nOn battery alone, LP (pad 2) must be high for this to find the chip\n(I²C is off in low-power mode).",
       "name": "tile_power_l_1t_init"
     },
     {
@@ -329,7 +335,7 @@
       "studio_exposed": true,
       "studio_section": "config",
       "brief": "Set the pre-charge current (used when VBAT < VLOW).",
-      "description": "Pre-charge applies to deeply-discharged cells; usually 10–20 % of\nthe fast-charge rate. Values clamp to 1.25–77.5 mA.",
+      "description": "Pre-charge applies to deeply-discharged cells; usually 10–20 % of\nthe fast-charge rate. Settable 0–75 mA in 2.5 mA steps, or 0–37.5 mA in\n1.25 mA steps at or below a 318 mA fast charge; requests round down to\na step and clamp to that range (below one step gives 0 mA).",
       "name": "tile_power_l_1t_set_pre_charge_ma"
     },
     {
@@ -584,14 +590,14 @@
       "studio_exposed": true,
       "studio_section": "runtime",
       "brief": "Snapshot the chip's current state + latched faults.",
-      "description": "Reads STAT0/STAT1 (live state) and FLAG0/FLAG1/FLAG3 (event flags\nwhich clear on read) into the supplied struct. Call once per\npolling cycle — multiple reads will lose flag transitions.",
+      "description": "Reads STAT0 and STAT1 (live state, including the VIN_OVP, BAT_OCP,\nBAT_UVLO and TS bits), FLAG3 (safety-timer and watchdog flags, which\nclear on read) and ICCTRL1/2 (for the derived `charging` bit) into the\nsupplied struct. Call once per polling cycle — a second read loses the\nFLAG3 events.",
       "name": "tile_power_l_1t_get_charge_status"
     },
     {
       "signature": "void tile_power_l_1t_enter_ship_mode(tile_t* tile)",
       "params": [],
       "notes": [
-        "Warning: Destructive: requires physical user action (MR press or VIN re-insertion) to recover. Marked `section=advanced` for the same posture as other one-way / hardware-gated operations."
+        "Warning: Destructive: requires physical user action (applying SUPPLY+ again) to recover. Marked `section=advanced` for the same posture as other one-way / hardware-gated operations."
       ],
       "studio_exposed": true,
       "studio_section": "advanced",
@@ -795,7 +801,7 @@
     }
   ],
   "source_file": "tile_power_l_1t.h",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "tile_family": "Power",
   "tile_name": "L.1T",
   "display_name": "Power.L.1T",

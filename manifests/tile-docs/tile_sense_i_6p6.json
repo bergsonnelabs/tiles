@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@20ee3f3",
   "file": "tile_sense_i_6p6.h",
   "brief": "Complete driver for the Sense.I.6P6 tile (ICM-42686-P). Supports I2C, I3C (Core.ST.H5) and SPI bus access via tiles_pal_t.",
-  "description": "        Supports I2C, I3C (Core.ST.H5) and SPI bus access via tiles_pal_t.\n@version 1.4.0\n\n1.4.0: I3C (Core.ST.H5) through the core_tiles_pal I3C bridge; on I2C the\ndatasheet's I2C driver setting (I3C slave off, so the chip's I2C glitch\nfilter is on), which makes it reliable on weak pull-ups.\n\n6-axis IMU with extended measurement range:\n  - Accelerometer:  16-bit, ±2/4/8/16/32 G, up to 32 kHz ODR\n  - Gyroscope:      16-bit, ±31.25 to ±4000 DPS, up to 32 kHz ODR\n  - Temperature:    on-chip sensor\n  - FIFO:           2 KB with multiple packet formats\n  - APEX:           Pedometer, tilt, wake-on-motion, tap detection\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\nOn Core.ST.H5 the tile also runs over I3C: coregen emits core_i3c1 when\nconfig.json asks for it (config-json.md §7), and the bridge maps the\ndriver's static address (0x69) to the tile's dynamic address.\n\n\n\n\nDatasheet: TDK InvenSense DS-000639, Rev 1.0\n\n@studio tile label=Sense.I.6P6 icon=triad\n@studio event name=data_ready mask=ICM42686P_INT_DATA_RDY\n@studio event name=fifo_watermark mask=ICM42686P_INT_FIFO_THS\n@studio event name=tilt mask=ICM42686P_INT_STATUS3_TILT_DET\n@studio event name=tap mask=ICM42686P_INT_STATUS3_TAP_DET payload=count:int,axis:int,direction:int read=tile_sense_i_6p6_get_tap_result read_type=sense_i_6p6_tap_result_t\n@studio event name=wake_on_motion mask=ICM42686P_INT_STATUS2_WOM_ANY\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"External timing pins (FSYNC / CLKIN)\"\n  Hardware-gated (not a driver gap). The ICM-42686-P can take a 31–50 kHz\n  FSYNC input (TIMESTAMP_FSYNC_EN) for sample time-stamping and a ~32 kHz\n  external CLKIN (RTC) for precise ODR. Neither pin is routed to a tile pad\n  on Sense-I-6P6-a, so the capability simply isn't wired out — closing\n  requires a tile hardware revision, not driver work.\n\n@studio unsupported severity=niche category=\"FIFO 20-bit hi-res mode\"\n  Design-gated. FIFO_HIRES_EN switches FIFO packets to 20-bit accel\n  + 20-bit gyro (Packet 4 with 3-byte extensions) at higher\n  sensitivity scale factors. Closing properly requires extending\n  sense_i_6p6_fifo_packet_t to represent 20-bit fields and reworking\n  the read_packet parser; toggling the bit alone breaks the existing\n  16-bit parsing path. Deferred to a future driver pass.\n\n@studio unsupported severity=niche category=\"I3C: HDR-DDR, IBI routing, Studio\"\n  I3C SDR works on Core.ST.H5 (driver 1.4.0): core_tiles_pal(&core_i3c1)\n  runs this driver unchanged at up to 12.4 MHz, with dynamic addressing,\n  and in-band interrupts through core_i3c_ibi_enable() + ENEC. What is left:\n  HDR-DDR (the chip has it; the H5 I3C peripheral is SDR-only, so it is\n  hardware-gated on every Core); no driver call routes events to IBI\n  (write INT_SOURCE8/9 in bank 4 with write_reg); and Studio cannot put a\n  bus on I3C yet (config.json can: \"i3c\": true on the I2C bus).\n\n@studio unsupported severity=advanced category=\"APEX raise-to-wake / raise-to-sleep\"\n  Driver-deferred (true driver gap — hardware supports it). The APEX engine\n  detects raise-to-wake / raise-to-sleep gestures (RWR), routable to INT via\n  INT_SOURCE6/7. The driver wraps pedometer / tilt / tap / WOM / SMD but not\n  RWR; no hardware or framework blocker — closing is a driver pass.\n\n@studio unsupported severity=advanced category=\"UI notch / anti-alias filter tuning\"\n  Driver-deferred (true driver gap). set_filter_bw / set_filter_order expose\n  the UI filter bandwidth and order, but not the notch-filter centre\n  frequency / Q (Bank-1 GYRO_CFG_STATIC registers) for rejecting a specific\n  vibration band.\n\n@studio unsupported severity=niche category=\"Standalone timestamp (TMSTVAL) read\"\n  Driver-deferred (true driver gap). FIFO packets carry a 16-bit timestamp,\n  but the chip's free-running timestamp counter (Bank-1 TMSTVAL0-2) isn't\n  exposed as a direct read.",
+  "description": "        Supports I2C, I3C (Core.ST.H5) and SPI bus access via tiles_pal_t.\n@version 1.5.0\n\n1.4.0: I3C (Core.ST.H5) through the core_tiles_pal I3C bridge; on I2C the\ndatasheet's I2C driver setting (I3C slave off, so the chip's I2C glitch\nfilter is on), which makes it reliable on weak pull-ups.\n\n6-axis IMU with extended measurement range:\n  - Accelerometer:  16-bit, ±2/4/8/16/32 G, up to 32 kHz ODR\n  - Gyroscope:      16-bit, ±31.25 to ±4000 DPS, up to 32 kHz ODR\n  - Temperature:    on-chip sensor\n  - FIFO:           2 KB with multiple packet formats\n  - APEX:           Pedometer, tilt, wake-on-motion, tap detection\n\nPlatform-agnostic: uses tiles_pal_t for all bus access.\n\n\nOn Core.ST.H5 the tile also runs over I3C: coregen emits core_i3c1 when\nconfig.json asks for it (config-json.md §7), and the bridge maps the\ndriver's static address (0x69) to the tile's dynamic address.\n\n\n\n\nDatasheet: TDK InvenSense DS-000639, Rev 1.0\n\n@studio tile label=Sense.I.6P6 icon=triad\n@studio event name=data_ready mask=ICM42686P_INT_DATA_RDY\n@studio event name=fifo_watermark mask=ICM42686P_INT_FIFO_THS\n@studio event name=tilt mask=SENSE_I_6P6_EV_TILT\n@studio event name=tap mask=SENSE_I_6P6_EV_TAP payload=count:int,axis:int,direction:int read=tile_sense_i_6p6_get_tap_result read_type=sense_i_6p6_tap_result_t\n@studio event name=wake_on_motion mask=SENSE_I_6P6_EV_WOM\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"External timing pins (FSYNC / CLKIN)\"\n  Hardware-gated (not a driver gap). The ICM-42686-P can take a 31–50 kHz\n  FSYNC input (TIMESTAMP_FSYNC_EN) for sample time-stamping and a ~32 kHz\n  external CLKIN (RTC) for precise ODR. Neither pin is routed to a tile pad\n  on Sense-I-6P6-a, so the capability simply isn't wired out — closing\n  requires a tile hardware revision, not driver work.\n\n@studio unsupported severity=niche category=\"FIFO 20-bit hi-res mode\"\n  Design-gated. FIFO_HIRES_EN switches FIFO packets to 20-bit accel\n  + 20-bit gyro (Packet 4 with 3-byte extensions) at higher\n  sensitivity scale factors. Closing properly requires extending\n  sense_i_6p6_fifo_packet_t to represent 20-bit fields and reworking\n  the read_packet parser; toggling the bit alone breaks the existing\n  16-bit parsing path. Deferred to a future driver pass.\n\n@studio unsupported severity=niche category=\"I3C: HDR-DDR, IBI routing, Studio\"\n  I3C SDR works on Core.ST.H5 (driver 1.4.0): core_tiles_pal(&core_i3c1)\n  runs this driver unchanged at up to 12.4 MHz, with dynamic addressing,\n  and in-band interrupts through core_i3c_ibi_enable() + ENEC. What is left:\n  HDR-DDR (the chip has it; the H5 I3C peripheral is SDR-only, so it is\n  hardware-gated on every Core); no driver call routes events to IBI\n  (write INT_SOURCE8/9 in bank 4 with write_reg); and Studio cannot put a\n  bus on I3C yet (config.json can: \"i3c\": true on the I2C bus).\n\n@studio unsupported severity=advanced category=\"APEX raise-to-wake / raise-to-sleep\"\n  Driver-deferred (true driver gap — hardware supports it). The APEX engine\n  detects raise-to-wake / raise-to-sleep gestures (RWR), routable to INT via\n  INT_SOURCE6/7. The driver wraps pedometer / tilt / tap / WOM / SMD but not\n  RWR; no hardware or framework blocker — closing is a driver pass.\n\n@studio unsupported severity=advanced category=\"UI notch / anti-alias filter tuning\"\n  Driver-deferred (true driver gap). set_filter_bw / set_filter_order expose\n  the UI filter bandwidth and order, but not the notch-filter centre\n  frequency / Q (Bank-1 GYRO_CFG_STATIC registers) for rejecting a specific\n  vibration band.\n\n@studio unsupported severity=niche category=\"Standalone timestamp (TMSTVAL) read\"\n  Driver-deferred (true driver gap). FIFO packets carry a 16-bit timestamp,\n  but the chip's free-running timestamp counter (Bank-1 TMSTVAL0-2) isn't\n  exposed as a direct read.",
   "code_examples": [
     {
       "label": "Quick start — I2C (polling)",
@@ -81,7 +81,7 @@
     },
     {
       "name": "TILE_SENSE_I_6P6_VERSION_MINOR",
-      "value": "4",
+      "value": "5",
       "description": "",
       "section": ""
     },
@@ -961,7 +961,7 @@
         {
           "type": "uint8_t",
           "name": "int2_pin",
-          "description": "Core pad number for INT2. 0 = unused."
+          "description": "Reserved: stored but not used (INT2 is not wired up by the driver)."
         },
         {
           "type": "sense_i_6p6_event_cb_t",
@@ -971,12 +971,12 @@
         {
           "type": "uint8_t",
           "name": "accel_range",
-          "description": "sense_i_6p6_accel_range_t. 0 = default."
+          "description": "sense_i_6p6_accel_range_t. 0 = default (±8 g; ±32 g unreachable here)."
         },
         {
           "type": "uint8_t",
           "name": "gyro_range",
-          "description": "sense_i_6p6_gyro_range_t. 0 = default."
+          "description": "sense_i_6p6_gyro_range_t. 0 = default (±1000 dps; ±4000 dps unreachable here)."
         },
         {
           "type": "uint8_t",
@@ -1012,7 +1012,7 @@
       "studio_exposed": true,
       "studio_section": "events",
       "brief": "Process pending interrupt events. Call from your main loop.",
-      "description": "In interrupt mode: returns immediately if no INT1 interrupt fired;\nreads INT_STATUS and fires callback only when events are pending.\nIn polled mode: reads INT_STATUS every call, fires callback if set.",
+      "description": "Reads INT_STATUS, INT_STATUS2 and INT_STATUS3, composes the event word\n(SENSE_I_6P6_EV_*) and fires the callback when it is non-zero.\nIn interrupt mode: returns immediately if no INT1 interrupt fired.\nIn polled mode: reads the three registers every call.\n\nAll three registers clear on read, so process() consumes the WOM, SMD,\nstep, tilt and tap flags. Don't mix it with get_int_status2(),\nget_int_status3(), wait_for_tap() or wait_for_motion(): whichever reads\nfirst takes the flag.",
       "name": "tile_sense_i_6p6_process"
     },
     {
@@ -1066,7 +1066,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_accel_range(tile_t *tile, sense_i_6p6_accel_range_t range)",
-      "params": [],
+      "params": [
+        {
+          "name": "range",
+          "description": "Full-scale range (sense_i_6p6_accel_range_t)."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1076,7 +1081,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_gyro_range(tile_t *tile, sense_i_6p6_gyro_range_t range)",
-      "params": [],
+      "params": [
+        {
+          "name": "range",
+          "description": "Full-scale range (sense_i_6p6_gyro_range_t)."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1086,7 +1096,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_accel_odr(tile_t *tile, sense_i_6p6_odr_t odr)",
-      "params": [],
+      "params": [
+        {
+          "name": "odr",
+          "description": "Output data rate (sense_i_6p6_odr_t)."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1096,7 +1111,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_gyro_odr(tile_t *tile, sense_i_6p6_odr_t odr)",
-      "params": [],
+      "params": [
+        {
+          "name": "odr",
+          "description": "Output data rate (sense_i_6p6_odr_t)."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1106,7 +1126,16 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_power_mode(tile_t *tile, sense_i_6p6_power_mode_t accel, sense_i_6p6_power_mode_t gyro)",
-      "params": [],
+      "params": [
+        {
+          "name": "accel",
+          "description": "Accel power mode (off, low-power or low-noise)."
+        },
+        {
+          "name": "gyro",
+          "description": "Gyro power mode (off, standby or low-noise)."
+        }
+      ],
       "notes": [
         "Wait 200 µs after changing mode before accessing other registers."
       ],
@@ -1118,7 +1147,16 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_filter_bw(tile_t *tile, sense_i_6p6_filter_bw_t accel_bw, sense_i_6p6_filter_bw_t gyro_bw)",
-      "params": [],
+      "params": [
+        {
+          "name": "accel_bw",
+          "description": "Accel UI filter bandwidth."
+        },
+        {
+          "name": "gyro_bw",
+          "description": "Gyro UI filter bandwidth."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -1128,7 +1166,16 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_filter_order(tile_t *tile, sense_i_6p6_filter_order_t accel_order, sense_i_6p6_filter_order_t gyro_order)",
-      "params": [],
+      "params": [
+        {
+          "name": "accel_order",
+          "description": "Accel UI filter order."
+        },
+        {
+          "name": "gyro_order",
+          "description": "Gyro UI filter order."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -1138,7 +1185,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_set_temp_filter(tile_t *tile, sense_i_6p6_temp_filter_t bw)",
-      "params": [],
+      "params": [
+        {
+          "name": "bw",
+          "description": "Temperature filter bandwidth."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "config",
@@ -1173,7 +1225,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_get_raw_accels(tile_t *tile, int16_t *buffer)",
-      "params": [],
+      "params": [
+        {
+          "name": "buffer",
+          "description": "Output: 3 raw accel counts [X, Y, Z]."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1183,7 +1240,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_get_raw_gyros(tile_t *tile, int16_t *buffer)",
-      "params": [],
+      "params": [
+        {
+          "name": "buffer",
+          "description": "Output: 3 raw gyro counts [X, Y, Z]."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1193,7 +1255,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_get_raw_6dof(tile_t *tile, int16_t *buffer)",
-      "params": [],
+      "params": [
+        {
+          "name": "buffer",
+          "description": "Output: 6 raw counts [AX, AY, AZ, GX, GY, GZ]."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1213,7 +1280,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_get_raw_all(tile_t *tile, int16_t *buffer)",
-      "params": [],
+      "params": [
+        {
+          "name": "buffer",
+          "description": "Output: 7 raw counts [Temp, AX, AY, AZ, GX, GY, GZ]."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "runtime",
@@ -1280,10 +1352,6 @@
     {
       "signature": "uint8_t tile_sense_i_6p6_read_tilt_centi_degrees_flat(tile_t *tile, uint8_t axis, int32_t *out_centi_deg)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "axis",
           "description": "[0..2] 0 = X, 1 = Y, 2 = Z."
@@ -1354,14 +1422,14 @@
         },
         {
           "name": "hires",
-          "description": "Enable 20-bit high-resolution mode (forces ±32g/±4000dps)"
+          "description": "Reserved, ignored. 20-bit packets are not supported (see the \"FIFO 20-bit hi-res mode\" gap); FIFO_HIRES_EN stays 0."
         }
       ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "fifo",
       "brief": "Configure the FIFO.",
-      "description": "",
+      "description": "Accel and gyro are enabled together: if either is requested, both go in,\nso every packet is the 16-byte accel + gyro + temp + timestamp format that\nfifo_read_packet() parses (an accel-only or gyro-only stream would be\n8-byte packets, DS-000639 §6.4). Both 0 stops FIFO writes.",
       "name": "tile_sense_i_6p6_fifo_config"
     },
     {
@@ -1402,10 +1470,6 @@
       "signature": "void tile_sense_i_6p6_fifo_read_packet_flat(tile_t *tile, int32_t *out)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "out",
           "description": "Output buffer (8 int32_t slots)."
         }
@@ -1438,10 +1502,6 @@
     {
       "signature": "uint16_t tile_sense_i_6p6_fifo_read_packets_flat(tile_t *tile, int32_t *out, uint16_t cap_ints)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
         {
           "name": "out",
           "description": "Output buffer; must be sized N × 8 ints."
@@ -1603,10 +1663,6 @@
       "signature": "void tile_sense_i_6p6_set_int_pulse_duration(tile_t *tile, sense_i_6p6_int_pulse_t pulse)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
-        {
           "name": "pulse",
           "description": "Pulse-width selector"
         }
@@ -1621,10 +1677,6 @@
     {
       "signature": "void tile_sense_i_6p6_subsystem_reset(tile_t *tile, sense_i_6p6_subsystem_t which)",
       "params": [
-        {
-          "name": "tile",
-          "description": "Initialised tile handle"
-        },
         {
           "name": "which",
           "description": "Subsystem to reset"
@@ -1718,7 +1770,12 @@
     },
     {
       "signature": "void tile_sense_i_6p6_smd_config(tile_t *tile, sense_i_6p6_smd_mode_t mode)",
-      "params": [],
+      "params": [
+        {
+          "name": "mode",
+          "description": "SMD mode (sense_i_6p6_smd_mode_t); disabled turns it off."
+        }
+      ],
       "notes": [],
       "studio_exposed": true,
       "studio_section": "smd",
@@ -1770,7 +1827,7 @@
       "notes": [],
       "studio_exposed": true,
       "studio_section": "pedometer",
-      "return": "Steps per second in u6.2 fixed-point (divide by 4.0 for float)",
+      "return": "Cadence in samples per step, u6.2 fixed point (divide by 4 for samples; DS-000639 §14.27). At 50 Hz ODR and 2 steps/s it reads 100 (25 samples). Steps per second = ODR × 4 / value.",
       "brief": "Read the step cadence.",
       "description": "",
       "name": "tile_sense_i_6p6_get_step_cadence"
@@ -1852,10 +1909,6 @@
       "signature": "void tile_sense_i_6p6_get_tap_result_flat(tile_t *tile, int32_t *count, int32_t *axis, int32_t *direction, int32_t *timing)",
       "params": [
         {
-          "name": "tile",
-          "description": "Initialised tile handle."
-        },
-        {
           "name": "count",
           "description": "Output: 0 = none, 1 = single tap, 2 = double."
         },
@@ -1883,16 +1936,16 @@
       "signature": "void tile_sense_i_6p6_set_gyro_offset(tile_t *tile, int16_t x_dps16, int16_t y_dps16, int16_t z_dps16)",
       "params": [
         {
-          "name": "x_dps",
+          "name": "x_dps16",
           "description": "X offset in dps × 16 (12-bit signed, ±128 dps max, 0.0625 dps resolution)"
         },
         {
-          "name": "y_dps",
-          "description": "Y offset"
+          "name": "y_dps16",
+          "description": "Y offset in dps × 16"
         },
         {
-          "name": "z_dps",
-          "description": "Z offset"
+          "name": "z_dps16",
+          "description": "Z offset in dps × 16"
         }
       ],
       "notes": [],
@@ -1942,7 +1995,7 @@
       "studio_section": "advanced",
       "return": "1 if both passed, 0 if either failed",
       "brief": "Perform self-test.",
-      "description": "Runs the built-in self-test for both accel and gyro.",
+      "description": "Runs the built-in self-test for both accel and gyro. Switches to ±4 g,\n±250 dps, 1 kHz and low-noise for the test (~0.6 s), then restores the\nprevious ranges, data rates and power mode. Returns 0 (both outputs 0) if\nthe sensor stops reporting data-ready for 20 ms.",
       "name": "tile_sense_i_6p6_self_test"
     },
     {
@@ -1989,7 +2042,7 @@
     }
   ],
   "source_file": "tile_sense_i_6p6.h",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "tile_family": "Sense",
   "tile_name": "I.6P6",
   "display_name": "Sense.I.6P6",

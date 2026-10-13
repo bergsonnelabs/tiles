@@ -23,6 +23,27 @@ static uint8_t resolve_id(uint8_t instance)
 }
 
 /* -------------------------------------------------------------- */
+/* Event state                                                     */
+/* -------------------------------------------------------------- */
+
+/* One entry per instance (the part has one fixed address). `prev` is the
+ * charge status process() saw last; 0 after init, so the first process()
+ * reports a state already in force. */
+typedef struct {
+    power_l_1n_event_cb_t cb;
+    void*                 ctx;
+    uint8_t               prev;
+} power_l_1n_ev_t;
+
+static power_l_1n_ev_t ev_state[1];
+
+static power_l_1n_ev_t* ev_for(tile_t* tile)
+{
+    (void)tile;          /* single instance (fixed address 0x6B) */
+    return &ev_state[0];
+}
+
+/* -------------------------------------------------------------- */
 /* Private helpers                                                 */
 /* -------------------------------------------------------------- */
 
@@ -127,6 +148,11 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     tile->hal = hal;
     tile->id  = id;
 
+    power_l_1n_ev_t* ev = ev_for(tile);
+    ev->cb   = NULL;
+    ev->ctx  = NULL;
+    ev->prev = 0;
+
     if (hal->i2c_is_ready(hal->handle, id) != 0) {
         TILE_ON_ERROR(tile, "init: device not found on bus");
         tile->state = TILE_STATE_ERROR;
@@ -180,6 +206,36 @@ void tile_power_l_1n_init(tiles_pal_t* hal, uint8_t instance, tile_t* tile,
     tile_power_l_1n_charger_enable(tile, enable);
 
     tile->state = TILE_STATE_READY;
+}
+
+/* -------------------------------------------------------------- */
+/* Events                                                         */
+/* -------------------------------------------------------------- */
+
+void tile_power_l_1n_process(tile_t* tile)
+{
+    if (tile->state != TILE_STATE_READY) return;
+    power_l_1n_ev_t* ev = ev_for(tile);
+
+    uint8_t s    = pmic_read(tile, NPM1300_REG_BCHGCHARGESTATUS);
+    uint8_t prev = ev->prev;
+    ev->prev = s;
+
+    /* Edges only: COMPLETED turning on, and "charging" turning on as a whole
+     * (none of trickle / CC / CV before, one of them now). A move between
+     * phases inside one charge is not a new event. */
+    uint8_t events = (uint8_t)(s & (uint8_t)~prev & NPM1300_CHG_COMPLETED);
+    if ((s & NPM1300_CHG_CHARGING) && !(prev & NPM1300_CHG_CHARGING))
+        events |= (uint8_t)(s & NPM1300_CHG_CHARGING);
+
+    if (events && ev->cb) ev->cb(tile, events, ev->ctx);
+}
+
+void tile_power_l_1n_on_event(tile_t* tile, power_l_1n_event_cb_t cb, void* ctx)
+{
+    power_l_1n_ev_t* ev = ev_for(tile);
+    ev->cb  = cb;
+    ev->ctx = ctx;
 }
 
 /* -------------------------------------------------------------- */
@@ -264,9 +320,7 @@ uint8_t tile_power_l_1n_get_charge_error(tile_t* tile)
 uint8_t tile_power_l_1n_is_charging(tile_t* tile)
 {
     uint8_t s = pmic_read(tile, NPM1300_REG_BCHGCHARGESTATUS);
-    return (s & (NPM1300_CHG_TRICKLECHARGE |
-                 NPM1300_CHG_CONSTANTCURRENT |
-                 NPM1300_CHG_CONSTANTVOLTAGE)) ? 1 : 0;
+    return (s & NPM1300_CHG_CHARGING) ? 1 : 0;
 }
 
 uint8_t tile_power_l_1n_is_charge_complete(tile_t* tile)
