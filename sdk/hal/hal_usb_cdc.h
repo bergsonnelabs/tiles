@@ -124,8 +124,10 @@ int hal_usb_cdc_write(const uint8_t *buf, uint16_t len);
 int hal_usb_cdc_try_write(const uint8_t *buf, uint16_t len);
 
 /**
- * Printf over USB CDC (blocking).
- * Returns number of characters written (from vsnprintf).
+ * Printf over USB CDC. Formats into a HAL_USB_CDC_PRINTF_BUF_SIZE stack buffer
+ * (longer text is cut) and sends it with hal_usb_cdc_write(): queued, waits
+ * at most HAL_USB_CDC_TX_TIMEOUT_MS for a stalled terminal, then drops.
+ * Returns the length vsnprintf reported, not the number of bytes queued.
  */
 int hal_usb_cdc_printf(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));

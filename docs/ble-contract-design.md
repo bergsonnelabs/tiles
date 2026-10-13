@@ -1,7 +1,11 @@
 # BLE contract — design note (Phase 0)
 
-Status: **proposal**, 2026-08-25. Written against `projects/Ring_Av2`, the only
-shipped Bergsonne BLE product, as the acceptance test.
+Status: **implemented** (coregen `build_ble_contract()` and
+`tools/coregen/templates/ble_contract.{c,h}.j2`, first in a9d6895, 2026-08-25;
+example `tests/ble-contract`; config reference in [config-json.md](../config-json.md)
+§10). This page is the original design note, written 2026-08-25 against the
+Ring_Av2 project (not in this repo) as the acceptance test; where it and the
+code differ, the code wins.
 
 ## Why this exists
 

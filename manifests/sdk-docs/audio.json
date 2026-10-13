@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "audio",
   "label": "Core.Audio",
   "icon": "🎤",
@@ -150,12 +150,12 @@
         {
           "name": "gain_shift",
           "ctype": "uint8_t",
-          "description": "Extra digital gain as a LEFT shift on the output (0 = unity"
+          "description": "Extra digital gain as a LEFT shift on the output (0 = unity CIC scaling). Use to lift a quiet mic; clips are saturated."
         },
         {
           "name": "lsb_first",
           "ctype": "uint8_t",
-          "description": "1 if the SAI packs PDM bits LSB-first within each byte,"
+          "description": "1 if the SAI packs PDM bits LSB-first within each byte, 0 for MSB-first. (Match your SAI capture config.)"
         }
       ],
       "studio_exposed": false,
@@ -185,10 +185,11 @@
         {
           "name": "out",
           "ctype": "int16_t *",
-          "description": "Output PCM buffer; must hold at least"
+          "description": "Output PCM buffer; must hold at least (phase + nbytes*8) / decimation samples."
         }
       ],
       "studio_exposed": false,
+      "return_desc": "number of PCM samples written to `out`.",
       "layer": "core"
     },
     {
@@ -211,6 +212,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, or HAL_ERROR if block != SAI1_Block_A or cfg is invalid.",
       "layer": "hal"
     },
     {
@@ -222,7 +224,7 @@
         {
           "name": "buf",
           "ctype": "hal_sai_t *",
-          "description": "raw PDM byte buffer in SRAM; len even. 4-byte aligned preferred"
+          "description": "raw PDM byte buffer in SRAM; len even. 4-byte aligned preferred (DMA does 32-bit dest writes)."
         },
         {
           "name": "ch",
@@ -231,7 +233,7 @@
         {
           "name": "buf",
           "ctype": "uint8_t *",
-          "description": "raw PDM byte buffer in SRAM; len even. 4-byte aligned preferred"
+          "description": "raw PDM byte buffer in SRAM; len even. 4-byte aligned preferred (DMA does 32-bit dest writes)."
         },
         {
           "name": "len",
@@ -374,6 +376,66 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_audio_pcm_cb",
+      "kind": "callback",
+      "brief": "Delivered finished PCM: `n` samples at the configured rate.",
+      "decl": "typedef void (*core_audio_pcm_cb)(const int16_t *pcm, uint32_t n, void *ctx);"
+    },
+    {
+      "name": "core_pdm_cic_t",
+      "kind": "struct",
+      "brief": "CIC decimator state. Zero-initialise via core_pdm_init(); do not poke the fields directly. One instance per microphone stream.",
+      "fields": [
+        {
+          "name": "integ",
+          "ctype": "int32_t[CORE_PDM_MAX_ORDER]",
+          "description": "integrator accumulators (bit rate)"
+        },
+        {
+          "name": "comb",
+          "ctype": "int32_t[CORE_PDM_MAX_ORDER]",
+          "description": "comb delay registers (output rate)"
+        },
+        {
+          "name": "decimation",
+          "ctype": "uint16_t",
+          "description": "R: input bits per output sample"
+        },
+        {
+          "name": "phase",
+          "ctype": "uint16_t",
+          "description": "bits since last output (0..R-1)"
+        },
+        {
+          "name": "order",
+          "ctype": "uint8_t",
+          "description": "N: number of CIC stages"
+        },
+        {
+          "name": "out_shift",
+          "ctype": "uint8_t",
+          "description": "right-shift to map CIC gain into int16"
+        },
+        {
+          "name": "lsb_first",
+          "ctype": "uint8_t",
+          "description": "1 = take PDM bits LSB-first per byte"
+        },
+        {
+          "name": "dc_y",
+          "ctype": "int32_t",
+          "description": "DC-blocker output accumulator (Q8)"
+        },
+        {
+          "name": "dc_x1",
+          "ctype": "int32_t",
+          "description": "DC-blocker previous input"
+        }
+      ]
     }
   ]
 }

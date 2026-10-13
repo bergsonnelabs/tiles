@@ -193,37 +193,51 @@ GPIO pads don't need a peripheral handle, but coregen still has to configure the
 ### Adding a new tile
 
 ```jsonc
-// config.json
+// config.json (Core.ST.L4: I2C3 on pads 2 and 8)
 {
-  "interfaces": {
-    "i2c3": { "pullups": true }
-  },
+  "core": "Core.ST.L4",
+  "pads": { "2": "I2C3.CLK", "8": "I2C3.DAT" },
+  "interfaces": { "I2C3": { "speed": 400000 } },
   "tiles": [
-    { "name": "Sense.MIC", "bus": "i2c3", "instance": 0 }
+    { "tile": "Sense.MIC", "bus": "I2C3", "instance": 0 }
   ]
 }
 ```
 
 ```c
 // main.c
-#include "tile_sense_mic.h"
-#include "tile_handles.h"     // generated — exposes `sense_mic` handle
+#include "core.h"
+#include "core_tiles.h"
+#include "tile_handles.h"     // generated: declares tile_sense_mic_i2c3_0
 
-void on_start(void) {
-    uint16_t mv = tile_sense_mic_get_raw_mv(&sense_mic);
+int main(void) {
+    core_init();
+    tile_sense_mic_init(core_tiles_pal(&core_i2c3), 0, &tile_sense_mic_i2c3_0, NULL);
+    for (;;) {
+        uint16_t mv = tile_sense_mic_get_raw_mv(&tile_sense_mic_i2c3_0);
+        (void)mv;
+    }
 }
 ```
 
-Coregen does the heavy lifting on the tile path: it brings up `i2c3`, allocates a `tile_t sense_mic`, calls `tile_sense_mic_init()` during `core_init()`, and adds the handle to `tile_handles.h`. You get a ready-to-use handle by including that header.
+Coregen brings up `I2C3`, adds the driver to the build (`core_drivers.mk`),
+declares a `tile_t` per tile in `tile_handles.h` (named `<prefix>_<bus>_<instance>`)
+and writes the init call into the recipe comment at the end of
+`coregen/core_init.h`. It does **not** call the driver's init: that belongs in
+main.c, where you control the order and the error handling.
 
-If the tile has multiple I2C addresses, set `"i2c_address": "0x5C"` on the entry. If you want two of the same tile on different buses, list both — each gets its own slot in `tile_handles.h`.
+`instance` picks the tile's I2C address (0 = the default, 1 = the alternate,
+per the driver's address table); there is no `i2c_address` key. Two of the same
+tile on different buses: list both, each gets its own handle. See
+[config-json.md §9](../config-json.md) for SPI tiles (`cs_pad`) and dual-bus
+tiles.
 
 ### What if the rebuild produces an undefined-symbol error?
 
 Two common shapes when config.json and your code disagree:
 
 - `undefined reference to core_pwm_timer_for_pad` — the dispatcher only ships when at least one pad uses a timer. Add a `TIMx.y` pad to `config.json` (or you wrote `core_pwm_duty` but forgot the pads entry).
-- `undefined reference to tile_sense_mic_init` — the tile's source file isn't in the build. Coregen wires this automatically when the tile is in `tiles[]`; if it's missing, the tile entry didn't make it through (typo in `name`, or you edited a stale `tile_handles.h` instead of `config.json`).
+- `undefined reference to tile_sense_mic_init` — the tile's source file isn't in the build. Coregen wires this automatically when the tile is in `tiles[]`; if it's missing, the tile entry didn't make it through (typo in `tile`, or you edited a stale `tile_handles.h` instead of `config.json`).
 
 Both errors mean coregen and your code are looking at different views of the project. Re-running `make` after touching `config.json` resolves them.
 
@@ -232,7 +246,7 @@ Both errors mean coregen and your code are looking at different views of the pro
 - **Tier 2 functions don't take a handle.** First argument is a `pad`, `pin`, `channel`, or `permil` — never a `core_*_t *h`.
 - **Tier 2 functions match a category.** `core_pwm_duty` lives in `core_pwm.h` under the `pwm` category. `core_led_blink` lives in `core_led.h` under `led`. Reading the generated C, the prefix tells you the docs page.
 - **Tier 1 functions are typically named with a verb.** `init`, `set`, `read`, `start`, `stop`. Tier 2 names are nouns or short verbs in user vocabulary: `duty`, `read_mv`, `heartbeat`, `now`.
-- **One-shot Tier 1 functions** (e.g., `core_led_init`) are usually called by coregen during `core_init()`. The user shouldn't need to call them. They're documented for completeness; if you find yourself calling them by hand, check whether you're missing a coregen step.
+- **One-shot Tier 1 functions** (the clock, pad and bus inits) are called by coregen during `core_init()`. The user shouldn't need to call them. They're documented for completeness; if you find yourself calling them by hand, check whether you're missing a coregen step. Two exceptions you do call yourself: `core_led_init()` (the templates do, after `core_init()`) and each tile driver's `_init()` (see above).
 
 ## When a Tier 2 wrapper is missing
 

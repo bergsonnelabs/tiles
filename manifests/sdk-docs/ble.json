@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@dda49b6",
+  "source": "tiles@77fd3f3",
   "category": "ble",
   "label": "Core.BLE",
   "icon": "ᛒ",
@@ -122,12 +122,12 @@
         {
           "name": "access",
           "ctype": "uint8_t",
-          "description": "Access mode: CORE_BLE_READ, CORE_BLE_WRITE, CORE_BLE_NOTIFY,"
+          "description": "Access mode: CORE_BLE_READ, CORE_BLE_WRITE, CORE_BLE_NOTIFY, or combinations (CORE_BLE_RW, CORE_BLE_READ | CORE_BLE_NOTIFY)."
         },
         {
           "name": "type",
           "ctype": "uint8_t",
-          "description": "Value type: CORE_BLE_BOOL, CORE_BLE_UINT8, CORE_BLE_UINT16,"
+          "description": "Value type: CORE_BLE_BOOL, CORE_BLE_UINT8, CORE_BLE_UINT16, CORE_BLE_UINT32, or CORE_BLE_BYTES(n) for raw buffers."
         },
         {
           "name": "on_write",
@@ -141,6 +141,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Characteristic handle for set_value/notify.",
       "layer": "core"
     },
     {
@@ -273,6 +274,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, -1 when the stack could not take the update (its TX queue is full): keep the data and call again on a later pass.",
       "layer": "core"
     },
     {
@@ -302,6 +304,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "1 when connected and the client has enabled notify/indicate, else 0.",
       "layer": "core"
     },
     {
@@ -414,7 +417,7 @@
         {
           "name": "on",
           "ctype": "uint8_t",
-          "description": "1 to request the exchange after connecting (default), 0 to leave"
+          "description": "1 to request the exchange after connecting (default), 0 to leave it to the central."
         }
       ],
       "studio_exposed": false,
@@ -428,6 +431,26 @@
       "params": [],
       "studio_exposed": false,
       "layer": "core"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_ble_svc_t",
+      "kind": "typedef",
+      "brief": "Service handle, returned by core_ble_add_service*().",
+      "decl": "typedef uint16_t core_ble_svc_t;"
+    },
+    {
+      "name": "core_ble_char_t",
+      "kind": "typedef",
+      "brief": "Characteristic handle, returned by core_ble_add_char*().",
+      "decl": "typedef uint16_t core_ble_char_t;"
+    },
+    {
+      "name": "core_ble_write_cb",
+      "kind": "callback",
+      "brief": "Write callback: called when the central writes to a characteristic.",
+      "decl": "typedef void (*core_ble_write_cb)(const uint8_t *data, uint16_t len, void *ctx);"
     }
   ]
 }

@@ -185,8 +185,10 @@ static inline int core_rtc_alarm_fired(void)
 //
 // @studio unsupported tier=1 value=M title="LSE / external crystal not exposed"
 //   core_rtc_init always selects LSI (~32 kHz RC, ±5% typical drift on the
-//   L4/WBA; the L0's is 26-56 kHz part to part and is not calibrated against
-//   HSI16, so its RTC second can be off by tens of percent).
+//   L4/WBA). The L0's LSI is 26-56 kHz part to part; it is measured once
+//   against SYSCLK (ll_lsi_hz(), sdk/hal/hal_lsi.c) and the RTC prescaler
+//   is set from that, so the second is as good as SYSCLK at that moment
+//   (HSI16 at high / max, MSI at low / medium) and drifts with temperature.
 //   Cores with an LSE crystal need ll_rtc_init(1) — no Tier 2 wrapper
 //   that takes a clock-source argument.
 //

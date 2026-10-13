@@ -47,6 +47,11 @@
     "gpio.od_pull": "verified",
     "uart.polling": "verified",
     "uart.irq": "compile",
+    "uart.dma": {
+      "status": "none",
+      "note": "hal_uart_tx_dma() is a stub that returns HAL_ERROR; TX is polled."
+    },
+    "uart.flow": "none",
     "uart.lp": {
       "status": "na",
       "note": "Core.ST.W5 routes no LPUART1 pads. (The clock enable targeted RCC+0xAC; RCC_APB7ENR is 0xA8, fixed 2026-09-25 for other WBA boards.)"
@@ -54,15 +59,36 @@
     "i2c.std": "verified",
     "i2c.fast": "verified",
     "i2c.fmp": "na",
+    "i2c.irq": {
+      "status": "none",
+      "note": "Controller transfers are polled with timeouts. Target mode (core_i2c_target_*) is interrupt-driven; see i2c.target."
+    },
     "i2c.target": "compile",
+    "i2c.dma": "none",
+    "i2c.10bit": {
+      "status": "none",
+      "note": "7-bit addresses only (the API takes uint8_t)."
+    },
+    "i2c.smbus": "none",
     "spi.master": {
       "status": "verified",
       "note": "Bench-verified 2026-09-26 on Core.ST.W5 (tests/hw-spi-loopback, SPI3 on pads 2/3/6/7 with a MOSI-MISO loopback) at medium, high and max clock: multi-byte TSIZE transfers, all four modes, bounded timeouts (~2 ms stall budget), CS framing and two tiles sharing the bus with per-tile CS (T7). Up to 32 MHz SCK (33 MHz cap below 2.7 V). SPI1 (pads 8-11) not benched yet."
+    },
+    "spi.irq": {
+      "status": "none",
+      "note": "Transfers are polled or DMA; the SPI interrupt only ends a DMA transfer."
     },
     "spi.octo": "na",
     "timer.tick": "verified",
     "timer.pwm": "compile",
     "timer.stepdir": "compile",
+    "timer.capture": {
+      "status": "compile",
+      "note": "Same LL capture path as the other Cores; builds on Core.ST.W5 (tests/val-pwm-capture moved to W5 pads, 2026-10-13). Not benched."
+    },
+    "timer.oneshot": "none",
+    "timer.encoder": "none",
+    "timer.lptim": "none",
     "timer.wdog": {
       "status": "verified",
       "note": "A 6 s SWD halt reset the chip unless DBG_IWDG_STOP was set (2026-08-24), and two 10 s core_stop_for with a 5 s IWDG ran with 0 resets (tests/hw-sleep-cycle, 2026-09-25)"
@@ -88,6 +114,7 @@
       "status": "partial",
       "note": "Register path is generic (CFGR1 EXTSEL/EXTEN), but only the Core.ST.L0 trigger source constants are defined (LL_ADC_L0_TRG_*, RM0377 Table 58). Other families need a raw encoding from their own reference manual."
     },
+    "adc.watchdog": "none",
     "audio.pdm": {
       "status": "compile",
       "note": "SAI1 PDM master-RX + GPDMA (RM0493 Tables 407/408) and a real-time CIC fast path; captured audio on silicon during bring-up (June 2026) but no recorded bench test"
@@ -96,8 +123,15 @@
     "coregen.i2c": "verified",
     "coregen.analog": "verified",
     "coregen.i3c": "na",
-    "coregen.spi": "compile",
+    "coregen.spi": {
+      "status": "verified",
+      "note": "tests/hw-spi-loopback config-w5.json: SPI3 on pads 2/3/6/7 from config.json (core_spi3), bench PASS 2026-09-26"
+    },
     "coregen.uart": "compile",
+    "coregen.timer": {
+      "status": "compile",
+      "note": "TIM1/2/3/16/17 in coregen's clock map; a W5 project with TIM2/TIM16 pads generates and builds (2026-10-13). Not benched."
+    },
     "power.sleep": "verified",
     "power.stop": {
       "status": "verified",
@@ -115,7 +149,10 @@
       "status": "compile",
       "note": "core_stop_until_on_change with the Stop 1 wait-state/HDIV5 handling and fed chunks while the watchdog runs; returns at once if the pad is already at its wake level; core_stop_until_on_change_timeout() bounds the wait. 2026-09-25, awaiting bench"
     },
-    "power.wkup_wake": "",
+    "power.wkup_wake": {
+      "status": "none",
+      "note": "core_standby_until_on_change() is implemented for Core.ST.L4 only."
+    },
     "power.rtc_alarm": {
       "status": "verified",
       "note": "ALRMAR at 0x40 (0x1C is RTC_PRIVCFGR) and ALRAF in RTC_SR/SCR 0x50/0x5C, no ALRAWF poll (RM0493 §36.6.16-23); ALRMAR read back 0x80808003 and Alarm A fired at 2900-2940 ms for a 3 s alarm (T2). Bench-verified 2026-09-25 on Core.ST.W5 (tests/hw-sleep-cycle)."
@@ -145,6 +182,10 @@
       "status": "na",
       "note": "No USB"
     },
+    "conn.ble_update": {
+      "status": "verified",
+      "note": "Benched 2026-10-10 on a Core.ST.W5 (tiles#323): full and delta updates confirmed by READY's CRC; a dropped link and power cuts during transfer and install recovered."
+    },
     "conn.swd": {
       "status": "verified",
       "note": "Studio flashes over SWD through a CoreProbe (flash-wba), halting at the reset vector so a running watchdog can't reset the chip mid-write (fixed 2026-08-25). A first BLE image is slow: no RAM-resident flash algorithm."
@@ -156,8 +197,11 @@
     "conn.ble_adv": "verified",
     "conn.ble_gatt": "verified",
     "conn.fdcan": "na",
-    "adv.i3c_ctrl": "na",
-    "adv.i3c_target": "na",
+    "adv.comp": {
+      "status": "none",
+      "note": "No comparator code in the SDK."
+    },
+    "i3c.target": "na",
     "adv.dac": "na",
     "ble.adv": {
       "status": "verified",
@@ -167,7 +211,7 @@
     "ble.notify": "verified",
     "ble.pairing": {
       "status": "partial",
-      "note": "Just Works legacy pairing + bonding only; no LE Secure Connections / passkey. Bonds never reached flash (8-byte writes; the WBA programs 16-byte quad-words, RM0493 §7.3.7); fixed 2026-09-25, awaiting bench"
+      "note": "Just Works legacy pairing + bonding only; no LE Secure Connections / passkey. The bond store's flash path (quad-word writes through the flash manager) passed tests/hw-nvm-flash T7 on 2026-09-26; an over-the-air pair, reboot and reconnect has not been run."
     },
     "ble.central": "none",
     "nvm.eeprom": "na",
@@ -183,6 +227,7 @@
       "status": "verified",
       "note": "Bench-verified 2026-09-26 on Core.ST.W5 (tests/hw-spi-loopback, SPI3 on pads 2/3/6/7 with a MOSI-MISO loopback) at medium, high and max clock: GPDMA1 CH6/CH7, blocking and async-with-callback, up to 3.88 MB/s at 32 MHz SCK. SPI1 not benched yet."
     },
+    "spi.slave": "none",
     "i3c.controller": "na",
     "i3c.daa": "na",
     "i3c.ccc": "na",
@@ -196,7 +241,7 @@
     },
     "thread.udp": {
       "status": "verified",
-      "note": "Bench 2026-10-11 (tests/hw-thread): ff03::1 broadcast once a second between three nodes, 45 of 46 received on a two-node link."
+      "note": "Bench 2026-10-11 (tests/hw-thread): ff03::1 broadcast once a second between three nodes, 45 of 46 received on a two-node link. The receive callback changed to one packet struct in tiles#334 (2026-10-12); that form has not run on a board yet."
     },
     "thread.diag": {
       "status": "verified",
@@ -212,7 +257,7 @@
     },
     "thread.ble_provisioning": {
       "status": "compile",
-      "note": "DEV-ONLY: open writes, any connected phone can set the network (no pairing; core_thread_prov_allow_write() is the gate hook). 2026-10-12: tests/hw-ble-thread, val-ble-thread (BLE service 0x5D00) and val-thread-provision (C API, no BLE) build; host tests for the wire format and boot precedence pass (tests/host-thread-prov). Not yet run on a board."
+      "note": "DEV-ONLY: open writes, any connected phone can set the network (no pairing; core_thread_prov_allow_write() is the gate hook). 2026-10-12: tests/hw-ble-thread with provisioning reached its loop on a Core.ST.W5 (leader, advertising); writing a dataset over BLE has not been exercised. val-ble-thread and val-thread-provision build; host tests for the wire format and boot precedence pass (tests/host-thread-prov)."
     },
     "thread.commissioning": "none"
   }

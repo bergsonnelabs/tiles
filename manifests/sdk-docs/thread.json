@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@a155230",
+  "source": "tiles@77fd3f3",
   "category": "thread",
   "label": "Core.Thread",
   "icon": "⌬",
@@ -16,6 +16,7 @@
       "brief": "Start Thread: bring up the radio and OpenThread, then join (or form) the network from config.json.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "0 on success (also when Thread is already running), or a negative CORE_THREAD_ERR_* code.",
       "layer": "core"
     },
     {
@@ -34,6 +35,7 @@
       "brief": "The device's current Thread role.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "CORE_THREAD_DISABLED before core_thread_start(), else the role.",
       "layer": "core"
     },
     {
@@ -70,7 +72,7 @@
         {
           "name": "rx_cb",
           "ctype": "core_thread_udp_rx_cb",
-          "description": "Called with each datagram received on the port (one"
+          "description": "Called with each datagram received on the port (one core_thread_udp_packet_t); may be NULL to only send."
         },
         {
           "name": "ctx",
@@ -79,6 +81,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_THREAD_ERR_FULL when all sockets are taken, or another negative code.",
       "layer": "core"
     },
     {
@@ -109,6 +112,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 when queued, CORE_THREAD_ERR_STATE when not attached, or another negative code.",
       "layer": "core"
     },
     {
@@ -134,6 +138,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 when queued, CORE_THREAD_ERR_STATE when not attached, or another negative code.",
       "layer": "core"
     },
     {
@@ -143,6 +148,7 @@
       "brief": "The device's RLOC16 (its short address in the mesh; changes with the role).",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "The RLOC16, or 0xFFFE when not attached.",
       "layer": "core"
     },
     {
@@ -167,6 +173,7 @@
       "brief": "The ID of the Thread partition the device belongs to.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "The partition ID, or 0 when not attached.",
       "layer": "core"
     },
     {
@@ -176,6 +183,7 @@
       "brief": "Number of neighbours in the device's neighbour table (routers and children it hears).",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "The neighbour count.",
       "layer": "core"
     },
     {
@@ -185,6 +193,7 @@
       "brief": "Average RSSI of frames from the parent, when the device is a child.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "RSSI in dBm, or 127 when there is no parent (not a child).",
       "layer": "core"
     },
     {
@@ -194,6 +203,7 @@
       "brief": "The last error OpenThread reported to this API (an otError value; 0 = none).",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "The otError code (see openthread/error.h).",
       "layer": "core"
     },
     {
@@ -203,6 +213,7 @@
       "brief": "The OpenThread instance, for C code that calls the OpenThread API directly.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "An otInstance pointer (as void*), or NULL before core_thread_start().",
       "layer": "core"
     },
     {
@@ -218,6 +229,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_THREAD_ERR_STATE before core_thread_start(), or another negative code.",
       "layer": "core"
     },
     {
@@ -233,6 +245,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_THREAD_ERR_STATE before core_thread_start(), or another negative code.",
       "layer": "core"
     },
     {
@@ -248,6 +261,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_THREAD_ERR_ARG for a bad dataset, CORE_THREAD_ERR_STATE before core_thread_start(), CORE_THREAD_ERR_UNSUPPORTED without \"provisioning\" in config.json, or another negative code.",
       "layer": "core"
     },
     {
@@ -257,6 +271,7 @@
       "brief": "Forget the stored (provisioned) network and return to config.json's, then attach again.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_THREAD_ERR_STATE before core_thread_start(), CORE_THREAD_ERR_UNSUPPORTED without \"provisioning\" in config.json, or another negative code.",
       "layer": "core"
     },
     {
@@ -266,6 +281,7 @@
       "brief": "Is the current network a stored (provisioned) one rather than config.json's factory default?",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "1 when a provisioned network is in use, 0 when it is config.json's (always 0 before core_thread_start() and in builds without \"provisioning\").",
       "layer": "core"
     },
     {
@@ -275,7 +291,165 @@
       "brief": "Hook: may a BLE client change the network now? Override to gate the provisioning service.",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "Nonzero to accept writes to the BLE provisioning service, 0 to refuse them (THREAD_PROV_ERR_DENIED). The SDK's default (a weak function) returns 1: open writes.",
       "layer": "core"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_thread_role_t",
+      "kind": "enum",
+      "brief": "Device role (the values of OpenThread's otDeviceRole).",
+      "members": [
+        {
+          "name": "CORE_THREAD_DISABLED",
+          "value": "0",
+          "description": "Thread is not running"
+        },
+        {
+          "name": "CORE_THREAD_DETACHED",
+          "value": "1",
+          "description": "Running, not attached to a network (searching)"
+        },
+        {
+          "name": "CORE_THREAD_CHILD",
+          "value": "2",
+          "description": "Attached as a child of a router"
+        },
+        {
+          "name": "CORE_THREAD_ROUTER",
+          "value": "3",
+          "description": "A router"
+        },
+        {
+          "name": "CORE_THREAD_LEADER",
+          "value": "4",
+          "description": "The leader (a router that also manages the partition)"
+        }
+      ]
+    },
+    {
+      "name": "core_thread_role_cb",
+      "kind": "callback",
+      "brief": "Role-change callback: the new role. Runs from core_thread_process().",
+      "decl": "typedef void (*core_thread_role_cb)(core_thread_role_t role, void *ctx);"
+    },
+    {
+      "name": "core_thread_udp_packet_t",
+      "kind": "struct",
+      "brief": "A received UDP datagram, as handed to a core_thread_udp_rx_cb. One struct instead of separate arguments on purpose: the old (data, len, src, port, ctx) form had two pointer and two uint16_t parameters, so a callback with them in the wrong order compiled silently and read the sender's address as the payload. Valid only during the callback: copy what you keep.",
+      "fields": [
+        {
+          "name": "data",
+          "ctype": "const uint8_t *",
+          "description": "Payload bytes"
+        },
+        {
+          "name": "len",
+          "ctype": "uint16_t",
+          "description": "Payload length in bytes"
+        },
+        {
+          "name": "src",
+          "ctype": "uint8_t[16]",
+          "description": "Sender's IPv6 address (network order)"
+        },
+        {
+          "name": "src_port",
+          "ctype": "uint16_t",
+          "description": "Sender's UDP port"
+        }
+      ]
+    },
+    {
+      "name": "core_thread_udp_rx_cb",
+      "kind": "callback",
+      "brief": "UDP receive callback. Runs from core_thread_process(). Reply with core_thread_udp_send(pkt->src, pkt->src_port, ...).",
+      "decl": "typedef void (*core_thread_udp_rx_cb)(const core_thread_udp_packet_t *pkt, void *ctx);"
+    },
+    {
+      "name": "core_thread_dataset_t",
+      "kind": "struct",
+      "brief": "A Thread network: the operational dataset fields config.json sets. Byte strings are in the order they are written down (an ext PAN ID of dead00beef00cafe is { 0xde, 0xad, 0x00, 0xbe, 0xef, 0x00, 0xca, 0xfe }).",
+      "fields": [
+        {
+          "name": "channel",
+          "ctype": "uint8_t",
+          "description": "802.15.4 channel, 11-26"
+        },
+        {
+          "name": "panid",
+          "ctype": "uint16_t",
+          "description": "PAN ID, 0x0000-0xFFFE"
+        },
+        {
+          "name": "ext_panid",
+          "ctype": "uint8_t[8]",
+          "description": "Extended PAN ID"
+        },
+        {
+          "name": "mesh_local_prefix",
+          "ctype": "uint8_t[8]",
+          "description": "Mesh-local prefix: the first 8 bytes of the /64 (fdde:ad00:beef:0:: is fd de ad 00 be ef 00 00)"
+        },
+        {
+          "name": "network_key",
+          "ctype": "uint8_t[16]",
+          "description": "Network key (never returned by core_thread_get_network())"
+        },
+        {
+          "name": "network_name",
+          "ctype": "char[17]",
+          "description": "Network name, 1-16 bytes, NUL-terminated"
+        },
+        {
+          "name": "active_timestamp",
+          "ctype": "uint32_t",
+          "description": "Active Timestamp, seconds; 0 means 1, the value config.json networks use"
+        }
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_THREAD_ERR_STATE",
+      "value": "(-1)",
+      "description": "Not started, or not attached"
+    },
+    {
+      "name": "CORE_THREAD_ERR_ARG",
+      "value": "(-2)",
+      "description": "Bad argument"
+    },
+    {
+      "name": "CORE_THREAD_ERR_NOBUFS",
+      "value": "(-3)",
+      "description": "Out of message buffers"
+    },
+    {
+      "name": "CORE_THREAD_ERR_FULL",
+      "value": "(-4)",
+      "description": "No free UDP socket"
+    },
+    {
+      "name": "CORE_THREAD_ERR_FAILED",
+      "value": "(-5)",
+      "description": "OpenThread refused; see core_thread_last_error()"
+    },
+    {
+      "name": "CORE_THREAD_ERR_UNSUPPORTED",
+      "value": "(-6)",
+      "description": "Not in this build: needs config.json \"thread\": {\"provisioning\": true}"
+    },
+    {
+      "name": "CORE_THREAD_UDP_SOCKETS",
+      "value": "4",
+      "description": "Sockets core_thread_udp_open() can hold"
+    },
+    {
+      "name": "CORE_THREAD_UDP_MAX_PAYLOAD",
+      "value": "256",
+      "description": "Received datagrams are cut to this many bytes"
     }
   ]
 }

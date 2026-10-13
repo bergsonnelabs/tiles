@@ -1,6 +1,6 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@f82b284",
+  "source": "tiles@77fd3f3",
   "file": "tile_power_l_1n.h",
   "brief": "Power.L.1N tile driver — Nordic nPM1300 PMIC.",
   "description": "Battery charger + 2 buck regulators + system supply (VSYS) + 3 indicator\nLEDs. Platform-agnostic: all bus access goes through tiles_pal_t.\n\nThe bucks come up at fixed boot voltages chosen by the tile's VSET pulldown\nresistors (no I2C needed): VSET1 = 47 kΩ → VOUT1 = 1.8 V, VSET2 = 330 kΩ →\nVOUT2 = 3.3 V. buck_set_mv() switches a buck to software control to override\nits VSET default at runtime.\n\nTile LEDs. Three discrete 0201 parts (Power-L1-N-a BOM), not an RGB package:\n  U3 = APG015SURKKC-TT  631 nm red\n  U4 = APG015SEKKC-TT   605 nm ORANGE   (previously documented as \"yellow\")\n  U5 = APG015CGKKC-TT   571 nm green\n\nWhich LED is which (confirmed 2026-09-24): red, orange, green sit left to\nright on the nPM1300's A1, A2, A3 balls, which are LED0, LED1, LED2 (WLCSP\npin table). So LED0 = red (U3), LED1 = orange (U4), LED2 = green (U5).\n\nDriver mode assignment made by init() (the chip's own reset assignment):\n  LED0 red    → ERROR mode    (auto, on for charger faults)\n  LED1 orange → CHARGING mode (auto, on while charging)\n  LED2 green  → HOST mode     (firmware \"ready\"/status, via led_set())\n\nBefore 1.2.0 init() had this backwards (LED0 HOST, LED2 ERROR, from a\nmisread schematic), so a charger fault lit the green LED and firmware\nstatus the red one.\n\n@note Prefer conveying state by blink PATTERN rather than by colour. A\nmisstuffed or single-colour tile still communicates correctly that way.\n\n\nDatasheet: Nordic nPM1300 Product Specification v1.1 (4490_483).\n\n@studio tile label=Power.L.1N icon=🔋\n@studio event name=charge_complete mask=NPM1300_CHG_COMPLETED\n@studio event name=charging mask=NPM1300_CHG_CONSTANTCURRENT\n\nUnsupported capabilities (gating noted per item — a HARDWARE gap means the\nchip can do it but the tile doesn't wire the pin out, NOT a driver omission):\n\n@studio unsupported severity=advanced category=\"NTC battery thermistor\"\n  Hardware-gated (not a driver gap). The nPM1300 can sense battery temperature\n  via an NTC thermistor for JEITA charge regulation. NTC is tied to GND on\n  Power-L-1N-a (no thermistor fitted), so the driver disables NTC monitoring\n  (ADCNTCRSEL=0, DISABLENTC). Closing requires a tile hardware revision.\n\n@studio unsupported severity=niche category=\"Load switches / LDOs (LSIN/LSOUT)\"\n  Hardware-gated (not a driver gap). The nPM1300's two load-switch/LDO outputs\n  are tied off (LSIN1/2, LSOUT1/2 grounded) on this tile, so there's nothing\n  to control.\n\n@studio unsupported severity=niche category=\"GPIO0-3\"\n  Hardware-gated (not a driver gap). The nPM1300 GPIOs aren't routed to tile\n  pads on Power-L-1N-a, so there's no externally useful GPIO function.\n\n@studio unsupported severity=advanced category=\"Ship / hibernate mode\"\n  Driver-deferred. The chip supports ultra-low-power ship (370 nA) and\n  hibernate modes that isolate the battery for storage (datasheet §7.4:\n  TASKENTERSHIPMODE 0x0B02, TASKENTERHIBERNATE 0x0B00). Not yet exposed. The\n  SHPHLD wake button is not routed to a pad on Power-L-1N-a, so the only way\n  back out of ship mode on this tile is applying CHG (VBUS), which needs a\n  bench check before it is offered as a Studio call.\n\n@studio unsupported severity=niche category=\"POF warning + buck retention / forced-PWM\"\n  Driver-deferred. Power-fail early-warning (via GPIO) and buck\n  retention-voltage / forced-PWM modes aren't exposed yet.",
@@ -168,9 +168,11 @@
           "description": "Optional config, or NULL for defaults"
         }
       ],
-      "notes": [],
+      "notes": [
+        "Warning: The NULL defaults suit a single Li-ion / Li-poly cell rated 4.20 V and at least ~100 mAh (100 mA is 1C for a 100 mAh cell). They are NOT safe for a LiFePO4 cell (charge to 3.60 V: pass term_mv = 3600) or for a smaller cell (lower charge_current_ma to <= 1C). The chip itself powers up with charging disabled at 3.60 V / 32 mA; init() is what raises it."
+      ],
       "brief": "Initialize the nPM1300 PMIC.",
-      "description": "Sets the indicator LED modes (LED0 red = ERROR, LED1 orange = CHARGING,\nLED2 green = HOST),\ndisables NTC monitoring (no thermistor on this tile), and applies the\ncharger settings. The buck regulators are left at their boot voltages\n(1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.\nPass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging\nenabled, USB-C auto limit off). A zero-initialised cfg is NOT the same as NULL: it leaves\ncharging OFF (enable_charging = 0).\n\n4.20 V and at least ~100 mAh (100 mA is 1C for a 100 mAh cell). They are\nNOT safe for a LiFePO4 cell (charge to 3.60 V: pass term_mv = 3600) or for\na smaller cell (lower charge_current_ma to <= 1C). The chip itself powers\nup with charging disabled at 3.60 V / 32 mA; init() is what raises it.",
+      "description": "Sets the indicator LED modes (LED0 red = ERROR, LED1 orange = CHARGING,\nLED2 green = HOST),\ndisables NTC monitoring (no thermistor on this tile), and applies the\ncharger settings. The buck regulators are left at their boot voltages\n(1.8 V / 3.3 V, fixed by the VSET resistors) — they are already up.\nPass cfg=NULL for defaults (500 mA USB limit, 100 mA, 4.20 V, charging\nenabled, USB-C auto limit off). A zero-initialised cfg is NOT the same as NULL: it leaves\ncharging OFF (enable_charging = 0).",
       "name": "tile_power_l_1n_init"
     },
     {
@@ -280,12 +282,14 @@
     {
       "signature": "uint8_t tile_power_l_1n_battery_present(tile_t* tile)",
       "params": [],
-      "notes": [],
+      "notes": [
+        "Warning: Only meaningful while charging is ENABLED. This reads BATTERYDETECTED in BCHGCHARGESTATUS, a charger-domain bit: the datasheet states \"CHARGER waits until a battery is detected before charging\", i.e. detection runs as part of the charge cycle. With the charger disabled the bit reads 0 whether or not a cell is fitted — measured on the bench with a battery physically attached (0 before enable, 1 after)."
+      ],
       "studio_exposed": true,
       "studio_section": "runtime",
       "return": "1 if a battery is present, 0 otherwise.",
       "brief": "Whether a battery is detected.",
-      "description": "BATTERYDETECTED in BCHGCHARGESTATUS, a charger-domain bit: the datasheet\nstates \"CHARGER waits until a battery is detected before charging\", i.e.\ndetection runs as part of the charge cycle. With the charger disabled the\nbit reads 0 whether or not a cell is fitted — measured on the bench with a\nbattery physically attached (0 before enable, 1 after).\n\nDo NOT gate a charge-enable decision on this; that deadlocks. Enable\ncharging first, poll this for a second or two, and disable again if nothing\nappears. Note also that get_vbat_mv() cannot substitute: an open battery\nterminal reads a plausible ~3 V once charger current has pushed the VBAT\ndecoupling cap up.",
+      "description": "Do NOT gate a charge-enable decision on this; that deadlocks. Enable\ncharging first, poll this for a second or two, and disable again if nothing\nappears. Note also that get_vbat_mv() cannot substitute: an open battery\nterminal reads a plausible ~3 V once charger current has pushed the VBAT\ndecoupling cap up.",
       "name": "tile_power_l_1n_battery_present"
     },
     {
@@ -512,7 +516,7 @@
         4.45
       ],
       "unit": "V",
-      "default": 4200
+      "default": 4.2
     },
     {
       "label": "USB input limit from USB-C source",

@@ -389,11 +389,11 @@ static inline void core_i2c_target_deinit(core_i2c_target_t *t)
 //   binding, close to what the BLE characteristic binding does.
 //
 // @studio unsupported tier=1 value=L title="Target mode on H5 I2C2 / I2C3"
-//   startup_stm32h523xx.s carries vectors for I2C1_EV, I2C1_ER and
-//   I2C2_EV only. There is no I2C2_ER or I2C3 entry, and slot 58 is
-//   labelled as I2C2 Error shared with USART1, so target mode is
-//   restricted to I2C1 on Core.ST.H5. I2C1 + I2C3 both work on
-//   Core.ST.L4 and Core.ST.W5; Core.ST.L0 has only I2C1.
+//   Target mode runs on I2C1 only on Core.ST.H5 (driver-deferred).
+//   startup_stm32h523xx.s now has the I2C2 and I2C3 event and error
+//   vectors (51-54, 80-81, RM0481 Table 147), but hal_i2c.c registers
+//   a target on I2C1 alone there. I2C1 + I2C3 both work on Core.ST.L4
+//   and Core.ST.W5; Core.ST.L0 has only I2C1.
 //
 // @studio unsupported tier=1 value=M title="10-bit addressing"
 //   API takes uint8_t addr — 7-bit only. No path for 10-bit-addressed

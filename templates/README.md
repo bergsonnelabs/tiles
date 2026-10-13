@@ -26,10 +26,14 @@ not repeat it, or keep the project inside the SDK checkout.
 | Folder | Core | MCU | Flashing | USB |
 |---|---|---|---|---|
 | [`core-st-l0`](core-st-l0/) | `Core.ST.L0` | STM32L011 | SWD (`make flash`) | — |
-| [`core-st-l4`](core-st-l4/) | `Core.ST.L4` | STM32L422 | USB DFU (`make flash-dfu`) | CDC |
-| [`core-st-l4-2`](core-st-l4-2/) | `Core.ST.L4.2` | STM32L422 | USB DFU (`make flash-dfu`) | CDC |
-| [`core-st-w5`](core-st-w5/) | `Core.ST.W5` | STM32WBA55 | SWD via CubeProgrammer | — |
-| [`core-st-h5`](core-st-h5/) | `Core.ST.H5` | STM32H523 | USB DFU (`make flash-dfu`) | CDC |
+| [`core-st-l4`](core-st-l4/) | `Core.ST.L4` | STM32L422 | USB serial (`make flash-serial`); USB DFU (`make flash-dfu`) the first time | CDC |
+| [`core-st-l4-2`](core-st-l4-2/) | `Core.ST.L4.2` | STM32L422 | USB serial (`make flash-serial`); USB DFU (`make flash-dfu`) the first time | CDC |
+| [`core-st-w5`](core-st-w5/) | `Core.ST.W5` | STM32WBA55 | SWD (`make flash`: CubeProgrammer + ST-Link; or Studio / probe-rs over a CoreProbe) | — |
+| [`core-st-h5`](core-st-h5/) | `Core.ST.H5` | STM32H523 | USB serial (`make flash-serial`); USB DFU (`make flash-dfu`) the first time | CDC |
+
+`make flash-serial` reflashes a running Core over its CDC port in about a
+second, with no bootloader and no replug. Use `make flash-dfu` once for a Core
+whose firmware predates serial update (flash-serial says so), and for recovery.
 
 `core-st-l4` and `core-st-l4-2` are for two different boards: the Core.ST.L4
 (called Core.ST.L4.1 until the 2026-09 rename) and the larger Core.ST.L4.2.
@@ -59,8 +63,9 @@ The cost is one `core_watchdog_feed()` call in the main loop. Drop the `iwdg`
 block from `config.json` if you'd rather not think about it — you lose the
 automatic un-bricking, not the ability to flash.
 
-The L0 and W5 templates leave all three out: neither Core has USB, so there is
-no DFU to escape into and an un-fed watchdog would only reset-loop.
+The L0 and W5 templates have no USB, so they leave out `bootloader` and `usb`:
+there is no DFU to escape into. They do turn the 5 s watchdog on and feed it;
+recovery there is SWD, which a probe can always reach.
 
 ## Next steps
 

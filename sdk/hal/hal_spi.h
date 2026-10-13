@@ -16,8 +16,7 @@
  * reconfigured so the next call starts clean.
  *
  * DMA: hal_spi_exchange_dma() (blocking) and hal_spi_xfer_dma() (completion
- * callback) on the L4 (DMA1 CH2/CH3) and the WBA (GPDMA1 CH6/CH7). The H5
- * returns HAL_ERROR for DMA.
+ * callback) on the L4 (DMA1 CH2/CH3), the WBA and the H5 (GPDMA1 CH6/CH7).
  */
 
 #ifndef HAL_SPI_H
@@ -220,8 +219,8 @@ hal_status_t hal_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx, uint8_t *rx,
  * @param h    SPI handle
  * @param tx   TX buffer (NULL = send the fill byte, 0xFF)
  * @param rx   RX buffer (NULL = discard received data)
- * @param len  Number of bytes (L4: up to 65535; WBA: up to 65535 on SPI1,
- *             1023 on SPI3)
+ * @param len  Number of bytes (L4 and H5: up to 65535; WBA: up to 65535 on
+ *             SPI1, 1023 on SPI3)
  * @param cb   Completion callback (from interrupt context)
  * @param ctx  User context for callback
  * @return HAL_OK, HAL_BUSY, or HAL_ERROR (bad length, or no DMA on this platform)

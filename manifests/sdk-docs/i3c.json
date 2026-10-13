@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@3bcb81b",
+  "source": "tiles@77fd3f3",
   "category": "i3c",
   "label": "Core.I3C",
   "icon": "⇶",
@@ -34,6 +34,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "I3C_OK, or I3C_ERROR for a bad instance.",
       "layer": "core"
     },
     {
@@ -84,6 +85,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "I3C_OK, I3C_NACK when no target answers at that static address, I3C_ERROR when dyn_addr is taken or equals static_addr.",
       "layer": "core"
     },
     {
@@ -104,6 +106,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "I3C_OK, or I3C_NACK when no target took part.",
       "layer": "core"
     },
     {
@@ -122,6 +125,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The dynamic address, or 0 if the target does not answer.",
       "layer": "core"
     },
     {
@@ -988,6 +992,21 @@
       "params": [],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_i3c_t",
+      "kind": "typedef",
+      "brief": "Core-level I3C handle. Alias for hal_i3c_t — use this in application code.",
+      "decl": "typedef hal_i3c_t core_i3c_t;"
+    }
+  ],
+  "constants": [
+    {
+      "name": "I3C_12M5",
+      "value": "12500000UL",
+      "description": "SDR maximum (12.4 MHz at a 248 MHz kernel)"
     }
   ]
 }

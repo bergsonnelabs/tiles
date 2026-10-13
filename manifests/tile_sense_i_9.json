@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@ca327c2",
+  "source": "tiles@77fd3f3",
   "tile": "Sense.I.9",
   "palette": {
     "label": "Sense.I.9",
@@ -831,7 +831,7 @@
         {
           "name": "output_period_ms",
           "type": "int",
-          "description": "DMP output period, in ms (clamped to 10–1000 ms)."
+          "description": "DMP output period, in ms (clamped to 10–1000 ms). Internally maps to a divider against the DMP's ~225 Hz base ODR."
         }
       ],
       "returns": "uint8_t",

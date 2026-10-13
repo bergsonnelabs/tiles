@@ -237,11 +237,12 @@ page, so most of a new image equals the running one byte for byte. `S`
   cross page boundaries are valid too, they are just copied.)
 - **Cost on the Core:** a kept page ≈ 45-65 ms (CMAC ≈ 40-60 ms, CRC ≈ 4
   ms at 32 MHz), no flash writes; a staged page adds ≈ 60 ms of erase +
-  program in radio windows. A typical small edit (one constant changed in
-  `tests/ota-bench-a`, a 155000-byte image, 19 pages) is **19 `S` + 1 `D`**
-  (1400 bytes sent; 18 pages kept, the last one staged) instead of 76 `D`.
-  Estimates, not benched: ≈ 1-1.3 s on the Core for the transfer, ≈ 0.5 s
-  for the install (§9). The software CMAC is most of the transfer time.
+  program in radio windows. A typical small edit (one constant changed in a
+  ~155 KB image, 19 pages) is **19 `S` + 1 `D`** (18 pages kept, the last
+  one staged) instead of 76 `D`. Benched 2026-10-10 on a Core.ST.W5
+  (tiles#323): a one-constant delta sent 2,048 of 158,532 bytes and the
+  transfer took 4.2 s. The install (§9) is an estimate, ≈ 0.5 s. The
+  software CMAC is most of the transfer time.
 
 ## 4. Replies (Core → host)
 

@@ -24,8 +24,8 @@ The **Cores SDK** is a firmware development kit for the Tiletown **Core** family
 | `Core.ST.L0` | STM32L011E4 | `Core-ST-L0-a` | Cortex-M0+, 32 MHz max, ultra-low-power |
 | `Core.ST.L4` | STM32L422TB | `Core-ST-L4-b` | Cortex-M4F, 80 MHz (first shipping L4; was `Core.ST.L4.1`) |
 | `Core.ST.L4.2` | STM32L422TB | `Core-ST-L4-2-a` | Cortex-M4F, 80 MHz (more pads) |
-| `Core.ST.W5` | STM32WBA55HGF6 | `Core-ST-W5-b` | Cortex-M33, 100 MHz, BLE |
-| `Core.ST.H5` | STM32H523HE | `Core-ST-H5-a` | Cortex-M33, 250 MHz |
+| `Core.ST.W5` | STM32WBA55HGF6 | `Core-ST-W5-b` | Cortex-M33, 100 MHz, BLE, Thread |
+| `Core.ST.H5` | STM32H523HE | `Core-ST-H5-a` | Cortex-M33, 248 MHz |
 
 Pass either the **public name** or the **definition stem** as `TILE`. The
 public names (matching each board's silkscreen) resolve to their definition
@@ -53,7 +53,7 @@ MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `M
 ## Repo Layout
 
 ```
-cores/
+tiles/
 ├── Makefile                    # Top-level build orchestrator
 ├── AI.md                       # ← this file
 ├── sdk/
@@ -64,8 +64,7 @@ cores/
 │   │   ├── tal_adc.h           # Pad → ADC channel resolution
 │   │   ├── tal_timer.h         # Pad → timer instance/channel resolution
 │   │   └── tal_exti.h          # Pad → EXTI with auto-pull
-│   ├── cmsis/                  # ARM CMSIS headers
-│   ├── device/                 # Linker scripts, startup code (per MCU)
+│   ├── device/                 # Linker scripts, startup code, device headers (per MCU)
 │   ├── wpan/                   # Core.ST.W5 2.4 GHz radio plumbing shared by every ST link-layer
 │   │                           #   protocol (BLE, Thread): sequencer, timer server, flash manager
 │   │                           #   (wpan_flash.c), link-layer platform + ll_sys glue (wpan_sys.c,
@@ -105,17 +104,15 @@ cores/
 ├── tools/
 │   └── coregen/
 │       ├── coregen.py          # Main generator — entry point
-│       ├── templates/          # Jinja2 templates (see below)
-│       └── config-schema.json
+│       └── templates/          # Jinja2 templates (see below)
 ├── templates/                  # One minimal, buildable starter per Core — copy one
 │   ├── core-st-l0/           # Makefile + config.json + main.c
 │   ├── core-st-l4/
 │   ├── core-st-l4-2/
 │   ├── core-st-w5/
 │   └── core-st-h5/
-├── projects/                   # User projects (each has config.json)
-│   └── my-project/
-└── examples/                   # Reference projects (no config.json changes needed)
+├── tests/                      # Validation (val-*) and bench (hw-*) projects
+└── examples/                   # Reference projects that ship to the community
     ├── u2-blink/
     ├── h1-usb-hid/             # USB HID example
     └── ...
@@ -170,12 +167,15 @@ watchdog + strike→ROM-DFU brick recovery, fed from the starter loop. See
 | Variable | Default | Description |
 |---|---|---|
 | `TILE` | `Core.ST.L4.2` | Core to build for — public name or definition stem |
-| `PROJECT` | `blink` | Project name (looks in `examples/` or `projects/`) |
-| `PROJECT_DIR` | `examples/$(PROJECT)` | Override if project lives elsewhere |
-| `TILES_ENABLED` | `0` or `1` | Auto-set: 1 if project has tiles configured |
+| `PROJECT` | `blink` | Project name under `examples/` (there is no `examples/blink`: pass `PROJECT` or `PROJECT_DIR`) |
+| `PROJECT_DIR` | `examples/$(PROJECT)` | The project directory; a project's own Makefile sets it to itself |
+| `TILES_ENABLED` | `0` | `1` = build tile drivers (`core_drivers.mk`); a project with `tiles` in config.json sets it in its Makefile |
+| `TILES_OVERLAY` | empty (`~/.zshrc` may export it) | Space-separated private overlay checkouts (definitions + drivers of non-public tiles) |
+| `SCOPE_ENABLED` | from config.json (`1`) | `0` = compile every `core_scope_*` call out (config `"scope": {"enabled": false}`) |
+| `WAMR_ENABLED` | `0` | `1` = link the WAMR interpreter for on-device `.wasm` (Cortex-M33 Cores: H5, W5) |
 | `BLE_ENABLED` | from config.json | `1` = link the BLE stack (Core.ST.W5; config `"ble": {"enabled": true}`) |
 | `THREAD_ENABLED` | from config.json | `1` = link OpenThread (Core.ST.W5; config `"thread": {"enabled": true}`). With `BLE_ENABLED=1` too: one image runs both (`BLE_THREAD`: ST's concurrent `LinkLayer_BLE_Thread_lib.a`, the trimmed OpenThread lib, `stm32wba55hg_ble_thread.ld`) |
-| `BOOTLOADER` | from config.json | `1` = custom DFU bootloader (app at 0x08002000) |
+| `BOOTLOADER` | from config.json | `1` = custom DFU bootloader (app at 0x08002000). **Parked**: refused unless `CUSTOM_BOOTLOADER_ACK=1`; use `"bootloader": "rom"` |
 | `ROM_DFU` | from config.json | `1` = ROM DfuSe bootloader (app at 0x08000000) |
 | `V` | `0` | Verbosity (1 = show all commands) |
 | `PYTHON` | auto-probed | Python 3 for coregen — tries `python3`, `py -3`, `python` |
@@ -185,12 +185,13 @@ watchdog + strike→ROM-DFU brick recovery, fed from the starter loop. See
 ### Common Commands
 
 ```bash
-make                                           # Build blink for the default Core (Core.ST.L4.2 / Core-ST-L4-2-a)
-make TILE=Core.ST.W5 PROJECT=my-project     # Build specific core + project
+make PROJECT=u2-blink                          # Build examples/u2-blink for the default Core (Core.ST.L4.2)
+make TILE=Core.ST.W5 PROJECT_DIR=/path/to/my-project  # Build a project elsewhere (or run make in its directory)
 make TILE=Core.ST.W5 PROJECT=my-project V=1 # Verbose build
 make generate                                  # Run coregen only (no compile)
 make flash                                     # Flash via OpenOCD / ST-Link
-make flash-dfu                                 # Flash via USB DFU
+make flash-dfu                                 # Flash via USB DFU (1200-baud touch first)
+make flash-rom                                 # dfu-util to a Core already in the ST ROM bootloader
 make flash-serial                              # Flash a running Core.ST.L4 / H5 over its CDC port (docs/serial-update-protocol.md)
 make clean                                     # Remove build artefacts
 make distclean                                 # Remove build + coregen output
@@ -285,6 +286,8 @@ Four more host differences the Makefile handles, each with its own trap:
 | `core.h` | project only | Master include (includes all of the above) |
 | `tile_handles.h` | project+tiles | Tile handle variables; preserves edits outside markers |
 | `core_drivers.mk` | project+tiles | Makefile fragment listing tile driver source files |
+| `ble_contract.c` / `.h` | `ble.contract` set | GATT services, characteristics and publishers from the contract |
+| `thread_dataset.h` | `thread.enabled` | The Thread network from config.json (`THREAD_CFG_*`) |
 
 #### Key Internal Functions
 
@@ -300,7 +303,7 @@ The `build_*_config()` functions in `coregen.py` each parse one section of `conf
 
 ## config.json Format
 
-Every project in `projects/<name>/` has a `config.json`. It is the single source of truth for hardware configuration. coregen derives all generated code from it. The filename is literal — coregen looks for `config.json` in the project directory; the project's human name comes from the directory name itself.
+Every project directory has a `config.json`. It is the single source of truth for hardware configuration. coregen derives all generated code from it. The filename is literal — coregen looks for `config.json` in the project directory; the project's human name comes from the directory name itself.
 
 **→ Full authoring reference: [`config-json.md`](config-json.md).** It documents every key coregen actually reads (verified against `tools/coregen/coregen.py`), the per-MCU constraints, the validation/error behaviour, a cookbook, and — importantly — the keys that are **silently ignored**. Read it before hand-editing a config.
 
@@ -311,24 +314,29 @@ Minimal shape:
   "core": "Core.ST.W5",        // Public name (or a definitions/<name>.json stem)
   "clock": "max",               // a clock-level NAME from the tile JSON, not a frequency
   "pads": {                     // pad number (string) → function the tile JSON allows
-    "9":  "I2C1.CLK",
+    "10": "I2C1.CLK",
     "11": "I2C1.DAT",
-    "8":  "SPI1.CS",            // SPI CS pads → GPIO output (software CS)
-    "4":  "GPIO.OUT"
+    "2":  "SPI3.CLK",
+    "6":  "SPI3.MOSI",
+    "7":  "SPI3.MISO",
+    "3":  "SPI3.CS",            // SPI CS pads → GPIO output (software CS)
+    "8":  "GPIO.OUT",
+    "9":  "GPIO.IN"
   },
   "interfaces": {               // TUNING ONLY — never creates a bus; a pad function does
     "I2C1": { "speed": 400000, "pullups": true },
-    "SPI1": { "mode": 0, "prescaler": 8, "cs_polarity": "active-low" }
+    "SPI3": { "mode": 0, "prescaler": 8, "cs_polarity": "active-low" }
   },
   "gpio": {                     // per-pin pull / output_type / exti / default
-    "5": { "pull": "up", "exti": "falling" }
+    "9": { "pull": "up", "exti": "falling" }
   },
   "tiles": [
-    { "tile": "Sense.I.9", "bus": "I2C1", "instance": 0 }   // SPI tiles also need "cs_pad"; several on
-                                                             // one bus: own cs_pad + instance each
+    { "tile": "Sense.I.6P6", "bus": "I2C1", "instance": 0 },              // SPI tiles also need "cs_pad"; several
+    { "tile": "Store.O.128", "bus": "SPI3", "instance": 0, "cs_pad": "3" } // on one bus: own cs_pad + instance each
   ],
-  "bootloader": "custom",       // "custom" | "rom" | "none" (default)
-  "usb": { "enabled": false, "vid": "0x1209", "pid": "0xDA01", "product": "…" },
+  "bootloader": "none",         // "rom" (L4 / H5, the fleet standard) | "none" (default; the W5 has no USB) | "custom" (parked)
+  "iwdg": { "enabled": true, "timeout_ms": 5000 },   // core_init() starts it; feed it in the loop
+  "ble": { "enabled": true, "name": "MY-DEVICE" },  // W5: link the BLE stack (BLE_ENABLED); see config-json.md §10
   "thread": { "enabled": true, "role": "ftd", "channel": 15, "panid": "0x1234",   // W5; DEVELOPMENT
               "network_key": "<32 hex>", "network_name": "tiles-dev",              // ONLY: a fixed network,
               "ext_panid": "<16 hex>", "mesh_local_prefix": "fdde:ad00:beef:0::",  // no commissioning
@@ -337,9 +345,9 @@ Minimal shape:
 ```
 
 **Key things that bite (see config-json.md for the rest):**
-- Buses/PWM/ADC are **derived from `pads`**, not declared. `interfaces.X` only tunes a bus some pad already created; a freq for a timer goes under `interfaces.TIM<n>.freq`.
+- Buses/PWM/ADC are **derived from `pads`**, not declared. `interfaces.X` only tunes a bus some pad already created, and must name an interface of the Core's definition. Timers are not interfaces: `interfaces.TIM<n>` is an error, coregen starts each used timer at 1 kHz, and `core_timer_set_freq()` changes it at run time.
 - Most mistakes (bad pad/function, unknown clock level, illegal I2C speed, bad SPI mode/prescaler, unknown tile, SPI tiles sharing a bus without their own `cs_pad`/`instance`, bad bootloader) make coregen **exit** — it's fail-fast.
-- coregen reads a **fixed allowlist** of keys; unknown/typo'd keys are silently ignored. In particular `ble`, `debug`, `isp`, `programming`, and any `timers`/`pwm`/`capture`/`iwdg` sections are **NOT read by coregen** and do nothing. (For the WBA radio, get HSE by picking an HSE-sourced `clock` level — there is no `ble` switch.)
+- coregen reads a **fixed allowlist** of keys; unknown/typo'd keys are silently ignored. In particular `debug`, `isp`, `programming`, and any `timers`/`pwm`/`capture` sections are **NOT read** and do nothing. `iwdg` IS read (`core_init()` starts the watchdog), and so is `ble` (W5: the Makefile sets `BLE_ENABLED` from `ble.enabled`; coregen generates the name, TX power, advertising interval, pairing and the GATT contract). BLE and Thread need `clock` medium or higher.
 - `thread` IS read: the Makefile sets `THREAD_ENABLED` from `thread.enabled`, and coregen validates the block (channel 11-26, PAN ID, 16-byte key, 8-byte ext PAN ID, name <= 16 bytes, /64 mesh-local prefix, role `ftd` only, W5 only, clock medium or higher) and writes `coregen/thread_dataset.h`; `ble` may be enabled too (one image, both radios). Absent keys take the development defaults (`THREAD_DEFAULTS` in coregen.py, mirrored in `core_thread.c`). `thread.enabled` means **joins on boot**: the generated `core_init()` calls `core_thread_start()` (Thread-only; with `ble`, `core_ble_init()` does, BLE first), and in Thread builds `core_delay_ms()` (`ll_delay_ms`) and `core_watchdog_feed()` run `core_thread_process()`, so main.c need not mention core_thread (`tests/val-thread-auto`). `provisioning: true` makes a network stored at run time (`core_thread_set_dataset()`) win over config.json's at boot (config.json's = factory default); `ble_provisioning: true` (needs `ble`) adds the BLE service 0x5D00 for it (DEVELOPMENT ONLY, open writes; `docs/thread-provisioning-protocol.md`). coregen emits `THREAD_CFG_PROVISIONING` / `THREAD_CFG_BLE_PROVISIONING` into `thread_dataset.h` only when set.
 - Several SPI tiles can share a bus: each tile's `cs_pad` becomes an entry in a chip-select map keyed by its `instance` (the `cs` its driver passes as `tile->id`), and the tile bridge asserts only that pad. One CS pad on a bus stays the bus's own CS. A dual-bus tile (`bus` I2C + `bus2` SPI, e.g. Sense.CAM.P via `core_tiles_pal2`) is keyed by its `cs_id` instead, which the app passes as the driver's `cfg.spi_cs`. See config-json.md §9.
 - I3C (Core.ST.H5 only) is requested on an I2C bus: `"interfaces": {"I2C1": {"i3c": true, "i3c_speed": 12500000}}`. coregen runs the bus as I3C (pads AF3 push-pull, `core_i3c1`, RSTDAA + SETDASA per known tile in `core_init()`) only when the MCU has I3C, both pads offer it, and every tile's definition lists `I3C.CLK/DAT` on its I2C pads; otherwise the bus stays I2C with one NOTE line. Tiles keep `"bus": "I2C1"`. Assigning `I3Cn.*` in `pads` is an error. See config-json.md §7.
@@ -354,15 +362,15 @@ The `core_` layer provides platform-agnostic naming for application code. It is 
 
 | Header | Purpose |
 |---|---|
-| `core_timer.h` | `core_timer_init_freq()` (PWM/tick), `core_timer_init_tick()` (capture), `core_timer_pwm_set()` (0-100%), `core_timer_capture_init/read()`, `core_timer_enable_tick()` |
+| `core_timer.h` | `core_timer_init_freq()` (PWM/tick), `core_timer_init_tick()` (capture), `core_timer_set_freq()`, `core_timer_pwm_set()` (duty in per mille, 0-1000), `core_timer_capture_init/read()`, `core_timer_enable_tick()`, `core_timer_set_trgo()` (a timer event that paces `core_adc_set_trigger()` DMA) |
 | `core_gpio.h` | Single include for `core_pad_output/input/read/write/toggle()` + `core_pad_on_change()` (EXTI) |
-| `core_adc.h` | `core_adc_init()`, `core_adc_read()`, `core_adc_read_mv()`, DMA, temp sensor |
-| `core_i2c.h` | `core_i2c_setup()` with auto-timing, `core_i2c_write/read/probe/scan()` |
+| `core_adc.h` | `core_adc_init()`, `core_adc_add()`, `core_adc_read()`, `core_adc_read_mv()`, `core_adc_read_pad()`, `core_adc_temp_decidegc()` and `core_adc_vdd_mv()` (no ADC pad needed), DMA (`core_adc_start_dma/stop_dma/dma_read()`), `core_adc_set_trigger()` (pace DMA from a timer TRGO or EXTI line) |
+| `core_i2c.h` | `core_i2c_setup()` with auto-timing, `core_i2c_write/read/probe/scan()`; target (device) mode: `core_i2c_target_init()` / `_init_rw()` / `_deinit()` (register-file model, interrupt-driven; I2C1 only on Core.ST.H5) |
 | `core_i3c.h` | Core.ST.H5 only (`#error` elsewhere). I3C SDR controller over `hal_i3c`: `core_i3c_init(&h, I3C1, I3C_12M5)` (kernel = APB clock: 12.4 MHz SCL at max), `core_i3c_rstdaa/setdasa/entdaa()`, `core_i3c_attach(&h, static)` (SETDASA if needed, returns the dynamic address; never the static one), `core_i3c_get_pid/bcr/dcr/status()`, `core_i3c_enec/disec()`, `core_i3c_read/write/read_reg/write_reg()`, `core_i3c_ibi_enable/disable()` (callback from the EV IRQ). Polled, timeout-bounded; `I3C_OK/NACK/TIMEOUT/ERROR`. HAL: `hal_i3c.{h,c}` (frame engine over the C/TX/RX FIFOs, RM0481 ch. 49); LL: `ll_i3c.h` (register map, RCC). Bench: `tests/hw-i3c`. |
 | `core_watchdog.h` | `core_watchdog_start(ms)`, `core_watchdog_feed()`, `core_watchdog_caused_reset()`, `core_watchdog_running()`, `core_watchdog_sleep_chunk_ms()`. Timeout recorded in `core_watchdog.c` (compiled per project like `core_led.c`); `core_power.h` sleeps in fed chunks around it and `core_standby_for()` returns `HAL_ERROR` past half the timeout. On ROM-DFU builds `feed()` zeroes the brick-recovery strike count once after max(10 s, 2x timeout) of uptime. |
 | `core_nvm.h` | Persistent byte store, same API on every Core: `core_nvm_read/write(offset, buf, len)` (0 or negative `CORE_NVM_ERR_*`), `core_nvm_erase_all()`, `core_nvm_size()`, DSL `core_nvm_read_byte/write_byte()`. L0: 512 B data EEPROM. L4 / W5: 1 KB emulated in two flash pages (L4 0x0801F000, W5 0x080FA000; W5 page 127 above it is the BLE bond store): an append log with CRC'd records, compacted to the other page when full, power-loss safe, survives flash-serial / DFU / SWD reflashing (the linker scripts end the app below the pages, `__core_nvm_start`). A compaction erases a page: ~22 ms CPU stall on the L4. W5 with BLE schedules erases/writes through ST's flash manager (`sdk/wpan/wpan_flash.c`). H5: 1 KB in the flash high-cycle data area (bank 2 sectors 30-31, read at 0x09015000, 16-bit words, `ll_flash_edata.h`), switched on at first boot by `_core_nvm_h5_boot()` from `core_init()`. Backed by `core_nvm.c` (compiled per project; it also owns `NMI_Handler` on L4/W5 to survive ECC errors from torn writes; on the H5 it masks that NMI during its own reads and checks FLASH_ECCDETR instead). |
 | `core_thread.h` | Core.ST.W5, `THREAD_ENABLED` builds (`#error` on other Cores). OpenThread FTD on a fixed development network from config.json: `core_thread_start()` (joins or forms it; settings in flash pages 122-123, `stm32wba55hg_thread.ld`), `core_thread_process()` (the sequencer: radio, OpenThread tasklets and alarms; WFI when idle), `core_thread_role()` + `core_thread_on_role_change()`, `core_thread_udp_open(port, cb, ctx)` (cb takes one `const core_thread_udp_packet_t *` with `data`, `len`, `src[16]`, `src_port`, plus ctx: a struct so a swapped-argument callback can't compile) / `_send(addr6, port, buf, len)` / `_broadcast(port, buf, len)` (ff03::1), diagnostics `core_thread_rloc16/ext_addr/partition_id/neighbor_count/parent_rssi/last_error()`, `core_thread_instance()` for the raw OpenThread API, `core_thread_get_network()` (dataset without the key), `core_thread_set_enabled(0/1)` (leave / attach). Provisioning (config `provisioning` / `ble_provisioning`): `core_thread_set_dataset()`, `core_thread_factory_reset()`, `core_thread_is_provisioned()`, the weak write gate `core_thread_prov_allow_write()`; the stored network is a vendor settings key (0x8B01) beside the dataset; the BLE service is `sdk/thread/thread_prov_ble.c`, wire format + boot rule `sdk/thread/thread_prov_codec.c` (host tests `tests/host-thread-prov`), spec `docs/thread-provisioning-protocol.md`. **Joins on boot**: `core_init()` / `core_ble_init()` start it, `core_thread_start()` again returns 0, and `core_thread_process()` is also run by `core_delay_ms()` / `core_watchdog_feed()` (rate-limited to every 5 ms); it is a no-op before start, inside a sequencer pass (`thread_app_seq_depth`, set by `thread_app_process()` and core_ble's runs), in an ISR or with PRIMASK set. 0 or negative `CORE_THREAD_ERR_*`. No commissioning, MTD, or ECC. **BLE + Thread** (config enables both): `core_ble_init()` first, then `core_thread_start()` (else `CORE_THREAD_ERR_STATE`; ST's BLE_HeartRate_Thread order: `thread_app_init()` skips the sequencer / timer / flash-manager init `ble_app_init()` did), both `core_ble_process()` and `core_thread_process()` in the loop (one sequencer; OpenThread tasks join BLE's in `sdk/ble/include/app_conf.h`), the trimmed OpenThread (`stm32wba-openthread-ftd-trim-config.h`: no commissioner / joiner / DTLS / SRP / DNS / TCP, 64 message buffers), settings pages 122-123 outside the BLE update's staging area (`su_ota.h` `SU_OTA_APP_LIMIT` = page 122 in these builds). Tests: `tests/val-thread`, `tests/hw-thread` (two-node bench, status block over SWD), `tests/val-ble-thread`, `tests/hw-ble-thread` (hw-thread + a BLE status characteristic + the provisioning service), `tests/hw-thread-ble-gw` (BLE + Thread gateway forwarding hw-thread beacons as notifications; `tools/thread_gw_listen.py` on the computer), `tests/val-thread-provision` (C API, no BLE), `tests/val-thread-auto` (no Thread code in main.c; `make check-linked`), `tests/host-thread-prov` (host cc). |
-| `core_usb.h` | `core_usb_init()`, `core_usb_write()`, `core_usb_printf`, includes `<stdio.h>` |
+| `core_usb.h` | `core_usb_init()`, `core_usb_write()`, `core_usb_printf`, includes `<stdio.h>`. Writes queue and return; a terminal that stops reading gets at most a 50 ms wait, then the bytes drop (a short return). Text printed before the port opens is kept, up to the TX queue size |
 | `core_timing.h` | `core_delay_ms/us()`, `core_millis()`, `core_timeout()` |
 | (W5, BLE builds) | **BLE firmware update**, automatic, no API: Studio Link (`0x5C00`, registered by `core_ble` after the app's services) carries Studio Update (`0x5C02`): the image is received into flash above the running app (staging, `sdk/ble/ble_update.c`, `su_core.c` built with `SU_STAGING`), checked (CRC-32 + per-board AES-CMAC key in flash page 124, written by Studio's SWD flasher), then an install marker in page 124 hands it to the page-0 copier (`sdk/ble/ble_update_boot.c`, `su_ota.c`, run from SRAM by `Reset_EarlyHook` before `.data`/`.bss`). W5 images end below page 124 (992 KB, the plain and BLE linker scripts; Thread and BLE + Thread builds end below page 122, 976 KB, and in BLE + Thread builds the staging area ends there too, so the OpenThread settings survive an update). `tools/check_ota_boot.py` runs after every BLE link. Spec: `docs/ble-update-protocol.md`; host tests `make -C sdk/serial_update test`. |
 | `core_scope.h` | Scope: live variable streaming to Studio or any host. `core_scope_watch(var)` / `core_scope_watch_array(arr, n)` register variables (type + name via `_Generic`); `core_scope_update()` in the loop snapshots and sends. ISR path: `core_scope_declare_rate_hz()`, `core_scope_sample()` (ISR-safe, copy only) + `core_scope_pump()` (main loop). Never blocks; drops whole samples and tells the host how many. Link chosen per Core: USB CDC (shares the port with print text, via `core_usb_try_write`), BLE notifications on the Studio Link service (`0x5C00/0x5C01`; core_ble registers Studio Link in every BLE build and scope attaches through `ble_studio_link_attach()` — first scope call must precede `core_ble_init()`), or any `core_scope_link_t`. `"scope": {"enabled": false}` in config.json compiles every call out. Wire format: `docs/scope-protocol.md`; reference decoder `tools/scope_decode.py`; host test `tools/test_core_scope.py`. Backed by `core_scope.c` (compiled per project; gc'd when unused). |
@@ -372,9 +380,9 @@ The `core_` layer provides platform-agnostic naming for application code. It is 
 - `core_timer_init_freq(&t, TIM2, 1000)` — overflow at 1 kHz (for PWM, periodic tick)
 - `core_timer_init_tick(&t, TIM2, 1000000)` — tick at 1 MHz, free-running (for input capture)
 
-**PWM duty is 0-100 integer percent** at the core_ layer. For 0.1% resolution, use `hal_timer_pwm_set_duty()` with 0-1000.
+**PWM duty is per mille (0-1000)** at the core_ layer: `core_timer_pwm_set(&t, ch, 500)` is 50 %.
 
-**`core.h`** (generated by coregen) includes `core_gpio.h` and `core_timing.h` automatically, so delays and GPIO are always available.
+**`core.h`** (generated by coregen) includes `core_led.h`, `core_gpio.h` and `core_timing.h` always, and `core_usb.h`, `core_dac.h`, `core_i2c.h`, `core_spi.h`, `core_i3c.h`, `core_tiles.h` when the project uses them. It never includes `core_ble.h`, `core_thread.h`, `core_rng.h`, `core_power.h`, `core_nvm.h` or `core_scope.h`: include those yourself.
 
 ---
 
@@ -390,26 +398,28 @@ Design principles:
 
 **I2C** (`hal_i2c.h`):
 ```c
-hal_status_t hal_i2c_init(hal_i2c_t *h, uint32_t instance, hal_i2c_config_t *cfg);
-hal_status_t hal_i2c_write_reg(hal_i2c_t *h, uint8_t addr, uint16_t reg, uint8_t *data, uint16_t len);
-hal_status_t hal_i2c_read_reg(hal_i2c_t *h, uint8_t addr, uint16_t reg, uint8_t *data, uint16_t len);
-hal_status_t hal_i2c_is_ready(hal_i2c_t *h, uint8_t addr);
+hal_status_t hal_i2c_init(hal_i2c_t *h, I2C_TypeDef *instance, const hal_i2c_config_t *cfg);
+hal_status_t hal_i2c_write_reg(hal_i2c_t *h, uint8_t addr, uint16_t reg, const uint8_t *data, uint32_t len);
+hal_status_t hal_i2c_read_reg(hal_i2c_t *h, uint8_t addr, uint16_t reg, uint8_t *buf, uint32_t len);
+hal_status_t hal_i2c_probe(hal_i2c_t *h, uint8_t addr);
 ```
 
 **SPI** (`hal_spi.h`):
 ```c
-hal_status_t hal_spi_init(hal_spi_t *h, uint32_t instance, hal_spi_config_t *cfg);
-hal_status_t hal_spi_set_cs(hal_spi_t *h, GPIO_TypeDef *port, uint32_t pin);
-hal_status_t hal_spi_write(hal_spi_t *h, uint8_t *data, uint16_t len);
-hal_status_t hal_spi_read(hal_spi_t *h, uint8_t *data, uint16_t len);
+hal_status_t hal_spi_init(hal_spi_t *h, SPI_TypeDef *instance, const hal_spi_config_t *cfg);
+void         hal_spi_set_cs(hal_spi_t *h, GPIO_TypeDef *port, uint32_t pin);
+hal_status_t hal_spi_write(hal_spi_t *h, const uint8_t *data, uint32_t len);
+hal_status_t hal_spi_read(hal_spi_t *h, uint8_t *buf, uint32_t len);
 // h->cs_active_low = 0  →  active-high CS
 ```
 
 **UART** (`hal_uart.h`):
 ```c
 // NOTE: instance is USART_TypeDef* (e.g. USART2), not a bus number.
-// pclk_hz = SYSCLK_HZ (all APB dividers are 1 in coregen output).
+// pclk_hz: PCLK1_HZ / PCLK2_HZ from core_config.h (core_serial_init() passes
+// PCLK1_HZ; coregen leaves the APB dividers at 1).
 // hal_uart_init() enables its own peripheral clock internally.
+// 8N1 only; TX is polled; RX is an interrupt-driven ring with cfg.rx_interrupt.
 hal_status_t hal_uart_init(hal_uart_t *h, USART_TypeDef *instance,
                            uint32_t pclk_hz, const hal_uart_config_t *cfg);
 void         hal_uart_tx(hal_uart_t *h, const uint8_t *data, uint32_t len);
@@ -420,14 +430,16 @@ uint8_t      hal_uart_rx(hal_uart_t *h);         // blocking
 int          hal_uart_rx_try(hal_uart_t *h, uint8_t *byte);  // non-blocking
 ```
 
-**I3C** (`hal_i3c.h` — stub, not yet implemented):
+**I3C** (`hal_i3c.h`, Core.ST.H5 only; SDR controller, verified 2026-09-27; `core_i3c.h` wraps it):
 ```c
-hal_status_t hal_i3c_init(hal_i3c_t *h, uint32_t instance_id,
-                           const hal_i3c_config_t *cfg);  // returns HAL_ERROR
-hal_status_t hal_i3c_write(hal_i3c_t *h, uint8_t addr,
-                            const uint8_t *data, uint16_t len);
-hal_status_t hal_i3c_read(hal_i3c_t *h, uint8_t addr,
-                           uint8_t *data, uint16_t len);
+hal_status_t hal_i3c_init(hal_i3c_t *h, I3C_TypeDef *instance, const hal_i3c_config_t *cfg);
+hal_status_t hal_i3c_write(hal_i3c_t *h, uint8_t dyn_addr, const uint8_t *data, uint16_t len);
+hal_status_t hal_i3c_read(hal_i3c_t *h, uint8_t dyn_addr, uint8_t *buf, uint16_t len,
+                          uint16_t *got);   // got: bytes received (may be NULL)
+hal_status_t hal_i3c_write_reg(hal_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
+                               const uint8_t *data, uint16_t len);
+hal_status_t hal_i3c_read_reg(hal_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
+                              uint8_t *buf, uint16_t len);
 ```
 
 **ADC** (`hal_adc.h` — Tier 1, all four Core families):
@@ -459,7 +471,7 @@ hal_status_t hal_adc_start_dma(hal_adc_t *adc, uint16_t *buf, uint16_t len,
 void hal_adc_stop_dma(hal_adc_t *adc);
 ```
 
-Enums: `HAL_ADC_RES_6/8/10/12BIT` (all families, plus `14BIT` on H5). Sampling: `HAL_ADC_SAMP_FAST/MED/SLOW/VERY_SLOW`. Oversampling: `HAL_ADC_OVERSAMPLE_1X/4X/16X/64X/256X` (plus `1024X` on H5).
+Enums: `HAL_ADC_RES_6/8/10/12BIT` (all families). Sampling: `HAL_ADC_SAMP_FAST/MED/SLOW/VERY_SLOW`. Oversampling: `HAL_ADC_OVERSAMPLE_1X` to `_256X` in powers of two (plus `1024X` on H5).
 
 `hal_adc_read_mv()` uses VREFINT factory calibration to derive true VDDA, so millivolt results are correct even when VDD differs from 3.3 V. VDDA is cached in `adc->vdda_mv` after first measurement.
 
@@ -469,7 +481,7 @@ Enums: `HAL_ADC_RES_6/8/10/12BIT` (all families, plus `14BIT` on H5). Sampling: 
 |------------|-----------|---------|-------------|
 | L0 (L011)  | 17        | 16      | 3.0 V       |
 | L4 (L422)  | 0         | 17      | 3.0 V       |
-| WBA (WBA55)| 13        | 12      | 3.3 V       |
+| WBA (WBA55)| 0         | 13      | 3.0 V       |
 | H5 (H523)  | 17        | 16      | 3.3 V       |
 
 `hal_adc_start_dma` uses DMA1 CH1 (L0/L4) or GPDMA1 CH0 (WBA/H5) in circular mode with HT+TC interrupts for double-buffered processing.
@@ -511,8 +523,9 @@ TILES_CHECK_VERSION(1, 0);
 // Find: scan bus for the device, set tile state
 uint8_t tile_sense_i_9_find(tiles_pal_t *hal, uint8_t instance);
 
-// Init: configure registers, mark TILE_STATE_READY
-void tile_sense_i_9_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile);
+// Init: configure registers, mark TILE_STATE_READY (cfg NULL = defaults)
+void tile_sense_i_9_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile,
+                         const sense_i_9_cfg_t *cfg);
 
 // Data access functions (after init)
 void tile_sense_i_9_get_raw_accels(tile_t *tile, int16_t accel[3]);
@@ -607,7 +620,7 @@ int main(void) {
 
     tile_t imu;
     tiles_pal_t *hal = core_tiles_pal(&core_i2c1);
-    tile_sense_i_9_init(hal, 0, &imu);
+    tile_sense_i_9_init(hal, 0, &imu, NULL);
 
     while (1) {
         int16_t accel[3];
@@ -713,7 +726,7 @@ Status files live in `sdk/status/`. `features.json` is the canonical feature man
 - `"compile"` — builds cleanly, not yet hardware-validated
 - `"partial"` — partially working; a `note` field explains the limitation
 - `"wip"` — actively in development
-- `"none"` — not yet implemented (omitting a key is equivalent)
+- `"none"` — not yet implemented. Every Core file lists every feature id with one of these values; `tools/check_status_consistency.py` fails on a missing id or a blank `""`
 - `"na"` — not applicable for this Core (hide from display)
 
 **`features.json` entry format:**
@@ -742,7 +755,7 @@ Layer values: `"LL"`, `"HAL"`, `"TAL"`, `"Core"` — implies all layers below ar
 ### Debug a coregen issue
 
 ```bash
-make generate TILE=Core.ST.W5 PROJECT=my-project V=1
-# Check projects/my-project/coregen/ for generated files
+make generate TILE=Core.ST.W5 PROJECT_DIR=/path/to/my-project V=1
+# Check /path/to/my-project/coregen/ for generated files
 # coregen prints validation errors to stderr
 ```

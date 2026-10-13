@@ -27,6 +27,10 @@
 /**
  * Blocking delay in milliseconds.
  *
+ * Thread builds (Core.ST.W5): the wait runs Thread's scheduler, so Thread
+ * callbacks (UDP receive, state changes) can run inside it, and it can end
+ * up to ~1 ms late.
+ *
  * @studio expose category=timing name=delay_ms
  * @studio twin full
  * @param ms [1..60000] Delay duration in milliseconds.

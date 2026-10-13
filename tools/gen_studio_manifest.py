@@ -381,10 +381,53 @@ def parse_studio_tag(lines):
     return None
 
 
-def parse_params(lines):
+def join_continuations(lines):
+    """Fold the lines that continue an @-command into it, as Doxygen reads it.
+
+    A wrapped `@param x  First half` + `            second half.` comes back as
+    one line. A command runs until a blank line or the next @command; lines
+    that follow no command (the brief, prose) are returned unchanged. Before
+    this, @param text was cut at the first line on the API reference
+    ("Called with each datagram received on the port (one").
+    """
     out = []
+    in_cmd = False
     for raw in lines:
         line = raw.strip()
+        if line.startswith("@"):
+            out.append(line)
+            in_cmd = True
+        elif not line:
+            out.append(line)
+            in_cmd = False
+        elif in_cmd:
+            out[-1] = out[-1] + " " + line
+        else:
+            out.append(line)
+    return out
+
+
+def parse_return(lines):
+    """The @return / @returns text (continuation lines joined), or None."""
+    for line in join_continuations(lines):
+        m = re.match(r"^@returns?\b\s*(.*)$", line)
+        if m:
+            return m.group(1).strip() or None
+    return None
+
+
+def parse_deprecated(lines):
+    """The @deprecated text: "" when the tag has no text, None without it."""
+    for line in join_continuations(lines):
+        m = re.match(r"^@deprecated\b\s*(.*)$", line)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def parse_params(lines):
+    out = []
+    for line in join_continuations(lines):
         m = PARAM_RE.match(line)
         if not m:
             continue
@@ -1350,6 +1393,11 @@ def build_doc_entry(doxy_lines, sig, studio_exposed, source, doxy_end_offset):
     cleanly on the page.
     """
     description = first_brief(doxy_lines)
+    deprecated = parse_deprecated(doxy_lines)
+    if description is None and deprecated is not None:
+        # `/** @deprecated Use x() */` has no brief of its own; the reference
+        # showed `brief: null` for these.
+        description = ("Deprecated. " + deprecated).strip()
     doxy_params = parse_params(doxy_lines)
     by_name = {p["name"]: p for p in doxy_params}
 
@@ -1387,9 +1435,156 @@ def build_doc_entry(doxy_lines, sig, studio_exposed, source, doxy_end_offset):
         "params": doc_params,
         "studio_exposed": studio_exposed,
     }
+    return_desc = parse_return(doxy_lines)
+    if return_desc:
+        entry["return_desc"] = return_desc
+    if deprecated is not None:
+        entry["deprecated"] = True
     if attributes:
         entry["attributes"] = attributes
     return entry
+
+
+# ---- Types, constants and macros for the SDK reference ----
+#
+# Functions are only part of an API: a callback's signature, a struct a
+# function fills, or the error codes it returns live in typedefs and #defines,
+# which the reference used to leave out (core_thread_udp_rx_cb,
+# core_thread_udp_packet_t, CORE_THREAD_ERR_*). These are emitted per category
+# as `types`, `constants` and `macros`, beside `functions`.
+
+_MEMBER_DOC_RE = re.compile(r"/\*\*<\s*(.*?)\s*\*/")
+_FIELD_RE = re.compile(r"^\s*([A-Za-z_][\w\s\*]*?[\w\*])\s*\b([A-Za-z_]\w*)\s*(\[[^\]]*\])?\s*;")
+_ENUMERATOR_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(?:=\s*([^,/]+?))?\s*,?\s*(?:/\*\*<.*)?$")
+_CONST_RE = re.compile(
+    r"^[ \t]*#define[ \t]+([A-Z][A-Z0-9_]*)[ \t]+(.+?)[ \t]*/\*\*<\s*(.*?)\s*\*/[ \t]*$", re.M)
+
+
+def _squash(text):
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _members(body, kind):
+    """Fields of a struct body or enumerators of an enum body, each with its
+    trailing `/**< */` text."""
+    out = []
+    for line in body.splitlines():
+        doc = _MEMBER_DOC_RE.search(line)
+        code = _MEMBER_DOC_RE.sub("", line).split("//")[0]
+        if not code.strip():
+            continue
+        if kind == "struct":
+            m = _FIELD_RE.match(code)
+            if not m:
+                continue
+            item = {"name": m.group(2), "ctype": _squash(m.group(1)) + (m.group(3) or "")}
+        else:
+            m = _ENUMERATOR_RE.match(code)
+            if not m:
+                continue
+            item = {"name": m.group(1)}
+            if m.group(2):
+                item["value"] = m.group(2).strip()
+        if doc and doc.group(1):
+            item["description"] = _squash(doc.group(1))
+        out.append(item)
+    return out
+
+
+def _typedef_at(source, i):
+    """The typedef starting at source[i:], as a types entry (without brief),
+    or None if what follows isn't one."""
+    m = re.match(r"typedef\s+(struct|enum)\b[^{;]*\{", source[i:])
+    if m:
+        open_at = i + m.end() - 1
+        depth, j = 0, open_at
+        while j < len(source):
+            if source[j] == "{":
+                depth += 1
+            elif source[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        tail = re.match(r"\}\s*([A-Za-z_]\w*)\s*;", source[j:])
+        if not tail:
+            return None
+        kind = m.group(1)
+        return {"name": tail.group(1), "kind": kind,
+                ("fields" if kind == "struct" else "members"): _members(source[open_at + 1:j], kind)}
+    end = source.find(";", i)
+    if end < 0:
+        return None
+    decl = _squash(source[i:end + 1])
+    fp = re.match(r"typedef\s+(.+?)\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\((.*)\)\s*;$", decl)
+    if fp:
+        return {"name": fp.group(2), "kind": "callback", "decl": decl}
+    alias = re.match(r"typedef\s+.+?\b([A-Za-z_]\w*)\s*;$", decl)
+    if alias:
+        return {"name": alias.group(1), "kind": "typedef", "decl": decl}
+    return None
+
+
+def _prose_lines(lines):
+    """Doxygen lines up to the first code example (an @code block, or an
+    indented paragraph after a blank line), which a one-line brief can't carry."""
+    out = []
+    prev_blank = False
+    for line in lines:
+        if line.strip().startswith("@code") or (prev_blank and line.startswith("  ") and line.strip()):
+            break
+        out.append(line)
+        prev_blank = not line.strip()
+    return out
+
+
+def parse_header_types(source):
+    """(types, constants, macros) documented in one header.
+
+    types      a Doxygen block, then a typedef (callback, struct, enum, alias)
+    constants  `#define NAME value  /**< text */`, upper-case names only
+    macros     a Doxygen block, then a function-like `#define name(args)`
+    Names starting with `_` are internal and skipped; the first of several
+    `#if`-gated definitions wins.
+    """
+    types, macros = [], []
+    seen = set()
+    for m in DOXY_BLOCK_RE.finditer(source):
+        i = m.end()
+        while i < len(source) and source[i].isspace():
+            i += 1
+        lines = strip_doxy(m.group(1))
+        brief = first_brief(_prose_lines(lines))
+        if source.startswith("typedef", i):
+            t = _typedef_at(source, i)
+            if not t or t["name"].startswith("_") or t["name"] in seen:
+                continue
+            seen.add(t["name"])
+            types.append({"name": t.pop("name"), "kind": t.pop("kind"), "brief": brief, **t})
+            continue
+        mm = re.match(r"#define[ \t]+([a-z_]\w*)\(([^)]*)\)", source[i:])
+        if mm and not mm.group(1).startswith("_") and mm.group(1) not in seen:
+            seen.add(mm.group(1))
+            entry = {"name": mm.group(1),
+                     "signature": f"{mm.group(1)}({_squash(mm.group(2))})",
+                     "brief": brief}
+            params = [{"name": p["name"], **({"description": p["description"]} if "description" in p else {})}
+                      for p in parse_params(lines)]
+            if params:
+                entry["params"] = params
+            ret = parse_return(lines)
+            if ret:
+                entry["return_desc"] = ret
+            macros.append(entry)
+    constants = []
+    for m in _CONST_RE.finditer(source):
+        name = m.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        constants.append({"name": name, "value": _squash(m.group(2)),
+                          "description": _squash(m.group(3))})
+    return types, constants, macros
 
 
 def parse_layer_docs(path, layer, only=None):
@@ -1704,6 +1899,7 @@ def main():
             core_categories[name] = meta
             for fn in docs:
                 fn["layer"] = "core"
+            types, constants, macros = parse_header_types(p.read_text())
             if name in sdk_docs:
                 # A category may span headers (audio = core_audio.h +
                 # core_pdm.h, usb = core_usb.h + core_usb_hid.h): append, in
@@ -1711,6 +1907,9 @@ def main():
                 doc = sdk_docs[name]
                 doc["functions"].extend(docs)
                 doc["headers"]["core"] += ", " + p.name
+                for key, items in (("types", types), ("constants", constants), ("macros", macros)):
+                    if items:
+                        doc.setdefault(key, []).extend(items)
                 continue
             sdk_docs[name] = {
                 "schema": "studio-sdk-docs/v2",
@@ -1722,6 +1921,9 @@ def main():
                 "headers": {"core": p.name},
                 "functions": docs,
             }
+            for key, items in (("types", types), ("constants", constants), ("macros", macros)):
+                if items:
+                    sdk_docs[name][key] = items
 
     # Augment categories with their HAL / LL surface so the SDK reference can
     # render at whichever layer the reader works in. A category may be brand

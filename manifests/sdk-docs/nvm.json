@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@044f8f3",
+  "source": "tiles@77fd3f3",
   "category": "nvm",
   "label": "Core.NVM",
   "icon": "▤",
@@ -33,6 +33,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, CORE_NVM_ERR_RANGE (-1) if the range falls outside the NVM region, CORE_NVM_ERR_FLASH if the store can't be read.",
       "layer": "core"
     },
     {
@@ -58,6 +59,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0 on success, or a negative CORE_NVM_ERR_* code: RANGE (-1) if the range falls outside the region or the Core has no NVM, FLASH (-2) if the hardware reported an error, BUSY (-3), LAYOUT (-4).",
       "layer": "core"
     },
     {
@@ -67,6 +69,7 @@
       "brief": "Erase the whole NVM region: every byte reads CORE_NVM_ERASED afterwards. Core.ST.L4 / W5 / H5: one page erase, or nothing if the region is already empty. Core.ST.L0: clears the EEPROM word by word (up to ~0.4 s; words already clear are skipped).",
       "params": [],
       "studio_exposed": false,
+      "return_desc": "0 on success, or a negative CORE_NVM_ERR_* code.",
       "layer": "core"
     },
     {
@@ -214,6 +217,38 @@
       "params": [],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_NVM_OK",
+      "value": "0",
+      "description": "Success."
+    },
+    {
+      "name": "CORE_NVM_ERR_RANGE",
+      "value": "(-1)",
+      "description": "Offset / length outside the region, or this Core has no NVM."
+    },
+    {
+      "name": "CORE_NVM_ERR_FLASH",
+      "value": "(-2)",
+      "description": "Erase or program failed (FLASH_SR error, or the read-back did not match)."
+    },
+    {
+      "name": "CORE_NVM_ERR_BUSY",
+      "value": "(-3)",
+      "description": "Called while another NVM call was in progress (e.g. from an interrupt)."
+    },
+    {
+      "name": "CORE_NVM_ERR_LAYOUT",
+      "value": "(-4)",
+      "description": "The linker script does not reserve the NVM pages (a custom .ld)."
+    },
+    {
+      "name": "CORE_NVM_ERASED",
+      "value": "0x00u",
+      "description": "RM0377 §3.3.4: an erased EEPROM byte reads 0."
     }
   ]
 }

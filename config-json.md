@@ -41,7 +41,7 @@ coregen *infers* the peripherals from them:
 | `"I2C1.CLK"` + `"I2C1.DAT"`    | an I2C1 bus (look in `interfaces.I2C1` for speed) |
 | `"SPI1.CLK"` + `"SPI1.MOSI"` … | an SPI1 bus (look in `interfaces.SPI1` for mode)  |
 | `"USART2.TX"` + `"USART2.RX"`  | a USART2 UART (look in `interfaces.USART2` for baud) |
-| `"TIM2.1"`                     | a PWM/timer channel on TIM2 (freq from `interfaces.TIM2`) |
+| `"TIM2.1"`                     | a PWM/timer channel on TIM2 (1 kHz, see §7) |
 | `"ADC5"` / `"ADC1"` / `"ADC_IN3"` | an ADC input channel                   |
 | `"DAC1.OUT"`                   | the DAC                                   |
 
@@ -84,10 +84,12 @@ A real project — one I2C tile on a USB-powered L4:
 }
 ```
 
-After editing, regenerate (from the project dir, or `make generate`):
+After editing, regenerate with `make generate` (the build also does it). By
+hand, from the SDK root, write into the project's `coregen/` directory as the
+Makefile does:
 
 ```
-python3 tools/coregen/coregen.py definitions/<Core>.json <project_dir> --config <project_dir>/config.json
+python3 tools/coregen/coregen.py definitions/<stem>.json <project_dir>/coregen --config <project_dir>/config.json
 ```
 
 **Never hand-edit generated files between `coregen:begin`/`coregen:end`
@@ -108,10 +110,11 @@ markers** — re-running coregen will clobber them. Edit `config.json` instead.
 | `tiles`        | array  | no       | `[]`           | ✅ |
 | `usb`          | object | no       | disabled       | ✅ |
 | `bootloader`   | string | no       | `"none"`       | ✅ |
-| `iwdg`         | object | no       | disabled       | ✅ |
+| `iwdg`         | object | no       | disabled       | ✅ (§10) |
 | `timer`        | object | no       | none           | ✅ (Studio only) |
 | `pins`         | object | no       | —              | ✅ (legacy alias for `pads`) |
-| `ble`          | object | no       | —              | ✅ (radio + GATT contract) |
+| `ble`          | object | no       | disabled       | ✅ (Core.ST.W5 radio + GATT contract, §10) |
+| `thread`       | object | no       | disabled       | ✅ (Core.ST.W5 Thread network, §10) |
 | `scope`        | object | no       | enabled        | ❌ (read by the Makefile, see §10) |
 | `debug`        | object | no       | —              | ❌ **ignored** |
 | `isp`          | object | no       | —              | ❌ **ignored** |
@@ -139,7 +142,7 @@ options, and on-board peripherals. Accepts either form:
 | `Core.ST.L4`   | `Core-ST-L4-b`          | STM32L422      | 80 MHz     | yes  |
 | `Core.ST.L4.2` | `Core-ST-L4-2-a`        | STM32L422      | 80 MHz     | yes  |
 | `Core.ST.W5`   | `Core-ST-W5-b`          | STM32WBA55     | 100 MHz    | no   |
-| `Core.ST.H5`   | `Core-ST-H5-a`          | STM32H523      | 250 MHz    | yes  |
+| `Core.ST.H5`   | `Core-ST-H5-a`          | STM32H523      | 248 MHz    | yes  |
 
 Prefer the public name. (`Core.ST.L4` resolves to rev **b** — the PA13/PA14
 superset of rev a.) If the name doesn't resolve cleanly to the tile JSON you
@@ -184,16 +187,15 @@ value `"default"` resolves to the tile's schema default.
   - **Core.ST.L0:** `low` runs in voltage range 3 (no Low-power run: that needs
     <= 131 kHz), or range 2 when the project has an I2C bus, whose HSI16
     kernel clock can't run in range 3.
-  - **Core.ST.W5:** BLE with `low` is an error: "BLE needs clock medium or
-    higher" (the radio needs voltage range 1).
+  - **Core.ST.H5:** `low` runs the HSI at 16 MHz, not the CSI at 4 MHz the
+    definition lists: USB is always on and needs APB2 >= 12 MHz (RM0481
+    §55.5.2).
+  - **Core.ST.W5:** BLE or Thread with `low` is an error: "BLE needs clock
+    medium or higher" (the 2.4 GHz radio needs voltage range 1).
 
-**Clock has knock-on effects on buses** — see the I2C kernel-clock minimums in
-§7. Picking too low a clock can make a requested I2C speed invalid.
-
-**Radio (WBA55 BLE) needs HSE.** There is no `ble` switch that does this for
-you (see §10). To run the radio you must pick a `clock` level whose source is
-HSE in the core JSON. Check `definitions/Core-ST-W5-b.json` → `config.clock` for
-which levels are HSE-sourced.
+**Clock has knock-on effects on buses.** See the I2C kernel-clock minimums and
+the SPI SCK limit in §7. Picking too low a clock can make a requested I2C speed
+invalid, and too high a clock can put SPI SCK over the part's limit.
 
 ---
 
@@ -224,7 +226,7 @@ list in `definitions/<Core>.json`.)
 | I2C      | `I2C<n>.CLK`, `I2C<n>.DAT`    | `"I2C1.CLK"`, `"I2C3.DAT"`               |
 | SPI      | `SPI<n>.CLK/MOSI/MISO/CS`     | `"SPI1.CLK"`, `"SPI1.CS"`                |
 | USART    | `USART<n>.TX`, `USART<n>.RX`  | `"USART2.TX"`                            |
-| Timer/PWM| `TIM<n>.<ch>` (ch = 1–4)      | `"TIM2.1"`, `"TIM15.2"`                  |
+| Timer/PWM| `TIM<n>.<ch>` (ch = 1–4)      | `"TIM2.1"`, `"TIM15.1"`                  |
 | ADC      | `ADC`, `ADC<n>`, `ADC_IN<n>`, `ADCIN<n>`, optional trailing `+` | `"ADC1"`, `"ADC5"`, `"ADC_IN3"`, `"ADC7+"` |
 | DAC      | `DAC1.OUT`                    | `"DAC1.OUT"`                             |
 | USB      | `USB.DP`, `USB.DM`            | `"USB.DP"`                              |
@@ -253,9 +255,11 @@ Notes:
 
 ## 7. `interfaces` — tune the buses you brought up
 
-This section **only tunes** buses/timers that a pad function already created. It
-never creates one. Keys are peripheral names (`I2C1`, `SPI1`, `USART2`, `TIM2`,
-…). If a named interface has no backing pads, coregen warns and skips it.
+This section **only tunes** buses that a pad function already created. It never
+creates one. Keys are peripheral names (`I2C1`, `SPI1`, `USART2`, …) and must be
+an interface the Core's definition lists (`interfaces[]` in
+`definitions/<Core>.json`); any other key is an error. If a named interface has
+no backing pads, coregen warns and skips it.
 
 ### I2C
 
@@ -355,7 +359,7 @@ name to reference.
 
 ```json
 "interfaces": {
-  "SPI1": { "mode": 0, "prescaler": 8, "cs_polarity": "active-low" }
+  "SPI1": { "mode": 0, "prescaler": 8, "bit_order": "msb", "cs_polarity": "active-low" }
 }
 ```
 
@@ -363,9 +367,14 @@ name to reference.
 |---------------|--------|----------------|------------------------------------------|
 | `mode`        | int    | `0`            | `0`–`3` (CPOL = bit1, CPHA = bit0)       |
 | `prescaler`   | int    | `8`            | `2,4,8,16,32,64,128,256`                 |
+| `bit_order`   | string | `"msb"`        | `"msb"` or `"lsb"` (first bit on the wire) |
 | `cs_polarity` | string | `"active-low"` | `"active-low"` or `"active-high"`        |
 
-Invalid `mode` or `prescaler` → coregen exits with the valid set listed.
+Invalid `mode`, `prescaler` or `bit_order` → coregen exits with the valid set
+listed. On Core.ST.L4 / L4.2 and Core.ST.W5 coregen also checks SCK = SYSCLK /
+`prescaler` against the datasheet: over the 2.7-3.6 V limit (L4 40 MHz, W5
+50 MHz) is an error, over the low-VDD limit (16 / 33 MHz) a NOTE. The H5's SPI
+kernel clock is the HSI (64 MHz), not SYSCLK, and is not checked.
 
 ### USART / UART
 
@@ -383,20 +392,17 @@ Invalid `mode` or `prescaler` → coregen exits with the valid set listed.
 ### Timer / PWM
 
 ```json
-"pads": { "7": "TIM15.1", "8": "TIM2.1" },
-"interfaces": {
-  "TIM2": { "freq": 1000 }
-}
+"pads": { "7": "TIM15.1", "8": "TIM2.1" }
 ```
 
-| Field  | Type | Default | Notes                                                 |
-|--------|------|---------|-------------------------------------------------------|
-| `freq` | int  | `1000`  | overflow/PWM frequency in Hz; **shared by all channels on that timer** (hardware constraint) |
-
-Channels come from the `TIM<n>.<ch>` pad functions; duty cycle is set at runtime
-via the `core_pwm` API, **not** in config. There is no separate `pwm`,
-`capture`, `timers`, or `iwdg` config section — anything you saw claiming
-otherwise is stale (see §10).
+Each timer that a `TIM<n>.<ch>` pad uses gets a handle (`core_tim<n>`) and is
+set up in `core_init()` at **1 kHz**, a frequency shared by every channel on
+that timer. There is no config key for it today: no Core definition lists its
+timers as interfaces, so `"interfaces": { "TIM2": { "freq": … } }` fails
+validation ("Interface 'TIM2': not found on this tile"). Change the frequency
+at run time with `core_timer_set_freq(&core_tim2, hz)` (or `core_pwm_set_freq`),
+and the duty with `core_timer_pwm_set()` (per mille, 0-1000). There is no
+separate `pwm`, `capture` or `timers` config section (see §11).
 
 ---
 
@@ -430,7 +436,7 @@ spelling matters.
 ```json
 "tiles": [
   { "tile": "Sense.I.6P6", "bus": "I2C1", "instance": 0 },
-  { "tile": "Drive.H",     "bus": "SPI1", "instance": 0, "cs_pad": "8" }
+  { "tile": "Store.O.128", "bus": "SPI1", "instance": 0, "cs_pad": "8" }
 ]
 ```
 
@@ -526,7 +532,7 @@ each private overlay in `TILES_OVERLAY` declares in its `drivers/drivers.json`
 
 ---
 
-## 10. `usb`, `bootloader`, and `iwdg`
+## 10. `usb`, `bootloader`, `iwdg`, `scope`, `ble`, `thread`
 
 ### `usb`
 
@@ -543,7 +549,7 @@ each private overlay in `TILES_OVERLAY` declares in its `drivers/drivers.json`
 
 | Field          | Type           | Default     | Notes                                  |
 |----------------|----------------|-------------|----------------------------------------|
-| `enabled`      | bool           | `false`     | `true` adds USB-CDC init to `core_init()` |
+| `enabled`      | bool           | `false`     | `true` adds `core_usb.h` to `core.h` and Studio's USB line input. USB-CDC itself starts in `core_init()` on every L4 / H5 project, enabled or not (it keeps the 1200-baud DFU touch working) |
 | `vid` / `pid`  | hex-string/int | SDK default | `"0x1209"` or `4617`                    |
 | `product`      | string         | SDK default | CMSIS-DAP hosts auto-detect by matching `CMSIS-DAP` in this string |
 | `manufacturer` | string         | SDK default | descriptor override                    |
@@ -562,7 +568,7 @@ USB-capable MCU (L4 or H5); on a non-USB core it's a no-op/warning.
 |------------|-----------------------------------------------------|---------------------|-----------|
 | `"none"`   | app at `0x08000000`, SWD programming only (default) | all                 | no        |
 | `"custom"` | 8 KB DFU at `0x08000000`, app at `0x08002000`       | L4 / H5 — **parked** | yes      |
-| `"rom"`    | ST ROM DfuSe, app at `0x08000000`                   | L4 (full); H5 (needs power cycle) | yes |
+| `"rom"`    | ST ROM DfuSe, app at `0x08000000`                   | L4, H5 (see below)  | yes       |
 
 Sets the `BOOTLOADER` / `ROM_DFU` Make variables automatically. A non-`none`
 value on a non-USB core warns. Any other string → exit.
@@ -573,6 +579,12 @@ refuses `BOOTLOADER=1` unless you also pass `CUSTOM_BOOTLOADER_ACK=1`, because
 flashing a custom-layout image onto a ROM-DFU board writes at `0x08002000` and
 corrupts the resident app. Use `"rom"` unless you know the board carries the
 custom bootloader.
+
+On Core.ST.H5 the ROM's DFU "leave" starts the new image without a reset, and
+the peripherals the ROM secured (TIM1-TIM8, ADC, I2C1/2, LPUART1, …) can't be
+clocked until the next reset (`hal_dfu_started_by_rom()`). USB, SPI, I2C3 and
+USART1-3 are not affected. With BOOT0 low a reset runs the app with everything
+available.
 
 ### `iwdg`
 
@@ -612,6 +624,55 @@ no flash, no RAM, and on a radio Core no Studio Scope characteristic in the
 GATT table (the Studio Link service stays: it carries the Bluetooth firmware
 update, [docs/ble-update-protocol.md](docs/ble-update-protocol.md)). Read by the Makefile, not coregen (`make SCOPE_ENABLED=0` is the
 one-off override).
+
+### `ble` (Core.ST.W5)
+
+```json
+"ble": { "enabled": true, "name": "MY-DEVICE", "tx_power": "medium",
+         "adv_interval_ms": 100, "pairing": false, "contract": "ble_contract.json" }
+```
+
+| Field             | Type            | Default          | Meaning |
+|-------------------|-----------------|------------------|---------|
+| `enabled`         | bool            | `false`          | Link the BLE stack (the Makefile sets `BLE_ENABLED` from it) and generate the radio settings below |
+| `name`            | string          | the project name | Advertised name, `BLE_DEVICE_NAME` (`device_name` also accepted) |
+| `tx_power`        | string / int    | SDK default      | `low` / `medium` / `high`, or 0-2 |
+| `adv_interval_ms` | int / `{min, max}` | SDK default   | 20-10240 ms |
+| `pairing`         | bool            | `false`          | Just Works pairing + bonding; once on, every characteristic needs an encrypted link |
+| `contract`        | object / string | none             | The GATT contract (services, characteristics, explicit ids), inline or a file name relative to the project; coregen generates `ble_contract.{c,h}` |
+
+Needs `clock` medium or higher (§5). Include `core_ble.h` (and `ble_contract.h`
+with a contract) in main.c: `core.h` does not.
+
+### `thread` (Core.ST.W5)
+
+```json
+"thread": { "enabled": true, "role": "ftd", "channel": 15, "panid": "0x1234",
+            "network_key": "<32 hex>", "network_name": "tiles-dev",
+            "ext_panid": "<16 hex>", "mesh_local_prefix": "fdde:ad00:beef:0::",
+            "provisioning": false, "ble_provisioning": false }
+```
+
+| Field               | Default | Rule |
+|---------------------|---------|------|
+| `enabled`           | `false` | Link OpenThread (`THREAD_ENABLED`); the node **joins on boot** |
+| `role`              | `"ftd"` | `ftd` only |
+| `channel`           | 15      | 11-26 |
+| `panid`             | 0x1234  | 0x0000-0xFFFE |
+| `network_key`       | dev key | 16 bytes as 32 hex digits |
+| `network_name`      | `"tiles-dev"` | 1-16 bytes of printable text |
+| `ext_panid`         | `dead00beef00cafe` | 8 bytes as 16 hex digits |
+| `mesh_local_prefix` | `fdde:ad00:beef:0::` | an IPv6 /64 prefix |
+| `provisioning`      | `false` | A network stored at run time (`core_thread_set_dataset()`) wins over this one at boot |
+| `ble_provisioning`  | `false` | Also the BLE provisioning service 0x5D00 (needs `ble`); **development only: open writes** |
+
+coregen validates the block (Core.ST.W5 only, clock medium or higher) and
+writes `coregen/thread_dataset.h`. Absent keys take the development defaults,
+which every node shares: **a fixed, well-known network, for development only**.
+Thread-only builds start Thread in `core_init()`. With `ble` enabled too (one
+image, both radios), `core_ble_init()` starts it, so call `core_ble_init()` and
+keep `core_ble_process()` in the loop. See `core_thread.h` and
+[docs/thread-provisioning-protocol.md](docs/thread-provisioning-protocol.md).
 
 ### `timer` (Studio only)
 
@@ -691,11 +752,10 @@ though older docs described them. Don't rely on them:
 
 | Ignored key   | What people expect          | Reality                                                    |
 |---------------|-----------------------------|------------------------------------------------------------|
-| `ble`         | "enable the radio / HSE"    | No-op. Get HSE by choosing an HSE-sourced `clock` level (§5). |
 | `debug`       | emit SWD/JTAG defines       | No-op.                                                      |
 | `isp`         | `boot0_pad` etc.            | No-op.                                                      |
 | `programming` | `methods`, `boot0_pad`      | No-op.                                                      |
-| `timers`      | per-timer freq/tick         | No-op. Use `interfaces.TIM<n>.freq` (§7).                   |
+| `timers`      | per-timer freq/tick         | No-op. Timers run at 1 kHz; set the frequency at run time (§7). |
 | `pwm`         | per-channel duty            | No-op. Duty is a runtime API call.                          |
 | `capture`     | input-capture mapping       | No-op. (Capture isn't config-driven.)                      |
 
@@ -714,8 +774,12 @@ bad config won't silently generate wrong code. Things that **exit**:
 - on the L4 Cores, anything other than `USB.*` on the USB D+/D- pads (6/7 on
   Core.ST.L4, 16/17 on Core.ST.L4.2): USB is always on there
 - an unknown `pullups` name, or a pull-up control pin that is also a pad
-- on Core.ST.W5, `ble` enabled with `clock: "low"`
-- an `interfaces` key (in cross-checks) that doesn't match the core JSON
+- on Core.ST.W5, `ble` or `thread` enabled with `clock: "low"`
+- an `interfaces` key that isn't an interface of the Core's definition
+  (timers included: `interfaces.TIM<n>` is rejected, §7)
+- SPI `bit_order` not `msb`/`lsb`, or SCK over the part's 2.7-3.6 V limit (§7)
+- `thread` or `ble` values out of range (§10), `ble_provisioning`
+  without `ble`, or either radio on a Core other than Core.ST.W5
 - an unknown `clock` level
 - I2C `speed` not in the allowed set, or kernel clock too low for it
 - an I3C function assigned in `pads`, a non-bool `i3c`, or an `i3c_speed`
@@ -774,24 +838,23 @@ Things that are **silent** (no message):
 }
 ```
 
-**SPI tile with software CS:**
+**SPI tile with software CS** (SPI3 on pads 2/6/7, CS on pad 3):
 ```json
 {
-  "core": "Core.ST.W5", "clock": "max",
+  "core": "Core.ST.W5", "clock": "high",
   "pads": {
-    "9": "SPI1.CLK", "6": "SPI1.MOSI", "7": "SPI1.MISO", "8": "SPI1.CS"
+    "2": "SPI3.CLK", "6": "SPI3.MOSI", "7": "SPI3.MISO", "3": "SPI3.CS"
   },
-  "interfaces": { "SPI1": { "mode": 0, "prescaler": 8 } },
-  "tiles": [ { "tile": "Drive.H", "bus": "SPI1", "instance": 0, "cs_pad": "8" } ]
+  "interfaces": { "SPI3": { "mode": 0, "prescaler": 8 } },
+  "tiles": [ { "tile": "Store.O.128", "bus": "SPI3", "instance": 0, "cs_pad": "3" } ]
 }
 ```
 
-**PWM on two channels:**
+**PWM on two channels** (1 kHz each; change with `core_timer_set_freq()`):
 ```json
 {
   "core": "Core.ST.L4.2", "clock": "max",
-  "pads": { "7": "TIM15.1", "8": "TIM2.1" },
-  "interfaces": { "TIM2": { "freq": 2000 } }
+  "pads": { "7": "TIM15.1", "8": "TIM2.1" }
 }
 ```
 
@@ -804,13 +867,15 @@ Things that are **silent** (no message):
 }
 ```
 
-**USB CDC + ROM-DFU bootloader:**
+**USB CDC + ROM-DFU bootloader + watchdog** (Core.ST.L4.2's USB is on pads
+16/17 and always on, so no pads are needed):
 ```json
 {
   "core": "Core.ST.L4.2", "clock": "max",
   "bootloader": "rom",
   "usb": { "enabled": true },
-  "pads": { "6": "USB.DP", "7": "USB.DM" }
+  "iwdg": { "enabled": true, "timeout_ms": 5000 },
+  "pads": {}
 }
 ```
 

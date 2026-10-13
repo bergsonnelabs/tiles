@@ -75,6 +75,57 @@ Example with all three (Sense.I.6P6 tap detection):
  */
 ```
 
+### `@studio usage` (tile drivers)
+
+A note on how to use the tile from Studio: what init leaves running, what to
+call, what to avoid. The text may start on the tag line and runs until a blank
+line or the next `@` line. Published as `usage` in both the palette manifest
+and the docs manifest.
+
+```c
+/**
+ * @studio tile label=Sense.M.3G icon=…
+ * @studio usage
+ *   Starts measuring at 25 Hz as soon as init returns, so get_x_nt, …
+ *   always return the latest sample; no read() or wake() needed.
+ */
+```
+
+### `@studio unsupported` (known gaps)
+
+A capability the hardware has and the API doesn't expose. Continuation lines
+form the description, until a blank line or the next `@` line. Say whether
+the gap is hardware-gated (the tile doesn't route the pin) or driver-deferred.
+
+- **Tile drivers**, in the file-level `/** … */` block (a `//` comment is not read):
+  `@studio unsupported severity=<common|advanced|niche> category="<short>"`.
+  Feeds `studio_unsupported` in `manifests/tile-docs/<driver>.json`, the "Driver
+  gaps" rows of the docs Coverage Table.
+- **SDK core headers**, as `//` comments at the end of the header:
+  `// @studio unsupported tier=<1|2|3> value=<H|M|L> title="<short>"`. `tier`
+  is the API tier the gap sits at (1 = C API, 2 = DSL / Studio, 3 = later),
+  `value` how much closing it is worth. Feeds `manifests/sdk-docs/gaps.json`,
+  rendered per subsystem on the website. Delete a gap in the same change that
+  closes it: a stale one is published as a missing feature.
+
+### `@studio coverage` (SDK core headers)
+
+Names the subsystem a core header belongs to on the SDK coverage pages, as
+`key: value` lines under the tag (`id`, `name`, `page`, `blurb`). `id`, `name`
+and `page` identify the header's gaps in `gaps.json`. A header with only
+`@studio coverage` and no `@studio category` contributes no functions to
+`manifests/sdk-docs/` (e.g. `core_usb_hid.h`, `core_tiles.h`).
+
+```c
+/**
+ * @studio coverage
+ *   id:    power
+ *   name:  Power — sleep / Stop / Standby
+ *   page:  /docs/sdk/system
+ *   blurb: Sleep, Stop, and Standby helpers …
+ */
+```
+
 ## Function-level directives
 
 These go in the Doxygen block immediately before a function declaration.
@@ -156,13 +207,64 @@ The annotated parameter is stripped from the DSL-visible parameter list. Pair wi
 
 Only one `@studio out_buffer` per function. Multiple are dropped with a warning.
 
+The variable-length form, `@studio out_buffer <cname> type=<ctype> cap_param=<name>`,
+keeps the function's scalar return (the count) and exposes the buffer as an
+array the DSL caller passes in; the `cap_param` C parameter (the buffer's
+capacity) is filled in by codegen and stripped from the DSL signature.
+
+### `@studio out_scalar <cname> type=<ctype>`
+
+A scalar pointer parameter (`int32_t *out`) the function writes into. The DSL
+caller passes a local variable and gets the value back when the call returns;
+the parameter stays in the DSL signature, flagged `out_scalar`, and codegen
+passes its address. Several per function are allowed.
+
+```c
+/**
+ * @studio expose category=tile name=read_tilt_centi_degrees returns=bool section=runtime
+ * @studio out_scalar out_centi_deg type=int32_t
+ */
+uint8_t tile_sense_i_6p6_read_tilt_centi_degrees_flat(tile_t *tile, uint8_t axis,
+                                                      int32_t *out_centi_deg);
+```
+
+### `@studio in_buffer <cname> type=<ctype> [length=<N>] [length_param=<name>]`
+
+A caller-supplied array. The buffer parameter (and its length parameter, if
+any) collapse into one DSL array parameter in the buffer's position:
+
+- `length=N length_param=<name>`: the DSL sees `int[N]`; codegen passes `N` as
+  the C count.
+- `length_param=<name>` only: the DSL sees `int[]`; codegen passes the
+  caller's array length.
+- `length=N` only: fixed length, and the C function has no count argument.
+
+```c
+/**
+ * @studio expose category=tile name=play_sequence section=runtime
+ * @studio in_buffer effects type=uint8_t length=8 length_param=count
+ */
+void tile_drive_h_play_sequence(tile_t *tile, const uint8_t *effects, uint8_t count);
+```
+
+### `@studio control <arg> label="…" tier=basic|advanced …` and `@studio require expr="…" message="…"`
+
+Vibe Settings: `control` makes an argument of an exposed tile function a
+setting a person can change in Studio's inspector; `require` states a rule
+between settings. Both are tile-driver only and validated strictly (the
+generator fails the build on a name it cannot resolve). The attribute table,
+the expression language and the failure rules are in
+[AI.md, "Vibe Settings"](../AI.md); reference driver `drivers/tile_sense_i_6p6.h`.
+
 ## Standard Doxygen the generator consumes
 
 These are not `@studio` directives but the generator reads them and they directly affect what the user sees.
 
 ### `@brief <one-liner>`
 
-First sentence shown on the SDK docs page and as the palette tooltip. If absent, the generator falls back to the first non-tag line of the Doxygen block.
+First sentence shown on the SDK docs page and as the palette tooltip. If absent, the generator falls back to the first non-tag line of the Doxygen block. A block with only `@deprecated <text>` gets the brief "Deprecated. <text>".
+
+Every tag's text runs until a blank line or the next `@` line, as Doxygen reads it, so a wrapped `@param`, `@return`, `@note` or `@warning` keeps its continuation lines. Indent them; don't start them with `@`.
 
 ### `@param <cname> [{<dsl_type>}] [[lo..hi]] [<unit>] <description>`
 
@@ -182,7 +284,20 @@ The DSL parameter name **is the C identifier**. There is no rename mechanism —
 
 ### `@return <description>`
 
-Shown on the SDK docs page. Not consumed by Studio codegen — return semantics come from `returns=` on the expose tag.
+Shown on the SDK docs page (`return_desc` in `manifests/sdk-docs/`, `return` in a tile's docs manifest). Not consumed by Studio codegen — return semantics come from `returns=` on the expose tag.
+
+### `@note` / `@warning <text>`
+
+Tile drivers: published as `notes` in the docs manifest; a `@warning` becomes a note starting "Warning:".
+
+### Types, constants and macros (SDK core headers)
+
+The SDK reference also lists, per category, the core header's documented
+typedefs (`types`: callbacks, structs with their `/**< */` field docs, enums
+with their member docs), its `#define NAME value  /**< text */` constants
+(`constants`), and its documented function-like macros (`macros`, e.g.
+`core_scope_watch`). Give a typedef or macro a `/** … */` block, and a struct
+field or constant a trailing `/**< … */`, for it to appear.
 
 ## Putting it all together — a complete header
 
@@ -275,8 +390,9 @@ When adding `@studio` annotations to an existing driver:
 3. Add `@param` lines with ranges and units for every C parameter.
 4. For pointer-output parameters: add `@studio out_buffer <param> type=<ctype> length=<N>` and `returns=int[N]` (or `float[N]`) on the expose tag.
 5. For enum-coded parameters: add `@studio param <param> enum {…}`.
-6. Run `tools/gen_studio_manifest.py` and check stderr for warnings.
-7. Commit the regenerated `manifests/` files alongside the header changes — the manifests are checked in.
+6. List what the chip can do and the driver doesn't with `@studio unsupported`, and add a `@studio usage` note if init leaves something running.
+7. Run `tools/gen_studio_manifest.py` and check stderr for warnings.
+8. Commit the regenerated `manifests/` files alongside the header changes — the manifests are checked in.
 
 Reference patterns:
 - Default-instance helper (most common): [`core_pwm_duty`](../sdk/core/core_pwm.h) in `sdk/core/core_pwm.h`.

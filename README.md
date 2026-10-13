@@ -41,8 +41,8 @@ The folder name becomes the project name, so that produces
 | `Core.ST.L0`   | STM32L011E4    | Cortex-M0+, 32 MHz, low power | —       |
 | `Core.ST.L4`   | STM32L422TB    | Cortex-M4F, 80 MHz            | ✓       |
 | `Core.ST.L4.2` | STM32L422TB    | Cortex-M4F, 80 MHz, more pads | ✓       |
-| `Core.ST.W5`   | STM32WBA55HGF6 | Cortex-M33, 100 MHz, BLE      | —       |
-| `Core.ST.H5`   | STM32H523HE    | Cortex-M33, 250 MHz           | ✓       |
+| `Core.ST.W5`   | STM32WBA55HGF6 | Cortex-M33, 100 MHz, BLE, Thread | —    |
+| `Core.ST.H5`   | STM32H523HE    | Cortex-M33, 248 MHz           | ✓       |
 
 `Core.ST.L4` and `Core.ST.L4.2` are different boards: use the name printed on
 yours. The names match the silkscreens since the 2026-09 rename; the old names
@@ -119,10 +119,13 @@ pass (`gh pr merge --auto --merge`); merged branches are deleted.
 
 ## Third-party code
 
-The Core.ST.W5 radio support in `sdk/wpan/` (shared 2.4 GHz plumbing) and
-`sdk/ble/` (Bluetooth LE) includes STMicroelectronics code (the BLE stack and
-link-layer libraries, application modules and two utilities) under ST's own
-license, for use with ST microcontrollers only. See
-[THIRD_PARTY.md](THIRD_PARTY.md) for the file list and license texts; ST's
-license file also sits next to the code (`sdk/wpan/LICENSE-ST.txt`,
-`sdk/ble/LICENSE-ST.txt`).
+The Core.ST.W5 radio support in `sdk/wpan/` (shared 2.4 GHz plumbing),
+`sdk/ble/` (Bluetooth LE) and `sdk/thread/` (Thread) includes
+STMicroelectronics code (the BLE stack, the link-layer and prebuilt Thread
+libraries, application modules and two utilities) under ST's own license, for
+use with ST microcontrollers only, and `sdk/thread/` also carries OpenThread
+and Mbed TLS under their own licenses. See [THIRD_PARTY.md](THIRD_PARTY.md) for
+the file list and license texts; the license files also sit next to the code
+(`sdk/wpan/LICENSE-ST.txt`, `sdk/ble/LICENSE-ST.txt`,
+`sdk/thread/LICENSE-ST.txt`, `sdk/thread/LICENSE-OpenThread.txt`,
+`sdk/thread/LICENSE-mbedtls.txt`).

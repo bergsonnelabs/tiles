@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@d57b3eb",
+  "source": "tiles@77fd3f3",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
@@ -33,7 +33,7 @@
       "name": "core_usb_wait_host",
       "signature": "core_usb_wait_host(uint32_t timeout_ms)",
       "returns": "int",
-      "brief": "Wait up to `timeout_ms` for a host terminal to open the port (DTR set). Feeds the watchdog while it waits. Not needed just to see early output: on Core.ST.L4 text printed before the port opens is kept (up to HAL_USB_CDC_TX_QUEUE_SIZE bytes) and sent when it does.",
+      "brief": "Wait up to `timeout_ms` for a host terminal to open the port (DTR set). Feeds the watchdog while it waits. Not needed just to see early output: text printed before the port opens is kept (up to HAL_USB_CDC_TX_QUEUE_SIZE bytes) and sent when it does.",
       "params": [
         {
           "name": "timeout_ms",
@@ -42,6 +42,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "1 if a terminal is connected, 0 on timeout.",
       "layer": "core"
     },
     {
@@ -228,6 +229,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The completed line, NUL-terminated and without its ending, or NULL if this byte did not complete one. The text stays valid until the next call with the same `lr`.",
       "layer": "core"
     },
     {
@@ -243,6 +245,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The completed line, NUL-terminated and without its ending, or NULL if no line is complete yet. Valid until the next call with `lr`.",
       "layer": "core"
     },
     {
@@ -321,7 +324,7 @@
       "name": "hal_usb_cdc_printf",
       "signature": "hal_usb_cdc_printf(const char * fmt, ...)",
       "returns": "int",
-      "brief": "Printf over USB CDC (blocking). Returns number of characters written (from vsnprintf).",
+      "brief": "Printf over USB CDC. Formats into a HAL_USB_CDC_PRINTF_BUF_SIZE stack buffer (longer text is cut) and sends it with hal_usb_cdc_write(): queued, waits at most HAL_USB_CDC_TX_TIMEOUT_MS for a stalled terminal, then drops. Returns the length vsnprintf reported, not the number of bytes queued.",
       "params": [
         {
           "name": "fmt",
@@ -666,6 +669,30 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_usb_line_t",
+      "kind": "struct",
+      "brief": "Line-assembler state for core_usb_line_feed() / core_usb_poll_line(). Zero-initialize it (a static or global is).",
+      "fields": [
+        {
+          "name": "buf",
+          "ctype": "char[CORE_USB_LINE_MAX + 1]",
+          "description": "Line so far, then the NUL-terminated line."
+        },
+        {
+          "name": "len",
+          "ctype": "uint8_t",
+          "description": "Characters collected."
+        },
+        {
+          "name": "overflow",
+          "ctype": "uint8_t",
+          "description": "Set while discarding an over-long line."
+        }
+      ]
     }
   ]
 }

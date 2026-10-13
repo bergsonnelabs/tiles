@@ -158,22 +158,24 @@ static inline int core_serial_putc_bus(uint8_t bus, uint8_t byte)
 //   -1/0 always, defeating the point. Adding a "serial input" pane
 //   (analog of the GPIO toggle / ADC slider) closes both ends.
 //
-// @studio unsupported tier=2 value=M title="No coregen auto-init for serial"
-//   Tier 2 wrappers assume the user has called core_serial_init on the
-//   matching handle before any send. Coregen doesn't yet read a
-//   `serial: { 1: { baud: 115200 } }` block out of config.json and
-//   emit the init in core_init(). Until it does, the bus has to be
-//   primed by hand even when using Tier 2.
+// @studio unsupported tier=2 value=L title="Coregen sets up USART pads only, not LPUART"
+//   A USART<n>.TX / .RX pad in config.json makes coregen emit the handle
+//   (core_usart<n>) and its init in core_init(), with `baud` and
+//   `rx_interrupt` from interfaces.USART<n>. LPUART1 pads get no handle
+//   or init: call core_serial_init() on it by hand.
 //
-// @studio unsupported tier=1 value=H title="No interrupt / DMA driven path"
-//   All calls block. SDK roadmap Tier 1 item: "UART IRQ + coregen"
-//   for non-blocking serial (GPS, RS-485). Long reads currently stall
-//   the main loop until the buffer fills or times out.
+// @studio unsupported tier=1 value=M title="No DMA or interrupt-driven TX"
+//   TX is polled: core_serial_write() and print return once the last byte
+//   is in the data register. RX is interrupt-driven into a ring buffer
+//   only when `rx_interrupt` is set (or hal_uart_config_t.rx_interrupt);
+//   otherwise reads poll the data register. hal_uart_tx_dma() is a stub
+//   that returns HAL_ERROR.
 //
-// @studio unsupported tier=1 value=M title="No flow control / parity / 9-bit modes"
-//   The thin wrappers expose only the basics — RTS/CTS, parity, stop
-//   bits, 9-bit data, and inversion are reachable only via the
-//   hal_uart_config_t struct passed to init.
+// @studio unsupported tier=1 value=M title="8N1 only: no flow control, parity or 9-bit modes"
+//   ll_uart_init() sets 8 data bits, no parity, 1 stop bit.
+//   hal_uart_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS,
+//   parity, other stop bits, 9-bit data and inversion need register
+//   writes after init.
 //
 // @studio unsupported tier=1 value=M title="No LPUART (low-power UART)"
 //   SDK roadmap Tier 2: LPUART works in Stop mode for wake-on-serial.

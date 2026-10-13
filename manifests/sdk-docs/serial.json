@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "serial",
   "label": "Core.Serial",
   "icon": "⌨",
@@ -37,7 +37,7 @@
       "name": "core_serial_init_clk",
       "signature": "core_serial_init_clk(hal_uart_t * h, USART_TypeDef * instance, uint32_t pclk_hz, const hal_uart_config_t * cfg)",
       "returns": "hal_status_t",
-      "brief": null,
+      "brief": "Deprecated. Use core_serial_init(h, instance, cfg) — clock auto-resolved.",
       "params": [
         {
           "name": "h",
@@ -57,6 +57,7 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "core"
     },
     {
@@ -180,6 +181,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The coregen-initialized handle, or NULL.",
       "layer": "core"
     },
     {

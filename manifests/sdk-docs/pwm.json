@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "pwm",
   "label": "Core.PWM",
   "icon": "◲",
@@ -35,7 +35,7 @@
       "name": "core_pwm_init_clk",
       "signature": "core_pwm_init_clk(core_timer_t * h, TIM_TypeDef * instance, uint32_t pclk_hz, uint32_t freq_hz)",
       "returns": "hal_status_t",
-      "brief": null,
+      "brief": "Deprecated. Use core_pwm_init(h, instance, freq_hz) — clock auto-resolved.",
       "params": [
         {
           "name": "h",
@@ -55,6 +55,7 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "core"
     },
     {
@@ -182,6 +183,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The timer handle, or NULL for pads not bound to a timer in config.json.",
       "layer": "core"
     },
     {
@@ -246,7 +248,7 @@
       "name": "core_every_us_clk",
       "signature": "core_every_us_clk(core_timer_t * h, TIM_TypeDef * instance, uint32_t pclk_hz, uint32_t period_us, hal_callback_t cb, void * ctx)",
       "returns": "hal_status_t",
-      "brief": null,
+      "brief": "Deprecated. Use core_every_us(h, instance, period_us, cb, ctx) — clock auto-resolved.",
       "params": [
         {
           "name": "h",
@@ -274,6 +276,7 @@
         }
       ],
       "studio_exposed": false,
+      "deprecated": true,
       "layer": "core"
     },
     {

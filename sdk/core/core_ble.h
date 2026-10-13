@@ -10,7 +10,8 @@
  *   core_ble_advertise("MY-DEVICE");
  *   while (1) { core_ble_process(); }
  *
- * Requires: Core.ST.W5 (STM32WBA55), BLE_ENABLED=1, clock >= "default" (HSE).
+ * Requires: Core.ST.W5 (STM32WBA55), config.json "ble": {"enabled": true}
+ * (the Makefile derives BLE_ENABLED from it), and "clock" medium or higher.
  * Thread may run in the same image (config.json "thread" too, core_thread.h):
  * core_ble_init() first, then core_thread_start().
  *
@@ -22,10 +23,10 @@
  *   page:  /docs/sdk/ble
  *   blurb: Core.ST.W5-only API for BLE peripheral mode: advertise, define
  *          GATT services + characteristics, read/write/notify, and
- *          connect/disconnect callbacks. Currently Tier 1 only — there
- *          are no DSL bindings yet, and the API is C-callback heavy
- *          which doesn't translate cleanly to the current Studio
- *          host-call ABI.
+ *          connect/disconnect callbacks. A project's BLE contract
+ *          (config.json) also gives the DSL publish / receive blocks
+ *          (BLE.<name>_set, on BLE.<name>_written); the twin has no BLE
+ *          model yet, and connect / disconnect are C callbacks only.
  */
 
 #ifndef CORE_BLE_H
@@ -63,10 +64,12 @@
  * Handles
  * ============================================================ */
 
+/** Service handle, returned by core_ble_add_service*(). */
 typedef uint16_t core_ble_svc_t;
+/** Characteristic handle, returned by core_ble_add_char*(). */
 typedef uint16_t core_ble_char_t;
 
-/* Write callback type (called when central writes to a characteristic) */
+/** Write callback: called when the central writes to a characteristic. */
 typedef void (*core_ble_write_cb)(const uint8_t *data, uint16_t len, void *ctx);
 
 /* ============================================================

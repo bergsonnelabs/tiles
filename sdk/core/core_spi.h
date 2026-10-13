@@ -46,8 +46,8 @@
  *   page:  /docs/sdk/spi
  *   blurb: Master-mode SPI, 8-bit frames, modes 0-3, MSB or LSB first:
  *          bounded polled transfers (full-duplex, write, read, CS-held
- *          command + data) and DMA transfers, blocking or with a callback
- *          (Core.ST.L4 and Core.ST.W5). Bench-verified on Core.ST.L4 by
+ *          command + data) and DMA transfers, blocking or with a callback.
+ *          Bench-verified on Core.ST.L4, Core.ST.W5 and Core.ST.H5 by
  *          tests/hw-spi-loopback. Tier 2 exposes a single-byte full-duplex
  *          transfer against a bus id + CS pad — coregen resolves the handle
  *          via core_spi_handle_for_bus(). Tier 1 keeps the explicit-handle
@@ -257,15 +257,15 @@ static inline hal_status_t core_spi_write_read(hal_spi_t *h, const uint8_t *tx,
  *
  * Same buffers and NULL conventions as core_spi_exchange(); worth it from a
  * few dozen bytes up, where it keeps SCK saturated and the CPU free of
- * per-byte work. Core.ST.L4: DMA1 CH2/CH3. Core.ST.W5: GPDMA1 CH6/CH7.
+ * per-byte work. Core.ST.L4: DMA1 CH2/CH3. Core.ST.W5 and Core.ST.H5:
+ * GPDMA1 CH6/CH7.
  *
  * @param  h    SPI handle
  * @param  tx   Bytes to send, or NULL to send the fill byte
  * @param  rx   Receive buffer, or NULL to discard (may equal tx)
  * @param  len  Number of bytes (any length; long transfers are chunked)
  * @return HAL_OK, HAL_TIMEOUT (stalled; channels aborted, SPI reset),
- *         HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error,
- *         or Core.ST.H5, which has no SPI DMA yet)
+ *         HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error)
  */
 static inline hal_status_t core_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx,
                                                   uint8_t *rx, uint32_t len)
@@ -277,19 +277,20 @@ static inline hal_status_t core_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx
  * @brief  Start a full-duplex DMA transfer and return at once.
  *
  * The callback runs from interrupt context when the last frame is received
- * (Core.ST.L4: DMA RX complete; Core.ST.W5: the SPI's end-of-transfer).
+ * (Core.ST.L4: DMA RX complete; Core.ST.W5 and Core.ST.H5: the SPI's
+ * end-of-transfer).
  * Manage CS yourself: select before, deselect in the callback or after
  * core_spi_dma_wait(). One DMA transfer at a time across all SPI handles.
  *
  * @param  h    SPI handle
  * @param  tx   TX buffer (NULL = send the fill byte, 0xFF)
  * @param  rx   RX buffer (NULL = discard received data)
- * @param  len  Number of bytes: up to 65535 (Core.ST.L4, Core.ST.W5 SPI1),
- *              1023 (Core.ST.W5 SPI3)
+ * @param  len  Number of bytes: up to 65535 (Core.ST.L4, Core.ST.H5,
+ *              Core.ST.W5 SPI1), 1023 (Core.ST.W5 SPI3)
  * @param  cb   Completion callback (interrupt context), or NULL
  * @param  ctx  User context for the callback
  * @return HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR for a bad
- *         length or on Core.ST.H5
+ *         length
  */
 static inline hal_status_t core_spi_xfer_dma(hal_spi_t *h,
                                               const uint8_t *tx,
@@ -389,20 +390,6 @@ static inline int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx
 //   core_spi_write_read, core_spi_exchange_dma). Bulk variants need
 //   the array-IN / array-OUT host-call ABI prototyped on the tile-
 //   driver side — track with the DSL Capability Coverage close.
-//
-// @studio unsupported tier=1 value=M title="Core.ST.W5 SPI not yet bench-verified; Core.ST.H5 SPI still stalls"
-//   Core.ST.L4 passes tests/hw-spi-loopback (polled + DMA, modes 0-3,
-//   1-4096 bytes, timeouts). Core.ST.W5 builds the same code (TSIZE
-//   sessions, GPDMA) but has not run it on hardware yet; the camera tile's
-//   LL half-duplex path is the only W5 SPI use proven on silicon.
-//   Core.ST.H5: the kernel clock is now per_ck (the HSI), but on the bench
-//   SPI1 still never clocks a frame and a transfer returns HAL_TIMEOUT
-//   (2026-09-26, only tried on a board started by the ROM bootloader).
-//
-// @studio unsupported tier=1 value=L title="SPI DMA not on Core.ST.H5"
-//   core_spi_exchange_dma / core_spi_xfer_dma run on Core.ST.L4 (DMA1)
-//   and Core.ST.W5 (GPDMA1 CH6/CH7) and return HAL_ERROR on Core.ST.H5,
-//   where polled transfers are the only path.
 //
 // @studio unsupported tier=1 value=L title="8-bit Motorola frames only"
 //   Frames are 8 bits. No 16-bit frames, hardware CRC, TI frame format or

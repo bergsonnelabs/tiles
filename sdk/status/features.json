@@ -270,6 +270,11 @@
           "desc": "core_tiles_pal(&core_i3c1): I2C tile drivers run unchanged; the bridge maps each driver's static address to its dynamic address and re-assigns one a tile loses."
         },
         {
+          "id": "i3c.target",
+          "name": "target mode",
+          "desc": "Core acts as an I3C target, addressable by an external I3C controller."
+        },
+        {
           "id": "i3c.hdr",
           "name": "HDR modes (DDR)",
           "desc": "High data rate modes; the STM32H5 I3C peripheral is SDR-only."
@@ -601,6 +606,12 @@
           "desc": "make flash-serial: reflash a running Core over its USB serial port, no bootloader and no replug (docs/serial-update-protocol.md)."
         },
         {
+          "id": "conn.ble_update",
+          "layer": "Core",
+          "name": "firmware update over BLE",
+          "desc": "Full and delta firmware updates from a phone or computer over Bluetooth, recoverable after a dropped link or power cut (docs/ble-update-protocol.md)."
+        },
+        {
           "id": "conn.swd",
           "layer": "Studio",
           "name": "SWD flash from Studio",
@@ -631,16 +642,6 @@
       "id": "adv",
       "name": "Advanced",
       "features": [
-        {
-          "id": "adv.i3c_ctrl",
-          "name": "I3C controller",
-          "desc": "Next-gen sensor bus — I2C-compatible with higher speed, in-band interrupts, and dynamic addressing."
-        },
-        {
-          "id": "adv.i3c_target",
-          "name": "I3C target",
-          "desc": "Core acts as an I3C secondary device, addressable by an external I3C controller."
-        },
         {
           "id": "adv.comp",
           "name": "COMP (analog comparator)",

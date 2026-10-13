@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@77fd3f3",
   "category": "pad",
   "label": "Core.Pad",
   "icon": "◼",
@@ -481,6 +481,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK on success, HAL_ERROR if pad has no GPIO",
       "layer": "hal"
     },
     {

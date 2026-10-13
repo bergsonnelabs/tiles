@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@003821d",
+  "source": "tiles@77fd3f3",
   "category": "spi",
   "label": "Core.SPI",
   "icon": "⇆",
@@ -34,6 +34,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, or HAL_ERROR on a NULL argument",
       "layer": "core"
     },
     {
@@ -54,6 +55,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_BUSY while a DMA transfer runs, HAL_ERROR on NULL",
       "layer": "core"
     },
     {
@@ -69,6 +71,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "SYSCLK / (2..256); 0 for an uninitialized handle",
       "layer": "core"
     },
     {
@@ -139,6 +142,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The byte received (0xFF if the transfer failed)",
       "layer": "core"
     },
     {
@@ -169,6 +173,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT (stalled), HAL_ERROR (overrun / mode fault), HAL_BUSY (a DMA transfer is running)",
       "layer": "core"
     },
     {
@@ -194,6 +199,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
@@ -219,6 +225,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
@@ -249,6 +256,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
@@ -284,6 +292,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
@@ -314,6 +323,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT (stalled; channels aborted, SPI reset), HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error)",
       "layer": "core"
     },
     {
@@ -340,7 +350,7 @@
         {
           "name": "len",
           "ctype": "uint32_t",
-          "description": "Number of bytes: up to 65535 (Core.ST.L4, Core.ST.W5 SPI1),"
+          "description": "Number of bytes: up to 65535 (Core.ST.L4, Core.ST.H5, Core.ST.W5 SPI1), 1023 (Core.ST.W5 SPI3)"
         },
         {
           "name": "cb",
@@ -354,6 +364,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR for a bad length",
       "layer": "core"
     },
     {
@@ -369,6 +380,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The transfer's result (HAL_OK if none was running), or HAL_TIMEOUT after aborting a stalled transfer",
       "layer": "core"
     },
     {
@@ -384,6 +396,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "1 while core_spi_xfer_dma() is running, else 0",
       "layer": "core"
     },
     {
@@ -399,6 +412,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The coregen-initialized handle, or NULL.",
       "layer": "core"
     },
     {
@@ -449,6 +463,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK on success, HAL_ERROR on a NULL argument",
       "layer": "hal"
     },
     {
@@ -469,6 +484,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR on NULL",
       "layer": "hal"
     },
     {
@@ -581,6 +597,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "0, or -1 for an id not in the map",
       "layer": "hal"
     },
     {
@@ -641,6 +658,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT (stalled; the peripheral is reset), HAL_ERROR (overrun / mode fault / bad handle), HAL_BUSY (DMA running)",
       "layer": "hal"
     },
     {
@@ -807,6 +825,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error, or no DMA on this platform)",
       "layer": "hal"
     },
     {
@@ -833,7 +852,7 @@
         {
           "name": "len",
           "ctype": "uint32_t",
-          "description": "Number of bytes (L4: up to 65535; WBA: up to 65535 on SPI1,"
+          "description": "Number of bytes (L4 and H5: up to 65535; WBA: up to 65535 on SPI1, 1023 on SPI3)"
         },
         {
           "name": "cb",
@@ -847,6 +866,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "HAL_OK, HAL_BUSY, or HAL_ERROR (bad length, or no DMA on this platform)",
       "layer": "hal"
     },
     {
@@ -861,6 +881,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "The transfer's status (HAL_OK if none was running), or HAL_TIMEOUT",
       "layer": "hal"
     },
     {
@@ -890,6 +911,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Cycle budget",
       "layer": "ll"
     },
     {
@@ -991,6 +1013,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "LL_SPI_OK, LL_SPI_TIMEOUT (no progress within `stall`), or LL_SPI_ERR (overrun / mode fault)",
       "layer": "ll"
     },
     {
@@ -1214,6 +1237,20 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_spi_t",
+      "kind": "typedef",
+      "brief": "SPI handle type — same as hal_spi_t under the hood.",
+      "decl": "typedef hal_spi_t core_spi_t;"
+    },
+    {
+      "name": "core_spi_config_t",
+      "kind": "typedef",
+      "brief": "SPI configuration — prescaler, clock polarity, clock phase, bit order.",
+      "decl": "typedef hal_spi_config_t core_spi_config_t;"
     }
   ]
 }

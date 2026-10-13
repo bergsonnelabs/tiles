@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@2a1a847",
+  "source": "tiles@77fd3f3",
   "category": "rng",
   "label": "Core.RNG",
   "icon": "🎲",
@@ -46,6 +46,7 @@
         }
       ],
       "studio_exposed": false,
+      "return_desc": "Number of values successfully generated",
       "layer": "core"
     },
     {

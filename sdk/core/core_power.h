@@ -15,8 +15,8 @@
  * has armed it, core_stop_for() and core_stop_until_on_change() sleep in
  * chunks of half the timeout and feed it in between, and core_standby_for()
  * refuses (returns HAL_ERROR) a Standby longer than half the timeout, because
- * nothing can feed the watchdog until main() runs again. Core.ST.H5 keeps its
- * previous behavior (no chunking) until its own low-power pass.
+ * nothing can feed the watchdog until main() runs again. On Core.ST.H5,
+ * core_standby_for() does not check the watchdog yet.
  *
  * USB (Core.ST.L4): Stop turns the USB clock off, so while a USB host is awake
  * on the bus, core_stop_for() and core_stop_until_on_change() wait in Sleep
@@ -26,6 +26,11 @@
  * wakes the Core, it serves USB while the bus stays awake, then goes back to
  * Stop for the rest of the sleep. On USB power from a live host the sleep
  * current is therefore Sleep-mode current, not Stop current.
+ *
+ * USB (Core.ST.H5): the suspended-bus wake is not set up there, so once USB
+ * has started these sleeps always wait in Sleep mode, never Stop. core_init()
+ * starts USB on every H5 project, so in practice an H5 sleep is Sleep-mode
+ * current with USB answering; timing and watchdog feeding are the same.
  *
  * @studio category power label=Core.Power icon=☾
  *
@@ -71,10 +76,8 @@
  */
 extern void core_clock_init(void);
 
-#if !defined(STM32H523xx)
-
 /* ============================================================
- * Internal: Stop entry/exit per family (L0, L4, WBA)
+ * Internal: Stop entry/exit per family (L0, L4, WBA, H5)
  * ============================================================ */
 
 #if defined(STM32WBA55xx)
@@ -129,6 +132,19 @@ static inline void _core_stop1_exit_restore(const core_stop1_ctx_t *c)
     if (!c->m1_wsc) CLR_BITS(CORE_W5_RAMCFG_M1CR, CORE_W5_RAMCFG_WSC);
     if (!c->m2_wsc) CLR_BITS(CORE_W5_RAMCFG_M2CR, CORE_W5_RAMCFG_WSC);
 }
+#elif defined(STM32H523xx)
+/* H523 Stop 0 (RM0481 §10.8.5): exit is on the HSI (RCC_CFGR1.STOPWUCK = 0,
+ * its reset value) in VOS3. The sleeps below run between chunks on that
+ * clock, so the flash latency has to cover it: RM0481 Table 45 asks 3 wait
+ * states for the HSI's 64 MHz in VOS3, and the HSI 64 MHz level runs at 2 in
+ * VOS2. core_clock_init() sets the level's own wait states on the way out. */
+typedef struct { uint8_t unused; } core_stop1_ctx_t;
+static inline void _core_stop1_enter_prep(core_stop1_ctx_t *c)
+{
+    (void)c;
+    if (ll_flash_get_latency() < 3UL) ll_flash_set_latency(3UL);
+}
+static inline void _core_stop1_exit_restore(const core_stop1_ctx_t *c) { (void)c; }
 #else
 typedef struct { uint8_t unused; } core_stop1_ctx_t;
 static inline void _core_stop1_enter_prep(core_stop1_ctx_t *c) { (void)c; }
@@ -163,6 +179,14 @@ static inline void _core_rtc_wake_arm(uint32_t ms)
     SET_BITS(REG32(EXTI_BASE + 0x00UL), (1UL << LL_RTC_WKUP_EXTI));   /* IMR */
     SET_BITS(REG32(EXTI_BASE + 0x08UL), (1UL << LL_RTC_WKUP_EXTI));   /* RTSR */
     REG32(EXTI_BASE + 0x14UL) = (1UL << LL_RTC_WKUP_EXTI);            /* PR: clear */
+#elif defined(STM32H523xx)
+    /* H5: ll_rtc_wakeup_config_raw() doesn't clear a stale WUTF there, so
+     * clear it now (RTC_SCR.CWUTF, RM0481 §46.6.23); the timer just restarted,
+     * so it can't set again before `ms`. The RTC is a direct event on EXTI
+     * line 17 (RM0481 Table 150), which wakes the CPU from Stop once
+     * EXTI_IMR1 (offset 0x080, §18.6.20) unmasks it. */
+    ll_rtc_wakeup_clear_flag();
+    SET_BITS(REG32(EXTI_BASE + 0x80UL), (1UL << 17));
 #endif
 }
 
@@ -187,11 +211,13 @@ static inline void _core_rtc_wake_disarm(void)
  * path into it is masked for the sleep: ALRAIE on the WBA (RTC_CR bit 12,
  * RM0493 §36.6.7), EXTI IMR line 17 on the L0 (RM0377 §12.5.1). ALRAF still
  * sets, so core_rtc_alarm_fired() reports the match afterwards. The L4 has a
- * separate RTC_Alarm vector (41) and needs nothing.
+ * separate RTC_Alarm vector (41) and needs nothing. The H5 is like the WBA:
+ * one RTC vector (2) for all RTC events, ALRAIE at RTC_CR bit 12 (RM0481
+ * §46.6.7).
  */
 static inline uint32_t _core_stop_alarm_mask(void)
 {
-#if defined(STM32WBA55xx)
+#if defined(STM32WBA55xx) || defined(STM32H523xx)
     if (!(RTC_CR & LL_RTC_CR_ALRAIE)) return 0;
     ll_rtc_unlock();
     CLR_BITS(RTC_CR, LL_RTC_CR_ALRAIE);
@@ -209,7 +235,7 @@ static inline uint32_t _core_stop_alarm_mask(void)
 static inline void _core_stop_alarm_unmask(uint32_t masked)
 {
     if (!masked) return;
-#if defined(STM32WBA55xx)
+#if defined(STM32WBA55xx) || defined(STM32H523xx)
     ll_rtc_unlock();
     SET_BITS(RTC_CR, LL_RTC_CR_ALRAIE);
     ll_rtc_lock();
@@ -230,8 +256,12 @@ static inline void _core_stop_alarm_unmask(uint32_t masked)
  * back before the USB interrupt runs, the USB is serviced for as long as the
  * bus stays awake, and the rest of the sleep resumes in Stop once it is
  * suspended again. Weak: a build without the USB driver links without it.
+ *
+ * The H5's hal_usb_cdc_stop_allowed() allows Stop only before USB has
+ * started: the suspended-bus wake chain isn't set up there, so a running USB
+ * always waits in Sleep.
  */
-#if defined(STM32L422xx)
+#if defined(STM32L422xx) || defined(STM32H523xx)
 extern int hal_usb_cdc_started(void) __attribute__((weak));
 extern int hal_usb_cdc_stop_allowed(void) __attribute__((weak));
 #endif
@@ -239,7 +269,7 @@ extern int hal_usb_cdc_stop_allowed(void) __attribute__((weak));
 /* 1: enter Stop. 0: a USB host is awake on the bus, wait in Sleep. */
 static inline int _core_stop_usb_ok(void)
 {
-#if defined(STM32L422xx)
+#if defined(STM32L422xx) || defined(STM32H523xx)
     return !hal_usb_cdc_stop_allowed || hal_usb_cdc_stop_allowed();
 #else
     return 1;
@@ -336,7 +366,20 @@ static inline void _core_stop_pad_cb(void *ctx)
     _core_stop_pad_edge = 1;
 }
 
-#endif /* !STM32H523xx */
+/* After arming the wakeup timer: where the sleep's calendar time is measured
+ * from. On the H5, ll_rtc_wakeup_config_raw() sets WUTE through RTC init mode,
+ * and leaving init mode restarts the current calendar second, so the mark is
+ * taken again after each arm (the under 1 ms spent arming is not counted). Elsewhere arming leaves the calendar alone and the mark
+ * carries over from the previous chunk. */
+static inline void _core_stop_mark_after_arm(uint32_t *mark)
+{
+#if defined(STM32H523xx)
+    ll_rtc_resync();
+    *mark = ll_rtc_ms_of_day();
+#else
+    (void)mark;
+#endif
+}
 
 /* ---- Simple API ---- */
 
@@ -365,37 +408,6 @@ static inline void core_sleep(void)
  */
 static inline void core_stop_for(uint32_t seconds)
 {
-#if defined(STM32H523xx)
-    /* Enable PWR + backup domain */
-    ll_rcc_pwr_clk_enable();
-    ll_pwr_enable_backup_access();
-
-    /* Init RTC on LSI and set wakeup alarm */
-    ll_rtc_init(0);
-    ll_rtc_wakeup_config(seconds);
-
-    /* Unmask RTC wakeup for Stop mode wake.
-     * H5: RTC has direct NVIC interrupt (RTC_IRQn=2). Enable NVIC +
-     *      EXTI line 19 (wakeup timer) for wakeup from Stop.
-     *      Note: line 17 = RTC (non-secure, all events), line 19 = TAMP.
-     *      RTC is a "direct" EXTI event — only IMR needed, no RTSR. */
-    /* H5: EXTI line 17 = RTC non-secure (direct event, IMR only) */
-    ll_nvic_set_priority(2, 3);     /* RTC_IRQn = 2, level 3 (the helper shifts it) */
-    ll_nvic_enable_irq(2);
-    SET_BITS(REG32(EXTI_BASE + 0x80UL), (1UL << 17));  /* IMR1: line 17 */
-
-    /* Enter Stop mode */
-    ll_pwr_stop();
-
-    /* --- Woke up --- */
-
-    /* Clear RTC wakeup flag */
-    ll_rtc_wakeup_clear_flag();
-    ll_nvic_disable_irq(2);
-
-    /* Restore PLL + SysTick */
-    core_clock_init();
-#else
     if (seconds == 0) return;
     if (seconds > 2000000UL) seconds = 2000000UL;     /* 2 x ms + a chunk fit 32 bits */
 
@@ -422,6 +434,7 @@ static inline void core_stop_for(uint32_t seconds)
         if (ms > 65536000UL) ms = 65536000UL;       /* 16-bit reload at 1 Hz */
         core_watchdog_feed();
         _core_rtc_wake_arm(ms);
+        _core_stop_mark_after_arm(&mark);
         (void)_core_stop_wait(1, (volatile uint8_t *)0);
         armed += ms;
         ll_rtc_resync();                 /* calendar shadows are stale after Stop */
@@ -437,7 +450,6 @@ static inline void core_stop_for(uint32_t seconds)
     _core_stop1_exit_restore(&s1);
     ll_rtc_resync();
     _systick_ticks += t0 + slept;
-#endif
 }
 
 /* True when `pad` already sits at the level `edge` wakes on: low for
@@ -467,22 +479,11 @@ static inline int _core_stop_pad_at_wake_level(uint8_t pad, uint32_t edge)
  * @param timeout_ms  Longest time to stay asleep, measured on the RTC; 0 waits
  *                    for the edge however long it takes.
  * @return 1 = woken by the pad (or it was already at the wake level),
- *         0 = timed out, -1 = the pad can't take an edge interrupt, or
- *         (Core.ST.H5 only) a non-zero timeout, which isn't implemented there.
+ *         0 = timed out, -1 = the pad can't take an edge interrupt.
  */
 static inline int core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge,
                                                     uint32_t timeout_ms)
 {
-#if defined(STM32H523xx)
-    if (timeout_ms) return -1;
-    core_pad_on_change(pad, edge, (hal_callback_t)0, (void *)0);
-    if (_core_stop_pad_at_wake_level(pad, edge)) return 1;
-
-    ll_pwr_stop();
-
-    core_clock_init();
-    return 1;
-#else
     uint32_t t0 = _systick_ticks, slept = 0, mark = 0, tick_ms = 0;
     uint32_t chunk = core_watchdog_sleep_chunk_ms();
     int use_rtc = (chunk != 0) || (timeout_ms != 0);
@@ -512,6 +513,7 @@ static inline int core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge,
             }
             core_watchdog_feed();
             _core_rtc_wake_arm(ms);
+            _core_stop_mark_after_arm(&mark);
             woke = _core_stop_wait(1, &_core_stop_pad_edge);
             ll_rtc_resync();                 /* calendar shadows are stale after Stop */
             uint32_t now = ll_rtc_ms_of_day();
@@ -531,7 +533,6 @@ static inline int core_stop_until_on_change_timeout(uint8_t pad, uint32_t edge,
     if (use_rtc) ll_rtc_resync();        /* the RTC only runs if we started it */
     _systick_ticks += t0 + slept;        /* without an RTC nothing measured the sleep */
     return woke;
-#endif
 }
 
 /**
@@ -718,14 +719,14 @@ static inline void core_watchdog_start_seconds(uint32_t seconds)
 //   the host-call boundary. Tracked alongside the broader DSL event-
 //   model story.
 //
-// @studio unsupported tier=1 value=H title="Stop / Standby not bench-verified on Core.ST.L0; Standby not on Core.ST.W5"
+// @studio unsupported tier=1 value=H title="Standby not bench-verified on Core.ST.L0 or Core.ST.W5; Core.ST.H5 sleep compile-only"
 //   The register maps behind stop_for / standby_for / RTC / backup were
-//   corrected against RM0377 and RM0493 on 2026-09-25 (the L0 enabled the
-//   LSE instead of the LSI and hung; the WBA wrote CCIPR instead of BDCR1,
-//   had no RTC bus clock and a reserved Standby LPMS). The W5's Stop passed
-//   tests/hw-sleep-cycle on 2026-09-25; its Standby and all of the L0 are
-//   compile-only until they do. Core.ST.L4 passed the same test; Core.ST.H5
-//   keeps its older sleep code until its own fix session.
+//   corrected against RM0377 and RM0493 on 2026-09-25. Stop with the
+//   watchdog running passed tests/hw-sleep-cycle on Core.ST.L4 and
+//   Core.ST.W5 (2026-09-25) and Core.ST.L0 (2026-09-26). Standby on the L0
+//   and the W5 is compile-only. Core.ST.H5 moved to the same fed, chunked
+//   Stop code on 2026-10-13 and has not run it on a board yet; its
+//   core_standby_for() still has no watchdog check.
 //
 // @studio unsupported tier=1 value=M title="Standby can't outlast the watchdog"
 //   The IWDG keeps counting in Standby (always on the L0, by option byte on

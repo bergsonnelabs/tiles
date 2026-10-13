@@ -287,10 +287,9 @@ void hal_i2c_scan(hal_i2c_t *h, uint8_t *found, uint8_t *count,
  * ============================================================ */
 
 /* Slot 0 = I2C1 everywhere. Slot 1 = I2C3 on L4/WBA.
- * H5 I2C2/I2C3 are deliberately absent: startup_stm32h523xx.s has no
- * I2C2_ER or I2C3 vectors at all, and its slot 58 comment marks I2C2
- * Error as shared with USART1. Registering a target there would route
- * bus errors into the wrong handler. */
+ * H5 I2C2/I2C3 are not wired up yet. The startup file has their event and
+ * error vectors (51-54, 80-81, RM0481 Table 147) since it was corrected,
+ * but no handler below dispatches them. */
 #define _HAL_I2C_TGT_SLOTS 2
 
 static hal_i2c_target_t *_i2c_tgt[_HAL_I2C_TGT_SLOTS];
