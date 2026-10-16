@@ -42,6 +42,8 @@ void su_cmac_final(su_cmac_t *c, uint8_t tag[16]);
 
 /** auth_tag = CMAC(K, "SUA1" ‖ nonce) */
 void su_tag_auth(const uint8_t key[16], const uint8_t nonce[16], uint8_t out[16]);
+/** reset_tag = CMAC(K, "SUR1" ‖ nonce): the remote reset frame R */
+void su_tag_reset(const uint8_t key[16], const uint8_t nonce[16], uint8_t out[16]);
 /** Start image_tag = CMAC(K, "SUI1" ‖ LE32(size) ‖ LE32(crc) ‖ image): feed
  *  the image with su_cmac_update(), finish with su_cmac_final(). */
 void su_tag_image_start(su_cmac_t *c, const uint8_t key[16], uint32_t size, uint32_t crc);

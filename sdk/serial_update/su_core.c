@@ -391,6 +391,25 @@ static void on_end(const uint8_t *p, uint32_t len)
     reboot();
 }
 
+/* RESET: authenticated like an update (A on this link), and its tag is bound
+ * to this link's nonce like E's, so a recorded R neither replays on another
+ * link nor can be forged on this one without the key. A wrong tag forgets the
+ * authentication (start again at C). docs/ble-update-protocol.md. */
+static void on_reset(const uint8_t *p, uint32_t len)
+{
+    if (need_auth()) return;
+    if (len != SU_KEY_BYTES) { reply_err(SU_ERR_LENGTH, "length"); return; }
+    if (!O->reset || !O->reset_check || !O->reset_check(link_nonce, p)) {
+        authed = 0;
+        forget_nonce();
+        reply_err(SU_ERR_AUTH, "auth");
+        return;
+    }
+    reply_ok(SU_T_RESET, 0);
+    rebooting = 1;                       /* no more frames until the reset */
+    O->reset();
+}
+
 void su_core_link_reset(void)
 {
     authed = 0;
@@ -489,6 +508,7 @@ static void handle(uint8_t type, uint32_t a0, uint32_t a1, const uint8_t *p, uin
     case SU_T_END:   on_end(p, len);           break;
     /* The running app stays: abort only forgets the transfer. */
     case SU_T_ABORT: if (!need_auth()) { begun = 0; reply_ok(SU_T_ABORT, 0); } break;
+    case SU_T_RESET: on_reset(p, len);         break;
 #else
     case SU_T_END:   on_end();                 break;
     case SU_T_ABORT: reply_ok(SU_T_ABORT, 0); reboot(); break;
@@ -522,7 +542,7 @@ static void parse(void)
         uint8_t  t   = rx[2];
         if ((t != SU_T_QUERY && t != SU_T_BEGIN && t != SU_T_DATA && t != SU_T_END && t != SU_T_ABORT
 #if SU_STAGING
-             && t != SU_T_CHALLENGE && t != SU_T_AUTH && t != SU_T_SAME
+             && t != SU_T_CHALLENGE && t != SU_T_AUTH && t != SU_T_SAME && t != SU_T_RESET
 #endif
             ) ||
             rx[3] != 0 || rx[6] != 0 || rx[7] != 0 || len > SU_MAX_PAYLOAD) {

@@ -275,8 +275,56 @@ def run(sim_path, chip="l4"):
         outcomes.add(boots(fl))
     check("program() failing at each call: never a corrupt boot", "CORRUPT" not in outcomes, str(outcomes))
 
+    # The remote reset frame (§10) belongs to the running app, not the
+    # flasher: inside a flasher session it is skipped silently.
+    s = Sim(sim_path)
+    s.link.write(su.frame(su.T_RESET, su.RESET_ARG0, su.RESET_ARG1) + su.frame(su.T_QUERY))
+    r = su.reply(s.link, 1, want_ready=True)
+    code, fl = s.finish()
+    check("reset frame inside a flasher session: skipped silently, flash untouched",
+          r is not None and r[1] == "READY" and boots(fl) == "old", str(r))
+
+    test_remote_reset_client()
+
     print(f"{'FAILED: ' + ', '.join(FAILURES) if FAILURES else 'all passed'}")
     return 1 if FAILURES else 0
+
+
+class FakeLink(su.Link):
+    """The running app's side of the remote reset (hal_usb_cdc.c), scripted."""
+
+    def __init__(self, answer=b"", fail_after_write=False):
+        super().__init__()
+        self.sent = b""
+        self.answer = answer
+        self.fail = fail_after_write
+
+    def write(self, data):
+        self.sent += data
+
+    def read_some(self, timeout):
+        if self.fail:
+            raise OSError("port gone")
+        if self.answer:
+            a, self.answer = self.answer[:5], self.answer[5:]   # a few bytes at a time
+            return a
+        return b""
+
+
+def test_remote_reset_client():
+    want = b"SUR\x00\x00\x00\x00\x00" + b"RSET" + bytes([0xAD, 0xAC, 0xBA, 0xAB])
+    link = FakeLink(b"tick 41\r\ntick 42SU OK R\n")
+    ok = su.remote_reset(link, timeout=0.5)
+    check("reset frame: exactly the 16 bytes of §10", link.sent == want, link.sent.hex())
+    check("reset reply found behind the program's own text", ok)
+    link = FakeLink(fail_after_write=True)
+    check("port gone right after the reset frame: counts as reset", su.remote_reset(link, timeout=0.5))
+    try:
+        su.remote_reset(FakeLink(b"tick 1\r\n"), timeout=0.3)
+        silent = False
+    except su.NotSupported:
+        silent = True
+    check("no reply: firmware without the reset frame (exit 2)", silent)
 
 
 def main():

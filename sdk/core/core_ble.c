@@ -6,6 +6,9 @@
 
 #include "core_ble.h"
 #include "ble_studio_link.h"
+#include "core_timing.h"
+#include "ll_rcc.h"     /* RCC_BASE, which ll_iwdg.h uses */
+#include "ll_iwdg.h"
 #include <stdint.h>
 
 /* Low-level BLE functions (sdk/ble/) */
@@ -55,8 +58,13 @@ extern void UTIL_SEQ_Run(uint32_t mask);
  * nested pass (core_thread_process() checks the mark). */
 extern volatile uint8_t thread_app_seq_depth;
 #define SEQ_RUN()  do { thread_app_seq_depth++; UTIL_SEQ_Run(~0UL); thread_app_seq_depth--; } while (0)
+#define SEQ_DEPTH  thread_app_seq_depth
 #else
-#define SEQ_RUN()  UTIL_SEQ_Run(~0UL)
+/* Nonzero inside a pass (and the BLE callbacks it runs): _core_reset_ble()
+ * must not start a nested one. */
+static volatile uint8_t _seq_depth;
+#define SEQ_RUN()  do { _seq_depth++; UTIL_SEQ_Run(~0UL); _seq_depth--; } while (0)
+#define SEQ_DEPTH  _seq_depth
 #endif
 
 /* Connection state (ble_app_glue.c) */
@@ -331,6 +339,36 @@ __attribute__((weak)) void ble_contract_publish(void)
  * ============================================================ */
 
 int core_ble_connected(void)      { return ble_connected; }
+
+/* core_reset() (core_reset.c, weak there): drop a connected link so the
+ * central sees the disconnect now, not at its supervision timeout, and wait
+ * at most CORE_RESET_BLE_WAIT_MS for it. The link layer and the disconnect
+ * event both run from the sequencer, so the wait runs passes; from an
+ * interrupt or from inside a pass (a BLE callback) it can't, and returns
+ * right after asking. 200 ms, like the BLE update's own drop before its
+ * reset (ble_update.c). */
+#ifndef CORE_RESET_BLE_WAIT_MS
+#define CORE_RESET_BLE_WAIT_MS 200u
+#endif
+extern uint8_t aci_gap_terminate(uint16_t conn_handle, uint8_t reason);
+
+void _core_reset_ble(void)
+{
+    if (!_ble_initialized || !ble_connected) return;
+    (void)aci_gap_terminate(ble_conn_handle, 0x13);     /* remote user terminated */
+
+    uint32_t ipsr, primask;
+    __asm volatile ("mrs %0, ipsr"    : "=r" (ipsr));
+    __asm volatile ("mrs %0, primask" : "=r" (primask));
+    if ((ipsr & 0x1FFu) != 0u || (primask & 1u) != 0u || SEQ_DEPTH != 0u) return;
+
+    uint32_t t0 = core_millis();
+    while (ble_connected && (uint32_t)(core_millis() - t0) < CORE_RESET_BLE_WAIT_MS) {
+        SEQ_RUN();
+        ll_iwdg_refresh();
+    }
+}
+
 void core_ble_on_connect(void (*cb)(void *ctx), void *ctx)    { ble_on_connect_cb = cb; ble_on_connect_ctx = ctx; }
 void core_ble_on_disconnect(void (*cb)(void *ctx), void *ctx) { ble_on_disconnect_cb = cb; ble_on_disconnect_ctx = ctx; }
 

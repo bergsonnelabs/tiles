@@ -4,6 +4,8 @@
     python3 tools/serial_update.py build/app.bin              # auto-detect the Core
     python3 tools/serial_update.py --port COM5 build/app.bin
     make flash-serial                                         # same, from a project
+    python3 tools/serial_update.py --reset                    # restart the running program
+    make reset-serial                                         # same, from a project
 
 Opening the Core's CDC port at 2400 baud hands it to the SRAM flasher
 (sdk/serial_update/), which rewrites flash and restarts into the new image.
@@ -11,6 +13,10 @@ Core.ST.L4 and Core.ST.H5; the flasher reports its chip, flash and page size.
 Works wherever the serial port does — including Windows with no Zadig/WinUSB.
 Needs firmware built with an SDK that has serial update; older firmware
 doesn't answer, and this exits 2 so you can fall back to `make flash-dfu` once.
+
+--reset sends the remote reset frame (docs/serial-update-protocol.md §10) on
+the port as it is, at 115200 baud: the running program answers "SU OK R" and
+calls core_reset(). Exit 2: no answer (firmware without the reset frame).
 
 Protocol: docs/serial-update-protocol.md. Studio's client
 (web apps/studio/src/lib/serialUpdate.ts) mirrors this file.
@@ -31,6 +37,10 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 TRIGGER_BAUD = 2400
 HDR = struct.Struct("<2sBBHHII")      # 'SU', type, flags, len, reserved, arg0, arg1
 T_QUERY, T_BEGIN, T_DATA, T_END, T_ABORT = (ord(c) for c in "QBDEX")
+T_RESET = ord("R")
+RESET_ARG0, RESET_ARG1 = 0x54455352, 0xABBAACAD   # SU_RESET_ARG0 ("RSET"), ~ARG0
+RESET_REPLY = b"SU OK R"
+RESET_TIMEOUT = 2.0                   # no reply by then: firmware without the reset frame
 ERR_CRC = 7
 CORE_USB_VID = 0x1209
 DEV_ID_L41X_L42X = 0x464
@@ -191,6 +201,40 @@ def update(link: Link, image: bytes, dev_id: int = DEV_ID_L41X_L42X, log=print) 
     log(f"flashed {len(image)} B in {time.monotonic() - t0:.1f} s — the Core is restarting")
 
 
+def remote_reset(link: Link, timeout: float = RESET_TIMEOUT) -> bool:
+    """Send the reset frame; True once "SU OK R" arrives. The running program
+    may have printed text just before it, on the same line, so look for the
+    bytes anywhere. A port that vanishes after the write means the Core reset
+    before its reply got here: also True."""
+    link.write(frame(T_RESET, RESET_ARG0, RESET_ARG1))
+    deadline = time.monotonic() + timeout
+    seen = b""
+    while time.monotonic() < deadline:
+        try:
+            seen += link.read_some(deadline - time.monotonic())
+        except OSError:
+            return True
+        if RESET_REPLY in seen:
+            return True
+        seen = seen[-64:]
+    raise NotSupported("no answer to the reset frame")
+
+
+def wait_for_port(port: str, timeout: float = 6.0):
+    """After a reset: seconds until `port` is back (it drops off USB first), or None."""
+    from serial.tools import list_ports
+    t0 = time.monotonic()
+    gone = False
+    while time.monotonic() - t0 < timeout:
+        present = any(p.device == port for p in list_ports.comports())
+        if not present:
+            gone = True
+        elif gone:
+            return time.monotonic() - t0
+        time.sleep(0.05)
+    return None
+
+
 def find_core_port():
     from serial.tools import list_ports
     ports = [p for p in list_ports.comports() if p.vid == CORE_USB_VID]
@@ -203,7 +247,9 @@ def find_core_port():
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Flash a running Core over USB serial (no bootloader).")
-    ap.add_argument("image", help="raw binary for 0x08000000 (build/<project>.bin)")
+    ap.add_argument("image", nargs="?", help="raw binary for 0x08000000 (build/<project>.bin)")
+    ap.add_argument("--reset", action="store_true",
+                    help="don't flash: restart the running program (remote reset frame)")
     ap.add_argument("--port", help="serial port (default: the one Core on USB)")
     ap.add_argument("--dev-id", type=lambda s: int(s, 0), default=None,
                     help="expected DEV_ID: 0x464 STM32L41x/L42x (Core.ST.L4), 0x478 "
@@ -216,6 +262,27 @@ def main() -> int:
         print("serial_update: needs pyserial — pip install pyserial", file=sys.stderr)
         return 1
 
+    if args.reset:
+        try:
+            port = args.port or find_core_port()
+            print(f"{port}: resetting the Core…")
+            with serial.Serial(port, 115200, timeout=0.05) as ser:
+                remote_reset(SerialLink(ser))
+            back = wait_for_port(port)
+            print("reset" + (f": back on {port} after {back:.1f} s" if back is not None
+                             else f"; {port} hasn't come back yet"))
+            return 0
+        except NotSupported:
+            print("serial_update: the Core didn't answer the reset frame: its firmware predates it.\n"
+                  "  Reflash it once (make flash-serial or make flash-dfu) with a current SDK.",
+                  file=sys.stderr)
+            return 2
+        except (UpdateError, OSError) as e:
+            print(f"serial_update: {e}", file=sys.stderr)
+            return 1
+
+    if not args.image:
+        ap.error("an image is needed unless --reset")
     with open(args.image, "rb") as f:
         image = f.read()
     dev_id = args.dev_id if args.dev_id is not None else image_dev_id(image)

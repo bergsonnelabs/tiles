@@ -22,6 +22,14 @@
       "status": "na",
       "note": "No USB, so no ROM DFU path to park in"
     },
+    "system.reset": {
+      "status": "compile",
+      "note": "Compiles (tests/val-watchdog, 2026-10-16); not bench-run yet. Drops a connected BLE link first (at most 200 ms)"
+    },
+    "system.reset_reason": {
+      "status": "compile",
+      "note": "Compiles (tests/val-watchdog, 2026-10-16); not bench-run yet. RCC_CSR 0xF4, RM0493 §12.8.40"
+    },
     "system.swo": {
       "status": "compile",
       "note": "ll_itm_init leaves DBGMCU alone on the WBA: DBGMCU_SCR has no trace bits (RM0493 §43.12.7) and PB3 is TRACESWO from reset. It used to write 0xE0042004, the CTI block"
@@ -185,6 +193,14 @@
     "conn.ble_update": {
       "status": "verified",
       "note": "Benched 2026-10-10 on a Core.ST.W5 (tiles#323): full and delta updates confirmed by READY's CRC; a dropped link and power cuts during transfer and install recovered."
+    },
+    "conn.reset_usb": {
+      "status": "na",
+      "note": "No USB"
+    },
+    "conn.reset_ble": {
+      "status": "compile",
+      "note": "Compiles in every BLE build; auth, nonce binding and replay refusal host-tested (ota_sim, 2026-10-16); not run over the air yet"
     },
     "conn.swd": {
       "status": "verified",

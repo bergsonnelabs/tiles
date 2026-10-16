@@ -69,6 +69,11 @@ typedef struct {
     uint32_t run_size;
     /** Feed the watchdog between the pieces of a long S run (may be 0). */
     void (*feed)(void);
+    /** RESET: 1 if tag == CMAC(K, "SUR1" ‖ nonce). */
+    int  (*reset_check)(const uint8_t nonce[16], const uint8_t tag[16]);
+    /** RESET accepted and "SU OK R" sent: reset the Core once the reply is
+     *  out (the app calls core_reset()). May be 0: then R is refused. */
+    void (*reset)(void);
 #endif
 } su_ops_t;
 

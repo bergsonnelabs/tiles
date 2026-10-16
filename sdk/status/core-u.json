@@ -20,6 +20,14 @@
       "status": "verified",
       "note": "Healthy feed, hang, 1-2-3 strikes, SOS, ROM DFU, reflash: bench-verified on Core.ST.L4 (tests/hw-watchdog-recovery, 2026-07-13). Since 2026-09-25 core_watchdog_feed() clears the count after max(10 s, 2x the timeout) of uptime."
     },
+    "system.reset": {
+      "status": "verified",
+      "note": "Bench 2026-10-16 on a Core.ST.L4 (tests/hw-reset): 'r' calls core_reset(); next boot reads software (SFTRSTF). Clears a stale FLASH_SR.PEMPTY first (RM0394) so the reset doesn't land in the ROM bootloader after a DFU flash."
+    },
+    "system.reset_reason": {
+      "status": "verified",
+      "note": "Bench 2026-10-16 on a Core.ST.L4 (tests/hw-reset): software after core_reset() (0x14000000) and after a serial flash (OBLRSTF, 0x06000000), watchdog after an unfed IWDG (0x24000000). Power-on not yet checked."
+    },
     "system.swo": "compile",
     "system.wamr": {
       "status": "na",
@@ -193,6 +201,11 @@
       "note": "Bench-verified on Core.ST.L4 (tiles#254, 2026-09-24): 13 x 120 KB and 10 x 15 KB updates, lost-reply resend, abort, and a power pull mid-update. Not yet run on Windows."
     },
     "conn.ble_update": "na",
+    "conn.reset_usb": {
+      "status": "verified",
+      "note": "Bench 2026-10-16 on a Core.ST.L4 (tests/hw-reset): make reset-serial got SU OK R, the Core was back on the same port after 1.4 s, next boot software."
+    },
+    "conn.reset_ble": "na",
     "conn.swd": {
       "status": "none",
       "note": "No SWD flash algorithm for the L4 yet; Studio flashes it over USB (DFU or serial update)"

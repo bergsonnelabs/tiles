@@ -155,8 +155,9 @@ static inline void ll_iwdg_init_10s(void)
  * ============================================================ */
 
 /**
- * Check if the last reset was caused by the IWDG.
- * Call early in main() to detect watchdog resets.
+ * Check the live IWDG reset flag. core_init() reads and clears every reset
+ * flag first thing (core_reset_capture), so after it this reads 0: use
+ * core_reset_reason() or core_watchdog_caused_reset() instead.
  */
 static inline int ll_iwdg_caused_reset(void)
 {
@@ -174,6 +175,31 @@ static inline int ll_iwdg_caused_reset(void)
 }
 
 /**
+ * The raw reset-flag register: bits 31..24 hold the reset flags, the same
+ * positions on all four families (LPWR 31, WWDG 30, IWDG 29, SFT 28, POR/BOR
+ * 27, PIN 26, OBL 25, FW 24, where the part has them). Other bits are masked.
+ *   L0  RCC_CSR 0x50 (RM0377 §7.3.20): bit 27 is PORRSTF (POR/PDR).
+ *   L4  RCC_CSR 0x94 (RM0394 §6.4.29): bit 27 is BORRSTF.
+ *   W5  RCC_CSR 0xF4 (RM0493 §12.8.40): no FW flag.
+ *   H5  RCC_RSR 0xF4 (RM0481 §11.8.46): no OBL or FW flag.
+ * core_reset.h reads this once per boot and classifies it.
+ */
+static inline uint32_t ll_rcc_reset_flags(void)
+{
+#if defined(STM32L011xx)
+    return REG32(RCC_BASE + 0x50UL) & 0xFF000000UL;
+#elif defined(STM32L422xx)
+    return REG32(RCC_BASE + 0x94UL) & 0xFF000000UL;
+#elif defined(STM32WBA55xx)
+    return REG32(RCC_BASE + 0xF4UL) & 0xFE000000UL;
+#elif defined(STM32H523xx)
+    return REG32(RCC_BASE + 0xF4UL) & 0xFC000000UL;
+#else
+    return 0;
+#endif
+}
+
+/**
  * Clear the reset flags (so the next check gives a fresh result).
  * Clears all reset flags, not just IWDG.
  */
@@ -184,9 +210,14 @@ static inline void ll_rcc_clear_reset_flags(void)
 #elif defined(STM32L422xx)
     SET_BITS(REG32(RCC_BASE + 0x94UL), (1UL << 23));  /* CSR: RMVF */
 #elif defined(STM32WBA55xx)
+    /* RM0493 §12.8.40: RMVF clears itself once the flags are cleared. */
     SET_BITS(REG32(RCC_BASE + 0xF4UL), (1UL << 23));  /* CSR: RMVF */
 #elif defined(STM32H523xx)
-    SET_BITS(REG32(RCC_BASE + 0xF4UL), (1UL << 23));
+    /* RM0481 §11.8.46: RMVF is "set and reset by software", and RSR is reset
+     * only by a power-on reset. Left at 1 it would hold the flags cleared
+     * through every later reset, so write it back to 0. */
+    SET_BITS(REG32(RCC_BASE + 0xF4UL), (1UL << 23));  /* RSR: RMVF */
+    CLR_BITS(REG32(RCC_BASE + 0xF4UL), (1UL << 23));
 #endif
 }
 

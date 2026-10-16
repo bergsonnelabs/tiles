@@ -100,7 +100,7 @@ LAYER_HEADERS = {
             "ll_iwdg.h",
             ["ll_iwdg_init", "ll_iwdg_init_1s", "ll_iwdg_init_2s",
              "ll_iwdg_init_5s", "ll_iwdg_init_10s", "ll_iwdg_refresh",
-             "ll_iwdg_caused_reset", "ll_rcc_clear_reset_flags"],
+             "ll_iwdg_caused_reset", "ll_rcc_reset_flags", "ll_rcc_clear_reset_flags"],
         ),
     },
     "clocks": {

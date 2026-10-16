@@ -62,6 +62,7 @@
 #include "ll_exti.h"
 #include "ll_systick.h"
 #include "hal_dfu.h"
+#include "ll_iwdg.h"     /* ll_iwdg_refresh: hal_usb_cdc_flush_for_reset */
 #include "core_uid.h"      /* 96-bit UID base, RM0394 §48.1 (0x1FFF7590) */
 #include <stddef.h>
 #include <string.h>
@@ -77,6 +78,18 @@
 #  include "hal_serial_update_blob_l4.h"
 #else
 #  define HAL_SERIAL_UPDATE 0
+#endif
+
+/* Remote reset (docs/serial-update-protocol.md §10): a 16-byte "SU" 'R' frame
+ * arriving as one whole OUT packet is taken out of the data stream, answered
+ * "SU OK R" and followed by core_reset(). In every layout; compile it out
+ * with HAL_USB_REMOTE_RESET_DISABLE. */
+#if !defined(HAL_USB_REMOTE_RESET_DISABLE)
+#  define HAL_USB_REMOTE_RESET 1
+#  include "../serial_update/su_protocol.h"
+extern void core_reset(void) __attribute__((noreturn));   /* sdk/core/core_reset.c */
+#else
+#  define HAL_USB_REMOTE_RESET 0
 #endif
 
 /* ============================================================
@@ -411,6 +424,11 @@ static struct {
     /* RX flow control: EP1 OUT holds a packet the ring had no room for (NAK) */
     volatile uint8_t     rx_held;
 
+    /* A remote reset frame arrived: act on it at the end of the interrupt */
+    volatile uint8_t     reset_req;
+    /* hal_usb_cdc_flush_for_reset() is running: a reset is under way */
+    volatile uint8_t     resetting;
+
     /* RX callback (optional) */
     hal_usb_cdc_rx_cb_t  rx_cb;
     void                *rx_cb_ctx;
@@ -475,6 +493,7 @@ static void _ep0_stall(void)
 
 /* Defined with the TX queue below. */
 static void _txq_send_next(void);
+static uint16_t _txq_put(const uint8_t *buf, uint16_t len);
 
 /* ENDPOINT_HALT on a data endpoint (USB 2.0 §9.4.1, §9.4.5). SET stalls it.
  * CLEAR resets its data toggle to DATA0 whether or not it was halted (the
@@ -902,6 +921,46 @@ static void _serial_update_enter(void)
 }
 #endif /* HAL_SERIAL_UPDATE */
 
+#if HAL_USB_REMOTE_RESET
+/* ============================================================
+ * Remote reset (docs/serial-update-protocol.md §10)
+ * ============================================================ */
+
+/* The whole packet must be exactly this: "SU", 'R', flags 0, len 0,
+ * reserved 0, arg0 "RSET", arg1 its complement. */
+static int _is_reset_frame(const uint8_t *p)
+{
+    static const uint8_t f[SU_HDR_LEN] = {
+        SU_SYNC0, SU_SYNC1, SU_T_RESET, 0, 0, 0, 0, 0,
+        (uint8_t)SU_RESET_ARG0, (uint8_t)(SU_RESET_ARG0 >> 8),
+        (uint8_t)(SU_RESET_ARG0 >> 16), (uint8_t)(SU_RESET_ARG0 >> 24),
+        (uint8_t)SU_RESET_ARG1, (uint8_t)(SU_RESET_ARG1 >> 8),
+        (uint8_t)(SU_RESET_ARG1 >> 16), (uint8_t)(SU_RESET_ARG1 >> 24),
+    };
+    for (unsigned i = 0; i < SU_HDR_LEN; i++)
+        if (p[i] != f[i]) return 0;
+    return 1;
+}
+
+/* USB interrupt, after its transfers: queue the reply behind what the
+ * program already printed (dropping that if there is no room), then
+ * core_reset(), which flushes the queue (hal_usb_cdc_flush_for_reset). */
+static void _remote_reset(void) __attribute__((noreturn));
+static void _remote_reset(void)
+{
+    static const char reply[] = "SU OK R\n";
+    const uint16_t len = (uint16_t)(sizeof(reply) - 1u);
+    _cdc.reset_req = 0;
+    if (_cdc.configured && _cdc.dtr) {
+        if ((uint16_t)(HAL_USB_CDC_TX_QUEUE_SIZE - (uint16_t)(_txq_head - _txq_tail)) < len)
+            _txq_tail = _txq_head;
+        (void)_txq_put((const uint8_t *)reply, len);
+        _txq_send_next();
+    }
+    core_reset();
+}
+#endif /* HAL_USB_REMOTE_RESET */
+
 /* ============================================================
  * RX flow control
  *
@@ -917,6 +976,21 @@ static void _rx_pull(void)
 {
     uint16_t count = ll_usb_bdt_get_rx_count(1);
     if (count > EP1_MAX_PACKET) count = EP1_MAX_PACKET;
+    uint8_t tmp[EP1_MAX_PACKET];
+
+#if HAL_USB_REMOTE_RESET
+    /* Checked before the ring's room, so the frame gets through even to a
+     * program that never reads its input. It never reaches the program. */
+    if (count == SU_HDR_LEN) {
+        ll_usb_pma_read(PMA_EP1_RX, tmp, count);
+        if (_is_reset_frame(tmp)) {
+            _cdc.rx_held = 0;
+            ll_usb_ep_set_stat_rx(1, USB_EP_STAT_VALID);
+            if (!_cdc.resetting) _cdc.reset_req = 1;   /* USB IRQ handler, on its way out */
+            return;
+        }
+    }
+#endif
 
     if (!_cdc.rx_cb) {
         uint16_t space = (uint16_t)(HAL_USB_CDC_RX_BUF_SIZE - 1u
@@ -927,7 +1001,6 @@ static void _rx_pull(void)
         }
     }
 
-    uint8_t tmp[EP1_MAX_PACKET];
     ll_usb_pma_read(PMA_EP1_RX, tmp, count);
     _cdc.rx_held = 0;
     ll_usb_ep_set_stat_rx(1, USB_EP_STAT_VALID);   /* the PMA copy is done */
@@ -1099,6 +1172,10 @@ void USB_IRQHandler(void)
      * read-only and stays set while any endpoint has one pending. */
     for (int n = 0; n < 8 && (USB_ISTR & USB_ISTR_CTR); n++)
         _handle_ctr();
+
+#if HAL_USB_REMOTE_RESET
+    if (_cdc.reset_req) _remote_reset();    /* does not return */
+#endif
 
     /* Start of frame: only enabled while a newly opened port settles. */
     if (istr & USB_ISTR_SOF) {
@@ -1532,6 +1609,46 @@ int hal_usb_hid_send_report(const uint8_t *buf, uint16_t len)
     return (int)len;
 }
 
+/* Before a reset (core_reset()): let the terminal collect what is queued.
+ * Polls the USB peripheral with interrupts masked (the interrupt body is
+ * called directly), so it works from any context, the USB interrupt
+ * included. Timed on USB frames (SOF, 1 ms), since SysTick is masked too.
+ * Ends when the queue is empty and the last packet collected (then 10 more
+ * frames, so the host's reader has the bytes before the device detaches);
+ * after HAL_USB_CDC_TX_TIMEOUT_MS with no packet collected (not counting a
+ * just-opened port's settle); after 500 frames in all; or at once with no
+ * terminal, a suspended bus, or a host that is gone (suspend after 3 ms). */
+void hal_usb_cdc_flush_for_reset(void)
+{
+    if (!_cdc.started) return;
+    uint32_t irq   = ll_irq_save();
+    _cdc.resetting = 1;                      /* a second reset frame is dropped */
+    uint16_t fn    = (uint16_t)(USB_FNR & 0x7FFu);
+    uint16_t t0    = fn, since = fn, done_at = 0;
+    uint16_t tail  = _txq_tail;
+    int      done  = 0;
+    for (uint32_t spins = 0; spins < 4000000UL; spins++) {
+        if (!_cdc.configured || !_cdc.dtr || _cdc.suspended) break;
+        USB_IRQHandler();                    /* IN completions, SOF, suspend */
+        fn = (uint16_t)(USB_FNR & 0x7FFu);
+        if (!done && _txq_head == _txq_tail && !_cdc.tx_busy) {
+            done = 1;
+            done_at = fn;
+        }
+        if (done) {
+            if (((fn - done_at) & 0x7FFu) >= 10u) break;
+        } else if (_txq_tail != tail || _cdc.tx_hold) {
+            tail  = _txq_tail;               /* the host took a packet */
+            since = fn;
+        } else if (((fn - since) & 0x7FFu) >= HAL_USB_CDC_TX_TIMEOUT_MS) {
+            break;                           /* the terminal stopped reading */
+        }
+        if (((fn - t0) & 0x7FFu) >= 500u) break;
+        if ((spins & 0xFFFu) == 0u) ll_iwdg_refresh();
+    }
+    ll_irq_restore(irq);
+}
+
 #elif defined(STM32H523xx)
 
 /* ################################################################
@@ -1552,6 +1669,7 @@ int hal_usb_hid_send_report(const uint8_t *buf, uint16_t len)
 #include "ll_gpio.h"
 #include "ll_systick.h"
 #include "hal_dfu.h"
+#include "ll_iwdg.h"     /* ll_iwdg_refresh: hal_usb_cdc_flush_for_reset */
 #include "core_uid.h"      /* 96-bit UID base, RM0481 §60.1 (0x08FF_F800) */
 #include <stddef.h>
 #include <string.h>
@@ -1567,6 +1685,18 @@ int hal_usb_hid_send_report(const uint8_t *buf, uint16_t len)
 #  include "hal_serial_update_blob_h5.h"
 #else
 #  define HAL_SERIAL_UPDATE 0
+#endif
+
+/* Remote reset (docs/serial-update-protocol.md §10): a 16-byte "SU" 'R' frame
+ * arriving as one whole OUT packet is taken out of the data stream, answered
+ * "SU OK R" and followed by core_reset(). In every layout; compile it out
+ * with HAL_USB_REMOTE_RESET_DISABLE. */
+#if !defined(HAL_USB_REMOTE_RESET_DISABLE)
+#  define HAL_USB_REMOTE_RESET 1
+#  include "../serial_update/su_protocol.h"
+extern void core_reset(void) __attribute__((noreturn));   /* sdk/core/core_reset.c */
+#else
+#  define HAL_USB_REMOTE_RESET 0
 #endif
 
 /* ============================================================
@@ -1904,6 +2034,11 @@ static struct {
     /* RX flow control: EP1 OUT holds a packet the ring had no room for (NAK) */
     volatile uint8_t     rx_held;
 
+    /* A remote reset frame arrived: act on it at the end of the interrupt */
+    volatile uint8_t     reset_req;
+    /* hal_usb_cdc_flush_for_reset() is running: a reset is under way */
+    volatile uint8_t     resetting;
+
     /* RX callback (optional) */
     hal_usb_cdc_rx_cb_t  rx_cb;
     void                *rx_cb_ctx;
@@ -1968,6 +2103,7 @@ static void _ep0_stall(void)
 
 /* Defined with the TX queue below. */
 static void _txq_send_next(void);
+static uint16_t _txq_put(const uint8_t *buf, uint16_t len);
 
 /* ENDPOINT_HALT on a data endpoint (USB 2.0 §9.4.1, §9.4.5). SET stalls it.
  * CLEAR resets its data toggle to DATA0 whether or not it was halted (the
@@ -2422,6 +2558,46 @@ static void _serial_update_enter(void)
 }
 #endif /* HAL_SERIAL_UPDATE */
 
+#if HAL_USB_REMOTE_RESET
+/* ============================================================
+ * Remote reset (docs/serial-update-protocol.md §10)
+ * ============================================================ */
+
+/* The whole packet must be exactly this: "SU", 'R', flags 0, len 0,
+ * reserved 0, arg0 "RSET", arg1 its complement. */
+static int _is_reset_frame(const uint8_t *p)
+{
+    static const uint8_t f[SU_HDR_LEN] = {
+        SU_SYNC0, SU_SYNC1, SU_T_RESET, 0, 0, 0, 0, 0,
+        (uint8_t)SU_RESET_ARG0, (uint8_t)(SU_RESET_ARG0 >> 8),
+        (uint8_t)(SU_RESET_ARG0 >> 16), (uint8_t)(SU_RESET_ARG0 >> 24),
+        (uint8_t)SU_RESET_ARG1, (uint8_t)(SU_RESET_ARG1 >> 8),
+        (uint8_t)(SU_RESET_ARG1 >> 16), (uint8_t)(SU_RESET_ARG1 >> 24),
+    };
+    for (unsigned i = 0; i < SU_HDR_LEN; i++)
+        if (p[i] != f[i]) return 0;
+    return 1;
+}
+
+/* USB interrupt, after its transfers: queue the reply behind what the
+ * program already printed (dropping that if there is no room), then
+ * core_reset(), which flushes the queue (hal_usb_cdc_flush_for_reset). */
+static void _remote_reset(void) __attribute__((noreturn));
+static void _remote_reset(void)
+{
+    static const char reply[] = "SU OK R\n";
+    const uint16_t len = (uint16_t)(sizeof(reply) - 1u);
+    _cdc.reset_req = 0;
+    if (_cdc.configured && _cdc.dtr) {
+        if ((uint16_t)(HAL_USB_CDC_TX_QUEUE_SIZE - (uint16_t)(_txq_head - _txq_tail)) < len)
+            _txq_tail = _txq_head;
+        (void)_txq_put((const uint8_t *)reply, len);
+        _txq_send_next();
+    }
+    core_reset();
+}
+#endif /* HAL_USB_REMOTE_RESET */
+
 /* ============================================================
  * RX flow control
  *
@@ -2437,6 +2613,21 @@ static void _rx_pull(void)
 {
     uint16_t count = ll_usb_drd_bdt_get_rx_count(1);
     if (count > EP1_MAX_PACKET) count = EP1_MAX_PACKET;
+    uint8_t tmp[EP1_MAX_PACKET];
+
+#if HAL_USB_REMOTE_RESET
+    /* Checked before the ring's room, so the frame gets through even to a
+     * program that never reads its input. It never reaches the program. */
+    if (count == SU_HDR_LEN) {
+        ll_usb_drd_pma_read(PMA_EP1_RX, tmp, count);
+        if (_is_reset_frame(tmp)) {
+            _cdc.rx_held = 0;
+            ll_usb_drd_chep_set_stat_rx(1, USB_CHEP_STAT_VALID);
+            if (!_cdc.resetting) _cdc.reset_req = 1;   /* USB IRQ handler, on its way out */
+            return;
+        }
+    }
+#endif
 
     if (!_cdc.rx_cb) {
         uint16_t space = (uint16_t)(HAL_USB_CDC_RX_BUF_SIZE - 1u
@@ -2447,7 +2638,6 @@ static void _rx_pull(void)
         }
     }
 
-    uint8_t tmp[EP1_MAX_PACKET];
     ll_usb_drd_pma_read(PMA_EP1_RX, tmp, count);
     _cdc.rx_held = 0;
     ll_usb_drd_chep_set_stat_rx(1, USB_CHEP_STAT_VALID);   /* the PMA copy is done */
@@ -2619,6 +2809,10 @@ void _hal_usb_irq(void)
      * read-only and stays set while any endpoint has one pending. */
     for (int n = 0; n < 8 && (USB_ISTR & USB_ISTR_CTR); n++)
         _handle_ctr();
+
+#if HAL_USB_REMOTE_RESET
+    if (_cdc.reset_req) _remote_reset();    /* does not return */
+#endif
 
     /* Start of frame: only enabled while a newly opened port settles. */
     if (istr & USB_ISTR_SOF) {
@@ -3081,6 +3275,46 @@ int hal_usb_hid_send_report(const uint8_t *buf, uint16_t len)
     ll_irq_restore(irq);
 
     return (int)len;
+}
+
+/* Before a reset (core_reset()): let the terminal collect what is queued.
+ * Polls the USB peripheral with interrupts masked (the interrupt body is
+ * called directly), so it works from any context, the USB interrupt
+ * included. Timed on USB frames (SOF, 1 ms), since SysTick is masked too.
+ * Ends when the queue is empty and the last packet collected (then 10 more
+ * frames, so the host's reader has the bytes before the device detaches);
+ * after HAL_USB_CDC_TX_TIMEOUT_MS with no packet collected (not counting a
+ * just-opened port's settle); after 500 frames in all; or at once with no
+ * terminal, a suspended bus, or a host that is gone (suspend after 3 ms). */
+void hal_usb_cdc_flush_for_reset(void)
+{
+    if (!_cdc.started) return;
+    uint32_t irq   = ll_irq_save();
+    _cdc.resetting = 1;                      /* a second reset frame is dropped */
+    uint16_t fn    = (uint16_t)(USB_FNR & 0x7FFu);
+    uint16_t t0    = fn, since = fn, done_at = 0;
+    uint16_t tail  = _txq_tail;
+    int      done  = 0;
+    for (uint32_t spins = 0; spins < 4000000UL; spins++) {
+        if (!_cdc.configured || !_cdc.dtr || _cdc.suspended) break;
+        _hal_usb_irq();                      /* IN completions, SOF, suspend */
+        fn = (uint16_t)(USB_FNR & 0x7FFu);
+        if (!done && _txq_head == _txq_tail && !_cdc.tx_busy) {
+            done = 1;
+            done_at = fn;
+        }
+        if (done) {
+            if (((fn - done_at) & 0x7FFu) >= 10u) break;
+        } else if (_txq_tail != tail || _cdc.tx_hold) {
+            tail  = _txq_tail;               /* the host took a packet */
+            since = fn;
+        } else if (((fn - since) & 0x7FFu) >= HAL_USB_CDC_TX_TIMEOUT_MS) {
+            break;                           /* the terminal stopped reading */
+        }
+        if (((fn - t0) & 0x7FFu) >= 500u) break;
+        if ((spins & 0xFFFu) == 0u) ll_iwdg_refresh();
+    }
+    ll_irq_restore(irq);
 }
 
 #endif /* STM32H523xx */

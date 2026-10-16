@@ -9,7 +9,7 @@
 
 #include <stdint.h>
 
-#define SU_FLASHER_L4_SRC_HASH "a41966d3071b451a"
+#define SU_FLASHER_L4_SRC_HASH "1df3d2f22776cfd2"
 #define SU_FLASHER_L4_LEN      4904u
 
 static const uint8_t su_flasher_l4_bytes[SU_FLASHER_L4_LEN] __attribute__((aligned(4))) = {

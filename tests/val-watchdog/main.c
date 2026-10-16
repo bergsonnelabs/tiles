@@ -23,6 +23,10 @@
  *   make TILE=Core.ST.H5 && make clean
  *   make TILE=Core.ST.L0 && make clean
  *
+ * Also the reset API (core_reset.h) that core_watchdog_caused_reset() is now
+ * built on: core_reset_reason(), core_reset_flags(), and core_reset() by
+ * address (calling it would reset the Core every loop).
+ *
  * Compile/link validation only — nothing here is meant to run on hardware.
  * core_watchdog_start() is deliberately NOT called: once started the IWDG
  * cannot be stopped, and an un-fed dog on a Core with no ROM-DFU escape just
@@ -36,12 +40,18 @@
  * the compiler through the body (the point of the test) while leaving the
  * watchdog off. */
 static void (*const start_fn)(uint32_t) = core_watchdog_start;
+static void (*const reset_fn)(void) = core_reset;
 
 int main(void)
 {
     core_init();
 
     (void)start_fn;
+    (void)reset_fn;
+    volatile core_reset_reason_t why = core_reset_reason();
+    volatile uint32_t flags = core_reset_flags();
+    (void)why;
+    (void)flags;
     (void)core_watchdog_caused_reset();
     core_watchdog_clear_flags();
     core_watchdog_debug_freeze();

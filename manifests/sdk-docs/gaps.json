@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@217a38f",
   "subsystems": [
     {
       "id": "adc",
@@ -424,6 +424,33 @@
       ]
     },
     {
+      "id": "reset",
+      "name": "Reset: software reset and reset reason",
+      "header": "core_reset.h",
+      "page": "/docs/sdk/system",
+      "category": "power",
+      "gaps": [
+        {
+          "title": "Brownout reads as power-on",
+          "brief": "The four Cores set one flag for a power-on and a brownout (BORRSTF on the L4, W5 and H5, PORRSTF on the L0), so core_reset_reason() can't tell them apart and reports both as power-on. Hardware limit, not a driver gap.",
+          "tier": 1,
+          "value": "L"
+        },
+        {
+          "title": "Studio's simulator doesn't model reset",
+          "brief": "Core.Power.reset() and Core.Power.reset_reason() run on the board; the simulator needs its own handlers (restart the program, report power-on) in web apps/studio/src/lib/simulator/runtime.ts.",
+          "tier": 2,
+          "value": "M"
+        },
+        {
+          "title": "Remote and app resets not bench-verified",
+          "brief": "core_reset(), the USB reset frame and the BLE R frame compile on every Core and pass the host tests (make -C sdk/serial_update test); none has run on a board yet (2026-10-16). tests/hw-reset is the L4 bench test.",
+          "tier": 1,
+          "value": "L"
+        }
+      ]
+    },
+    {
       "id": "rng",
       "name": "RNG — hardware random numbers",
       "header": "core_rng.h",
@@ -785,7 +812,7 @@
       "gaps": [
         {
           "title": "No DSL access to caused_reset / clear_flags",
-          "brief": "These return / clear hardware flags that only matter on the very first boot iteration. Exposing them needs a story for \"before studio_start runs\" — Studio doesn't currently model that phase.",
+          "brief": "Both stay C-only. The DSL reads the same answer from Core.Power.reset_reason() (2 = watchdog), which core_init() keeps for the whole run, so there is no \"before studio_start\" phase to model.",
           "tier": 2,
           "value": "L"
         },
