@@ -1,12 +1,12 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@217a38f",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
   "header": "core_power.h",
   "headers": {
-    "core": "core_power.h",
+    "core": "core_power.h, core_reset.h",
     "ll": "ll_pwr.h"
   },
   "functions": [
@@ -187,6 +187,46 @@
       "layer": "core"
     },
     {
+      "name": "core_reset",
+      "signature": "core_reset(void)",
+      "returns": "void",
+      "brief": "Reset the Core. Does not return. With a BLE central connected (Core.ST.W5), the link is dropped first so the central sees a clean disconnect (waits at most 200 ms). Pending USB serial output is flushed (Core.ST.L4 / H5: waits at most 50 ms for a terminal that stopped reading, longer only while a just-opened port settles). The watchdog is fed while it waits. Then a system reset (AIRCR SYSRESETREQ). Core.ST.L4: if the chip still believes its flash is empty (it was flashed blank by DFU or SWD and not power-cycled since), that stale verdict is corrected first, so the reset starts this program and not the ROM bootloader. Core.ST.H5 with BOOT0 held high resets into the ROM bootloader. Safe from an interrupt handler; the BLE disconnect is then left to the central's supervision timeout.",
+      "params": [],
+      "studio_exposed": true,
+      "attributes": [
+        "noreturn"
+      ],
+      "layer": "core"
+    },
+    {
+      "name": "core_reset_reason",
+      "signature": "core_reset_reason(void)",
+      "returns": "core_reset_reason_t",
+      "brief": "Why the Core last reset: power-on (or brownout), the reset pin, the watchdog, a software reset (core_reset(), a remote reset from Studio, an update), or other. Read once by core_init() and kept, so it answers the same for the whole run.",
+      "params": [],
+      "studio_exposed": true,
+      "return_desc": "core_reset_reason_t: 0 power-on, 1 pin, 2 watchdog, 3 software, 4 other.",
+      "layer": "core"
+    },
+    {
+      "name": "core_reset_flags",
+      "signature": "core_reset_flags(void)",
+      "returns": "uint32_t",
+      "brief": "The raw RCC reset flags read at boot (CORE_RESET_FLAG_*; bits 31..24). 0 if no flag was set.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
+      "name": "core_reset_capture",
+      "signature": "core_reset_capture(void)",
+      "returns": "void",
+      "brief": "Read and keep the reset flags, then clear them in RCC. core_init() calls this first thing; later calls do nothing. core_reset_reason() calls it too, for a program that never ran core_init().",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "core"
+    },
+    {
       "name": "ll_pwr_enable_backup_access",
       "signature": "ll_pwr_enable_backup_access(void)",
       "returns": "void",
@@ -239,6 +279,82 @@
       "params": [],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_reset_reason_t",
+      "kind": "enum",
+      "brief": "Cause of the reset this program started from (core_reset_reason()).",
+      "members": [
+        {
+          "name": "CORE_RESET_POWER_ON",
+          "value": "0",
+          "description": "Power-on, or a brownout (one flag for both)"
+        },
+        {
+          "name": "CORE_RESET_PIN",
+          "value": "1",
+          "description": "NRST pin: a reset button or a debug probe"
+        },
+        {
+          "name": "CORE_RESET_WATCHDOG",
+          "value": "2",
+          "description": "Independent or window watchdog timeout"
+        },
+        {
+          "name": "CORE_RESET_SOFTWARE",
+          "value": "3",
+          "description": "core_reset(), a remote reset, the DFU touch, an update's restart, SWD"
+        },
+        {
+          "name": "CORE_RESET_OTHER",
+          "value": "4",
+          "description": "Illegal low-power entry, firewall, or no flag"
+        }
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_RESET_FLAG_LPWR",
+      "value": "(1UL << 31)",
+      "description": "Illegal Stop/Standby entry"
+    },
+    {
+      "name": "CORE_RESET_FLAG_WWDG",
+      "value": "(1UL << 30)",
+      "description": "Window watchdog"
+    },
+    {
+      "name": "CORE_RESET_FLAG_IWDG",
+      "value": "(1UL << 29)",
+      "description": "Independent watchdog"
+    },
+    {
+      "name": "CORE_RESET_FLAG_SFT",
+      "value": "(1UL << 28)",
+      "description": "Software (AIRCR SYSRESETREQ)"
+    },
+    {
+      "name": "CORE_RESET_FLAG_POR",
+      "value": "(1UL << 27)",
+      "description": "POR/PDR (L0), BOR (L4, W5, H5)"
+    },
+    {
+      "name": "CORE_RESET_FLAG_PIN",
+      "value": "(1UL << 26)",
+      "description": "NRST pin (set by every reset)"
+    },
+    {
+      "name": "CORE_RESET_FLAG_OBL",
+      "value": "(1UL << 25)",
+      "description": "Option-byte reload (not on the H5)"
+    },
+    {
+      "name": "CORE_RESET_FLAG_FW",
+      "value": "(1UL << 24)",
+      "description": "Firewall (L0, L4 only)"
     }
   ]
 }

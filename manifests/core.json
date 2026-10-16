@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@217a38f",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -791,6 +791,31 @@
         }
       ],
       "returns": "void"
+    },
+    {
+      "qname": [
+        "power",
+        "reset"
+      ],
+      "symbol": "core_reset",
+      "header": "core_reset.h",
+      "category": "power",
+      "description": "Reset the Core. Does not return. With a BLE central connected (Core.ST.W5), the link is dropped first so the central sees a clean disconnect (waits at most 200 ms). Pending USB serial output is flushed (Core.ST.L4 / H5: waits at most 50 ms for a terminal that stopped reading, longer only while a just-opened port settles). The watchdog is fed while it waits. Then a system reset (AIRCR SYSRESETREQ). Core.ST.L4: if the chip still believes its flash is empty (it was flashed blank by DFU or SWD and not power-cycled since), that stale verdict is corrected first, so the reset starts this program and not the ROM bootloader. Core.ST.H5 with BOOT0 held high resets into the ROM bootloader. Safe from an interrupt handler; the BLE disconnect is then left to the central's supervision timeout.",
+      "params": [],
+      "returns": "void"
+    },
+    {
+      "qname": [
+        "power",
+        "reset_reason"
+      ],
+      "symbol": "core_reset_reason",
+      "header": "core_reset.h",
+      "category": "power",
+      "description": "Why the Core last reset: power-on (or brownout), the reset pin, the watchdog, a software reset (core_reset(), a remote reset from Studio, an update), or other. Read once by core_init() and kept, so it answers the same for the whole run.",
+      "params": [],
+      "returns": "core_reset_reason_t",
+      "dsl_returns": "int"
     },
     {
       "qname": [

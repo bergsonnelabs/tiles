@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-/* 32 Studio-exposed host symbols (static table). */
+/* 34 Studio-exposed host symbols (static table). */
 extern NativeSymbol g_studio_natives[];
 extern const size_t g_studio_natives_count;
 

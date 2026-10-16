@@ -19,7 +19,6 @@
  *
  *   if (core_watchdog_caused_reset()) {
  *       // handle recovery...
- *       core_watchdog_clear_flags();
  *   }
  *
  *   core_watchdog_start(2000);   // 2-second timeout
@@ -46,7 +45,8 @@
 
 #include "ll_iwdg.h"
 #include "ll_systick.h" /* _systick_ticks: uptime for the strike-counter auto-clear */
-#include "hal_dfu.h"  /* recovery stash: lets caused_reset() survive core_init's RMVF clear */
+#include "hal_dfu.h"  /* brick-recovery strike counter (core_watchdog_feed) */
+#include "core_reset.h"  /* core_watchdog_caused_reset() is core_reset_reason() */
 
 /* Timeout (ms) of the IWDG this firmware started, or 0 if it hasn't started
  * one. Set by core_watchdog_start(); defined in core_watchdog.c. The IWDG has
@@ -168,21 +168,20 @@ static inline void core_watchdog_feed(void)
 #endif
 }
 
-/** Check if the last reset was caused by the watchdog.
- *  On ROM_DFU builds, core_init() reads and clears the hardware flag early (for
- *  the strike counter), stashing the cause in reserved SRAM — so prefer that
- *  when it's valid; otherwise fall back to the raw RCC_CSR flag. */
+/** Check if the last reset was caused by a watchdog (IWDG or WWDG):
+ *  core_reset_reason() == CORE_RESET_WATCHDOG. core_init() reads the RCC
+ *  flags once, keeps the cause and clears them, so this gives the same answer
+ *  for the whole run (core_reset.h). */
 static inline int core_watchdog_caused_reset(void)
 {
-#ifdef DFU_STRIKE_TAG_ADDR
-    if (hal_recovery_valid()) return (int)hal_recovery_stashed_cause();
-#endif
-    return ll_iwdg_caused_reset();
+    return core_reset_reason() == CORE_RESET_WATCHDOG;
 }
 
-/** Clear all reset flags (call after checking cause). */
+/** Clear the RCC reset flags. core_init() already does this at boot, and the
+ *  cause it kept stays, so this is only needed by code that skips core_init. */
 static inline void core_watchdog_clear_flags(void)
 {
+    core_reset_capture();          /* keep this boot's cause before clearing */
     ll_rcc_clear_reset_flags();
 }
 
@@ -219,9 +218,9 @@ static inline void core_watchdog_debug_freeze(void)
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
 // @studio unsupported tier=2 value=L title="No DSL access to caused_reset / clear_flags"
-//   These return / clear hardware flags that only matter on the very
-//   first boot iteration. Exposing them needs a story for "before
-//   studio_start runs" — Studio doesn't currently model that phase.
+//   Both stay C-only. The DSL reads the same answer from
+//   Core.Power.reset_reason() (2 = watchdog), which core_init() keeps for
+//   the whole run, so there is no "before studio_start" phase to model.
 //
 // @studio unsupported tier=1 value=L title="No window watchdog (WWDG)"
 //   STM32 also has a windowed watchdog (must feed within a window,

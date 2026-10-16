@@ -268,6 +268,8 @@ static void d_send(const char *line, uint32_t len)
     n_replies++;
 }
 static void d_reboot(void) { dev_rebooting = 1; }
+static int  dev_resets;
+static void d_reset(void) { dev_resets++; }
 static int  d_stage(uint32_t size, uint32_t *at) { return su_ota_fit(dev_app_end, size, at); }
 static int  d_key_info(uint32_t *id)
 {
@@ -323,6 +325,14 @@ static int d_commit(uint32_t at, uint32_t size, uint32_t crc, const uint32_t kee
 }
 static long dev_feeds;
 static void d_feed(void) { dev_feeds++; }
+static int d_reset_check(const uint8_t n16[16], const uint8_t tag[16])
+{
+    su_ota_key_t k;
+    uint8_t want[16];
+    if (!su_ota_key_read(&sim_io, &k)) return 0;
+    su_tag_reset(k.key, n16, want);
+    return su_ct_equal(want, tag, 16);
+}
 
 /* Power on with the app currently in flash (ending at app_end). */
 static void device_boot_app(uint32_t app_end)
@@ -356,6 +366,9 @@ static void device_boot_app(uint32_t app_end)
     dev_ops.commit      = d_commit;
     dev_ops.run_size    = app_end;
     dev_ops.feed        = d_feed;
+    dev_ops.reset_check = d_reset_check;
+    dev_ops.reset       = d_reset;
+    dev_resets          = 0;
     su_core_init(&dev_ops);
 }
 
@@ -375,6 +388,14 @@ static void h_auth_tag(const uint8_t key[16], const uint8_t nonce[16], uint8_t o
 {
     uint8_t m[20];
     memcpy(m, "SUA1", 4);
+    memcpy(m + 4, nonce, 16);
+    cmac_oneshot(key, m, sizeof(m), out);
+}
+
+static void h_reset_tag(const uint8_t key[16], const uint8_t nonce[16], uint8_t out[16])
+{
+    uint8_t m[20];
+    memcpy(m, "SUR1", 4);
     memcpy(m + 4, nonce, 16);
     cmac_oneshot(key, m, sizeof(m), out);
 }
@@ -547,6 +568,9 @@ static const uint8_t VEC_NONCE[16] = { 0xf0,0xe1,0xd2,0xc3,0xb4,0xa5,0x96,0x87,0
 #define VEC_CRC   0x0da62e3cu
 #define VEC_ITAG  "559931c85ad5df723ad703750da306c5"
 #define VEC_END   "f18a6f9daccd1c7c5de8e5b106df0802"
+/* printf 'SUR1' | cat - nonce.bin | openssl mac -cipher AES-128-CBC -macopt hexkey:<K> CMAC
+ * (OpenSSL 3.6.1, 2026-10-16) */
+#define VEC_RESET "e97afbbe9dd3959e92abec70f8758894"
 
 static void vectors(char auth[33], uint32_t *crc, char itag[33], char end[33])
 {
@@ -578,6 +602,13 @@ static void test_vectors(void)
     char auth[33], itag[33], end[33];
     uint32_t crc;
     vectors(auth, &crc, itag, end);
+    uint8_t rt[16], rt2[16];
+    char rh[33], rh2[33];
+    su_tag_reset(KEY, VEC_NONCE, rt);
+    h_reset_tag(KEY, VEC_NONCE, rt2);
+    hex(rt, 16, rh);
+    hex(rt2, 16, rh2);
+    check(strcmp(rh, VEC_RESET) == 0 && strcmp(rh2, VEC_RESET) == 0, "spec reset_tag %s / %s", rh, rh2);
     check(strcmp(auth, VEC_AUTH) == 0, "spec auth_tag %s", auth);
     check(crc == VEC_CRC, "spec crc %08x", crc);
     check(strcmp(itag, VEC_ITAG) == 0, "spec image_tag %s", itag);
@@ -760,6 +791,50 @@ static void test_bad_auth(void)
     free(evil);
     free(old);
     free(img);
+}
+
+/* R (remote reset): authenticated like the update, bound to the link's
+ * nonce, never replayable, and nothing in flash changes. */
+static void test_reset(void)
+{
+    uint8_t *old = make_image(OLD_SIZE, 1);
+    fresh_board(old, OLD_SIZE);
+    device_boot_app(OLD_SIZE);
+    uint8_t t[16];
+
+    memset(t, 0, sizeof(t));
+    check(strcmp(send_frame('R', 0, 0, t, 16), "SU ERR 12 noauth") == 0, "R before A");
+    check(strcmp(h_connect(KEY), "SU OK A") == 0, "auth");
+    check(strcmp(send_frame('R', 0, 0, t, 3), "SU ERR 1 length") == 0, "short R");
+    check(strcmp(send_frame('R', 0, 0, t, 16), "SU ERR 11 auth") == 0, "wrong R tag");
+    h_reset_tag(KEY, h_nonce, t);
+    check(strcmp(send_frame('R', 0, 0, t, 16), "SU ERR 12 noauth") == 0, "a wrong R tag forgets the auth");
+    check(dev_resets == 0, "no reset so far");
+
+    /* A good R on this link, recorded, then replayed on the next link. */
+    check(strcmp(h_connect(KEY), "SU OK A") == 0, "auth again");
+    uint8_t rec[16], rec_nonce[16];
+    h_reset_tag(KEY, h_nonce, rec);
+    memcpy(rec_nonce, h_nonce, 16);
+    su_core_link_reset();
+    check(strcmp(send_frame('R', 0, 0, rec, 16), "SU ERR 12 noauth") == 0, "replayed R on a new link: noauth");
+    check(strcmp(h_connect(KEY), "SU OK A") == 0, "new link: auth");
+    check(memcmp(rec_nonce, h_nonce, 16) != 0, "new link: new nonce");
+    check(strcmp(send_frame('R', 0, 0, rec, 16), "SU ERR 11 auth") == 0, "replayed R after a new A: refused");
+    check(dev_resets == 0, "no reset from a replay");
+
+    /* The real thing. */
+    check(strcmp(h_connect(KEY), "SU OK A") == 0, "auth for R");
+    h_reset_tag(KEY, h_nonce, t);
+    check(strcmp(send_frame('R', 0, 0, t, 16), "SU OK R") == 0, "R accepted");
+    check(dev_resets == 1 && !dev_rebooting, "reset requested once (not an install)");
+    check(strcmp(send_frame('Q', 0, 0, 0, 0), "") == 0, "no replies after R");
+    check(flash_is(old, OLD_SIZE), "flash untouched");
+    su_ota_state_t s;
+    su_ota_scan(&sim_io, &s);
+    check(!s.pending, "no install marker");
+    ok("remote reset R: needs A, tag bound to the nonce, replays refused, reply then reset");
+    free(old);
 }
 
 static void test_refusals(void)
@@ -1661,6 +1736,7 @@ int main(int argc, char **argv)
     test_full(SMALL_SIZE, 3, "full transfer + install, new image smaller than the running app");
     test_resume();
     test_bad_auth();
+    test_reset();
     test_refusals();
     sweep_commit();
     sweep_copy(20u * 1024u, 24u * 1024u + 100u, 1, 0, "small images, page 0 differs");

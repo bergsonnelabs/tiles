@@ -14,7 +14,8 @@ running). Delta updates (`S`, §3.1) benched 2026-10-10 (one constant changed:
 board back on the new program soon after (total with a 3.7 s build ≈ 6-9 s,
 against 14.9 s for a full update). A power cut during the transfer and during
 the install both recovered. **The reflash guard (§8.2) is host-tested only.**
-Recovery is SWD (Studio's SWD flasher or a probe).
+Recovery is SWD (Studio's SWD flasher or a probe). The remote reset (frame
+`R`, §3.2, 2026-10-16) is host-tested only.
 
 - Firmware: `sdk/ble/ble_update.c` (BLE glue, staging, commit),
   `sdk/ble/ble_update_boot.c` (page-0 boot hook + RAM copier),
@@ -125,6 +126,9 @@ E  payload = CMAC(K, "SUE1" ‖ nonce ‖ image_tag) ►    CRC-32 of the staged
   install): start over. Don't infer it from `B`: `OK B 0` only means "no
   transfer in progress", which is true both after an install and after a
   reset that lost a transfer.
+- **Remote reset** (restart the running program, nothing flashed): `C`, `A`,
+  then `R` with its tag; `SU OK R`, then the Core drops the link and resets
+  (§3.2).
 - **`X` is always harmless.** It only forgets the in-RAM transfer state: it
   never erases or programs flash and never touches the install marker or the
   staged image. Before the post-`DONE` reset it is ignored like every frame;
@@ -139,7 +143,7 @@ serial update):
 | bytes | field    | |
 |-------|----------|-|
 | 0-1   | `"SU"`   | `0x53 0x55` |
-| 2     | type     | ASCII: `Q` `C` `A` `B` `D` `S` `E` `X` |
+| 2     | type     | ASCII: `Q` `C` `A` `B` `D` `S` `E` `X` `R` |
 | 3     | flags    | 0 |
 | 4-5   | len      | payload bytes, ≤ 2048 |
 | 6-7   | reserved | 0 |
@@ -156,6 +160,7 @@ serial update):
 | `S` same (delta, §3.1) | offset | length | none | yes | `SU OK S <next offset>` |
 | `E` end | 0 | 0 | 16 B end tag (§5) | yes | `SU DONE` |
 | `X` abort | 0 | 0 | none | yes | `SU OK X` |
+| `R` reset (§3.2) | 0 | 0 | 16 B reset tag (§5) | yes | `SU OK R`, then the link drops |
 
 - **`B`** checks the chip (DEV_ID[11:0] = `0x492`) and that the image fits
   (§7). Nothing is erased. If a transfer of the same size and CRC is already
@@ -244,6 +249,44 @@ page, so most of a new image equals the running one byte for byte. `S`
   transfer took 4.2 s. The install (§9) is an estimate, ≈ 0.5 s. The
   software CMAC is most of the transfer time.
 
+### 3.2 Remote reset: the `R` frame
+
+Restarts the running program (`core_reset()`, `sdk/core/core_reset.h`), for
+Studio's reset link. Nothing in flash changes, and a transfer in progress is
+forgotten (the reset clears RAM).
+
+- **Frame:** type `'R'` (0x52), the usual 16-byte header with flags 0,
+  reserved 0, arg0 = arg1 = 0 (not checked), `len` = 16, payload = the 16-byte
+  **reset tag** `CMAC(K, "SUR1" ‖ nonce)` (§5), where `nonce` is this
+  connection's `SU NONCE`, the same one the `A` used.
+- **Authentication, exactly as for an update:** `R` needs a successful `A` on
+  this connection (`ERR 12 noauth` before it), and its tag is bound to the
+  connection's nonce like `E`'s end tag. A wrong tag answers `ERR 11 auth`
+  and forgets the connection's authentication (send `C`, `A` again). A
+  payload other than 16 bytes is `ERR 1 length`.
+- **No replay:** every `C` draws a fresh 16-byte nonce from the RNG, a nonce
+  is good for one `A`, and a disconnect forgets the authentication. A
+  recorded `R` on another connection fails: `ERR 12` before `A`, `ERR 11`
+  after a new `A` (new nonce). On its own connection an accepted `R` ends the
+  connection.
+- **Sequence:** connect, subscribe, (`Q`), `C` → `SU NONCE …`, `A` → `SU OK A`,
+  `R` → `SU OK R`.
+- **Reply, then the drop:** `SU OK R` goes out as a notification first. From
+  then on the Core ignores every frame (no replies). About **0.3 s** after the
+  reply was queued it calls `core_reset()`, which terminates the link (HCI
+  reason 0x13, remote user terminated), waits for the disconnection (at most
+  200 ms) and resets. So the host sees `SU OK R`, then a disconnect about
+  0.3-0.5 s later. The program then restarts and advertises again after its
+  own startup; `core_reset_reason()` reads `CORE_RESET_SOFTWARE` (3).
+- **Timeouts:** wait up to **2 s** for `SU OK R`. Firmware from before `R`
+  skips the frame silently (an unknown type, §3), so no reply means firmware
+  without the remote reset: reflash once. A disconnect after `R` was sent
+  counts as a reset even if the reply was lost.
+- **No key** (`READY … 0 0`): `C` answers `ERR 10 nokey`, so a board that was
+  never provisioned can't be reset over BLE.
+- `R` on a connection that is mid-transfer is fine; the transfer is lost
+  with the reset (`B` restarts at 0 afterwards).
+
 ## 4. Replies (Core → host)
 
 One ASCII line per notification:
@@ -275,12 +318,12 @@ fields they don't know):
 
 Hex fields have no leading zeros (`0` for zero).
 
-`OK B`, `OK D`, `OK S` carry the next offset. `OK A`, `OK X` carry nothing.
+`OK B`, `OK D`, `OK S` carry the next offset. `OK A`, `OK X`, `OK R` carry nothing.
 The longest `READY` (8-digit key id and CRC) is 61 characters plus `\n`.
 
 | code | word | meaning | host does |
 |------|------|---------|-----------|
-| 1 | length | `D` empty, > 2048, or short before the end; `A`/`E` payload not 16 bytes; `S` with a payload, or any §3.1 length / range rule broken | bug: stop |
+| 1 | length | `D` empty, > 2048, or short before the end; `A`/`E`/`R` payload not 16 bytes; `S` with a payload, or any §3.1 length / range rule broken | bug: stop |
 | 2 | device | DEV_ID in `B` isn't 0x492 | stop: wrong image |
 | 3 | size | image empty, or it doesn't fit (§7), or a chunk past the end | stop: show the limit from `READY` |
 | 4 | vectors | chunk 0 isn't a vector table for this chip | stop: not a W5 image |
@@ -290,8 +333,8 @@ The longest `READY` (8-digit key id and CRC) is 61 characters plus `\n`.
 | 8 | image-crc | CRC of the staged image wrong at `E` | start over (with `D` only if `S` was used) |
 | 9 | state | frame not valid now (`D` before `B`, `E` before the last chunk) | re-`B`, continue from `next` |
 | 10 | nokey | no board key provisioned | stop: "flash once over SWD to enable Bluetooth updates" |
-| 11 | auth | `A` tag wrong (the nonce is spent: send `C` again) | check the key id; stop after 2 tries |
-| 12 | noauth | `B`/`D`/`E`/`X` before a successful `A` on this connection | `C`, `A`, then re-`B` |
+| 11 | auth | `A` tag wrong (the nonce is spent: send `C` again), or `R` tag wrong (the authentication is forgotten) | check the key id; stop after 2 tries |
+| 12 | noauth | `B`/`D`/`E`/`X`/`R` before a successful `A` on this connection | `C`, `A`, then re-`B` (or `R`) |
 | 13 | mac | end tag wrong at `E`: the image or the key doesn't match; after `S` frames, usually the running image isn't the one the host diffed against | start over, with `D` only |
 | 14 | rng | no nonce (RNG fault) | send `C` again |
 
@@ -308,11 +351,13 @@ never stand in for another:
 auth_tag  = CMAC(K, "SUA1" ‖ nonce)                                  (20-byte message)
 image_tag = CMAC(K, "SUI1" ‖ LE32(size) ‖ LE32(crc32) ‖ image)        (12 + size bytes)
 end_tag   = CMAC(K, "SUE1" ‖ nonce ‖ image_tag)                      (36-byte message)
+reset_tag = CMAC(K, "SUR1" ‖ nonce)                                  (20-byte message)
 ```
 
 - `nonce`: the 16 bytes of the current connection's `SU NONCE` line (hex
   decoded, first pair = byte 0). A nonce is good for one `A` (right or wrong),
-  and `E` uses the same nonce as the `A` that authenticated the connection.
+  and `E` and `R` use the same nonce as the `A` that authenticated the
+  connection.
 - `size`, `crc32`: the values sent in `B`. `image`: exactly `size` bytes.
 - The Core computes `image_tag` as chunks arrive and as `S` runs are copied or kept (it never needs the whole
   image in RAM) and checks `end_tag` at `E`, so an image or tag recorded from
@@ -338,6 +383,7 @@ tests reproduce them):
 K        = 000102030405060708090a0b0c0d0e0f
 nonce    = f0e1d2c3b4a5968778695a4b3c2d1e0f
 auth_tag = 9edcf74eaf564b287d7cfec175987d53
+reset_tag= e97afbbe9dd3959e92abec70f8758894
 
 image    = the 40 bytes 00 01 02 … 27 (hex), size = 40
 crc32    = 0x0da62e3c  (LE32 in the message: 3c 2e a6 0d)
@@ -607,3 +653,5 @@ transfer (20 frames, window 2).
 - Delta updates (§3.1): keep the `.bin` last installed on each board (keyed by
   its CRC), send `S` runs when `READY` says `delta 1` and its CRC matches,
   fall back to a full `D` transfer after `ERR 13` / `ERR 8`.
+- Remote reset (§3.2): `C`, `A`, then `R` with `CMAC(K, "SUR1" ‖ nonce)`;
+  `SU OK R`, then the link drops. No reply within 2 s: firmware without it.

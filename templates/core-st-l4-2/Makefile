@@ -3,6 +3,7 @@
 #   make              # build
 #   make flash-dfu    # flash over USB DFU (first time, and recovery)
 #   make flash-serial # flash over USB serial — no bootloader, no driver
+#   make reset-serial # restart the running program over USB serial
 #   make flash        # flash over SWD (OpenOCD + ST-Link)
 #   make doctor       # check the toolchain, report what's missing
 #   make clean
@@ -38,6 +39,6 @@ endif
 # Bootloader mode is deliberately NOT passed through: config.json's
 # "bootloader" key is the single source of truth, and the SDK Makefile reads it.
 
-.PHONY: all clean distclean flash flash-dfu flash-rom flash-serial size generate doctor
-all clean distclean flash flash-dfu flash-rom flash-serial size generate doctor:
+.PHONY: all clean distclean flash flash-dfu flash-rom flash-serial reset-serial size generate doctor
+all clean distclean flash flash-dfu flash-rom flash-serial reset-serial size generate doctor:
 	$(MAKE) --no-print-directory -C $(SDK_ROOT) TILE=$(TILE) PROJECT=$(PROJECT) PROJECT_DIR=$(PROJECT_DIR) TILES_ENABLED=$(TILES_ENABLED) V=$(V) $@

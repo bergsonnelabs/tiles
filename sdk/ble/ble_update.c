@@ -36,6 +36,7 @@
 #include "core_timing.h"
 #include "ll_rcc.h"
 #include "ll_iwdg.h"
+#include "core_reset.h"
 
 /* ble_svc.c */
 extern uint16_t ble_svc_add_service_id(const char *name, uint8_t num_chars, uint16_t uuid16);
@@ -203,6 +204,18 @@ static void op_reboot(void)
     s_reboot_at = core_millis();
 }
 
+/* R (remote reset): "SU OK R" is queued; core_reset() runs from
+ * ble_update_process() REBOOT_DISCONNECT_MS later, once the reply has had
+ * time to go out. It drops the link and resets. */
+static uint32_t s_reset_at;
+static uint8_t  s_resetting;
+
+static void op_reset(void)
+{
+    s_resetting = 1;
+    s_reset_at = core_millis();
+}
+
 static int op_erase(uint32_t page) { return fl_erase(page); }
 static int op_program(uint32_t addr, const uint8_t *buf, uint32_t len)
 {
@@ -323,6 +336,18 @@ static int op_commit(uint32_t at, uint32_t size, uint32_t crc, const uint32_t ke
 
 static void op_feed(void) { ll_iwdg_refresh(); }
 
+static int op_reset_check(const uint8_t n16[16], const uint8_t tag[16])
+{
+    su_ota_key_t k;
+    uint8_t want[16];
+    if (!key_get(&k)) return 0;
+    su_tag_reset(k.key, n16, want);
+    int ok = su_ct_equal(want, tag, 16);
+    su_wipe(&k, sizeof(k));
+    su_wipe(want, sizeof(want));
+    return ok;
+}
+
 static su_ops_t s_ops;
 
 /* ============================================================
@@ -397,6 +422,8 @@ static void init_ops(void)
     s_ops.commit      = op_commit;
     s_ops.run_size    = s_app_end;      /* S frames copy from [0, s_app_end) */
     s_ops.feed        = op_feed;
+    s_ops.reset_check = op_reset_check;
+    s_ops.reset       = op_reset;
     su_core_init(&s_ops);
 }
 
@@ -435,7 +462,7 @@ void ble_update_process(void)
 
     /* Feed whole received bytes to the protocol core while it has room. A
      * complete frame is handled inside su_core_rx (flash work included). */
-    while (s_rx_tail != s_rx_head && !s_rebooting) {
+    while (s_rx_tail != s_rx_head && !s_rebooting && !s_resetting) {
         uint8_t  chunk[64];
         uint32_t t = s_rx_tail;
         uint32_t n = s_rx_head - t;
@@ -447,7 +474,7 @@ void ble_update_process(void)
         s_rx_tail = t + n;
         (void)su_core_rx(chunk, n);
     }
-    if (s_rebooting) s_rx_tail = s_rx_head;
+    if (s_rebooting || s_resetting) s_rx_tail = s_rx_head;
 
     /* Replies, oldest first, while a host listens. */
     while (s_reply_tail != s_reply_head) {
@@ -456,6 +483,10 @@ void ble_update_process(void)
         if (ble_svc_set_value(s_char, s_reply[i], s_reply_len[i]) != 0) break;   /* queue full */
         s_reply_tail++;
     }
+
+    /* After SU OK R: let the reply go out, then core_reset() (core_reset.h)
+     * drops the link, waits for it to go (at most 200 ms) and resets. */
+    if (s_resetting && core_millis() - s_reset_at >= REBOOT_DISCONNECT_MS) core_reset();
 
     /* After SU DONE: let the reply go out, drop the link (the host sees it
      * at once rather than at its supervision timeout), reset into the copier. */

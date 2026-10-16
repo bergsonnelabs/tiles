@@ -73,6 +73,17 @@
 #define SU_SAME_MAX             8192u /* longest S run, bytes */
 #define SU_KEY_BYTES            16u
 
+/* Remote reset: 'R' → "SU OK R", then core_reset() (sdk/core/core_reset.h).
+ *  - BLE (staging): needs A on this link; payload = 16-byte tag
+ *    CMAC(K, "SUR1" ‖ nonce). docs/ble-update-protocol.md.
+ *  - USB: not a flasher frame. The running app's CDC driver takes it from
+ *    the data stream as one whole 16-byte OUT packet: header only, len 0,
+ *    arg0 = SU_RESET_ARG0, arg1 = SU_RESET_ARG1. docs/serial-update-protocol.md.
+ * The flashers don't take 'R' (they still skip it), so their blobs are unchanged. */
+#define SU_T_RESET              'R'
+#define SU_RESET_ARG0           0x54455352UL  /* bytes "RSET" */
+#define SU_RESET_ARG1           0xABBAACADUL  /* ~SU_RESET_ARG0 */
+
 /* ---- Core → host replies ----
  *
  * One ASCII line per frame, each shorter than one 64-byte USB packet:

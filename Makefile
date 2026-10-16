@@ -681,12 +681,13 @@ GEN_OBJS = $(GEN_SOURCES:.c=.o)
 # drives, core_pdm.c the PDM decimator, core_stepper.c the STEP/DIR pulse
 # generator's ISR state, core_watchdog.c the running watchdog's timeout
 # (which core_power.h sleeps around), core_nvm.c the EEPROM / flash-emulation
-# store, core_adc.c the default ADC handle for pad-less internal channels.
+# store, core_adc.c the default ADC handle for pad-less internal channels,
+# core_reset.c core_reset() and the reset reason core_init() keeps.
 # (core_ble.o stays BLE-gated, below.)
 CORE_OBJS = $(BUILD_DIR)/sdk/core/core_led.o $(BUILD_DIR)/sdk/core/core_pdm.o \
             $(BUILD_DIR)/sdk/core/core_stepper.o $(BUILD_DIR)/sdk/core/core_scope.o \
             $(BUILD_DIR)/sdk/core/core_watchdog.o $(BUILD_DIR)/sdk/core/core_nvm.o \
-            $(BUILD_DIR)/sdk/core/core_adc.o
+            $(BUILD_DIR)/sdk/core/core_adc.o $(BUILD_DIR)/sdk/core/core_reset.o
 # Link order = flash order. The linker scripts place prebuilt archives (the ST
 # BLE stack, libc, libgcc) first and then every object in the order given here,
 # so the project's own sources go LAST: a small edit to a program then changes
@@ -867,6 +868,11 @@ $(BUILD_DIR)/sdk/core/core_watchdog.o: $(SDK_DIR)sdk/core/core_watchdog.c $(GEN_
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/sdk/core/core_nvm.o: $(SDK_DIR)sdk/core/core_nvm.c $(GEN_HEADERS)
+	$(Q)mkdir -p $(dir $@)
+	$(LOG) "  CC    $<"
+	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/sdk/core/core_reset.o: $(SDK_DIR)sdk/core/core_reset.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
@@ -1140,6 +1146,14 @@ endif
 .PHONY: flash-serial
 flash-serial: $(TARGET).bin
 	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)") $(if $(SU_DEV_ID),--dev-id $(SU_DEV_ID)) "$<"
+
+# ---- Reset over USB serial ----
+# Restarts the running program (core_reset()) through the remote reset frame
+# the Core's USB serial port takes (docs/serial-update-protocol.md §10). No
+# build, no flash. Exit 2: the firmware predates the reset frame.
+.PHONY: reset-serial
+reset-serial:
+	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" --reset $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)")
 
 # ---- Flash the DFU bootloader itself ----
 

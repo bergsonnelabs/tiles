@@ -17,6 +17,8 @@ rules in §5 before they get this.
 - Studio's client mirrors it (web `apps/studio/src/lib/serialUpdate.ts`).
 - Tests: `make -C sdk/serial_update test` (no hardware).
 - Design discussion: web `docs/usb-serial-update.md`.
+- **Remote reset** (restart the running program, no flashing) uses the same
+  frame header but goes to the running app, not the flasher: §10.
 
 ## 1. Sequence
 
@@ -66,6 +68,9 @@ waiting for one.
 | `D` data  | offset | CRC-32 of payload | one page (the last may be short) | strictly in order from 0 |
 | `E` end   | – | – | – | verify, write page 0, reset |
 | `X` abort | – | – | – | reply, then reset |
+
+`R` (remote reset) is not a flasher frame: a flasher skips it like any unknown
+type. The running app takes it at any baud rate (§10).
 
 A header that isn't plausible (unknown type, non-zero flags/reserved, len > the
 page size) is skipped a byte at a time, **silently**: output the app printed before the
@@ -311,3 +316,89 @@ with `dfu-util … :leave`):
 
 Not yet run on the H5: an interrupted update and its BOOT0 recovery, and a
 Windows host.
+
+## 10. Remote reset
+
+Restart the running program from the host: no flashing, no baud-rate change,
+no bootloader. Studio's reset link uses it on L4 and H5 Cores. Firmware built
+with an SDK that has `core_reset()` (tiles, 2026-10) has it (`hal_usb_cdc.c`;
+`HAL_USB_REMOTE_RESET_DISABLE` compiles it out). The program needs no code
+for it.
+
+**Request.** One write of exactly these 16 bytes on the open CDC port:
+
+```
+53 55 52 00 00 00 00 00 52 53 45 54 AD AC BA AB
+```
+
+That is the §2 header: `"SU"`, type `R` (0x52), flags 0, len 0, reserved 0,
+arg0 = 0x54455352 (the bytes `RSET`), arg1 = 0xABBAACAD (its complement), no
+payload, little-endian.
+
+- The port stays as it is: any baud rate except 1200 (DFU touch) and 2400
+  (§1, the flasher). Studio's monitor port at 115200 is fine.
+- Keep DTR asserted (pyserial's default; Web Serial `setSignals({
+  dataTerminalReady: true })`). Without DTR the Core still resets, but its
+  reply isn't sent.
+- The Core recognizes the frame only as **one whole 16-byte USB packet**
+  matching byte for byte: send it in one write, with nothing else queued
+  right before it. Anything else (including the same bytes split across
+  packets or inside a longer write) is ordinary input to the program.
+- It is taken out of the data stream: the program never sees it.
+
+**Reply.** The ASCII line `SU OK R\n` on the CDC IN endpoint. It is queued
+behind whatever the program had already printed, so it can follow text on
+the same line: match the bytes `SU OK R` anywhere in what arrives, not a
+whole line.
+
+**Then.** The Core calls `core_reset()` (`sdk/core/core_reset.h`): it sends
+everything queued (the reply included), waits 10 ms more so the host's reader
+has the bytes, and resets (AIRCR SYSRESETREQ). The USB device detaches with
+the reset and enumerates again as the same device (same VID, PID and serial)
+once the program's `core_init()` has run. After it, `core_reset_reason()`
+reads `CORE_RESET_SOFTWARE` (3).
+
+**Timing** (from the analysis, not yet benched):
+
+| step | time |
+|------|------|
+| frame to reply | about 1-2 ms; up to ~100 ms if the port was opened (DTR raised) less than 100 ms earlier, because output waits out the open settle (`HAL_USB_CDC_OPEN_SETTLE_MS`) |
+| reply to reset | the queue drains at about 64 bytes per ms, then 10 ms; a terminal that stopped reading costs at most 50 ms (`HAL_USB_CDC_TX_TIMEOUT_MS`); 500 ms at most in all |
+| reset to the port back | the program's startup plus enumeration, typically 1-2 s |
+
+**Host rules.**
+- Wait up to **2 s** for `SU OK R`. No reply in that time means firmware
+  without the remote reset: older firmware passes the 16 bytes to the program
+  as input (Studio-generated programs and the templates ignore input they
+  don't expect). Tell the user to reflash once with a current SDK.
+- The port can vanish right after the reply, or before the host has read it.
+  A port that disappears after the frame was written counts as a reset.
+- Then reopen the port when it comes back.
+
+**Authentication: none.** Whoever has the USB port can already reflash the
+Core (the 1200-baud touch, then DFU), so a reset adds nothing to protect.
+
+**Limits.**
+- A program that never reads its input, with more than 256 bytes of earlier
+  input waiting (`HAL_USB_CDC_RX_BUF_SIZE`), holds the OUT endpoint in NAK
+  (§6's flow control), so the frame can't arrive until the program reads.
+- Inside a serial-update session (the port opened at 2400, `READY` received)
+  the flasher has the port: send `X` there instead, which resets into the
+  old app while nothing is erased (§2).
+- Core.ST.H5 with BOOT0 held high resets into the ROM bootloader (§5).
+
+**Core.ST.L4 and the empty check (§5).** A plain reset keeps the empty-flash
+verdict of the last option-byte load, so a Core flashed blank by ROM DFU or
+SWD and not power-cycled since would reset into the ROM bootloader.
+`core_reset()` clears the stale `FLASH_SR.PEMPTY` first (RM0394 §3.7.5: "can
+also be set and cleared by software"; the program runs from flash, so page 0
+is programmed and the flag is wrong). If the bit doesn't clear, it resets
+through `OBL_LAUNCH` as the flasher does, and the reason then reads software
+too (OBLRSTF is counted as software). OBL_LAUNCH isn't the default because a
+plain reset is enough once PEMPTY is right, needs no option-byte unlock, and
+sets SFTRSTF.
+
+**Host tool.** `python3 tools/serial_update.py --reset [--port PORT]`, or
+`make reset-serial` in a project: sends the frame at 115200, waits for
+`SU OK R` (exit 0) and for the port to return; exit 2 = no reply.
+Bench test: `tests/hw-reset` (Core.ST.L4).

@@ -13,8 +13,8 @@
  * USB-capable core (where hal_dfu.h defines the reserved addresses).
  *
  * Flow:
- *   note_boot()  → (core_init, pre-clock) read HW reset cause, stash it,
- *                  inc/reset strikes, clear RMVF
+ *   note_boot()  → (core_init, pre-clock) take the reset cause that
+ *                  core_reset_capture() kept, inc/reset strikes
  *   over_limit() → (core_init, pre-clock) decide whether to bail to DFU
  *   clear        → automatic: core_watchdog_feed() zeroes the counter, once,
  *                  after max(10 s, 2 x the watchdog timeout) of uptime, so
@@ -46,6 +46,7 @@
 #define CORE_RECOVERY_H
 
 #include "core_watchdog.h"
+#include "core_reset.h"
 #include "hal_dfu.h"
 
 /* Consecutive watchdog resets (with no healthy boot in between) before we stop
@@ -63,11 +64,13 @@
 static inline uint32_t core_recovery_note_boot(void)
 {
     uint32_t strikes = hal_recovery_strikes();
-    int wd = ll_iwdg_caused_reset();     /* read the raw HW cause (IWDGRSTF) */
-    hal_recovery_stash_cause(wd);        /* preserve for core_watchdog_caused_reset() */
+    /* IWDGRSTF as core_reset_capture() read it at the top of core_init(),
+     * which has already cleared the flags (RMVF, else the flag latches and
+     * miscounts). */
+    int wd = (core_reset_flags() & CORE_RESET_FLAG_IWDG) != 0;
+    hal_recovery_stash_cause(wd);
     strikes = wd ? (strikes + 1u) : 0u;  /* any non-watchdog reset = fresh start */
     hal_recovery_set_strikes(strikes);
-    ll_rcc_clear_reset_flags();          /* RMVF, else the flag latches and miscounts */
     return strikes;
 }
 

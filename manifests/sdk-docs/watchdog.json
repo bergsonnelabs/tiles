@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@217a38f",
   "category": "watchdog",
   "label": "Core.Watchdog",
   "icon": "🐕",
@@ -60,7 +60,7 @@
       "name": "core_watchdog_caused_reset",
       "signature": "core_watchdog_caused_reset(void)",
       "returns": "int",
-      "brief": "Check if the last reset was caused by the watchdog. On ROM_DFU builds, core_init() reads and clears the hardware flag early (for the strike counter), stashing the cause in reserved SRAM — so prefer that when it's valid; otherwise fall back to the raw RCC_CSR flag.",
+      "brief": "Check if the last reset was caused by a watchdog (IWDG or WWDG): core_reset_reason() == CORE_RESET_WATCHDOG. core_init() reads the RCC flags once, keeps the cause and clears them, so this gives the same answer for the whole run (core_reset.h).",
       "params": [],
       "studio_exposed": false,
       "layer": "core"
@@ -69,7 +69,7 @@
       "name": "core_watchdog_clear_flags",
       "signature": "core_watchdog_clear_flags(void)",
       "returns": "void",
-      "brief": "Clear all reset flags (call after checking cause).",
+      "brief": "Clear the RCC reset flags. core_init() already does this at boot, and the cause it kept stays, so this is only needed by code that skips core_init.",
       "params": [],
       "studio_exposed": false,
       "layer": "core"
@@ -150,7 +150,16 @@
       "name": "ll_iwdg_caused_reset",
       "signature": "ll_iwdg_caused_reset(void)",
       "returns": "int",
-      "brief": "Check if the last reset was caused by the IWDG. Call early in main() to detect watchdog resets.",
+      "brief": "Check the live IWDG reset flag. core_init() reads and clears every reset flag first thing (core_reset_capture), so after it this reads 0: use core_reset_reason() or core_watchdog_caused_reset() instead.",
+      "params": [],
+      "studio_exposed": false,
+      "layer": "ll"
+    },
+    {
+      "name": "ll_rcc_reset_flags",
+      "signature": "ll_rcc_reset_flags(void)",
+      "returns": "uint32_t",
+      "brief": "The raw reset-flag register: bits 31..24 hold the reset flags, the same positions on all four families (LPWR 31, WWDG 30, IWDG 29, SFT 28, POR/BOR 27, PIN 26, OBL 25, FW 24, where the part has them). Other bits are masked. L0  RCC_CSR 0x50 (RM0377 §7.3.20): bit 27 is PORRSTF (POR/PDR). L4  RCC_CSR 0x94 (RM0394 §6.4.29): bit 27 is BORRSTF. W5  RCC_CSR 0xF4 (RM0493 §12.8.40): no FW flag. H5  RCC_RSR 0xF4 (RM0481 §11.8.46): no OBL or FW flag. core_reset.h reads this once per boot and classifies it.",
       "params": [],
       "studio_exposed": false,
       "layer": "ll"

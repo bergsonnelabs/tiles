@@ -68,6 +68,9 @@
  * auto-prescaler); including it here also keeps the old re-export working. */
 #include "core_watchdog.h"
 
+/* core_reset() and core_reset_reason() share this category (Core.Power). */
+#include "core_reset.h"
+
 /**
  * Bring up the clock tree for the project's `clock` level (oscillator, PLL,
  * flash wait states, bus prescalers) and start SysTick. Generated per project

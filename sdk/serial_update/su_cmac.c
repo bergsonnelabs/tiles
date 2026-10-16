@@ -164,6 +164,15 @@ void su_tag_auth(const uint8_t key[16], const uint8_t nonce[16], uint8_t out[16]
     su_cmac_final(&c, out);
 }
 
+void su_tag_reset(const uint8_t key[16], const uint8_t nonce[16], uint8_t out[16])
+{
+    su_cmac_t c;
+    su_cmac_init(&c, key);
+    su_cmac_update(&c, (const uint8_t *)"SUR1", 4);
+    su_cmac_update(&c, nonce, 16);
+    su_cmac_final(&c, out);
+}
+
 void su_tag_image_start(su_cmac_t *c, const uint8_t key[16], uint32_t size, uint32_t crc)
 {
     uint8_t h[12] = { 'S', 'U', 'I', '1',

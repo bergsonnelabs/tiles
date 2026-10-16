@@ -52,6 +52,7 @@
 {% if iwdg_enabled %}
 #include "core_watchdog.h"
 {% endif %}
+#include "core_reset.h"     /* core_reset_capture: the reset reason, first thing */
 {% if mcu.define == "STM32H523xx" %}
 #include "core_nvm.h"       /* _core_nvm_h5_boot: the data area core_nvm needs */
 {% endif %}
@@ -797,6 +798,11 @@ static void core_recovery_sos(void)
 
 void core_init(void)
 {
+    /* Read the RCC reset flags before anything can clear them, keep the
+     * cause for core_reset_reason(), and clear them (RMVF) so the next boot
+     * reads only its own. The brick-recovery count below reads the kept
+     * flags. core_reset.h. */
+    core_reset_capture();
 {% if usb_capable %}
 #ifdef ROM_DFU
     /* ROM DFU: check for magic before ANY peripheral/clock init.

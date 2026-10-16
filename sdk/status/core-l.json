@@ -17,6 +17,14 @@
       "status": "na",
       "note": "No USB, so no ROM DFU path to park in"
     },
+    "system.reset": {
+      "status": "compile",
+      "note": "Compiles (tests/val-watchdog, 2026-10-16); not bench-run yet"
+    },
+    "system.reset_reason": {
+      "status": "compile",
+      "note": "Compiles (tests/val-watchdog, 2026-10-16); not bench-run yet. RCC_CSR 0x50, RM0377 §7.3.20"
+    },
     "system.swo": {
       "status": "na",
       "note": "Cortex-M0+ has no ITM/SWO; hal_debug_printf is a no-op"
@@ -178,6 +186,11 @@
       "note": "No USB"
     },
     "conn.ble_update": "na",
+    "conn.reset_usb": {
+      "status": "na",
+      "note": "No USB"
+    },
+    "conn.reset_ble": "na",
     "conn.swd": "none",
     "conn.ble": "na",
     "conn.ble_adv": "na",

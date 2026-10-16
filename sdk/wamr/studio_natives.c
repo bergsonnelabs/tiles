@@ -40,6 +40,9 @@
  *   - core_i2c_write_byte_bus: category 'i2c' reaches into coregen-generated state; needs per-project generation
  *   - core_i2c_read_byte_bus: category 'i2c' reaches into coregen-generated state; needs per-project generation
  *   - core_i2c_probe_bus: category 'i2c' reaches into coregen-generated state; needs per-project generation
+ *   - core_otp_size: category 'otp' reaches into coregen-generated state; needs per-project generation
+ *   - core_otp_slot_count: category 'otp' reaches into coregen-generated state; needs per-project generation
+ *   - core_otp_slot_is_blank: category 'otp' reaches into coregen-generated state; needs per-project generation
  *   - core_pad_write: category 'pad' reaches into coregen-generated state; needs per-project generation
  *   - core_pad_read: category 'pad' reaches into coregen-generated state; needs per-project generation
  *   - core_pad_toggle: category 'pad' reaches into coregen-generated state; needs per-project generation
@@ -140,6 +143,20 @@ static int core_woke_from_standby_native(wasm_exec_env_t env)
 {
     (void)env;
     return core_woke_from_standby();
+}
+
+/* core_reset  ()  (category: power) */
+static void core_reset_native(wasm_exec_env_t env)
+{
+    (void)env;
+    core_reset();
+}
+
+/* core_reset_reason  ()i  (category: power) */
+static core_reset_reason_t core_reset_reason_native(wasm_exec_env_t env)
+{
+    (void)env;
+    return core_reset_reason();
 }
 
 /* core_rng_read  ()i  (category: rng) */
@@ -299,6 +316,8 @@ NativeSymbol g_studio_natives[] = {
     { "core_sleep", (void *)core_sleep_native, "()", NULL },
     { "core_stop_for", (void *)core_stop_for_native, "(i)", NULL },
     { "core_woke_from_standby", (void *)core_woke_from_standby_native, "()i", NULL },
+    { "core_reset", (void *)core_reset_native, "()", NULL },
+    { "core_reset_reason", (void *)core_reset_reason_native, "()i", NULL },
     { "core_rng_read", (void *)core_rng_read_native, "()i", NULL },
     { "core_rtc_init", (void *)core_rtc_init_native, "()", NULL },
     { "core_rtc_set_time", (void *)core_rtc_set_time_native, "(iii)", NULL },

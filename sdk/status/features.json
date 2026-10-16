@@ -44,6 +44,18 @@
           "desc": "Counts consecutive watchdog resets; after three, core_init() parks the Core in the ST ROM bootloader so it can always be reflashed (core_recovery). USB Cores with ROM DFU only."
         },
         {
+          "id": "system.reset",
+          "layer": "Studio",
+          "name": "software reset",
+          "desc": "core_reset(): drops a BLE link and flushes USB serial output, then a system reset. DSL Core.Power.reset() (core_reset.h)."
+        },
+        {
+          "id": "system.reset_reason",
+          "layer": "Studio",
+          "name": "reset reason",
+          "desc": "core_reset_reason(): power-on, pin, watchdog, software or other, read from the RCC flags once at boot. DSL Core.Power.reset_reason() (core_reset.h)."
+        },
+        {
           "id": "system.swo",
           "layer": "HAL",
           "name": "SWO / ITM debug output",
@@ -610,6 +622,18 @@
           "layer": "Core",
           "name": "firmware update over BLE",
           "desc": "Full and delta firmware updates from a phone or computer over Bluetooth, recoverable after a dropped link or power cut (docs/ble-update-protocol.md)."
+        },
+        {
+          "id": "conn.reset_usb",
+          "layer": "HAL",
+          "name": "remote reset over USB serial",
+          "desc": "A 16-byte frame on the USB serial port: the running program answers SU OK R and calls core_reset(). make reset-serial (docs/serial-update-protocol.md §10)."
+        },
+        {
+          "id": "conn.reset_ble",
+          "layer": "Core",
+          "name": "remote reset over BLE",
+          "desc": "Frame R on the Studio Update characteristic, authenticated with the per-board key and bound to the link's nonce; replies, then core_reset() (docs/ble-update-protocol.md)."
         },
         {
           "id": "conn.swd",

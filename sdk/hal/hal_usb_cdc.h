@@ -206,6 +206,16 @@ void hal_usb_cdc_test_force_suspend(void);   /* next Stop as if suspended */
  */
 void hal_usb_cdc_poll(void);
 
+/**
+ * Let the terminal collect queued output before a reset (core_reset() calls
+ * this). Polls the USB peripheral with interrupts masked, so it works from
+ * any context, the USB interrupt included. Returns once the queue is sent
+ * (plus 10 ms), after HAL_USB_CDC_TX_TIMEOUT_MS with no packet collected
+ * (a just-opened port's settle doesn't count), after 500 ms in all, or at
+ * once without a terminal (DTR) or with the bus suspended.
+ */
+void hal_usb_cdc_flush_for_reset(void);
+
 /* ---- HID ---- */
 
 /**
