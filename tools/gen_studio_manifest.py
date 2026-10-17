@@ -2044,7 +2044,7 @@ def main():
             "definition": ROOT / "definitions/Drive-P-a.json",
             "prefix": "tile_drive_p",
             "init": "tile_drive_p_init",
-            "version": "3.6.2",
+            "version": "3.6.3",
         },
         {
             "path": ROOT / "drivers/tile_power_l_1t.h",

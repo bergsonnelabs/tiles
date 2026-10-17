@@ -130,13 +130,16 @@
 /* Driver version                                                  */
 /* -------------------------------------------------------------- */
 
-/* v3.6.2: play_on_touch() enters sense mode once and honors its timeout (a
+/* v3.6.3: docs only. read() is marked low-level (section=advanced) and says it
+ *         returns the raw word; read_sense() gives its units. Studio's Claude
+ *         streamed read() as a force reading and saw it jump 28600 -> 24000.
+ * v3.6.2: play_on_touch() enters sense mode once and honors its timeout (a
  *         1000 ms timeout waited ~6 s); docs: is_touched() blocks ~5 ms and
  *         compares with >=, read_sense_samples() is bus-paced, and the RAM
  *         Playback and PLAY_SRATE gaps are listed. */
 #define TILE_DRIVE_P_VERSION_MAJOR  3
 #define TILE_DRIVE_P_VERSION_MINOR  6
-#define TILE_DRIVE_P_VERSION_PATCH  2
+#define TILE_DRIVE_P_VERSION_PATCH  3
 
 /**
  * Power-up settle, in ms, at the end of tile_drive_p_init(). The BOS1921 is
@@ -431,20 +434,27 @@ void tile_drive_p_reset(tile_t* tile);
 void tile_drive_p_set_mode(tile_t* tile, drive_p_mode_t mode);
 
 /**
- * @brief  Read the current return register value.
- * @studio expose category=tile name=read returns=int section=runtime
+ * @brief  Raw return register (low-level): for the piezo sense voltage use read_sense() instead.
+ * @studio expose category=tile name=read returns=int section=advanced
  *
- * @return 16-bit value from the currently selected return register
+ * Returns the 16-bit word of whichever register the chip currently returns,
+ * undecoded: for the sense register that is a 12-bit value plus 4 other bits on
+ * top, so it jumps by thousands as those bits change (28600 / 24000 on the bench,
+ * 2026-10-17). read_sense() and read_status() select their register and decode it.
+ *
+ * @return Raw 16-bit word from the currently selected return register
  */
 uint16_t tile_drive_p_read(tile_t* tile);
 
 /**
- * @brief  Read the sensed piezo voltage.
+ * @brief  Read the sensed piezo voltage: signed, 7.6 mV a step in SENSE_FINE (54.5 mV in SENSE_COARSE).
  * @studio expose category=tile name=read_sense returns=int section=runtime
  *
- * Must be in SENSE_FINE or SENSE_COARSE mode.
+ * Must be in SENSE_FINE or SENSE_COARSE mode. Selects the sense register,
+ * keeps its 12 data bits and sign-extends them, so a press reads as a change
+ * of a few to a few hundred steps, not a jump by thousands (see read()).
  *
- * @return Signed 16-bit sense value (−2048 to +2047)
+ * @return Signed sense value, −2048 to +2047 steps
  */
 int16_t tile_drive_p_read_sense(tile_t* tile);
 
