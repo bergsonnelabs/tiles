@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@20ee3f3",
+  "source": "tiles@e539b7b",
   "tile": "Drive.P",
   "palette": {
     "label": "Drive.P",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_drive_p",
     "header": "tile_drive_p.h",
-    "version": "3.6.2"
+    "version": "3.6.3"
   },
   "handle": {
     "type": "tile_t",
@@ -75,7 +75,7 @@
       "symbol": "tile_drive_p_read",
       "header": "tile_drive_p.h",
       "category": "tile",
-      "description": "Read the current return register value.",
+      "description": "Raw return register (low-level): for the piezo sense voltage use read_sense() instead.",
       "params": [],
       "returns": "uint16_t",
       "dsl_returns": "int",
@@ -89,7 +89,7 @@
       "symbol": "tile_drive_p_read_sense",
       "header": "tile_drive_p.h",
       "category": "tile",
-      "description": "Read the sensed piezo voltage.",
+      "description": "Read the sensed piezo voltage: signed, 7.6 mV a step in SENSE_FINE (54.5 mV in SENSE_COARSE).",
       "params": [],
       "returns": "int16_t",
       "dsl_returns": "int",
