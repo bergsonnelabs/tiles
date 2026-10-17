@@ -107,6 +107,8 @@ const num = (args: number[], i: number, dflt: number) =>
 const u8 = (args: number[], i: number) => num(args, i, 0) & 0xff;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+// set_current()'s ceiling (driver LP5811_DC_MAX, v2.6.0).
+const DC_MAX = 10;
 const fullScaleMa = (s: State) => (s.max_current_mode === 1 ? 51 : 25.5);
 const autoOn = (s: State, ch: Ch) =>
   (ch === 'r' ? s.auto_r : ch === 'g' ? s.auto_g : ch === 'b' ? s.auto_b : s.auto_w) === 1;
@@ -300,12 +302,13 @@ const sim: TileSim<State> = {
       nextState: { r: u8(args, 0), g: u8(args, 1), b: u8(args, 2), w: 0, ...cancelHelper },
     }),
     tile_display_rgbw_off: () => ({ nextState: { r: 0, g: 0, b: 0, w: 0, ...cancelHelper } }),
+    // The driver clamps every channel at LP5811_DC_MAX (code 10, ~2 mA at 51 mA).
     tile_display_rgbw_set_current: ({ args }) => ({
       nextState: {
-        r_curr: u8(args, 0),
-        g_curr: u8(args, 1),
-        b_curr: u8(args, 2),
-        w_curr: u8(args, 3),
+        r_curr: Math.min(u8(args, 0), DC_MAX),
+        g_curr: Math.min(u8(args, 1), DC_MAX),
+        b_curr: Math.min(u8(args, 2), DC_MAX),
+        w_curr: Math.min(u8(args, 3), DC_MAX),
       },
     }),
     tile_display_rgbw_set_max_current: ({ args }) => ({

@@ -1,9 +1,9 @@
 {
   "schema": "tile-docs/v1",
-  "source": "tiles@20ee3f3",
+  "source": "tiles@b483c60",
   "file": "tile_display_rgbw.h",
   "brief": "RGBW LED driver for the Display.RGBW tile (LP5811).",
-  "description": "@version 2.5.1\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives\nwhite and OUT3 (ball D2) blue (tile schematic; confirmed on the board\n2026-09-24). Before 2.5.0 the driver had blue and white swapped.\n\n\nVersion history:\n  v2.5.1 — breathe_auto() honors `repeats`: it set the AEU's own playback\n           to 3, which is infinite, so the pattern count never completed\n           and every breathe ran forever. It now plays `repeats` breaths\n           (15 = forever). Not bench-verified.\n  v2.5.0 — Blue and white were swapped (OUT1 drives white, OUT3 blue,\n           confirmed on the board 2026-09-24). init() also sets the\n           Auto_DC registers, which reset to 0, so AEU animations\n           (breathe_auto etc.) no longer run dark.\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
+  "description": "@version 2.6.0\n\n4-channel LED driver with independent PWM + current control.\nChannels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives\nwhite and OUT3 (ball D2) blue (tile schematic; confirmed on the board\n2026-09-24). Before 2.5.0 the driver had blue and white swapped.\n\n\nVersion history:\n  v2.6.0 — set_current() caps every channel at LP5811_DC_MAX (code 10,\n           ~2 mA at the 51 mA scale). A program asking for full current\n           (code 255, ~51 mA a channel) pulled a Power.L.1T rail down\n           and reset the Core (2026-10-17). ~1 mA is already bright and\n           ~2 mA very bright, so nothing needs more; the docs now say\n           to start small.\n  v2.5.1 — breathe_auto() honors `repeats`: it set the AEU's own playback\n           to 3, which is infinite, so the pattern count never completed\n           and every breathe ran forever. It now plays `repeats` breaths\n           (15 = forever). Not bench-verified.\n  v2.5.0 — Blue and white were swapped (OUT1 drives white, OUT3 blue,\n           confirmed on the board 2026-09-24). init() also sets the\n           Auto_DC registers, which reset to 0, so AEU animations\n           (breathe_auto etc.) no longer run dark.\n  v2.4.1 — Documentation only, no behavior change. init()'s own doc\n           block still claimed \"current limits to 50%\" after v2.4.0\n           changed it to ~1 mA; @version had been stale at 2.1.0\n           since v2.2.0, and the generator emits it as the docs\n           page's first line; and the eight-address note added in\n           v2.4.0 sat in the file blurb, which the docs site does\n           not render, so it reached no reader. Moved to find().\n  v2.4.0 — Safe-by-default drive. init() now leaves the per-channel\n           current limit at LP5811_DC_DEFAULT (~1 mA at full PWM)\n           instead of 0x80 (~25.6 mA). The old default was both\n           painful to look at on a bare, undiffused LED and roughly\n           2x above the level at which an abrupt switch-on browns\n           out a bench fixture. Raise it with set_current() when you\n           actually want the light. Also documents the PWM > 25\n           precondition on LOD/LSD, and corrects the multi-address\n           note below (page bits vs variant bits).\n  v2.3.0 — init() ramps the boost 3.0 -> 4.5 V in 0.1 V committed\n           steps instead of one slam. The single-step commit's\n           inrush can brown-out a marginal supply (long leads,\n           loaded USB rail) and reset the host MCU.\n  v2.1.0 — Tier-2 idiomatic helpers (set_color, pulse, breathe,\n           flash, is_faulted) + section= tagging for Coverage Table.\n  v2.0.0 — Initial tier-1 surface (set, off, current, faults).\n\n@studio tile label=Display.RGBW icon=◑\n\nDriver gaps (chip capabilities not exposed by this driver):\n\n@studio unsupported severity=niche category=\"Multi-address support (0x50/0x54/0x58/0x5C)\"\n  Chip-gated. Per datasheet Table 7-4, Address Byte 1 carries the\n  chip address AND the top two bits of the 10-bit register address,\n  so the 7-bit address a bus scan sees is:\n\n    independent:  1 0 1 Bit4 Bit3 RA9 RA8\n    broadcast:    1 1 0  1    1   RA9 RA8\n\n  Bit4:Bit3 select the material variant (LP5811A/B/C/D, datasheet\n  §4 Device Comparison) and move the base address in steps of 4:\n  A = 0x50, then 0x54, 0x58, 0x5C. RA9:RA8 are the REGISTER PAGE,\n  which is why one A-variant part answers across 0x50-0x53 — that\n  is the mechanism lp_read_page() relies on, not four devices.\n  (An earlier version of this note claimed the variants sat at\n  0x50/0x51/0x52/0x53. They do not; that range is one chip's four\n  pages, and a second part placed at 0x51 would collide with it.)\n\n  The variant bits are fixed at the factory — not pin-strapped or\n  register-configurable — and Display.RGBW (rev a) ships only the\n  A variant, so alternate addresses need a tile hardware revision.",
   "code_examples": [
     {
       "label": "Quick start",
@@ -27,13 +27,13 @@
     },
     {
       "name": "TILE_DISP_RGBW_VERSION_MINOR",
-      "value": "5",
+      "value": "6",
       "description": "",
       "section": ""
     },
     {
       "name": "TILE_DISP_RGBW_VERSION_PATCH",
-      "value": "1",
+      "value": "0",
       "description": "",
       "section": ""
     },
@@ -70,6 +70,12 @@
     {
       "name": "LP5811_DC_DEFAULT",
       "value": "0x05",
+      "description": "",
+      "section": ""
+    },
+    {
+      "name": "LP5811_DC_MAX",
+      "value": "0x0A",
       "description": "",
       "section": ""
     },
@@ -267,19 +273,19 @@
       "params": [
         {
           "name": "r",
-          "description": "[0..255] Red current (fraction of full-scale max)."
+          "description": "[0..10] Red current code (fraction of full scale; above 10 is clamped)."
         },
         {
           "name": "g",
-          "description": "[0..255] Green current."
+          "description": "[0..10] Green current code."
         },
         {
           "name": "b",
-          "description": "[0..255] Blue current."
+          "description": "[0..10] Blue current code."
         },
         {
           "name": "w",
-          "description": "[0..255] White current."
+          "description": "[0..10] White current code."
         }
       ],
       "notes": [
@@ -287,8 +293,8 @@
       ],
       "studio_exposed": true,
       "studio_section": "runtime",
-      "brief": "Set per-channel current limit.",
-      "description": "Peak sink current = full_scale * code / 255 (datasheet Eq. 4), where\nfull_scale is 51 mA after init (see set_max_current()). The same code\nis written to Manual_DC (manual mode) and Auto_DC (autonomous\nanimation mode, registers 0x50-0x53, reset 0), so animations run at\nthe same current as set() / set_color().",
+      "brief": "Set per-channel current limit. Start small: code 5 (~1 mA, the init default) is bright, code 10 (~2 mA) is the most it takes.",
+      "description": "Brightness is mostly set with set() / set_color() (PWM); the current\nlimit only needs changing to dim further. Codes above LP5811_DC_MAX (10)\nare clamped to it: full current (code 255, ~51 mA a channel) pulls the\nsupply rail down and resets the Core.\n\nPeak sink current = full_scale * code / 255 (datasheet Eq. 4), where\nfull_scale is 51 mA after init (see set_max_current()). The same code\nis written to Manual_DC (manual mode) and Auto_DC (autonomous\nanimation mode, registers 0x50-0x53, reset 0), so animations run at\nthe same current as set() / set_color().",
       "name": "tile_display_rgbw_set_current"
     },
     {
@@ -734,7 +740,7 @@
     }
   ],
   "source_file": "tile_display_rgbw.h",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "tile_family": "Display",
   "tile_name": "RGBW",
   "display_name": "Display.RGBW",
@@ -748,7 +754,7 @@
       "kind": "number",
       "range": [
         0,
-        255
+        10
       ],
       "default": 5,
       "computed_unit": "mA"
@@ -762,7 +768,7 @@
       "kind": "number",
       "range": [
         0,
-        255
+        10
       ],
       "default": 5,
       "computed_unit": "mA"
@@ -776,7 +782,7 @@
       "kind": "number",
       "range": [
         0,
-        255
+        10
       ],
       "default": 5,
       "computed_unit": "mA"
@@ -790,7 +796,7 @@
       "kind": "number",
       "range": [
         0,
-        255
+        10
       ],
       "default": 5,
       "computed_unit": "mA"
@@ -845,19 +851,19 @@
   "vibe_rules": [
     {
       "function": "set_current",
-      "message": "Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+      "message": "Red is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
     },
     {
       "function": "set_current",
-      "message": "Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+      "message": "Green is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
     },
     {
       "function": "set_current",
-      "message": "Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+      "message": "Blue is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
     },
     {
       "function": "set_current",
-      "message": "White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+      "message": "White is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
     }
   ]
 }

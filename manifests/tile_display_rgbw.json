@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@20ee3f3",
+  "source": "tiles@b483c60",
   "tile": "Display.RGBW",
   "palette": {
     "label": "Display.RGBW",
@@ -9,7 +9,7 @@
   "driver": {
     "prefix": "tile_display_rgbw",
     "header": "tile_display_rgbw.h",
-    "version": "2.5.1"
+    "version": "2.6.0"
   },
   "handle": {
     "type": "tile_t",
@@ -89,43 +89,43 @@
       "symbol": "tile_display_rgbw_set_current",
       "header": "tile_display_rgbw.h",
       "category": "tile",
-      "description": "Set per-channel current limit.",
+      "description": "Set per-channel current limit. Start small: code 5 (~1 mA, the init default) is bright, code 10 (~2 mA) is the most it takes.",
       "params": [
         {
           "name": "r",
           "type": "int",
           "range": [
             0,
-            255
+            10
           ],
-          "description": "Red current (fraction of full-scale max)."
+          "description": "Red current code (fraction of full scale; above 10 is clamped)."
         },
         {
           "name": "g",
           "type": "int",
           "range": [
             0,
-            255
+            10
           ],
-          "description": "Green current."
+          "description": "Green current code."
         },
         {
           "name": "b",
           "type": "int",
           "range": [
             0,
-            255
+            10
           ],
-          "description": "Blue current."
+          "description": "Blue current code."
         },
         {
           "name": "w",
           "type": "int",
           "range": [
             0,
-            255
+            10
           ],
-          "description": "White current."
+          "description": "White current code."
         }
       ],
       "returns": "void",
@@ -266,11 +266,11 @@
                 ]
               },
               {
-                "num": 5
+                "num": 2
               }
             ]
           },
-          "message": "Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+          "message": "Red is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
         },
         {
           "expr": {
@@ -296,11 +296,11 @@
                 ]
               },
               {
-                "num": 5
+                "num": 2
               }
             ]
           },
-          "message": "Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+          "message": "Green is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
         },
         {
           "expr": {
@@ -326,11 +326,11 @@
                 ]
               },
               {
-                "num": 5
+                "num": 2
               }
             ]
           },
-          "message": "Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+          "message": "Blue is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
         },
         {
           "expr": {
@@ -356,11 +356,11 @@
                 ]
               },
               {
-                "num": 5
+                "num": 2
               }
             ]
           },
-          "message": "White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
+          "message": "White is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
         }
       ]
     },

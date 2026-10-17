@@ -169,6 +169,12 @@ void tile_display_rgbw_off(tile_t *tile)
 
 void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 {
+    /* Never above ~2 mA a channel: more pulls the supply rail down (see
+     * LP5811_DC_MAX). */
+    if (r > LP5811_DC_MAX) r = LP5811_DC_MAX;
+    if (g > LP5811_DC_MAX) g = LP5811_DC_MAX;
+    if (b > LP5811_DC_MAX) b = LP5811_DC_MAX;
+    if (w > LP5811_DC_MAX) w = LP5811_DC_MAX;
     lp_write(tile, LP5811_REG_DC_0, r);
     lp_write(tile, LP5811_REG_DC_1, w);
     lp_write(tile, LP5811_REG_DC_2, g);

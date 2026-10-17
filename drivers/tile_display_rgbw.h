@@ -1,7 +1,7 @@
 /**
  * @file   tile_display_rgbw.h
  * @brief  RGBW LED driver for the Display.RGBW tile (LP5811).
- * @version 2.5.1
+ * @version 2.6.0
  *
  * 4-channel LED driver with independent PWM + current control.
  * Channels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives
@@ -18,6 +18,12 @@
  * @endcode
  *
  * Version history:
+ *   v2.6.0 — set_current() caps every channel at LP5811_DC_MAX (code 10,
+ *            ~2 mA at the 51 mA scale). A program asking for full current
+ *            (code 255, ~51 mA a channel) pulled a Power.L.1T rail down
+ *            and reset the Core (2026-10-17). ~1 mA is already bright and
+ *            ~2 mA very bright, so nothing needs more; the docs now say
+ *            to start small.
  *   v2.5.1 — breathe_auto() honors `repeats`: it set the AEU's own playback
  *            to 3, which is infinite, so the pattern count never completed
  *            and every breathe ran forever. It now plays `repeats` breaths
@@ -86,8 +92,8 @@
 /* ---- Driver version ---- */
 
 #define TILE_DISP_RGBW_VERSION_MAJOR  2
-#define TILE_DISP_RGBW_VERSION_MINOR  5
-#define TILE_DISP_RGBW_VERSION_PATCH  1
+#define TILE_DISP_RGBW_VERSION_MINOR  6
+#define TILE_DISP_RGBW_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
 
@@ -186,6 +192,15 @@ TILES_CHECK_VERSION(1, 0);
  * driving hard AND switching on abruptly is what actually bites.
  */
 #define LP5811_DC_DEFAULT            0x05u
+
+/**
+ * The highest per-channel DC code set_current() writes: ~2 mA at the 51 mA
+ * full scale (~1 mA at 25.5 mA), and ~8 mA with all four channels on. That
+ * stays under the ~9.6 mA the bench survived an abrupt switch-on at (see
+ * LP5811_DC_DEFAULT), and ~2 mA already reads as very bright. Codes above
+ * it are clamped, so no program can brown the rail out through this call.
+ */
+#define LP5811_DC_MAX                0x0Au
 
 /**
  * Minimum PWM at which the chip will perform open/short detection.
@@ -342,7 +357,12 @@ void tile_display_rgbw_set(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_
 void tile_display_rgbw_off(tile_t *tile);
 
 /**
- * @brief Set per-channel current limit.
+ * @brief Set per-channel current limit. Start small: code 5 (~1 mA, the init default) is bright, code 10 (~2 mA) is the most it takes.
+ *
+ * Brightness is mostly set with set() / set_color() (PWM); the current
+ * limit only needs changing to dim further. Codes above LP5811_DC_MAX (10)
+ * are clamped to it: full current (code 255, ~51 mA a channel) pulls the
+ * supply rail down and resets the Core.
  *
  * Peak sink current = full_scale * code / 255 (datasheet Eq. 4), where
  * full_scale is 51 mA after init (see set_max_current()). The same code
@@ -361,14 +381,14 @@ void tile_display_rgbw_off(tile_t *tile);
  * @studio control g label="Green current" tier=basic default=5 show="g * value(set_max_current.mode) / 255" unit=mA
  * @studio control b label="Blue current" tier=basic default=5 show="b * value(set_max_current.mode) / 255" unit=mA
  * @studio control w label="White current" tier=basic default=5 show="w * value(set_max_current.mode) / 255" unit=mA
- * @studio require expr="r * value(set_max_current.mode) / 255 <= 5" message="Red is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
- * @studio require expr="g * value(set_max_current.mode) / 255 <= 5" message="Green is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
- * @studio require expr="b * value(set_max_current.mode) / 255 <= 5" message="Blue is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
- * @studio require expr="w * value(set_max_current.mode) / 255 <= 5" message="White is set above 5 mA, the on-tile LED's continuous rating. Keep it at or below 5 mA, or lower the full-scale current."
- * @param r [0..255] Red current (fraction of full-scale max).
- * @param g [0..255] Green current.
- * @param b [0..255] Blue current.
- * @param w [0..255] White current.
+ * @studio require expr="r * value(set_max_current.mode) / 255 <= 2" message="Red is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
+ * @studio require expr="g * value(set_max_current.mode) / 255 <= 2" message="Green is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
+ * @studio require expr="b * value(set_max_current.mode) / 255 <= 2" message="Blue is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
+ * @studio require expr="w * value(set_max_current.mode) / 255 <= 2" message="White is set above 2 mA. The driver caps each channel at 2 mA (code 10): ~1 mA is already bright, and more pulls the supply rail down."
+ * @param r [0..10] Red current code (fraction of full scale; above 10 is clamped).
+ * @param g [0..10] Green current code.
+ * @param b [0..10] Blue current code.
+ * @param w [0..10] White current code.
  */
 void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w);
 
