@@ -701,6 +701,7 @@ Studio do.
 |----------------|----------------------------|---------|
 | `target_power` | `off` `5v`                 | What the probe puts on T.V+. Default `off`. Current boards supply only 5 V (see below). |
 | `target_logic` | —                          | **Ignored.** The logic level is sensed, not declared. Older projects may still carry it; the tooling says so and it is safe to delete. |
+| `charger_input` | `true` `false`            | The probe's 5 V feeds a battery charger's input (a Power.L.1T SUPPLY+), not a logic rail. Default `false`. With it, a board that senses as self-powered (running from its cell) is still fed 5 V; without it the tooling supplies nothing to a powered board, and a battery-backed bench runs its cell flat (2026-10-11). Only with `target_power` `5v`. |
 
 **Why the supply is declared.** Supplying the wrong voltage is destructive, and
 nothing the probe can measure on an unpowered board tells it what that board

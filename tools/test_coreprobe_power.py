@@ -42,6 +42,23 @@ class TestDecide(unittest.TestCase):
         self.assertEqual(decide(3295, "5v"), (None, "3v3"))
         self.assertEqual(decide(1791, "5v"), (None, "1v8"))
 
+    def test_charger_input_feeds_a_battery_backed_board(self):
+        # Power.L.1T + LiPo: the board senses as self-powered, but the 5 V goes
+        # into the charger, so with the opt-in it is supplied anyway.
+        self.assertEqual(decide(1791, "5v", charger_input=True), ("5v", "1v8"))
+        self.assertEqual(decide(3295, "5v", charger_input=True), ("5v", "3v3"))
+
+    def test_charger_input_needs_five_volts_declared(self):
+        self.assertEqual(decide(1791, None, charger_input=True), (None, "1v8"))
+        self.assertEqual(decide(1791, "off", charger_input=True), (None, "1v8"))
+
+    def test_charger_input_still_refuses_an_anomalous_rail(self):
+        with self.assertRaises(PowerError):
+            decide(2500, "5v", charger_input=True)
+
+    def test_charger_input_on_an_unpowered_board_is_the_plain_supply(self):
+        self.assertEqual(decide(8, "5v", charger_input=True), ("5v", None))
+
     def test_self_powered_level_comes_from_the_sense(self):
         self.assertEqual(decide(3295, None), (None, "3v3"))
 
@@ -104,7 +121,7 @@ class TestAvailableSupplies(unittest.TestCase):
 class TestReadDeclaration(unittest.TestCase):
     def test_missing_file_reads_as_undeclared(self):
         # A project with no config.json is self-powered by default, not an error.
-        self.assertEqual(read_declaration("/nonexistent/config.json"), (None, None))
+        self.assertEqual(read_declaration("/nonexistent/config.json"), (None, None, False))
 
     def test_absent_block_reads_as_undeclared(self):
         import json
@@ -113,7 +130,7 @@ class TestReadDeclaration(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump({"core": "Core.ST.W5"}, f)
             path = f.name
-        self.assertEqual(read_declaration(path), (None, None))
+        self.assertEqual(read_declaration(path), (None, None, False))
 
     def test_block_is_read_back(self):
         # target_logic is still read, so a stale one can be reported.
@@ -123,7 +140,7 @@ class TestReadDeclaration(unittest.TestCase):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump({"probe": {"target_power": "5v", "target_logic": "1v8"}}, f)
             path = f.name
-        self.assertEqual(read_declaration(path), ("5v", "1v8"))
+        self.assertEqual(read_declaration(path), ("5v", "1v8", False))
 
 
 if __name__ == "__main__":
