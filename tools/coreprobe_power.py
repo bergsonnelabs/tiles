@@ -7,6 +7,7 @@ what, is declared by the project in config.json; it is never guessed, because a
 board that already has a rail must never be fed:
 
     "probe": { "target_power": "5v" }
+  "probe": { "target_power": "5v", "charger_input": true }   # 5 V feeds a charger
 
 `target_power: "off"` (or an absent block) means self-powered: the probe
 supplies nothing. That is the default, and what every project that never
@@ -113,7 +114,7 @@ class PowerError(Exception):
     """A refusal the operator has to resolve — never worked around silently."""
 
 
-def decide(sensed_mv, declared_power):
+def decide(sensed_mv, declared_power, charger_input=False):
     """What to do, given what we sensed and what the project declared.
 
     Pure, so the rules can be tested without a probe attached. Returns
@@ -122,6 +123,19 @@ def decide(sensed_mv, declared_power):
     supply it, because a board's logic level can only be read once it is up.
     """
     cls = classify(sensed_mv)
+
+    if cls != "absent" and charger_input and declared_power == "5v":
+        # The 5 V goes into a battery charger's input (Power.L.1T SUPPLY+),
+        # which is safe to feed while the board runs from its cell. Without
+        # the opt-in a battery-backed board would sense as self-powered, the
+        # probe would supply nothing, and the cell would run flat mid-session
+        # (2026-10-11). The logic level is already readable.
+        if cls == "anomalous":
+            raise PowerError(
+                f"Target VIO reads {sensed_mv} mV, which is neither 1V8 nor 3V3; "
+                "refusing to feed the charger input until the target's rail makes sense."
+            )
+        return "5v", cls
 
     if cls != "absent":
         # Self-powered. Never feed a board that already has a rail; the
@@ -154,15 +168,17 @@ def decide(sensed_mv, declared_power):
 def read_declaration(config_path):
     """The `probe` block from config.json, or empty when there is none.
 
-    Returns (target_power, target_logic). `target_logic` is read only so a
-    stale one can be reported; it no longer affects anything.
+    Returns (target_power, target_logic, charger_input). `target_logic` is
+    read only so a stale one can be reported; it no longer affects anything.
+    `charger_input` (bool, default False) says the probe's 5 V feeds a battery
+    charger's input, so a board running from its cell may still be supplied.
     """
     if not config_path or not os.path.isfile(config_path):
-        return None, None
+        return None, None, False
     with open(config_path, encoding="utf-8") as f:
         cfg = json.load(f)
     probe = cfg.get("probe") or {}
-    return probe.get("target_power"), probe.get("target_logic")
+    return probe.get("target_power"), probe.get("target_logic"), bool(probe.get("charger_input", False))
 
 
 # ---------- probe transport ----------
@@ -248,7 +264,7 @@ def main():
                 )
             return 0
 
-        power, logic = read_declaration(args.config)
+        power, logic, charger_input = read_declaration(args.config)
         if logic:
             print(
                 f"note: probe.target_logic ({logic}) is ignored. The logic level is "
@@ -264,10 +280,21 @@ def main():
 
         mv = sense_mv(dev)
         try:
-            supply, level = decide(mv, power)
+            supply, level = decide(mv, power, charger_input)
         except PowerError as e:
             print(f"\n{e}\n", file=sys.stderr)
             return 1
+
+        if supply is not None and level is not None:
+            print(f"target runs from its own cell ({mv} mV, {level}); feeding its charger input {supply}")
+            if not args.dry_run:
+                set_vpad(dev, supply)
+                time.sleep(0.3)
+                sel = restore_auto(dev)
+                print(f"level shifter left to the probe ({VSHIFT_NAMES.get(sel, sel)})")
+            else:
+                print("(dry run: nothing driven)")
+            return 0
 
         if supply is None:
             print(f"target is self-powered ({mv} mV, {level}); supplying nothing")
