@@ -68,6 +68,99 @@ volatile uint32_t local_basepri_value = 0;
 uint8_t AHB5_SwitchedOff = 0;
 uint32_t radio_sleep_timer_val = 0;
 
+/* Statistics for the radio-bus guards below (initialized, so .data / SRAM1:
+ * readable over SWD while the Core sleeps in the BLE idle loop). */
+volatile wpan_busclk_stats_t g_wpan_busclk_stats = { .magic = 0x42554C4Bu };
+
+#define BUSCLK_WAIT_BOUND  2000000u   /* loops; far beyond the ~1.6 ms resync seen 2026-09-25 */
+
+/* Spin until the radio sleep timer has moved twice from `from`: the first
+ * change can be the frozen value giving way to the live one, the second
+ * proves the timer is ticking (one tick is ~32 us at HSE/1000). Bounded, and
+ * counted, so a dead bus shows up in the statistics instead of hanging here. */
+static void _busclk_wait_ticking(uint32_t from, volatile uint32_t *loops_max,
+                                 volatile uint32_t *timeouts)
+{
+    uint32_t loops = 0, v = from;
+    for (int ticks = 0; ticks < 2; ticks++) {
+        uint32_t ref = v;
+        do {
+            v = ll_intf_cmn_get_slptmr_value();
+            loops++;
+        } while (v == ref && loops < BUSCLK_WAIT_BOUND);
+        if (loops >= BUSCLK_WAIT_BOUND) { (*timeouts)++; break; }
+    }
+    if (loops > *loops_max) *loops_max = loops;
+}
+
+/* Low-priority radio ISR entry and exit: the guard against the link layer's
+ * RCO-compensation assert.
+ *
+ * llhwc_cmn_hw_rco_compnstn_enable (LinkLayer_BLE_Basic_lib.a, llhwc_cmn.o,
+ * run from llhwc_cmn_rco_isr in the low ISR) reads the sleep timer at
+ * 0x48020014 directly, without the bus-ready hook the rest of the library
+ * uses, and asserts that it is strictly past g_rco_compnstn_enable_time_ref,
+ * the value it stored at a tick edge when it last enabled the timer's
+ * hardware compensation. With that compensation on, the counter is not
+ * monotonic from one read to the next: on the bench (Core.ST.W5, HSE/1000
+ * sleep clock, 2026-10-20) it read 0 to 2 ticks below the reference a few
+ * microseconds after reading above it, and the assert, an infinite loop in
+ * ll_sys_assert, showed up as watchdog resets after 1 to 107 minutes of
+ * advertising. So before the link layer runs here: the timer must move (live
+ * bus), be past the tick the previous low ISR exited in, and be at least
+ * LOWISR_REF_MARGIN_TICKS past the reference. Cost: a few poll loops as a
+ * rule, up to ~250 us when the margin wait engages (about every 3 minutes
+ * while advertising, counted in low_isr_behind_ref). Bench: no hang in 6 h 43
+ * min advertising and 2 h 10 min streaming with the guard, against hangs at
+ * 24, 6, 107, 8, 58, 1 and 29 minutes without it. Evidence and register
+ * values: portal page "KINETIK", bench log of 20 October 2026. */
+static uint32_t s_low_isr_exit_tick = 0xFFFFFFFFu;
+
+/* The link layer's reference, exported by llhwc_cmn.o (64-bit, timer value in
+ * the low word). Read only. */
+extern volatile uint64_t g_rco_compnstn_enable_time_ref;
+
+#define LOWISR_REF_WAIT_BOUND  20000u   /* loops, ~10 ms: far past the ~1.6 ms resync */
+#define LOWISR_REF_MARGIN_TICKS 8        /* ~250 us at 32 kHz */
+
+void LINKLAYER_PLAT_LowIsrEnter(void)
+{
+    g_wpan_busclk_stats.low_isr++;
+    uint32_t loops = 0, v, v0 = ll_intf_cmn_get_slptmr_value();
+    do {                                   /* live bus: the timer moves */
+        v = ll_intf_cmn_get_slptmr_value();
+        loops++;
+    } while (v == v0 && loops < BUSCLK_WAIT_BOUND);
+    if (v == s_low_isr_exit_tick) {        /* same tick as the previous exit */
+        g_wpan_busclk_stats.low_isr_same_tick++;
+        while (v == s_low_isr_exit_tick && loops < BUSCLK_WAIT_BOUND) {
+            v = ll_intf_cmn_get_slptmr_value();
+            loops++;
+        }
+    }
+    if (loops >= BUSCLK_WAIT_BOUND) g_wpan_busclk_stats.low_isr_timeouts++;
+    if (loops > g_wpan_busclk_stats.low_isr_loops_max) g_wpan_busclk_stats.low_isr_loops_max = loops;
+
+    /* The precondition the RCO compensation asserts, with margin (wrap-safe
+     * on the low word). */
+    uint32_t ref = (uint32_t)g_rco_compnstn_enable_time_ref;
+    uint32_t rloops = 0;
+    if ((int32_t)(v - ref) < LOWISR_REF_MARGIN_TICKS) {
+        g_wpan_busclk_stats.low_isr_behind_ref++;
+        while ((int32_t)(v - ref) < LOWISR_REF_MARGIN_TICKS && rloops < LOWISR_REF_WAIT_BOUND) {
+            v = ll_intf_cmn_get_slptmr_value();
+            rloops++;
+        }
+        if (rloops >= LOWISR_REF_WAIT_BOUND) g_wpan_busclk_stats.low_isr_ref_timeouts++;
+        if (rloops > g_wpan_busclk_stats.low_isr_ref_loops_max) g_wpan_busclk_stats.low_isr_ref_loops_max = rloops;
+    }
+}
+
+void LINKLAYER_PLAT_LowIsrExit(void)
+{
+    s_low_isr_exit_tick = ll_intf_cmn_get_slptmr_value();
+}
+
 /* ---- CMSIS intrinsics ---- */
 static inline uint32_t _get_PRIMASK(void) {
     uint32_t r;
@@ -138,27 +231,32 @@ void LINKLAYER_PLAT_Assert(uint8_t condition)
 
 void LINKLAYER_PLAT_WaitHclkRdy(void)
 {
-    /* Wait for radio bus clock readiness if it was turned off during sleep */
+    /* Wait for radio bus clock readiness after a WFI: the sleep timer must
+     * tick, not merely differ from the value sampled at the wake. */
     if (AHB5_SwitchedOff == 1)
     {
         AHB5_SwitchedOff = 0;
-        /* Wait for sleep timer to tick — proves bus clock is back */
-        uint32_t timeout = 100000;
-        while (radio_sleep_timer_val == ll_intf_cmn_get_slptmr_value() && --timeout)
-            ;
+        g_wpan_busclk_stats.wait_calls++;
+        _busclk_wait_ticking(radio_sleep_timer_val, &g_wpan_busclk_stats.wait_loops_max,
+                             &g_wpan_busclk_stats.wait_timeouts);
     }
 }
 
 void LINKLAYER_PLAT_NotifyWFIEnter(void)
 {
-    /* Check if AHB5 clock will be cut during WFI:
-     * - Radio not in ACTIVE mode, OR
-     * - Neither RADIOSMEN nor STRADIOCLKON is set */
+    /* CubeWBA predicts whether AHB5 will be cut during WFI (radio not
+     * ACTIVE, or neither RADIOSMEN nor STRADIOCLKON set) and resyncs only
+     * then. The prediction is kept for the statistics, but every WFI is
+     * treated as a possible cut: the wake then always samples the sleep
+     * timer and waits for it to tick (at most ~64 us when the bus was never
+     * cut). Part of the RCO-compensation guard, see LINKLAYER_PLAT_LowIsrEnter. */
+    g_wpan_busclk_stats.wfi_enter++;
     if ((ll_pwr_get_radio_mode() != LL_PWR_RADIO_ACTIVE_MODE) ||
         ((_RCC_AHB5SMENR & LL_AHB5_RADIO) == 0 && (_RCC_RADIOENR & _RADIOENR_STRADIOCLKON) == 0))
     {
-        AHB5_SwitchedOff = 1;
+        g_wpan_busclk_stats.wfi_predicted_cut++;
     }
+    AHB5_SwitchedOff = 1;
 }
 
 void LINKLAYER_PLAT_NotifyWFIExit(void)

@@ -39,10 +39,17 @@ void RADIO_IRQHandler(void)
     __asm volatile ("isb 0xF" ::: "memory");
 }
 
+extern void LINKLAYER_PLAT_LowIsrEnter(void);    /* linklayer_plat.c */
+extern void LINKLAYER_PLAT_LowIsrExit(void);
+
 void HASH_IRQHandler(void)
 {
     /* Disable SW radio low interrupt to prevent nested calls */
     hal_nvic_disable_irq(RADIO_SW_LOW_INTR_NUM);
+
+    /* Guard against the link layer's RCO-compensation assert: a live bus,
+     * past the previous exit tick and the library's reference (linklayer_plat.c). */
+    LINKLAYER_PLAT_LowIsrEnter();
 
     if (low_isr_callback != NULL)
     {
@@ -55,6 +62,8 @@ void HASH_IRQHandler(void)
         hal_nvic_set_priority(RADIO_SW_LOW_INTR_NUM, RADIO_INTR_PRIO_LOW);
         radio_sw_low_isr_is_running_high_prio = 0;
     }
+
+    LINKLAYER_PLAT_LowIsrExit();
 
     /* Re-enable SW radio low interrupt */
     hal_nvic_enable_irq(RADIO_SW_LOW_INTR_NUM);
