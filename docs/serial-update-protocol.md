@@ -256,7 +256,12 @@ The flasher reads DEV_ID from `DBGMCU_IDCODE` at the software base 0x44024000
   bootloader (`make flash-dfu`, Studio's DFU path). Ship kits pre-flashed.
 - Not under the parked custom-bootloader layout (`APP_OFFSET`): the flasher
   writes from `0x08000000`.
-- `HAL_SERIAL_UPDATE_DISABLE` compiles it out.
+- `HAL_SERIAL_UPDATE_DISABLE` compiles it out. The CoreProbe is built this way
+  (`projects/CoreProbe/firmware/Makefile` sets it via `EXTRA_CFLAGS`): a probe is
+  a Core.ST.L4 sharing the USB vendor id, so without this a tool aimed at the
+  probe instead of its target makes the probe overwrite itself. A probe is
+  updated over DFU instead, and `flash-dfu` refuses one unless the caller passes
+  `COREPROBE_UPDATE=1`.
 - The trigger is any `SET_LINE_CODING` at 2400 baud. Something that opens the
   Core's port at 2400 by accident gets a 10 s pause and a reset into the same app.
 
