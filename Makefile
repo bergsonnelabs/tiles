@@ -1030,20 +1030,63 @@ endif
 
 # Canned recipe: the 1200-baud touch that reboots the Core into DFU. Shared by
 # both flash-dfu branches so the host-specific handling lives in one place.
+#
+# The firmware triggers on DTR *falling* while the line is at 1200 baud
+# (sdk/hal/hal_usb_cdc.c, the 1200-baud-touch check). So DTR has to be asserted
+# first and then dropped. `stty ... 1200 hupcl` only drops it at close and does
+# not reliably produce that edge — measured 2026-09-23 on a Core.ST.L4, where
+# stty left the board running normally and dfu-util then sat waiting. pyserial
+# drives the edge explicitly and entered DFU in about a second.
+
+# Wait for the ROM bootloader to show up, and say so plainly if it never does.
+# Without this, a touch that silently missed leaves dfu-util waiting, which
+# reads like a slow flash instead of a no-op.
+define DFU_WAIT
+@_n=0; \
+echo "  DFU   Waiting for DFU device..."; \
+while [ $$_n -lt 15 ]; do \
+	if dfu-util -l 2>/dev/null | grep -q "0483:df11"; then break; fi; \
+	sleep 1; _n=$$((_n+1)); \
+done; \
+if ! dfu-util -l 2>/dev/null | grep -q "0483:df11"; then \
+	echo "  DFU   No DFU device after 15 s — the board is not in the bootloader."; \
+	echo "  DFU   The touch needs DTR to fall while the port is at 1200 baud; the"; \
+	echo "  DFU   stty fallback often misses that edge."; \
+	echo "  DFU     pip install pyserial     (then retry)"; \
+	echo "  DFU     or enter DFU by hand: hold BOOT0 while plugging in USB"; \
+	exit 1; \
+fi
+endef
+
+# Pick the Core's port by USB identity, not by globbing /dev. A CoreProbe is a
+# Core.ST.L4 running probe firmware: same vendor id, its own CDC port, and it
+# matches the glob. A hackathon participant flashed a Core image onto one that
+# way (2026-10). Prints the port, or COREPROBE when the only match is a probe.
+CORE_PORT_PY = import sys; from serial.tools import list_ports; \
+c=[p for p in list_ports.comports() if p.vid==0x1209]; \
+pr=[p for p in c if p.pid==0xDA01 or (p.product or "").startswith("CoreProbe")]; \
+ok=[p for p in c if p not in pr]; \
+print(ok[0].device if len(ok)==1 else ("COREPROBE" if pr and not ok else ""))
+
+# The probe's own port, for a deliberate probe update (COREPROBE_UPDATE=1).
+PROBE_PORT_PY = import sys; from serial.tools import list_ports; \
+pr=[p for p in list_ports.comports() if p.vid==0x1209 \
+and (p.pid==0xDA01 or (p.product or "").startswith("CoreProbe"))]; \
+print(pr[0].device if len(pr)==1 else "")
+
+# Assert DTR, drop it, close — the edge the firmware watches for.
+DFU_TOUCH_PY = import serial,sys,time; p=serial.Serial(sys.argv[1],1200); p.dtr=True; time.sleep(0.25); p.dtr=False; time.sleep(0.25); p.close()
+
 ifeq ($(HOST_OS),windows)
 # Windows has no /dev entry for a USB-CDC port, so there is nothing to glob and
 # stty cannot address COM ports. Do the touch through pyserial when the user
-# names the port, and otherwise say plainly that this step is manual — the old
-# code globbed a macOS path, found nothing, said nothing, and left dfu-util to
-# fail with "No DFU capable USB device available".
+# names the port, and otherwise say plainly that this step is manual.
 define DFU_TOUCH
 @if [ -n "$(SERIAL_PORT)" ]; then \
 	echo "  DFU   Triggering reboot via 1200-baud touch on $(SERIAL_PORT)..."; \
-	$(PYTHON) -c "import serial,sys; p=serial.Serial(sys.argv[1],1200); p.setDTR(False); p.close()" "$(SERIAL_PORT)" \
+	$(PYTHON) -c "$(DFU_TOUCH_PY)" "$(SERIAL_PORT)" \
 		|| { echo "  DFU   Touch failed — it needs pyserial (pip install pyserial)"; \
 		     echo "  DFU   or the port name is wrong (Device Manager -> Ports (COM & LPT))."; }; \
-	echo "  DFU   Waiting for DFU device..."; \
-	sleep 4; \
 else \
 	echo "  DFU   Windows: no automatic 1200-baud touch — COM ports have no /dev entry."; \
 	echo "  DFU     name the port:  make flash-dfu SERIAL_PORT=COM5   (needs pyserial)"; \
@@ -1051,20 +1094,43 @@ else \
 	echo "  DFU   dfu-util on Windows also needs the WinUSB driver bound to the device"; \
 	echo "  DFU   (install it once with Zadig). 'make doctor' checks the rest."; \
 fi
+$(DFU_WAIT)
 endef
 else
 define DFU_TOUCH
 @TTY="$(SERIAL_PORT)"; \
-if [ -z "$$TTY" ]; then TTY=$$(ls $(SERIAL_GLOB) 2>/dev/null | head -1); fi; \
+if [ -z "$$TTY" ]; then TTY=$$($(PYTHON) -c '$(CORE_PORT_PY)' 2>/dev/null \
+	|| ls $(SERIAL_GLOB) 2>/dev/null | head -1); fi; \
+if [ "$$TTY" = "COREPROBE" ]; then \
+	if [ "$(COREPROBE_UPDATE)" = "1" ]; then \
+		TTY=$$($(PYTHON) -c '$(PROBE_PORT_PY)' 2>/dev/null); \
+		if [ -z "$$TTY" ]; then \
+			echo "  DFU   COREPROBE_UPDATE=1 but the probe's port could not be resolved"; \
+			echo "  DFU   (more than one probe attached? name it with SERIAL_PORT=)."; \
+			exit 1; \
+		fi; \
+		echo "  DFU   Updating the CoreProbe itself (COREPROBE_UPDATE=1)."; \
+	else \
+		echo "  DFU   The only Bergsonne board on USB is a CoreProbe, not a Core."; \
+		echo "  DFU   A CoreProbe is a Core.ST.L4 running probe firmware, so it shares the"; \
+		echo "  DFU   USB vendor id and looks like a Core here. Flashing this image onto it"; \
+		echo "  DFU   would replace the probe firmware."; \
+		echo "  DFU   If you meant to update the probe, build from"; \
+		echo "  DFU   projects/CoreProbe/firmware, whose Makefile passes COREPROBE_UPDATE=1."; \
+		exit 1; \
+	fi; \
+fi; \
 if [ -n "$$TTY" ]; then \
 	echo "  DFU   Triggering reboot via 1200-baud touch on $$TTY..."; \
-	stty $(STTY_DEV) "$$TTY" 1200 hupcl; \
-	echo "  DFU   Waiting for DFU device..."; \
-	sleep 4; \
+	$(PYTHON) -c "$(DFU_TOUCH_PY)" "$$TTY" 2>/dev/null \
+		|| { echo "  DFU   pyserial missing — falling back to stty, which often misses"; \
+		     echo "  DFU   the DTR edge. pip install pyserial if this does not work."; \
+		     stty $(STTY_DEV) "$$TTY" 1200 hupcl; }; \
 else \
-	echo "  DFU   No serial port matched $(SERIAL_GLOB) — assuming the Core is"; \
-	echo "  DFU   already in DFU mode. If it isn't, plug it in (or hold BOOT0)."; \
+	echo "  DFU   No serial port matched $(SERIAL_GLOB) — expecting the board to be"; \
+	echo "  DFU   in DFU already (a virgin board arrives that way)."; \
 fi
+$(DFU_WAIT)
 endef
 endif
 

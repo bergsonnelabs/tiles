@@ -43,6 +43,26 @@ RESET_REPLY = b"SU OK R"
 RESET_TIMEOUT = 2.0                   # no reply by then: firmware without the reset frame
 ERR_CRC = 7
 CORE_USB_VID = 0x1209
+
+# A CoreProbe is a Core.ST.L4 running probe firmware, so it shares the vendor
+# id and shows up as another USB serial port. Flashing a Core image onto one
+# replaces the probe firmware; it happened at a hackathon, 2026-10. The product
+# id is the only thing that separates them while the app is running.
+COREPROBE_USB_PID = 0xDA01
+
+
+def _is_coreprobe(p):
+    return p.pid == COREPROBE_USB_PID or (p.product or "").startswith("CoreProbe")
+
+
+def _refuse_coreprobe(devices):
+    raise UpdateError(
+        "that is a CoreProbe (" + ", ".join(devices) + "), not a Core.\n"
+        "A CoreProbe is a Core.ST.L4 running probe firmware and shares the USB\n"
+        "vendor id, so it looks like a Core here. Flashing a Core image onto it\n"
+        "would replace the probe firmware.\n"
+        "To update a probe, build and flash it from projects/CoreProbe/firmware."
+    )
 DEV_ID_L41X_L42X = 0x464
 DEV_ID_H523_H533 = 0x478
 NVM_RESERVED = 4096                   # SU_NVM_RESERVED: what a v1 (L4) flasher keeps at the top
@@ -237,12 +257,24 @@ def wait_for_port(port: str, timeout: float = 6.0):
 
 def find_core_port():
     from serial.tools import list_ports
-    ports = [p for p in list_ports.comports() if p.vid == CORE_USB_VID]
+    candidates = [p for p in list_ports.comports() if p.vid == CORE_USB_VID]
+    probes = [p for p in candidates if _is_coreprobe(p)]
+    ports = [p for p in candidates if not _is_coreprobe(p)]
     if len(ports) == 1:
         return ports[0].device
     if not ports:
+        if probes:
+            _refuse_coreprobe([p.device for p in probes])
         raise UpdateError("no Core found on USB (VID 0x1209) — is it plugged in and running?")
     raise UpdateError("more than one Core: pick one with --port " + " / ".join(p.device for p in ports))
+
+
+def check_port_is_not_a_probe(device):
+    """Guard an explicitly named --port too, not just the auto-picked one."""
+    from serial.tools import list_ports
+    for p in list_ports.comports():
+        if p.device == device and _is_coreprobe(p):
+            _refuse_coreprobe([device])
 
 
 def main() -> int:
@@ -292,6 +324,8 @@ def main() -> int:
         return 1
     try:
         port = args.port or find_core_port()
+        if args.port:
+            check_port_is_not_a_probe(port)
         print(f"{port}: handing the Core to its flasher…")
         with serial.Serial(port, TRIGGER_BAUD, timeout=0.05) as ser:
             update(SerialLink(ser), image, dev_id,
