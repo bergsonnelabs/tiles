@@ -34,14 +34,15 @@
 #define CORE_TILES_H
 
 #include "core_i2c.h"
+#include "core_caps.h"
 /* SPI is unavailable on Core.ST.L0 (STM32L011) — core_spi.h #errors there.
  * Guard all SPI bridging below so I2C-only tile projects still build on L0. */
-#if !defined(STM32L011xx)
+#if CORE_HAS_SPI
 #define _CORE_TILES_HAS_SPI 1
 #include "core_spi.h"
 #endif
 /* I3C exists only on the H523 (Core.ST.H5). */
-#if defined(STM32H523xx)
+#if CORE_HAS_I3C
 #define _CORE_TILES_HAS_I3C 1
 #include "core_i3c.h"
 #endif

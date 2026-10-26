@@ -34,7 +34,9 @@
 #ifndef CORE_USB_HID_H
 #define CORE_USB_HID_H
 
-#if !defined(STM32L422xx) && !defined(STM32H523xx)
+#include "core_caps.h"
+
+#if !CORE_HAS_USB
 #error "core_usb_hid.h: USB HID is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
 #endif
 

@@ -159,7 +159,7 @@ static inline void core_timer_pwm_set(core_timer_t *h, uint8_t channel,
 
 #if __has_include("core_pads.h")
 #include "core_pads.h"
-#ifdef CORE_HAS_TIMER_PADS
+#ifdef CORE_USES_TIMER_PADS
 /**
  * Set PWM duty cycle by pad number (requires coregen: only defined when the
  * project's config.json binds a timer to a pad). Resolves the channel from

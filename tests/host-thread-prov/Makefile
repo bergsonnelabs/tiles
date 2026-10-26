@@ -7,7 +7,7 @@
 CC     ?= cc
 ROOT   := $(abspath ../..)
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -Wshadow -Wconversion \
-          -DSTM32WBA55xx -I$(ROOT)/sdk/core -I$(ROOT)/sdk/thread/include
+          -DSTM32WBA55xx -I$(ROOT)/sdk/core -I$(ROOT)/sdk/port/stm32/core -I$(ROOT)/sdk/thread/include
 SRCS   := prov_test.c $(ROOT)/sdk/thread/thread_prov_codec.c
 DEPS   := $(SRCS) $(ROOT)/sdk/thread/include/thread_prov.h $(ROOT)/sdk/core/core_thread.h
 

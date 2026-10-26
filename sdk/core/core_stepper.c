@@ -346,7 +346,7 @@ static hal_status_t _init_common(core_stepper_t *h, TIM_TypeDef *instance, uint8
 
 hal_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad)
 {
-#ifdef CORE_HAS_TIMER_PADS
+#ifdef CORE_USES_TIMER_PADS
     TIM_TypeDef *instance;
     uint8_t channel;
     if (core_pad_timer_info(step_pad, &instance, &channel) != 0) {

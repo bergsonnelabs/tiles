@@ -38,8 +38,9 @@
 
 #include "hal_sai.h"
 #include "core_pdm.h"
+#include "core_caps.h"
 
-#if !defined(STM32WBA55xx)
+#if !CORE_HAS_AUDIO
 #error "core_audio.h: SAI PDM capture needs an SAI, and only Core.ST.W5 (STM32WBA55) has one"
 #endif
 

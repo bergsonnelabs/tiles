@@ -25,7 +25,7 @@ from scope_decode import ScopeDecoder, crc8  # noqa: E402
 
 CC = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
 FLAGS = ["-std=c17", "-Wall", "-Wextra", "-Wshadow", "-Wdouble-promotion", "-Werror", "-O1",
-         "-I", str(ROOT / "sdk/core")]
+         "-I", str(ROOT / "sdk/core"), "-I", str(ROOT / "sdk/port/stm32/core")]
 
 _build = tempfile.TemporaryDirectory()
 _exe: Path | None = None

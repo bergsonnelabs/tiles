@@ -7,6 +7,7 @@
                 "${workspaceFolder}/sdk/hal",
                 "${workspaceFolder}/sdk/tal",
                 "${workspaceFolder}/sdk/core",
+                "${workspaceFolder}/sdk/port/stm32/core",
                 "${workspaceFolder}/sdk/ble/include",
                 "${workspaceFolder}/sdk/ble/include/auto",
                 "${workspaceFolder}/sdk/wpan/include",

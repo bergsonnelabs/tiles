@@ -105,7 +105,7 @@ static inline uint16_t core_serial_read(hal_uart_t *h, uint8_t *buf,
  *
  * Forward-declared here rather than `#include "core_init.h"` so this header
  * compiles without a project (val tests, examples without config.json). The
- * natives-side caller is gated on CORE_HAS_SERIAL_BUSES, so the linker never asks for
+ * natives-side caller is gated on CORE_USES_SERIAL_BUSES, so the linker never asks for
  * the symbol unless the dispatcher exists.
  *
  * @param bus Bus id (1 = the first instance, ...).

@@ -191,7 +191,7 @@ static inline void core_i2c_scan(core_i2c_t *h, uint8_t *found,
  *
  * Forward-declared here rather than `#include "core_init.h"` so this header
  * compiles without a project (val tests, examples without config.json). The
- * natives-side caller is gated on CORE_HAS_I2C_BUSES, so the linker never asks for
+ * natives-side caller is gated on CORE_USES_I2C_BUSES, so the linker never asks for
  * the symbol unless the dispatcher exists.
  *
  * @param bus Bus id (1 = the first instance, ...).

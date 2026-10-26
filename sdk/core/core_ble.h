@@ -32,7 +32,9 @@
 #ifndef CORE_BLE_H
 #define CORE_BLE_H
 
-#if !defined(STM32WBA55xx)
+#include "core_caps.h"
+
+#if !CORE_HAS_BLE
 #error "core_ble.h: BLE is only available on Core.ST.W5 (STM32WBA55). This tile does not have a BLE radio."
 #endif
 

@@ -57,8 +57,10 @@
 #ifndef CORE_SPI_H
 #define CORE_SPI_H
 
+#include "core_caps.h"
+
 /* SPI is not available on Core.ST.L0 (STM32L011) */
-#if defined(STM32L011xx)
+#if !CORE_HAS_SPI
 #error "core_spi.h: SPI is not available on Core.ST.L0. Only Core.ST.L4, Core.ST.W5, and Core.ST.H5 have SPI."
 #endif
 
@@ -341,7 +343,7 @@ static inline int core_spi_busy(hal_spi_t *h)
  *
  * Forward-declared here rather than `#include "core_init.h"` so this header
  * compiles without a project (val tests, examples without config.json). The
- * natives-side caller is gated on CORE_HAS_SPI_BUSES, so the linker never asks for
+ * natives-side caller is gated on CORE_USES_SPI_BUSES, so the linker never asks for
  * the symbol unless the dispatcher exists.
  *
  * @param bus Bus id (1 = the first instance, ...).

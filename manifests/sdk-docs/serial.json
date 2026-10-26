@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@ebefbea",
   "category": "serial",
   "label": "Core.Serial",
   "icon": "⌨",
@@ -172,7 +172,7 @@
       "name": "core_serial_handle_for_bus",
       "signature": "core_serial_handle_for_bus(uint8_t bus)",
       "returns": "hal_uart_t *",
-      "brief": "The UART handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any USART); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_HAS_SERIAL_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
+      "brief": "The UART handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any USART); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_USES_SERIAL_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
       "params": [
         {
           "name": "bus",

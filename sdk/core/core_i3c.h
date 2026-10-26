@@ -44,8 +44,9 @@
 
 #include "hal_i3c.h"
 #include "core_config.h"
+#include "core_caps.h"
 
-#if !HAL_I3C_AVAILABLE
+#if !CORE_HAS_I3C
 #error "core_i3c.h: I3C exists only on Core.ST.H5 (STM32H523)"
 #endif
 
