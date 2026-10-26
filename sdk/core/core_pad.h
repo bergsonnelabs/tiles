@@ -34,7 +34,6 @@
 #ifndef CORE_PAD_H
 #define CORE_PAD_H
 
-#include "hal_gpio.h"
 #include "core_types.h"
 
 /* ---- On/Off convenience ---- */
@@ -84,30 +83,20 @@
 #define EDGE_FALLING  CORE_EDGE_FALLING
 #define EDGE_BOTH     CORE_EDGE_BOTH
 
-/* The port's pad types (core_pad_port_t) and its checks that the values
- * above are the hardware's. */
-#include "port_core_pad.h"
+/* The port's pad types (core_pad_port_t). */
+#include "port_core_pad_types.h"
 
 /* ---- Pad GPIO API ---- */
 
 /** Configure a pad as push-pull output (default). */
-static inline void core_pad_output(uint8_t pad)
-{
-    hal_pad_output(pad);
-}
+CORE_INLINE void core_pad_output(uint8_t pad);
 
 /** Configure a pad as open-drain output with optional pull resistor.
  *  Use CORE_PULL_UP for a wired-AND / I2C-style bus, CORE_PULL_NONE for external pull. */
-static inline void core_pad_output_od(uint8_t pad, uint32_t pull)
-{
-    hal_pad_output_od(pad, pull);
-}
+CORE_INLINE void core_pad_output_od(uint8_t pad, uint32_t pull);
 
 /** Configure a pad as input with pull resistor. */
-static inline void core_pad_input(uint8_t pad, uint32_t pull)
-{
-    hal_pad_input(pad, pull);
-}
+CORE_INLINE void core_pad_input(uint8_t pad, uint32_t pull);
 
 /**
  * Set a pad high (ON) or low (OFF).
@@ -117,10 +106,7 @@ static inline void core_pad_input(uint8_t pad, uint32_t pull)
  * @param pad [1..64] Tile pad number.
  * @param state [0..1] 0 for low, 1 for high.
  */
-static inline void core_pad_write(uint8_t pad, int state)
-{
-    hal_pad_write(pad, state);
-}
+CORE_INLINE void core_pad_write(uint8_t pad, int state);
 
 /**
  * Read a pad. Returns 0 or 1.
@@ -129,10 +115,7 @@ static inline void core_pad_write(uint8_t pad, int state)
  * @studio twin full
  * @param pad [1..64] Tile pad number.
  */
-static inline int core_pad_read(uint8_t pad)
-{
-    return hal_pad_read(pad);
-}
+CORE_INLINE int core_pad_read(uint8_t pad);
 
 /**
  * Toggle a pad output.
@@ -141,10 +124,7 @@ static inline int core_pad_read(uint8_t pad)
  * @studio twin full
  * @param pad [1..64] Tile pad number.
  */
-static inline void core_pad_toggle(uint8_t pad)
-{
-    hal_pad_toggle(pad);
-}
+CORE_INLINE void core_pad_toggle(uint8_t pad);
 
 /* ---- Fast path (resolved handle + bulk BSRR) ----
  *
@@ -160,27 +140,16 @@ typedef struct {
 } core_pad_fast_t;
 
 /** Resolve a pad to a fast handle once, outside the hot loop. */
-static inline core_pad_fast_t core_pad_resolve(uint8_t pad)
-{
-    hal_pad_gpio_t g = hal_pad_lookup(pad);
-    core_pad_fast_t h = { g.port, g.port ? (1UL << g.pin) : 0UL };
-    return h;
-}
+CORE_INLINE core_pad_fast_t core_pad_resolve(uint8_t pad);
 
 /** Drive the resolved pad high — single BSRR write. */
-static inline void core_pad_fast_set(core_pad_fast_t h)   { h.port->BSRR = h.mask; }
+CORE_INLINE void core_pad_fast_set(core_pad_fast_t h);
 /** Drive the resolved pad low — single BSRR write. */
-static inline void core_pad_fast_clear(core_pad_fast_t h) { h.port->BSRR = h.mask << 16; }
+CORE_INLINE void core_pad_fast_clear(core_pad_fast_t h);
 /** Drive the resolved pad to `state` (0/1) — single BSRR write. */
-static inline void core_pad_fast_write(core_pad_fast_t h, int state)
-{
-    h.port->BSRR = state ? h.mask : (h.mask << 16);
-}
+CORE_INLINE void core_pad_fast_write(core_pad_fast_t h, int state);
 /** Read the resolved pad — single IDR load. Returns 0 or 1. */
-static inline int core_pad_fast_read(core_pad_fast_t h)
-{
-    return (h.port->IDR & h.mask) ? 1 : 0;
-}
+CORE_INLINE int core_pad_fast_read(core_pad_fast_t h);
 
 /**
  * Bulk update many pins on ONE port in a single atomic BSRR write: pins in
@@ -188,31 +157,18 @@ static inline int core_pad_fast_read(core_pad_fast_t h)
  * BSRR). Build the masks from the generated PAD_n_MASK defines. Useful for
  * synchronized buses / LED matrices without per-pad jitter.
  */
-static inline void core_pad_bulk_write(core_pad_port_t *port,
-                                       uint32_t set_mask, uint32_t clear_mask)
-{
-    port->BSRR = set_mask | (clear_mask << 16);
-}
+CORE_INLINE void core_pad_bulk_write(core_pad_port_t *port,
+                                     uint32_t set_mask, uint32_t clear_mask);
 
 /** Configure a pad as analog (for ADC, DAC, comparator). */
-static inline void core_pad_analog(uint8_t pad)
-{
-    hal_pad_analog(pad);
-}
+CORE_INLINE void core_pad_analog(uint8_t pad);
 
 /** Set the output speed (slew rate) of a pad.
  *  Use CORE_SPEED_LOW / _MED / _HIGH / _VHIGH.
  *  Only affects outputs — input pads ignore this setting. */
-static inline void core_pad_speed(uint8_t pad, uint32_t speed)
-{
-    hal_pad_gpio_t g = hal_pad_lookup(pad);
-    if (!g.port) return;
-    ll_gpio_set_speed(g.port, g.pin, speed);
-}
+CORE_INLINE void core_pad_speed(uint8_t pad, uint32_t speed);
 
 /* ---- Edge-triggered interrupts (EXTI) ---- */
-
-#include "tal_exti.h"
 
 /** Pad edge callback, run in interrupt context with the ctx given at registration. */
 typedef core_callback_t core_pad_cb_t;
@@ -231,17 +187,11 @@ typedef core_callback_t core_pad_cb_t;
  * @param cb    Callback (called from ISR context)
  * @param ctx   Opaque pointer passed to cb
  */
-static inline core_status_t core_pad_on_change(uint8_t pad, uint32_t edge,
-                                                core_pad_cb_t cb, void *ctx)
-{
-    return tal_exti_enable(pad, edge, cb, ctx);
-}
+CORE_INLINE core_status_t core_pad_on_change(uint8_t pad, uint32_t edge,
+                                              core_pad_cb_t cb, void *ctx);
 
 /** Stop the interrupt on a pad. */
-static inline void core_pad_on_change_stop(uint8_t pad)
-{
-    tal_exti_disable(pad);
-}
+CORE_INLINE void core_pad_on_change_stop(uint8_t pad);
 
 /* ---- Backward compatibility ---- */
 #define core_on_change       core_pad_on_change
@@ -263,5 +213,8 @@ static inline void core_pad_on_change_stop(uint8_t pad)
 //   atomic BSRR for many pins) — used by bitbang inner loops like the
 //   CMSIS-DAP probe. Still no DSL surface (pointer/struct ABI), so
 //   synchronized-bus / LED-matrix updates from the IDE remain a gap.
+
+/* The port's value checks and the bodies of the functions above. */
+#include "port_core_pad.h"
 
 #endif /* CORE_PAD_H */

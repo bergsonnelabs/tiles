@@ -21,7 +21,6 @@
  * same ordering every main.c relies on. core_led.o is compiled per project
  * (it depends on the generated headers), so core.h is always available. */
 #include "core.h"
-#include "hal_adc.h"
 
 /* ---- Brightness that holds across VDD ----
  * Every Core drives a red LED from a GPIO through ~40 ohm, so its current is
@@ -40,69 +39,21 @@
 #define CORE_LED_MAX_Q8   (16u << 8)
 #define CORE_LED_RESCAN_MS 60000u /* re-read VDD at most once a minute */
 
-/* The project's ADC handle, when it declares ADC pads (coregen). Weak, so a
- * project without one links, and we can tell. */
-extern hal_adc_t core_adc1 __attribute__((weak));
-
 static uint32_t s_scale_q8 = 0;      /* 0 = not measured yet */
 static uint32_t s_scaled_at_ms = 0;
 
-/* VDD in mV through VREFINT: L0 and L4 (ADC1), W5 (ADC4). The H5 is not
- * wired in yet and returns a nominal 3300 mV, which gives a scale of 1 (no
- * change). Its VREFINT read itself works (adc.mv verified 2026-09-22); what
- * is missing is this path on the H5 and a bench check of it. */
-#if defined(STM32WBA55xx)
-#define LED_VDD_ADC  ADC4
-#else
-#define LED_VDD_ADC  ADC1
-#endif
-static uint32_t led_vdd_mv(void)
-{
-#if defined(STM32L011xx) || defined(STM32L422xx) || defined(STM32WBA55xx)
-    if (&core_adc1 != 0 && core_adc1.instance != 0) {
-        /* The project owns ADC1: never re-sequence it under running DMA. */
-        if (core_adc1.dma_active) {
-            return core_adc1.vdda_mv ? core_adc1.vdda_mv : CORE_LED_REF_MV;
-        }
-        return hal_adc_read_vdda_mv(&core_adc1);
-    }
-    /* No project ADC: bring one up, read VREFINT, and power it back down. */
-#if defined(STM32L011xx)
-    /* Put VREFINT's ADC buffers and the temperature sensor back the way they
-     * were: left on they draw ~17 uA typ (DS DocID027973 Table 21 I_BUF_ADC
-     * 13.5 uA, Table 58 I_DDA(TEMP) 3.4 uA), in Stop too. Bench, 2026-09-26:
-     * one heartbeat left SYSCFG_CFGR3 = 0x40000300, ADC_CCR VREFEN | TSEN. */
-    const uint32_t bufs = SYSCFG_CFGR3_ENBUF_VREFINT | SYSCFG_CFGR3_ENBUF_SENSOR;
-    const uint32_t ens = (1UL << 22) | (1UL << 23);           /* VREFEN, TSEN */
-    uint32_t apb2 = REG32(RCC_BASE + 0x34UL);                 /* APB2ENR */
-    uint32_t bufs_was = (apb2 & 1UL) ? (SYSCFG_CFGR3 & bufs) : 0u;
-    uint32_t ens_was = (apb2 & (1UL << 9)) ? (ADC_CCR & ens) : 0u;
-#endif
-    hal_adc_t adc;
-    uint32_t mv = CORE_LED_REF_MV;
-    if (hal_adc_init(&adc, LED_VDD_ADC, SYSCLK_HZ, HAL_ADC_RES_12BIT) == HAL_OK) {
-        mv = hal_adc_read_vdda_mv(&adc);
-        hal_adc_deinit(&adc);
-    }
-#if defined(STM32L011xx)
-    MOD_BITS(ADC_CCR, ens, ens_was);                          /* ADC is off: writable */
-    MOD_BITS(SYSCFG_CFGR3, bufs, bufs_was);
-    CLR_BITS(REG32(RCC_BASE + 0x34UL), ~apb2 & ((1UL << 9) | 1UL));  /* ADCEN, SYSCFGEN we set */
-#endif
-    return mv;
-#else
-    return CORE_LED_REF_MV;
-#endif
-}
+/* The supply read: port_core_led_vdd_mv() (the port's; it uses
+ * CORE_LED_REF_MV above when it has no reading). */
+#include "port_core_led_vdd.h"
 
 /* On-time multiplier relative to 3.3 V, Q8 (256 = 1x), clamped to 16x. */
 static uint32_t led_scale_q8(void)
 {
-    uint32_t now = _systick_ticks;
+    uint32_t now = core_millis();
     if (s_scale_q8 != 0u && (now - s_scaled_at_ms) < CORE_LED_RESCAN_MS) {
         return s_scale_q8;
     }
-    uint32_t vdd = led_vdd_mv();
+    uint32_t vdd = port_core_led_vdd_mv();
     uint32_t headroom_ref = CORE_LED_REF_MV - CORE_LED_VF_MV;
     uint32_t q8 = CORE_LED_MAX_Q8;
     if (vdd > CORE_LED_VF_MV) {
@@ -146,7 +97,7 @@ void core_led_heartbeat(int period_ms, int on_ms)
     /* Disabled: stop the heartbeat and leave the LED off. */
     if (period == 0u) {
         s_period_ms = 0u;
-        LED_OFF();
+        core_led_off();
         return;
     }
 
@@ -157,9 +108,9 @@ void core_led_heartbeat(int period_ms, int on_ms)
     s_phase_ms = 0u;
     s_on_ms = on;
     if (on > 0u) {
-        LED_ON();
+        core_led_on();
     } else {
-        LED_OFF();
+        core_led_off();
     }
     s_period_ms = period;
 }
@@ -179,10 +130,10 @@ void core_led_systick_tick(void)
     if (phase >= period) {
         phase = 0u;
         if (s_on_ms > 0u) {
-            LED_ON();
+            core_led_on();
         }
     } else if (phase == s_on_ms) {
-        LED_OFF();
+        core_led_off();
     }
     s_phase_ms = phase;
 }

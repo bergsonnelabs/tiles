@@ -29,21 +29,13 @@
 #ifndef CORE_LED_H
 #define CORE_LED_H
 
-#include "core_board.h"
-#include "ll_systick.h"
-#include "ll_rcc.h"
-#include "ll_gpio.h"
+#include "core_types.h"   /* CORE_INLINE, uint32_t */
 
 /**
  * Enable the GPIO clock and configure the LED pin as a push-pull output.
  * Call once after core_init(). The LED starts in the off state.
  */
-static inline void core_led_init(void)
-{
-    ll_rcc_gpio_clk_enable(LED_PORT);
-    ll_gpio_config_output(LED_PORT, LED_PIN);
-    LED_OFF();
-}
+CORE_INLINE void core_led_init(void);
 
 /**
  * Turn the onboard LED on. Simplest possible light control — useful
@@ -53,10 +45,7 @@ static inline void core_led_init(void)
  * @studio expose category=led name=on
  * @studio twin full
  */
-static inline void core_led_on(void)
-{
-    LED_ON();
-}
+CORE_INLINE void core_led_on(void);
 
 /**
  * Turn the onboard LED off.
@@ -64,10 +53,7 @@ static inline void core_led_on(void)
  * @studio expose category=led name=off
  * @studio twin full
  */
-static inline void core_led_off(void)
-{
-    LED_OFF();
-}
+CORE_INLINE void core_led_off(void);
 
 /**
  * Flip the onboard LED's current state. Non-blocking — no delay.
@@ -77,10 +63,7 @@ static inline void core_led_off(void)
  * @studio expose category=led name=toggle
  * @studio twin full
  */
-static inline void core_led_toggle(void)
-{
-    LED_TOGGLE();
-}
+CORE_INLINE void core_led_toggle(void);
 
 /*
  * A short LED on-time, stretched for the supply voltage so a blip looks
@@ -108,35 +91,13 @@ uint32_t core_led_scaled_on_ms(uint32_t on_ms);
  * @param on_ms [1..5000] ms LED-on duration per blink.
  * @param off_ms [1..5000] ms LED-off duration per blink.
  */
-static inline void core_led_blink(int n, int on_ms, int off_ms)
-{
-    if (on_ms < 0) on_ms = 0;
-    if (off_ms < 0) off_ms = 0;
-    /* Stretch a short on-time for the supply (see core_led_scaled_on_ms)
-     * and take the difference out of the off-time, so the rhythm holds. */
-    int on = (int)core_led_scaled_on_ms((uint32_t)on_ms);
-    int off = off_ms - (on - on_ms);
-    if (off < 0) off = 0;
-    for (int i = 0; i < n; i++) {
-        LED_ON();  ll_delay_ms(on);
-        LED_OFF(); ll_delay_ms(off);
-    }
-}
+CORE_INLINE void core_led_blink(int n, int on_ms, int off_ms);
 
 /**
  * Blink the SOS pattern (3 short, 3 long, 3 short) in an infinite loop.
  * Use for unrecoverable errors. This function never returns.
  */
-static inline void core_led_sos(void) __attribute__((noreturn));
-static inline void core_led_sos(void)
-{
-    while (1) {
-        core_led_blink(3, 100, 100);
-        core_led_blink(3, 400, 400);
-        core_led_blink(3, 100, 100);
-        ll_delay_ms(2000);
-    }
-}
+CORE_INLINE void core_led_sos(void) __attribute__((noreturn));
 
 /**
  * Start a free-running, asymmetric heartbeat on the onboard LED. Set it
@@ -190,5 +151,8 @@ void core_led_systick_tick(void);
 //   The onboard LED is hard-wired as a digital push-pull output. No
 //   PWM dimming wrapper, no RGB/RGBW support (tiles with addressable
 //   LEDs use Disp.RGBW or similar, not core_led).
+
+/* The port's bodies of the functions above. */
+#include "port_core_led.h"
 
 #endif /* CORE_LED_H */
