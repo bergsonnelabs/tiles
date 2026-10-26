@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "audio",
   "label": "Core.Audio",
   "icon": "🎤",
@@ -14,7 +14,7 @@
     {
       "name": "core_audio_init",
       "signature": "core_audio_init(core_audio_t * a, uint32_t kernel_clk_hz, uint32_t pcm_rate_hz, uint8_t data_line, uint8_t clock_line, uint8_t cic_order, uint8_t gain_shift)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Configure the mic: SAI PDM block + decimator (capture not started).",
       "params": [
         {
@@ -58,8 +58,8 @@
     },
     {
       "name": "core_audio_start",
-      "signature": "core_audio_start(core_audio_t * a, GPDMA_Channel_TypeDef * ch, uint8_t * pdm_buf, uint32_t pdm_len, int16_t * pcm_buf, core_audio_pcm_cb on_pcm, void * user_ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_audio_start(core_audio_t * a, core_dma_channel_t * ch, uint8_t * pdm_buf, uint32_t pdm_len, int16_t * pcm_buf, core_audio_pcm_cb on_pcm, void * user_ctx)",
+      "returns": "core_status_t",
       "brief": "Start continuous capture; `on_pcm` fires per half-buffer with PCM.",
       "params": [
         {
@@ -69,7 +69,7 @@
         },
         {
           "name": "pcm_buf",
-          "ctype": "GPDMA_Channel_TypeDef *",
+          "ctype": "core_dma_channel_t *",
           "description": "PCM scratch holding at least pdm_len/32 samples."
         },
         {

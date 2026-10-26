@@ -344,7 +344,7 @@ static hal_status_t _init_common(core_stepper_t *h, TIM_TypeDef *instance, uint8
     return HAL_OK;
 }
 
-hal_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad)
+core_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad)
 {
 #ifdef CORE_USES_TIMER_PADS
     TIM_TypeDef *instance;
@@ -361,8 +361,8 @@ hal_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_
 #endif
 }
 
-hal_status_t core_stepper_init_ch(core_stepper_t *h, TIM_TypeDef *instance, uint8_t channel,
-                                  uint8_t step_pad, uint8_t dir_pad)
+core_status_t core_stepper_init_ch(core_stepper_t *h, core_timer_instance_t *instance,
+                                   uint8_t channel, uint8_t step_pad, uint8_t dir_pad)
 {
     return _init_common(h, instance, channel, step_pad, dir_pad);
 }

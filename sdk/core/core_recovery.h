@@ -1,6 +1,10 @@
 /**
  * core_recovery.h — watchdog-strike brick recovery (ROM-DFU builds)
  *
+ * ST silicon only (it parks the Core in the STM32 system-memory bootloader),
+ * so the calls are core_st_rom_dfu_*(); the old core_recovery_*() names are
+ * deprecated aliases.
+ *
  * A soft-bricked Core (bad app that hangs before USB comes up) resets every
  * IWDG timeout but never enumerates, so it can't be reflashed. This counts
  * consecutive watchdog resets that never reached healthy operation; after
@@ -13,16 +17,18 @@
  * USB-capable core (where hal_dfu.h defines the reserved addresses).
  *
  * Flow:
- *   note_boot()  → (core_init, pre-clock) take the reset cause that
- *                  core_reset_capture() kept, inc/reset strikes
- *   over_limit() → (core_init, pre-clock) decide whether to bail to DFU
+ *   core_st_rom_dfu_note_boot()  → (core_init, pre-clock) take the reset
+ *                  cause that core_reset_capture() kept, inc/reset strikes
+ *   core_st_rom_dfu_over_limit() → (core_init, pre-clock) decide whether to
+ *                  bail to DFU
  *   clear        → automatic: core_watchdog_feed() zeroes the counter, once,
  *                  after max(10 s, 2 x the watchdog timeout) of uptime, so
  *                  transient resets on a healthy app never add up to a false
  *                  park. Works for any project that feeds the watchdog (Studio
  *                  output included) with no template changes. A bad app that
  *                  hangs before that point never feeds, so it still escalates.
- *                  core_recovery_clear() remains for apps that want it sooner.
+ *                  core_st_rom_dfu_clear_strikes() remains for apps that
+ *                  want it sooner.
  *
  * Before 2026-09-25 the clear was documented as the starter template's job,
  * but nothing called it (only tests/hw-watchdog-recovery): three watchdog
@@ -39,7 +45,8 @@
  *   page:  /docs/sdk/system
  *   blurb: Tier 1 only, and automatic: core_init() calls note_boot and
  *          over_limit, core_watchdog_feed() clears. Nothing to call unless
- *          you want the counter cleared sooner.
+ *          you want the counter cleared sooner. ST ROM DFU only
+ *          (core_st_rom_dfu_*).
  */
 
 #ifndef CORE_RECOVERY_H
@@ -61,13 +68,13 @@
  * Account for this boot and return the running strike count.
  * Call once, very early in core_init(), before clocks/user code.
  */
-static inline uint32_t core_recovery_note_boot(void)
+static inline uint32_t core_st_rom_dfu_note_boot(void)
 {
     uint32_t strikes = hal_recovery_strikes();
     /* IWDGRSTF as core_reset_capture() read it at the top of core_init(),
      * which has already cleared the flags (RMVF, else the flag latches and
      * miscounts). */
-    int wd = (core_reset_flags() & CORE_RESET_FLAG_IWDG) != 0;
+    int wd = (core_st_reset_flags() & CORE_ST_RESET_FLAG_IWDG) != 0;
     hal_recovery_stash_cause(wd);
     strikes = wd ? (strikes + 1u) : 0u;  /* any non-watchdog reset = fresh start */
     hal_recovery_set_strikes(strikes);
@@ -75,7 +82,7 @@ static inline uint32_t core_recovery_note_boot(void)
 }
 
 /** True once we've had enough consecutive watchdog resets to give up on the app. */
-static inline int core_recovery_over_limit(uint32_t strikes)
+static inline int core_st_rom_dfu_over_limit(uint32_t strikes)
 {
     return strikes >= CORE_RECOVERY_STRIKE_LIMIT;
 }
@@ -85,10 +92,17 @@ static inline int core_recovery_over_limit(uint32_t strikes)
  * the app has run healthy for max(10 s, 2x the timeout); call this only to
  * declare health earlier than that.
  */
-static inline void core_recovery_clear(void)
+static inline void core_st_rom_dfu_clear_strikes(void)
 {
     hal_recovery_set_strikes(0);
 }
+
+/** @deprecated Use core_st_rom_dfu_note_boot(). */
+#define core_recovery_note_boot   core_st_rom_dfu_note_boot
+/** @deprecated Use core_st_rom_dfu_over_limit(). */
+#define core_recovery_over_limit  core_st_rom_dfu_over_limit
+/** @deprecated Use core_st_rom_dfu_clear_strikes(). */
+#define core_recovery_clear       core_st_rom_dfu_clear_strikes
 
 #endif /* DFU_STRIKE_TAG_ADDR */
 

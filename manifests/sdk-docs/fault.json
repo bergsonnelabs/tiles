@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@f70bca2",
+  "source": "tiles@1993ec9",
   "category": "fault",
   "label": "Core.Fault",
   "icon": "⚠",
@@ -12,13 +12,13 @@
   "functions": [
     {
       "name": "core_fault_set_callback",
-      "signature": "core_fault_set_callback(hal_fault_callback_t cb)",
+      "signature": "core_fault_set_callback(core_fault_cb_t cb)",
       "returns": "void",
       "brief": "Register a fault callback, run in fault context before the SOS blink (and before the L4's USB register dump). Keep it minimal: no heap, no interrupts.",
       "params": [
         {
           "name": "cb",
-          "ctype": "hal_fault_callback_t",
+          "ctype": "core_fault_cb_t",
           "description": "Callback receiving the fault type and stacked frame; NULL removes it."
         }
       ],
@@ -39,6 +39,14 @@
       ],
       "studio_exposed": false,
       "layer": "hal"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_fault_cb_t",
+      "kind": "callback",
+      "brief": "Fault callback: the fault type (hard, memory management, bus, usage) and the register frame the core stacked on exception entry.",
+      "decl": "typedef void (*core_fault_cb_t)(core_fault_type_t type, const core_fault_frame_t *frame);"
     }
   ]
 }

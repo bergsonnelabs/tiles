@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "timer",
   "label": "Core.Timer",
   "icon": "◷",
@@ -13,8 +13,8 @@
   "functions": [
     {
       "name": "core_timer_init_freq",
-      "signature": "core_timer_init_freq(core_timer_t * h, TIM_TypeDef * instance, uint32_t freq_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_timer_init_freq(core_timer_t * h, core_timer_instance_t * instance, uint32_t freq_hz)",
+      "returns": "core_status_t",
       "brief": "Initialize a timer at a given overflow frequency. Use for PWM output and periodic tick — the frequency is how often the counter wraps (= the PWM frequency). core_timer_init_freq(&t, TIM2, 1000);   // overflows at 1 kHz",
       "params": [
         {
@@ -23,7 +23,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "freq_hz",
@@ -53,8 +53,8 @@
     },
     {
       "name": "core_timer_init_tick",
-      "signature": "core_timer_init_tick(core_timer_t * h, TIM_TypeDef * instance, uint32_t tick_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_timer_init_tick(core_timer_t * h, core_timer_instance_t * instance, uint32_t tick_hz)",
+      "returns": "core_status_t",
       "brief": "Initialize a timer at a given tick rate, free-running to max count. Use for input capture — the tick rate sets the measurement resolution, and the counter runs as long as possible before wrapping (0xFFFF for 16-bit, 0xFFFFFFFF for 32-bit TIM2). core_timer_init_tick(&t, TIM2, 1000000);  // 1 us per tick core_timer_capture_init(&t, 1); core_timer_start(&t);",
       "params": [
         {
@@ -63,7 +63,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "tick_hz",
@@ -205,7 +205,7 @@
     {
       "name": "core_timer_enable_tick",
       "signature": "core_timer_enable_tick(core_timer_t * h, core_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Enable periodic tick on an already-initialized timer. Does NOT touch PSC/ARR — the timer keeps its existing timebase. The callback fires on each counter overflow at the timer's frequency. Typical pattern: core_timer_init(&t, TIM2, 1000);         // 1 kHz timebase core_timer_pwm_set(&t, 1, 500);          // CH1 = 50% PWM (permil) core_timer_enable_tick(&t, on_tick, NULL); // also fire ISR at 1 kHz core_timer_start(&t);",
       "params": [
         {
@@ -240,8 +240,8 @@
     },
     {
       "name": "core_tick_init",
-      "signature": "core_tick_init(core_timer_t * h, TIM_TypeDef * instance, uint32_t period_us, core_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_tick_init(core_timer_t * h, core_timer_instance_t * instance, uint32_t period_us, core_callback_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Convenience: initialize a timer as a tick-only source. Sets up the timebase AND enables the update interrupt. Use this when the timer's only job is a periodic callback. core_tick_init(&t, TIM3, 500000, on_tick, NULL);  // 2 Hz core_timer_start(&t);",
       "params": [
         {
@@ -250,7 +250,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "period_us",
@@ -668,9 +668,9 @@
     },
     {
       "name": "core_callback_t",
-      "kind": "typedef",
-      "brief": "Core-level callback type.",
-      "decl": "typedef hal_callback_t core_callback_t;"
+      "kind": "callback",
+      "brief": "Core-level callback type: `void cb(void *ctx)`.",
+      "decl": "typedef void (*core_callback_t)(void *ctx);"
     }
   ]
 }

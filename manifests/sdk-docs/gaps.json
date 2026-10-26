@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-gaps/v1",
-  "source": "tiles@217a38f",
+  "source": "tiles@1993ec9",
   "subsystems": [
     {
       "id": "adc",
@@ -177,7 +177,7 @@
       "gaps": [
         {
           "title": "Tier 2 is byte-level only — no bulk / scan",
-          "brief": "The current Tier 2 surface is write_byte_bus / read_byte_bus / probe_bus. DSL programs that need to push a multi-byte payload (display init sequences, IMU FIFO drains) or discover what's on a bus (`scan -> int[]`) drop back to Tier 1 with a hal_i2c_t handle. Adds need the array-IN / array-OUT host-call ABI prototyped on the tile-driver side — track with the DSL Capability Coverage close.",
+          "brief": "The current Tier 2 surface is write_byte_bus / read_byte_bus / probe_bus. DSL programs that need to push a multi-byte payload (display init sequences, IMU FIFO drains) or discover what's on a bus (`scan -> int[]`) drop back to Tier 1 with a core_i2c_t handle. Adds need the array-IN / array-OUT host-call ABI prototyped on the tile-driver side — track with the DSL Capability Coverage close.",
           "tier": 2,
           "value": "M"
         },
@@ -366,7 +366,7 @@
         },
         {
           "title": "Standby can't outlast the watchdog",
-          "brief": "The IWDG keeps counting in Standby (always on the L0, by option byte on the L4/WBA) and nothing feeds it until main() runs again, so with the watchdog on (the Studio default, 5 s) core_standby_for refuses anything longer than half the timeout and returns HAL_ERROR, and core_standby_until_on_change returns without sleeping. Long sleeps use core_stop_for, which wakes to feed. Changing the IWDG_STDBY option byte would lift this on the L4/WBA; the SDK doesn't touch option bytes.",
+          "brief": "The IWDG keeps counting in Standby (always on the L0, by option byte on the L4/WBA) and nothing feeds it until main() runs again, so with the watchdog on (the Studio default, 5 s) core_standby_for refuses anything longer than half the timeout and returns CORE_ERROR, and core_standby_until_on_change returns without sleeping. Long sleeps use core_stop_for, which wakes to feed. Changing the IWDG_STDBY option byte would lift this on the L4/WBA; the SDK doesn't touch option bytes.",
           "tier": 1,
           "value": "M"
         },
@@ -543,13 +543,13 @@
         },
         {
           "title": "No DMA or interrupt-driven TX",
-          "brief": "TX is polled: core_serial_write() and print return once the last byte is in the data register. RX is interrupt-driven into a ring buffer only when `rx_interrupt` is set (or hal_uart_config_t.rx_interrupt); otherwise reads poll the data register. hal_uart_tx_dma() is a stub that returns HAL_ERROR.",
+          "brief": "TX is polled: core_serial_write() and print return once the last byte is in the data register. RX is interrupt-driven into a ring buffer only when `rx_interrupt` is set (or core_serial_config_t.rx_interrupt); otherwise reads poll the data register. hal_uart_tx_dma() is a stub that returns CORE_ERROR.",
           "tier": 1,
           "value": "M"
         },
         {
           "title": "8N1 only: no flow control, parity or 9-bit modes",
-          "brief": "ll_uart_init() sets 8 data bits, no parity, 1 stop bit. hal_uart_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS, parity, other stop bits, 9-bit data and inversion need register writes after init.",
+          "brief": "ll_uart_init() sets 8 data bits, no parity, 1 stop bit. core_serial_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS, parity, other stop bits, 9-bit data and inversion need register writes after init.",
           "tier": 1,
           "value": "M"
         },

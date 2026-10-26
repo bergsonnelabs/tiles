@@ -44,6 +44,9 @@
 #error "core_audio.h: SAI PDM capture needs an SAI, and only Core.ST.W5 (STM32WBA55) has one"
 #endif
 
+#include "core_types.h"
+#include "port_core_audio.h"   /* core_dma_channel_t */
+
 /** Delivered finished PCM: `n` samples at the configured rate. */
 typedef void (*core_audio_pcm_cb)(const int16_t *pcm, uint32_t n, void *ctx);
 
@@ -76,10 +79,10 @@ static inline void core_audio__on_half(void *ctx)
  * @param  cic_order      decimator order (4 = good voice default).
  * @param  gain_shift     extra digital gain (left shift on PCM; 0 = unity).
  */
-static inline hal_status_t core_audio_init(core_audio_t *a, uint32_t kernel_clk_hz,
-                                           uint32_t pcm_rate_hz, uint8_t data_line,
-                                           uint8_t clock_line, uint8_t cic_order,
-                                           uint8_t gain_shift)
+static inline core_status_t core_audio_init(core_audio_t *a, uint32_t kernel_clk_hz,
+                                            uint32_t pcm_rate_hz, uint8_t data_line,
+                                            uint8_t clock_line, uint8_t cic_order,
+                                            uint8_t gain_shift)
 {
     hal_sai_pdm_config_t cfg = {
         .kernel_clk_hz = kernel_clk_hz, .pcm_rate_hz = pcm_rate_hz,
@@ -98,10 +101,10 @@ static inline hal_status_t core_audio_init(core_audio_t *a, uint32_t kernel_clk_
  * @param  pdm_buf  raw PDM byte ring (even length, 4-byte aligned).
  * @param  pcm_buf  PCM scratch holding at least pdm_len/32 samples.
  */
-static inline hal_status_t core_audio_start(core_audio_t *a, GPDMA_Channel_TypeDef *ch,
-                                            uint8_t *pdm_buf, uint32_t pdm_len,
-                                            int16_t *pcm_buf, core_audio_pcm_cb on_pcm,
-                                            void *user_ctx)
+static inline core_status_t core_audio_start(core_audio_t *a, core_dma_channel_t *ch,
+                                             uint8_t *pdm_buf, uint32_t pdm_len,
+                                             int16_t *pcm_buf, core_audio_pcm_cb on_pcm,
+                                             void *user_ctx)
 {
     a->pdm_buf = pdm_buf; a->pdm_len = pdm_len; a->pcm_buf = pcm_buf;
     a->on_pcm = on_pcm; a->user_ctx = user_ctx;

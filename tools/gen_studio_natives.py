@@ -81,6 +81,7 @@ I32_TYPES = {
     "int8_t", "int16_t", "int32_t",
     "uint8_t", "uint16_t", "uint32_t",
     "hal_status_t",
+    "core_status_t",         # hal_status_t's neutral name (core_types.h)
     "core_reset_reason_t",   # an enum (core_reset.h): an int across the boundary
 }
 

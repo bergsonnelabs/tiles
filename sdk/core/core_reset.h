@@ -65,15 +65,26 @@ typedef enum {
     CORE_RESET_OTHER    = 4,   /**< Illegal low-power entry, firewall, or no flag */
 } core_reset_reason_t;
 
-/* Raw RCC flag bits (core_reset_flags()): the same positions on every Core. */
-#define CORE_RESET_FLAG_LPWR   (1UL << 31)  /**< Illegal Stop/Standby entry */
-#define CORE_RESET_FLAG_WWDG   (1UL << 30)  /**< Window watchdog */
-#define CORE_RESET_FLAG_IWDG   (1UL << 29)  /**< Independent watchdog */
-#define CORE_RESET_FLAG_SFT    (1UL << 28)  /**< Software (AIRCR SYSRESETREQ) */
-#define CORE_RESET_FLAG_POR    (1UL << 27)  /**< POR/PDR (L0), BOR (L4, W5, H5) */
-#define CORE_RESET_FLAG_PIN    (1UL << 26)  /**< NRST pin (set by every reset) */
-#define CORE_RESET_FLAG_OBL    (1UL << 25)  /**< Option-byte reload (not on the H5) */
-#define CORE_RESET_FLAG_FW     (1UL << 24)  /**< Firewall (L0, L4 only) */
+/* Raw STM32 RCC flag bits (core_st_reset_flags()): the same positions on
+ * every Core.ST. ST silicon only; portable code uses core_reset_reason(). */
+#define CORE_ST_RESET_FLAG_LPWR   (1UL << 31)  /**< Illegal Stop/Standby entry */
+#define CORE_ST_RESET_FLAG_WWDG   (1UL << 30)  /**< Window watchdog */
+#define CORE_ST_RESET_FLAG_IWDG   (1UL << 29)  /**< Independent watchdog */
+#define CORE_ST_RESET_FLAG_SFT    (1UL << 28)  /**< Software (AIRCR SYSRESETREQ) */
+#define CORE_ST_RESET_FLAG_POR    (1UL << 27)  /**< POR/PDR (L0), BOR (L4, W5, H5) */
+#define CORE_ST_RESET_FLAG_PIN    (1UL << 26)  /**< NRST pin (set by every reset) */
+#define CORE_ST_RESET_FLAG_OBL    (1UL << 25)  /**< Option-byte reload (not on the H5) */
+#define CORE_ST_RESET_FLAG_FW     (1UL << 24)  /**< Firewall (L0, L4 only) */
+
+/* Deprecated names: use CORE_ST_RESET_FLAG_*. */
+#define CORE_RESET_FLAG_LPWR   CORE_ST_RESET_FLAG_LPWR
+#define CORE_RESET_FLAG_WWDG   CORE_ST_RESET_FLAG_WWDG
+#define CORE_RESET_FLAG_IWDG   CORE_ST_RESET_FLAG_IWDG
+#define CORE_RESET_FLAG_SFT    CORE_ST_RESET_FLAG_SFT
+#define CORE_RESET_FLAG_POR    CORE_ST_RESET_FLAG_POR
+#define CORE_RESET_FLAG_PIN    CORE_ST_RESET_FLAG_PIN
+#define CORE_RESET_FLAG_OBL    CORE_ST_RESET_FLAG_OBL
+#define CORE_RESET_FLAG_FW     CORE_ST_RESET_FLAG_FW
 
 /**
  * Reset the Core. Does not return.
@@ -108,10 +119,14 @@ void core_reset(void) __attribute__((noreturn));
 core_reset_reason_t core_reset_reason(void);
 
 /**
- * The raw RCC reset flags read at boot (CORE_RESET_FLAG_*; bits 31..24).
- * 0 if no flag was set.
+ * The raw STM32 RCC reset flags read at boot (CORE_ST_RESET_FLAG_*; bits
+ * 31..24). 0 if no flag was set. ST silicon only: portable code uses
+ * core_reset_reason().
  */
-uint32_t core_reset_flags(void);
+uint32_t core_st_reset_flags(void);
+
+/** @deprecated Use core_st_reset_flags(). */
+#define core_reset_flags core_st_reset_flags
 
 /**
  * Read and keep the reset flags, then clear them in RCC. core_init() calls

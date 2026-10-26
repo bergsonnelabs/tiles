@@ -146,13 +146,16 @@ static inline void core_usb_print_bool(int v)
     core_usb_printf("%s\n", v ? "true" : "false");
 }
 
+/** Receive callback, run from the USB interrupt with the bytes of one packet. */
+typedef void (*core_usb_cdc_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);
+
 /**
  * Set a callback for received data.
  * Called from USB ISR. When set, data is NOT buffered for polling reads.
  * @param cb   Callback: void cb(const uint8_t *data, uint16_t len, void *ctx)
  * @param ctx  User context passed to callback; may be NULL
  */
-static inline void core_usb_on_receive(hal_usb_cdc_rx_cb_t cb, void *ctx)
+static inline void core_usb_on_receive(core_usb_cdc_rx_cb_t cb, void *ctx)
 {
     hal_usb_cdc_set_rx_callback(cb, ctx);
 }

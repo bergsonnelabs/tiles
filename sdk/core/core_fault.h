@@ -27,6 +27,13 @@
 #define CORE_FAULT_H
 
 #include "hal_fault.h"
+#include "port_core_fault.h"   /* core_fault_type_t, core_fault_frame_t */
+
+/**
+ * Fault callback: the fault type (hard, memory management, bus, usage) and
+ * the register frame the core stacked on exception entry.
+ */
+typedef void (*core_fault_cb_t)(core_fault_type_t type, const core_fault_frame_t *frame);
 
 /**
  * Register a fault callback, run in fault context before the SOS blink (and
@@ -34,7 +41,7 @@
  *
  * @param cb Callback receiving the fault type and stacked frame; NULL removes it.
  */
-static inline void core_fault_set_callback(hal_fault_callback_t cb)
+static inline void core_fault_set_callback(core_fault_cb_t cb)
 {
     hal_fault_set_callback(cb);
 }

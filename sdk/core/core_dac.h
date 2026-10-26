@@ -33,10 +33,11 @@
 #endif
 
 #include "hal_dac.h"
+#include "port_core_dac.h"   /* core_dac_t */
 
 /* DAC instance — defined by coregen in core_init.c based on config.json.
  * Stores the GPIO port/pin and DAC channel from the tile definition. */
-extern hal_dac_t core_dac;
+extern core_dac_t core_dac;
 
 /**
  * Initialize the DAC (clock, GPIO, peripheral). Call once from `on start`

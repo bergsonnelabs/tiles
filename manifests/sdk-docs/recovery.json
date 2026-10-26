@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@6af026f",
+  "source": "tiles@1993ec9",
   "category": "recovery",
   "label": "Core.Recovery",
   "icon": "⟲",
@@ -11,8 +11,8 @@
   },
   "functions": [
     {
-      "name": "core_recovery_note_boot",
-      "signature": "core_recovery_note_boot(void)",
+      "name": "core_st_rom_dfu_note_boot",
+      "signature": "core_st_rom_dfu_note_boot(void)",
       "returns": "uint32_t",
       "brief": "Account for this boot and return the running strike count. Call once, very early in core_init(), before clocks/user code.",
       "params": [],
@@ -20,8 +20,8 @@
       "layer": "core"
     },
     {
-      "name": "core_recovery_over_limit",
-      "signature": "core_recovery_over_limit(uint32_t strikes)",
+      "name": "core_st_rom_dfu_over_limit",
+      "signature": "core_st_rom_dfu_over_limit(uint32_t strikes)",
       "returns": "int",
       "brief": "True once we've had enough consecutive watchdog resets to give up on the app.",
       "params": [
@@ -34,8 +34,8 @@
       "layer": "core"
     },
     {
-      "name": "core_recovery_clear",
-      "signature": "core_recovery_clear(void)",
+      "name": "core_st_rom_dfu_clear_strikes",
+      "signature": "core_st_rom_dfu_clear_strikes(void)",
       "returns": "void",
       "brief": "Clear the strike counter now. core_watchdog_feed() already does this once the app has run healthy for max(10 s, 2x the timeout); call this only to declare health earlier than that.",
       "params": [],

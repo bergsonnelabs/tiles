@@ -7,14 +7,14 @@
  *
  * Quick start (polling):
  * @code
- *   hal_spi_t spi;
- *   hal_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };  // mode 0, MSB first
+ *   core_spi_t spi;
+ *   core_spi_config_t cfg = { .prescaler = LL_SPI_PRESCALER_8 };  // mode 0, MSB first
  *   core_spi_init(&spi, SPI1, &cfg);
  *   core_spi_set_cs(&spi, 9);          // Pad 9 as CS
  *
  *   uint8_t cmd[4] = { 0x03, 0x00, 0x10, 0x00 };   // SPI-NOR READ @ 0x001000
  *   uint8_t page[256];
- *   if (core_spi_write_read(&spi, cmd, 4, page, sizeof page) != HAL_OK) { ... }
+ *   if (core_spi_write_read(&spi, cmd, 4, page, sizeof page) != CORE_OK) { ... }
  * @endcode
  *
  * Projects that declare the bus in config.json get a ready handle
@@ -24,7 +24,7 @@
  * fill byte (0xFF, `spi.fill`), a NULL rx buffer discards what comes back,
  * and tx may equal rx. Every call is bounded: if no frame completes for the
  * stall budget (2 ms plus a few frame times at the configured SCK, see
- * ll_spi_stall_cycles) it returns HAL_TIMEOUT and the peripheral is reset, so
+ * ll_spi_stall_cycles) it returns CORE_TIMEOUT and the peripheral is reset, so
  * the next call starts clean.
  *
  * Fastest SCK is the kernel clock / 2 (the kernel clock is SYSCLK at every
@@ -66,6 +66,8 @@
 
 #include "hal_spi.h"
 #include "hal_gpio.h"
+#include "core_types.h"
+#include "port_core_spi.h"   /* core_spi_instance_t */
 
 /** SPI handle type — same as hal_spi_t under the hood. */
 typedef hal_spi_t core_spi_t;
@@ -85,11 +87,11 @@ typedef hal_spi_config_t core_spi_config_t;
  * @param  h         Handle (zeroed by this call; attach CS afterwards)
  * @param  instance  SPI1 (Core.ST.L4 / Core.ST.W5) or SPI3 (Core.ST.W5)
  * @param  cfg       Prescaler (LL_SPI_PRESCALER_2..256), cpol, cpha, lsb_first
- * @return HAL_OK, or HAL_ERROR on a NULL argument
+ * @return CORE_OK, or CORE_ERROR on a NULL argument
  */
-static inline hal_status_t core_spi_init(hal_spi_t *h,
-                                          SPI_TypeDef *instance,
-                                          const hal_spi_config_t *cfg)
+static inline core_status_t core_spi_init(core_spi_t *h,
+                                           core_spi_instance_t *instance,
+                                           const core_spi_config_t *cfg)
 {
     return hal_spi_init(h, instance, cfg);
 }
@@ -102,10 +104,10 @@ static inline hal_status_t core_spi_init(hal_spi_t *h,
  *
  * @param  h    SPI handle
  * @param  cfg  New configuration
- * @return HAL_OK, HAL_BUSY while a DMA transfer runs, HAL_ERROR on NULL
+ * @return CORE_OK, CORE_BUSY while a DMA transfer runs, CORE_ERROR on NULL
  */
-static inline hal_status_t core_spi_configure(hal_spi_t *h,
-                                               const hal_spi_config_t *cfg)
+static inline core_status_t core_spi_configure(core_spi_t *h,
+                                                const core_spi_config_t *cfg)
 {
     return hal_spi_configure(h, cfg);
 }
@@ -115,7 +117,7 @@ static inline hal_status_t core_spi_configure(hal_spi_t *h,
  * @param  h  SPI handle
  * @return SYSCLK / (2..256); 0 for an uninitialized handle
  */
-static inline uint32_t core_spi_sck_hz(const hal_spi_t *h)
+static inline uint32_t core_spi_sck_hz(const core_spi_t *h)
 {
     return hal_spi_sck_hz(h);
 }
@@ -131,7 +133,7 @@ static inline uint32_t core_spi_sck_hz(const hal_spi_t *h)
  * @param  h    SPI handle
  * @param  pad  Tile pad driving chip select
  */
-static inline void core_spi_set_cs(hal_spi_t *h, uint8_t pad)
+static inline void core_spi_set_cs(core_spi_t *h, uint8_t pad)
 {
     hal_pad_gpio_t g = hal_pad_lookup(pad);
     if (g.port)
@@ -142,7 +144,7 @@ static inline void core_spi_set_cs(hal_spi_t *h, uint8_t pad)
  * @brief  Assert CS. Everything until core_spi_deselect() is one transaction.
  * @param  h  SPI handle
  */
-static inline void core_spi_select(hal_spi_t *h)
+static inline void core_spi_select(core_spi_t *h)
 {
     hal_spi_select(h);
 }
@@ -151,7 +153,7 @@ static inline void core_spi_select(hal_spi_t *h)
  * @brief  Deassert CS, ending the transaction.
  * @param  h  SPI handle
  */
-static inline void core_spi_deselect(hal_spi_t *h)
+static inline void core_spi_deselect(core_spi_t *h)
 {
     hal_spi_deselect(h);
 }
@@ -164,7 +166,7 @@ static inline void core_spi_deselect(hal_spi_t *h)
  * @param  tx  Byte to send
  * @return The byte received (0xFF if the transfer failed)
  */
-static inline uint8_t core_spi_transfer(hal_spi_t *h, uint8_t tx)
+static inline uint8_t core_spi_transfer(core_spi_t *h, uint8_t tx)
 {
     return hal_spi_transfer(h, tx);
 }
@@ -180,11 +182,11 @@ static inline uint8_t core_spi_transfer(hal_spi_t *h, uint8_t tx)
  * @param  tx   Bytes to send, or NULL to send the fill byte (0xFF)
  * @param  rx   Receive buffer, or NULL to discard (may equal tx)
  * @param  len  Number of bytes
- * @return HAL_OK, HAL_TIMEOUT (stalled), HAL_ERROR (overrun / mode fault),
- *         HAL_BUSY (a DMA transfer is running)
+ * @return CORE_OK, CORE_TIMEOUT (stalled), CORE_ERROR (overrun / mode fault),
+ *         CORE_BUSY (a DMA transfer is running)
  */
-static inline hal_status_t core_spi_exchange(hal_spi_t *h, const uint8_t *tx,
-                                              uint8_t *rx, uint32_t len)
+static inline core_status_t core_spi_exchange(core_spi_t *h, const uint8_t *tx,
+                                               uint8_t *rx, uint32_t len)
 {
     return hal_spi_exchange(h, tx, rx, len);
 }
@@ -194,10 +196,10 @@ static inline hal_status_t core_spi_exchange(hal_spi_t *h, const uint8_t *tx,
  * @param  h     SPI handle
  * @param  data  Bytes to send
  * @param  len   Number of bytes
- * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ * @return CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)
  */
-static inline hal_status_t core_spi_write(hal_spi_t *h, const uint8_t *data,
-                                           uint32_t len)
+static inline core_status_t core_spi_write(core_spi_t *h, const uint8_t *data,
+                                            uint32_t len)
 {
     return hal_spi_write(h, data, len);
 }
@@ -208,9 +210,9 @@ static inline hal_status_t core_spi_write(hal_spi_t *h, const uint8_t *data,
  * @param  h    SPI handle
  * @param  buf  Receive buffer
  * @param  len  Number of bytes
- * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ * @return CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)
  */
-static inline hal_status_t core_spi_read(hal_spi_t *h, uint8_t *buf, uint32_t len)
+static inline core_status_t core_spi_read(core_spi_t *h, uint8_t *buf, uint32_t len)
 {
     return hal_spi_read(h, buf, len);
 }
@@ -221,10 +223,10 @@ static inline hal_status_t core_spi_read(hal_spi_t *h, uint8_t *buf, uint32_t le
  * @param  tx   Bytes to send, or NULL to send the fill byte
  * @param  rx   Receive buffer, or NULL to discard (may equal tx)
  * @param  len  Number of bytes
- * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ * @return CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)
  */
-static inline hal_status_t core_spi_xfer(hal_spi_t *h, const uint8_t *tx,
-                                          uint8_t *rx, uint32_t len)
+static inline core_status_t core_spi_xfer(core_spi_t *h, const uint8_t *tx,
+                                           uint8_t *rx, uint32_t len)
 {
     return hal_spi_xfer(h, tx, rx, len);
 }
@@ -242,11 +244,11 @@ static inline hal_status_t core_spi_xfer(hal_spi_t *h, const uint8_t *tx,
  * @param  tx_len  Number of command bytes
  * @param  rx      Receive buffer (may be NULL when rx_len is 0)
  * @param  rx_len  Number of bytes to read after the command
- * @return HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)
+ * @return CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)
  */
-static inline hal_status_t core_spi_write_read(hal_spi_t *h, const uint8_t *tx,
-                                                uint32_t tx_len, uint8_t *rx,
-                                                uint32_t rx_len)
+static inline core_status_t core_spi_write_read(core_spi_t *h, const uint8_t *tx,
+                                                 uint32_t tx_len, uint8_t *rx,
+                                                 uint32_t rx_len)
 {
     return hal_spi_write_read(h, tx, tx_len, rx, rx_len);
 }
@@ -266,11 +268,11 @@ static inline hal_status_t core_spi_write_read(hal_spi_t *h, const uint8_t *tx,
  * @param  tx   Bytes to send, or NULL to send the fill byte
  * @param  rx   Receive buffer, or NULL to discard (may equal tx)
  * @param  len  Number of bytes (any length; long transfers are chunked)
- * @return HAL_OK, HAL_TIMEOUT (stalled; channels aborted, SPI reset),
- *         HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error)
+ * @return CORE_OK, CORE_TIMEOUT (stalled; channels aborted, SPI reset),
+ *         CORE_BUSY (another DMA transfer is running), CORE_ERROR (DMA error)
  */
-static inline hal_status_t core_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx,
-                                                  uint8_t *rx, uint32_t len)
+static inline core_status_t core_spi_exchange_dma(core_spi_t *h, const uint8_t *tx,
+                                                   uint8_t *rx, uint32_t len)
 {
     return hal_spi_exchange_dma(h, tx, rx, len);
 }
@@ -291,14 +293,14 @@ static inline hal_status_t core_spi_exchange_dma(hal_spi_t *h, const uint8_t *tx
  *              Core.ST.W5 SPI1), 1023 (Core.ST.W5 SPI3)
  * @param  cb   Completion callback (interrupt context), or NULL
  * @param  ctx  User context for the callback
- * @return HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR for a bad
+ * @return CORE_OK, CORE_BUSY if a DMA transfer is running, CORE_ERROR for a bad
  *         length
  */
-static inline hal_status_t core_spi_xfer_dma(hal_spi_t *h,
-                                              const uint8_t *tx,
-                                              uint8_t *rx,
-                                              uint32_t len,
-                                              hal_callback_t cb, void *ctx)
+static inline core_status_t core_spi_xfer_dma(core_spi_t *h,
+                                               const uint8_t *tx,
+                                               uint8_t *rx,
+                                               uint32_t len,
+                                               core_callback_t cb, void *ctx)
 {
     return hal_spi_xfer_dma(h, tx, rx, len, cb, ctx);
 }
@@ -306,10 +308,10 @@ static inline hal_status_t core_spi_xfer_dma(hal_spi_t *h,
 /**
  * @brief  Wait for a core_spi_xfer_dma() transfer to finish (bounded).
  * @param  h  SPI handle
- * @return The transfer's result (HAL_OK if none was running), or HAL_TIMEOUT
+ * @return The transfer's result (CORE_OK if none was running), or CORE_TIMEOUT
  *         after aborting a stalled transfer
  */
-static inline hal_status_t core_spi_dma_wait(hal_spi_t *h)
+static inline core_status_t core_spi_dma_wait(core_spi_t *h)
 {
     return hal_spi_dma_wait(h);
 }
@@ -319,7 +321,7 @@ static inline hal_status_t core_spi_dma_wait(hal_spi_t *h)
  * @param  h  SPI handle
  * @return 1 while core_spi_xfer_dma() is running, else 0
  */
-static inline int core_spi_busy(hal_spi_t *h)
+static inline int core_spi_busy(core_spi_t *h)
 {
     return hal_spi_busy(h);
 }
@@ -328,7 +330,7 @@ static inline int core_spi_busy(hal_spi_t *h)
 
 /* These wrappers take a bus id (the SPI peripheral number — 1, 2, 3 …
  * matching how config.json declares it) plus the CS pad, instead of
- * a hal_spi_t handle + persistent CS state. The dispatcher
+ * a core_spi_t handle + persistent CS state. The dispatcher
  * `core_spi_handle_for_bus` is emitted by coregen alongside the per-
  * bus extern handles (core_spi1, core_spi2 …). DSL programs reach
  * for these; escape-to-C drops back to the Tier 1 handle-based forms
@@ -349,7 +351,7 @@ static inline int core_spi_busy(hal_spi_t *h)
  * @param bus Bus id (1 = the first instance, ...).
  * @return The coregen-initialized handle, or NULL.
  */
-hal_spi_t *core_spi_handle_for_bus(uint8_t bus);
+core_spi_t *core_spi_handle_for_bus(uint8_t bus);
 
 /**
  * Single-byte full-duplex transfer over `bus`, with CS auto-managed

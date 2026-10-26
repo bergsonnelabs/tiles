@@ -849,6 +849,15 @@ class ExtractSignatureShapes(unittest.TestCase):
         s = self.sig("static inline uint8_t * f(void) { return 0; }")
         self.assertEqual((s["name"], s["returns"]), ("f", "uint8_t *"))
 
+    def test_core_inline_is_a_storage_class_not_a_return_type(self):
+        s = self.sig("CORE_INLINE core_status_t core_x_init(core_x_t *h,\n"
+                     "                                    uint32_t hz) { return CORE_OK; }")
+        self.assertEqual(s["name"], "core_x_init")
+        self.assertEqual(s["returns"], "core_status_t")
+        self.assertEqual([p["ctype"] for p in s["params"]], ["core_x_t *", "uint32_t"])
+        s = self.sig("CORE_INLINE uint8_t *core_x_buf(void) { return 0; }")
+        self.assertEqual((s["name"], s["returns"]), ("core_x_buf", "uint8_t *"))
+
     def test_function_pointer_typedef_is_not_a_function(self):
         self.assertIsNone(self.sig("typedef void (*cb_t)(void *ctx, int x);"))
 
