@@ -14,7 +14,7 @@
  *     0x09015000-0x09017FFF. The area is an option-byte setting: the first
  *     time a Core.ST.H5 boots an SDK image, core_init() switches it on (one
  *     option-byte change, FLASH_EDATA2R, then one reset); every later boot
- *     just reads it. See _core_nvm_h5_boot() below.
+ *     just reads it. See _core_nvm_h5_boot() in the port's port_core_nvm.h.
  *
  * Usage:
  *   core_nvm_write(0, &data, sizeof(data));  // write at offset 0
@@ -94,7 +94,10 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "ll_common.h"
+/* The layout (CORE_NVM_SIZE; CORE_NVM_EEPROM or CORE_NVM_FLASH_EMU and its
+ * pages) is the port's: port_core_nvm_types.h. */
+#include "port_core_nvm_types.h"
+#include "core_types.h"   /* CORE_INLINE */
 
 /* ============================================================
  * Return codes (core_nvm_read / _write / _erase_all)
@@ -107,64 +110,18 @@
 #define CORE_NVM_ERR_LAYOUT   (-4)  /**< The linker script does not reserve the NVM pages (a custom .ld). */
 
 /* ============================================================
- * Platform-specific NVM configuration
+ * Erased value and the flash emulation's footprint
  * ============================================================ */
 
-#if defined(STM32L011xx)
-  /* True EEPROM: 512 bytes, byte-writable, no erase needed */
-  #define CORE_NVM_BASE        0x08080000UL
-  #define CORE_NVM_SIZE        512
-  #define CORE_NVM_EEPROM      1
-  #define CORE_NVM_FLASH_EMU   0
+/* What a never-written byte reads: a data EEPROM's erased state, or 0xFF
+ * from the flash emulation (its log replays over 0xFF, like erased flash). */
+#if CORE_NVM_EEPROM
   #define CORE_NVM_ERASED      0x00u   /**< RM0377 §3.3.4: an erased EEPROM byte reads 0. */
-
-#elif defined(STM32L422xx)
-  /* Flash emulation in the last two 2 KB pages (62, 63) of the 128 KB bank.
-   * The linker scripts end the application at 0x0801F000 to match. */
-  #define CORE_NVM_SIZE        1024
-  #define CORE_NVM_EEPROM      0
-  #define CORE_NVM_FLASH_EMU   1
+#else
   #define CORE_NVM_ERASED      0xFFu
-  #define CORE_NVM_FLASH_ADDR  0x0801F000UL
-  #define CORE_NVM_PAGE_SIZE   2048u
-  #define CORE_NVM_FIRST_PAGE  62u
-  #define CORE_NVM_PROG_UNIT   8u      /* RM0394 §3.3.7: 64-bit double-words */
-
-#elif defined(STM32WBA55xx)
-  /* Flash emulation in pages 125-126 (8 KB each). Page 127, the last one, is
-   * the BLE bond store (sdk/ble/nvm_stub.c), which was there first. The
-   * linker scripts end the application at 0x080FA000 to leave all three. */
-  #define CORE_NVM_SIZE        1024
-  #define CORE_NVM_EEPROM      0
-  #define CORE_NVM_FLASH_EMU   1
-  #define CORE_NVM_ERASED      0xFFu
-  #define CORE_NVM_FLASH_ADDR  0x080FA000UL
-  #define CORE_NVM_PAGE_SIZE   8192u
-  #define CORE_NVM_FIRST_PAGE  125u
-  #define CORE_NVM_PROG_UNIT   16u     /* RM0493 §7.3.7: 128-bit quad-words */
-
-#elif defined(STM32H523xx)
-  /* Flash emulation in the high-cycle data area (EDATA, RM0481 §7.3.10):
-   * bank 2 sectors 30 and 31, 6 KB each as data, at 0x09015000 (bank 2's
-   * sector 24 is data address 0x0900C000, RM0481 Figure 27). The linker
-   * script ends every image at 0x0807C000, the same sectors' code address.
-   * The array is written 16 bits at a time; records still align to 8 B. */
-  #define CORE_NVM_SIZE        1024
-  #define CORE_NVM_EEPROM      0
-  #define CORE_NVM_FLASH_EMU   1
-  #define CORE_NVM_EDATA       1
-  #define CORE_NVM_ERASED      0xFFu
-  #define CORE_NVM_FLASH_ADDR  0x09015000UL
-  #define CORE_NVM_PAGE_SIZE   6144u
-  #define CORE_NVM_FIRST_PAGE  62u     /* flat 8 KB sector: bank 2, sector 30 */
-  #define CORE_NVM_PROG_UNIT   8u      /* record alignment (the hardware writes 16 bits) */
-  #define CORE_NVM_CODE_ADDR   0x0807C000UL   /* the two sectors' code address */
 #endif
 
-#ifndef CORE_NVM_EDATA
-  #define CORE_NVM_EDATA       0
-#endif
-
+/* The flash emulation's two pages, A and B (core_nvm.c). */
 #if CORE_NVM_FLASH_EMU
   #define CORE_NVM_FLASH_SIZE  (2u * CORE_NVM_PAGE_SIZE)
 #endif
@@ -219,10 +176,7 @@ int core_nvm_erase_all(void);
  * @studio expose category=nvm name=size returns=int
  * @studio twin full
  */
-static inline uint32_t core_nvm_size(void)
-{
-    return CORE_NVM_SIZE;
-}
+CORE_INLINE uint32_t core_nvm_size(void);
 
 /* ---- Tier 2 — byte-level read / write -------------------------------- */
 
@@ -244,12 +198,7 @@ static inline uint32_t core_nvm_size(void)
  * @studio twin full
  * @param offset [0..1023] Byte offset into the NVM region (Core.ST.L0: 0..511).
  */
-static inline int core_nvm_read_byte(uint32_t offset)
-{
-    uint8_t b = 0;
-    if (core_nvm_read(offset, &b, 1) != 0) return -1;
-    return (int)b;
-}
+CORE_INLINE int core_nvm_read_byte(uint32_t offset);
 
 /**
  * Write a single byte to NVM at `offset`. Returns 1 on success or -1
@@ -262,67 +211,10 @@ static inline int core_nvm_read_byte(uint32_t offset)
  * @param offset [0..1023] Byte offset into the NVM region (Core.ST.L0: 0..511).
  * @param value  [0..255] Byte to store.
  */
-static inline int core_nvm_write_byte(uint32_t offset, uint8_t value)
-{
-    if (core_nvm_write(offset, &value, 1) != 0) return -1;
-    return 1;
-}
+CORE_INLINE int core_nvm_write_byte(uint32_t offset, uint8_t value);
 
-#if defined(STM32H523xx)
-/* ---- Core.ST.H5: switching the data area on (not API) ----
- *
- * _core_nvm_h5_boot() runs from core_init() on every boot, after the clocks
- * and before the watchdog. If FLASH_EDATA2R_CUR already has the area on
- * (EDATA2_EN, and EDATA2_STRT >= 1: at least the two last sectors) it only
- * notes that. Otherwise it makes one option-byte change, RM0481 §7.4.3:
- *   - only FLASH_EDATA2R_PRG is written, read-modify-write of EDATA2_EN and
- *     EDATA2_STRT (= 1); nothing else. OPTSTRT programs every _PRG register,
- *     so it first checks that each other readable _PRG equals its _CUR (they
- *     are loaded equal at option-byte load; the epoch counters and the
- *     secure-only registers are the exceptions, see core_nvm.c) and refuses
- *     otherwise; it records every _CUR before and after;
- *   - not when SWAP_BANK is set, nor when the ROM bootloader started the
- *     image (BOOT0 high: the reset below would land back in the ROM);
- *   - then it resets the chip (§7.4.3 step 9, "always recommended").
- * A reset or power loss during the change keeps the old option value
- * (§7.4.3 note), so the next boot simply tries again. At most one change is
- * made per power-on, so nothing can loop. The record below lives in SRAM that
- * startup leaves alone (.noinit), so the boot after the change can report it;
- * a power cycle clears it. On a Core whose option bytes erase SRAM1 on reset
- * (FLASH_OPTSR2.SRAM13_RST = 0) the record would not survive, so there the
- * change is made without the reset. */
-#define CORE_NVM_H5_OB_N  15u
-typedef struct {
-    uint32_t magic;          /* valid record */
-    int32_t  state;          /* CORE_NVM_H5_*: what this boot found or did */
-    uint32_t writes;         /* option-byte changes made since the record began */
-    uint32_t boots;          /* boots since the record began */
-    uint32_t edata2_before;  /* FLASH_EDATA2R_CUR before the change */
-    uint32_t edata2_after;   /* FLASH_EDATA2R_CUR after it */
-    uint32_t edata1;         /* FLASH_EDATA1R_CUR (never written) */
-    uint32_t optsr;          /* FLASH_OPTSR_CUR (never written) */
-    uint32_t nssr;           /* FLASH_NSSR at the end of the change */
-    uint32_t opsr;           /* FLASH_OPSR at boot: an operation a reset cut short */
-    uint32_t mismatch;       /* _PRG offset that differed from its _CUR (refused) */
-    uint32_t ob_before[CORE_NVM_H5_OB_N];   /* every option _CUR register before */
-    uint32_t ob_after[CORE_NVM_H5_OB_N];    /* ... and after the change (core_nvm.c) */
-} core_nvm_h5_prov_t;
-
-#define CORE_NVM_H5_ENABLED   1    /* on already: nothing written this boot */
-#define CORE_NVM_H5_CHANGED   2    /* switched on this boot (the reset follows) */
-#define CORE_NVM_H5_ROM      (-1)  /* started by the ROM bootloader: not tried */
-#define CORE_NVM_H5_SWAP     (-2)  /* SWAP_BANK set: not tried */
-#define CORE_NVM_H5_PRG      (-3)  /* another _PRG register differed from _CUR: refused */
-#define CORE_NVM_H5_FAILED   (-4)  /* the change reported an error or did not take */
-#define CORE_NVM_H5_RETRY    (-5)  /* changed once since power-on, still off: not again */
-
-void _core_nvm_h5_boot(void);
-/* The record, or NULL after a power cycle before this boot's call. */
-const core_nvm_h5_prov_t *_core_nvm_h5_prov(void);
-/* Data-area words core_nvm has read with an uncorrectable ECC error since
- * boot (a torn write leaves some; each one ends the log there). */
-uint32_t _core_nvm_h5_ecc_errors(void);
-#endif
+/* Core.ST.H5's first-boot switch of the data area (_core_nvm_h5_boot(), its
+ * record core_nvm_h5_prov_t; not API) is the port's: port_core_nvm.h. */
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -345,5 +237,8 @@ uint32_t _core_nvm_h5_ecc_errors(void);
 //   core_nvm_erase_all clears the region, but nothing reports the page
 //   erase count or the remaining write budget. Long-running data loggers
 //   budget their write rate from the figures in core_nvm.h.
+
+/* The bodies of the CORE_INLINE functions above. */
+#include "port_core_nvm.h"
 
 #endif /* CORE_NVM_H */
