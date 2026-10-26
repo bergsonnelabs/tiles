@@ -21,18 +21,14 @@
 #ifndef CORE_DEBUG_H
 #define CORE_DEBUG_H
 
-#include "hal_debug.h"
-#include "core_config.h"  /* SYSCLK_HZ */
+#include "core_types.h"   /* CORE_INLINE */
 
 /* ============================================================
  * Init
  * ============================================================ */
 
 /** Initialize SWO debug output using the project's SYSCLK_HZ (no-op on Core.ST.L0). */
-static inline void core_debug_init(void)
-{
-    hal_debug_init(SYSCLK_HZ);
-}
+CORE_INLINE void core_debug_init(void);
 
 /* ============================================================
  * Output
@@ -43,13 +39,10 @@ static inline void core_debug_init(void)
  *
  * @param str NUL-terminated string to send on ITM stimulus port 0.
  */
-static inline void core_debug_print(const char *str)
-{
-    hal_debug_puts(str);
-}
+CORE_INLINE void core_debug_print(const char *str);
 
-/** Printf via SWO/ITM — same format as standard printf. */
-#define core_debug_printf  hal_debug_printf
+/* core_debug_printf(fmt, ...): printf via SWO/ITM, same format as standard
+ * printf. A macro the port defines (port_core_debug.h). */
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -63,5 +56,8 @@ static inline void core_debug_print(const char *str)
 //   All output goes to ITM stimulus port 0 with no timestamp packets.
 //   Multi-channel routing (e.g., separate streams for log vs. data)
 //   and ETM/CYCCNT correlation aren't wrapped.
+
+/* The port's bodies of the functions above. */
+#include "port_core_debug.h"
 
 #endif /* CORE_DEBUG_H */

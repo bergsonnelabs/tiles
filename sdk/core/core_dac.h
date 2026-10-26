@@ -32,8 +32,8 @@
 #error "core_dac.h: DAC is not available on this Core tile. Only Core.ST.H5 (STM32H523) has a DAC peripheral."
 #endif
 
-#include "hal_dac.h"
-#include "port_core_dac.h"   /* core_dac_t */
+#include "core_types.h"      /* CORE_INLINE */
+#include "port_core_dac_types.h"   /* core_dac_t */
 
 /* DAC instance — defined by coregen in core_init.c based on config.json.
  * Stores the GPIO port/pin and DAC channel from the tile definition. */
@@ -46,10 +46,7 @@ extern core_dac_t core_dac;
  * @studio expose category=dac name=init availability=Core.ST.H5
  * @studio twin full
  */
-static inline void core_dac_init(void)
-{
-    hal_dac_init(&core_dac);
-}
+CORE_INLINE void core_dac_init(void);
 
 /**
  * Write a raw 12-bit value. Output = val / 4095 × VREF+.
@@ -58,10 +55,7 @@ static inline void core_dac_init(void)
  * @studio twin full
  * @param val [0..4095] Raw DAC value.
  */
-static inline void core_dac_write(uint16_t val)
-{
-    hal_dac_write(&core_dac, val);
-}
+CORE_INLINE void core_dac_write(uint16_t val);
 
 /**
  * Write a voltage in millivolts.
@@ -70,10 +64,7 @@ static inline void core_dac_write(uint16_t val)
  * @studio twin full
  * @param mv [0..3300] Output voltage in millivolts.
  */
-static inline void core_dac_write_mv(uint16_t mv)
-{
-    hal_dac_write_mv(&core_dac, mv);
-}
+CORE_INLINE void core_dac_write_mv(uint16_t mv);
 
 /**
  * Read back the current DAC output register value (12-bit).
@@ -81,10 +72,7 @@ static inline void core_dac_write_mv(uint16_t mv)
  * @studio expose category=dac name=read returns=int availability=Core.ST.H5
  * @studio twin full
  */
-static inline uint16_t core_dac_read(void)
-{
-    return hal_dac_read(&core_dac);
-}
+CORE_INLINE uint16_t core_dac_read(void);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -96,5 +84,8 @@ static inline uint16_t core_dac_read(void)
 // @studio unsupported tier=1 value=L title="No dual-channel synchronization"
 //   The DAC peripheral has two channels that can be triggered together
 //   for stereo / I-Q output. Only single-channel writes are exposed.
+
+/* The port's bodies of the functions above. */
+#include "port_core_dac.h"
 
 #endif /* CORE_DAC_H */

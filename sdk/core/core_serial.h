@@ -24,78 +24,53 @@
 #ifndef CORE_SERIAL_H
 #define CORE_SERIAL_H
 
-#include "hal_uart.h"
 #include "core_types.h"
-#include "port_core_serial.h"   /* core_serial_t, core_serial_config_t, core_uart_instance_t */
+#include "port_core_serial_types.h"   /* core_serial_t, core_serial_config_t, core_uart_instance_t */
 
 /* ---- Init ---- */
 
 /** Initialize a UART instance.
  *  Clock is auto-resolved from PCLK1_HZ (core_config.h).
  */
-static inline core_status_t core_serial_init(core_serial_t *h,
-                                              core_uart_instance_t *instance,
-                                              const core_serial_config_t *cfg)
-{
-    return hal_uart_init(h, instance, PCLK1_HZ, cfg);
-}
+CORE_INLINE core_status_t core_serial_init(core_serial_t *h,
+                                            core_uart_instance_t *instance,
+                                            const core_serial_config_t *cfg);
 
 /** @deprecated Use core_serial_init(h, instance, cfg) — clock auto-resolved. */
-static inline core_status_t core_serial_init_clk(core_serial_t *h,
-                                                  core_uart_instance_t *instance,
-                                                  uint32_t pclk_hz,
-                                                  const core_serial_config_t *cfg)
-{
-    return hal_uart_init(h, instance, pclk_hz, cfg);
-}
+CORE_INLINE core_status_t core_serial_init_clk(core_serial_t *h,
+                                                core_uart_instance_t *instance,
+                                                uint32_t pclk_hz,
+                                                const core_serial_config_t *cfg);
 
 /* ---- TX ---- */
 
 /** Transmit a buffer (blocking). */
-static inline void core_serial_write(core_serial_t *h, const uint8_t *data,
-                                      uint32_t len)
-{
-    hal_uart_tx(h, data, len);
-}
+CORE_INLINE void core_serial_write(core_serial_t *h, const uint8_t *data,
+                                    uint32_t len);
 
 /** Transmit a null-terminated string (blocking). */
-static inline void core_serial_print(core_serial_t *h, const char *str)
-{
-    hal_uart_tx_str(h, str);
-}
+CORE_INLINE void core_serial_print(core_serial_t *h, const char *str);
 
-/** Printf over UART (blocking). */
-#define core_serial_printf  hal_uart_printf
+/* core_serial_printf(h, fmt, ...): printf over UART (blocking). A macro the
+ * port defines (port_core_serial.h). */
 
 /** Transmit a single byte (blocking). */
-static inline void core_serial_putc(core_serial_t *h, uint8_t byte)
-{
-    hal_uart_putc(h, byte);
-}
+CORE_INLINE void core_serial_putc(core_serial_t *h, uint8_t byte);
 
 /* ---- RX ---- */
 
 /** Number of bytes available in the RX buffer. */
-static inline uint16_t core_serial_available(core_serial_t *h)
-{
-    return hal_uart_available(h);
-}
+CORE_INLINE uint16_t core_serial_available(core_serial_t *h);
 
 /** Receive a single byte (blocking -- waits for data). */
-static inline uint8_t core_serial_getc(core_serial_t *h)
-{
-    return hal_uart_rx(h);
-}
+CORE_INLINE uint8_t core_serial_getc(core_serial_t *h);
 
 /**
  * Read available bytes from the RX ring buffer (non-blocking).
  * Returns number of bytes read.
  */
-static inline uint16_t core_serial_read(core_serial_t *h, uint8_t *buf,
-                                         uint16_t max_len)
-{
-    return hal_uart_read(h, buf, max_len);
-}
+CORE_INLINE uint16_t core_serial_read(core_serial_t *h, uint8_t *buf,
+                                       uint16_t max_len);
 
 /* ---- Tier 2 — default-instance bus helpers ---------------------------- */
 
@@ -126,13 +101,7 @@ core_serial_t *core_serial_handle_for_bus(uint8_t bus);
  * @param bus UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...).
  * @param str NUL-terminated string to send.
  */
-static inline int core_serial_print_bus(uint8_t bus, const char *str)
-{
-    hal_uart_t *h = core_serial_handle_for_bus(bus);
-    if (!h) return -1;
-    hal_uart_tx_str(h, str);
-    return 0;
-}
+CORE_INLINE int core_serial_print_bus(uint8_t bus, const char *str);
 
 /**
  * Write a single byte to `bus` (blocking). Returns 0 on success or
@@ -143,13 +112,7 @@ static inline int core_serial_print_bus(uint8_t bus, const char *str)
  * @param bus UART bus id as declared in config.json (1 = USART1, 2 = USART2, ...).
  * @param byte Byte to send.
  */
-static inline int core_serial_putc_bus(uint8_t bus, uint8_t byte)
-{
-    hal_uart_t *h = core_serial_handle_for_bus(bus);
-    if (!h) return -1;
-    hal_uart_putc(h, byte);
-    return 0;
-}
+CORE_INLINE int core_serial_putc_bus(uint8_t bus, uint8_t byte);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -182,5 +145,8 @@ static inline int core_serial_putc_bus(uint8_t bus, uint8_t byte)
 // @studio unsupported tier=1 value=M title="No LPUART (low-power UART)"
 //   SDK roadmap Tier 2: LPUART works in Stop mode for wake-on-serial.
 //   Compile-only on every Core today; not surfaced through this header.
+
+/* The port's bodies of the functions above. */
+#include "port_core_serial.h"
 
 #endif /* CORE_SERIAL_H */
