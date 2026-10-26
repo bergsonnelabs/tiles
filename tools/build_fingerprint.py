@@ -6,10 +6,11 @@ compiles every Studio project against it. Redeploying it is only worth doing
 when that commit would build something different. This fingerprint answers
 that: same fingerprint, same firmware for any project; a new one, redeploy.
 
-Inputs are what `make` and coregen read: the Makefile, sdk/, hal/, drivers/,
-the Core definitions (a peripheral's definition is never read by the build),
-third_party submodule pins, tools/coregen/, tools/gen_studio_natives.py (coregen
-imports it) and manifests/sdk-docs/ (coregen reads them for the WAMR natives).
+Inputs are what `make` and coregen read: the Makefile, cores/ (each Core's
+core.mk), sdk/, hal/, drivers/, the Core definitions (a peripheral's
+definition is never read by the build), third_party submodule pins,
+tools/coregen/, tools/gen_studio_natives.py (coregen imports it) and
+manifests/sdk-docs/ (coregen reads them for the WAMR natives).
 
 What does NOT count: comments and whitespace in C, docstrings in Python, prose
 fields in JSON (descriptions, briefs, labels, timestamps), and documentation
@@ -22,8 +23,9 @@ changes, because a project may start calling it.
 
 With --overlay (checkouts of the private overlay repos a build uses through
 TILES_OVERLAY), the fingerprint also covers what the build reads from each:
-drivers/ (with drivers.json) and definitions/, at the overlay's HEAD (its git
-tree, not the working tree). Each overlay is hashed on its own, the digests
+drivers/ (with drivers.json), definitions/, and for an overlay Core its
+cores/<stem>/core.mk, sdk/port/ and tools/coregen/ports/, at the overlay's
+HEAD (its git tree, not the working tree). Each overlay is hashed on its own, the digests
 are sorted and combined with the tiles fingerprint, so the value doesn't
 depend on the overlays' order or directory names; with none it is the plain
 tiles fingerprint.
@@ -40,7 +42,7 @@ import sys
 import tokenize
 
 INPUTS = re.compile(
-    r'^(Makefile|tiles[^/]*\.h|sdk/|hal/|drivers/|definitions/Core-|third_party/|'
+    r'^(Makefile|cores/|tiles[^/]*\.h|sdk/|hal/|drivers/|definitions/Core-|third_party/|'
     r'tools/coregen/|tools/gen_studio_natives\.py|manifests/sdk-docs/)'
 )
 # manifests/sdk-docs/gaps.json is the SDK's known-gap notes for the website;
@@ -124,9 +126,11 @@ def normalize(path: str, src: bytes) -> bytes:
 
 
 # What a build reads from a private overlay checkout (TILES_OVERLAY): its
-# drivers (and drivers/drivers.json) and its definitions (non-public Cores;
-# coregen reads tile definitions too).
-OVERLAY_INPUTS = re.compile(r'^(drivers/|definitions/)')
+# drivers (and drivers/drivers.json), its definitions (non-public Cores;
+# coregen reads tile definitions too), and for a non-public Core its
+# cores/<stem>/core.mk, its port's sources (sdk/port/) and coregen port
+# (tools/coregen/ports/).
+OVERLAY_INPUTS = re.compile(r'^(drivers/|definitions/|cores/|sdk/port/|tools/coregen/ports/)')
 
 
 def _git(*args: str, cwd=None) -> str:

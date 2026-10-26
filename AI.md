@@ -46,6 +46,21 @@ map is `CORE_NAME_ALIASES` in `tools/coregen/coregen.py`.
   moved the C0 Core and Sense.A.3 into the T24 "m" families:
   `mCore-ST-C0-a` (mCore.ST.C0, not yet buildable) and `mSense-A-3-a`.
 
+Each Core's build settings live in **`cores/<stem>/core.mk`**, one file per
+definition stem, which the Makefile includes after resolving `TILE`:
+`MCU_FAMILY`, `MCU_PART`, `PROBE_RS_CHIP`, `CPU`, `FPU`/`FLOAT_ABI` (unset on
+the L0, which has no FPU), `LDSCRIPT`, `STARTUP`, `OPENOCD_CFG`, optional
+`FLASH_TOOL`, plus `PORT` (`stm32`), `ARCH` (`cortex-m`) and `TOOLCHAIN`
+(`arm-none-eabi`). The contract is in each file's header. The lookup matches
+the definition's: `cores/<stem>/core.mk` here first, then each
+`TILES_OVERLAY` checkout's, so a non-public Core ships its own core.mk in its
+private repo and public tiles never names it. Such a Core may also be passed by
+its public name (`TILE=Core.N.LM20B` picks the overlay's highest-rev
+`cores/Core-N-LM20B-<rev>/`). A core.mk for a non-stm32 port sets `PORT_MK`
+to its port's make fragment (included right after; `CORE_DIR` is the core.mk's
+own directory), which must then supply its own sources, flags, link script
+and flash targets: the rest of the Makefile is the STM32 port.
+
 MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `MCU_DB` inside `tools/coregen/coregen.py`.
 
 ---
@@ -56,6 +71,7 @@ MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `M
 tiles/
 ├── Makefile                    # Top-level build orchestrator
 ├── AI.md                       # ← this file
+├── cores/<stem>/core.mk        # Per-Core build settings (MCU, CPU/FPU, link script, startup, probe)
 ├── sdk/
 │   ├── core/                   # User-facing API (core_ namespace, see Core Layer section)
 │   ├── hal/                    # HAL implementations (see HAL Layer section)
@@ -716,7 +732,9 @@ Data/control functions
 2. Add linker script + startup to `sdk/device/`
 3. Add `SPI_CLK_MAP` entries for the new MCU's APB assignments
 4. Add the tile JSON to `definitions/`
-5. Update `TILE` -> MCU mapping in `Makefile`
+5. Add `cores/<stem>/core.mk` (copy a sibling's; contract in its header).
+   A non-public Core keeps it, like its definition, in its private repo
+   (found through `TILES_OVERLAY`).
 6. Add a `sdk/status/core-<x>.json` with the new Core's feature statuses
 
 ### SDK implementation status

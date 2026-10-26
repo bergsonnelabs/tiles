@@ -194,6 +194,32 @@ else ifeq ($(TILE),Core.ST.W5)
   override TILE := Core-ST-W5-b
 endif
 
+# ---- Core lookup: cores/<stem>/core.mk ----
+# Each Core's MCU settings live in cores/<stem>/core.mk (contract in the file's
+# header), searched like its definition: this SDK first, then each overlay's
+# cores/<stem>/core.mk. An overlay Core may also be named by its public name
+# (Core.<Family>.<Name>, dots), which has no alias above: Core.N.LM20B picks
+# the overlay's highest-rev cores/Core-N-LM20B-<rev>/ (last in sort order),
+# and TILE becomes that stem so the definition lookup and coregen get the stem.
+# Included further down, where the per-Core settings have always been set.
+_core_mk = $(firstword $(wildcard $(SDK_DIR)cores/$(1)/core.mk \
+             $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/cores/$(1)/core.mk)))
+CORE_MK := $(call _core_mk,$(TILE))
+ifeq ($(CORE_MK),)
+  ifneq ($(findstring .,$(TILE)),)
+    _CORE_PREFIX := $(subst .,-,$(TILE))-
+    _CORE_STEMS := $(sort $(foreach m, \
+                     $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(wildcard $(o)/cores/$(_CORE_PREFIX)*/core.mk)), \
+                     $(notdir $(patsubst %/,%,$(dir $(m))))))
+    # Only <prefix><rev> with a one-segment rev: Core.N.LM20 must not pick Core-N-LM20-B-a.
+    _CORE_STEMS := $(foreach s,$(_CORE_STEMS),$(if $(findstring -,$(patsubst $(_CORE_PREFIX)%,%,$(s))),,$(s)))
+    ifneq ($(_CORE_STEMS),)
+      override TILE := $(lastword $(_CORE_STEMS))
+      CORE_MK := $(call _core_mk,$(TILE))
+    endif
+  endif
+endif
+
 # Project directory — override to point at any folder outside the SDK
 PROJECT_DIR ?= $(SDK_DIR)examples/$(PROJECT)
 
@@ -239,51 +265,30 @@ GEN_DIR      ?= $(PROJECT_DIR)/coregen
 # the SHELL block above guarantees on Windows.)
 CONFIG_FOUND := $(shell [ -f "$(CONFIG_JSON)" ] && echo 1)
 
-# ---- Tile → MCU mapping ----
-# coregen generates the headers; the Makefile still needs to know
-# CPU architecture and linker script for compiler flags.
+# ---- Tile → MCU mapping: include the Core's core.mk ----
+# coregen generates the headers; the Makefile still needs to know CPU
+# architecture and linker script for compiler flags. Those come from the
+# core.mk found above (recursive `=`, so later blocks can still override
+# LDSCRIPT). CORE_DIR (ends in /) is that file's directory, for an overlay
+# core.mk to name its own files.
 
-ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
-  MCU_FAMILY  = stm32l4xx
-  MCU_PART    = STM32L422xx
-  PROBE_RS_CHIP = STM32L422KB
-  CPU         = cortex-m4
-  FPU         = fpv4-sp-d16
-  FLOAT_ABI   = hard
-  LDSCRIPT    = $(SDK_DIR)sdk/device/stm32l422tb.ld
-  STARTUP     = $(SDK_DIR)sdk/device/stm32l4xx/startup_stm32l422xx.s
-  OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32l4.cfg
-else ifeq ($(TILE),Core-ST-L0-a)
-  MCU_FAMILY  = stm32l0xx
-  MCU_PART    = STM32L011xx
-  PROBE_RS_CHIP = STM32L011K4
-  CPU         = cortex-m0plus
-  LDSCRIPT    = $(SDK_DIR)sdk/device/stm32l011e4.ld
-  STARTUP     = $(SDK_DIR)sdk/device/stm32l0xx/startup_stm32l011xx.s
-  OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32l0.cfg
-else ifeq ($(TILE),Core-ST-W5-b)
-  MCU_FAMILY  = stm32wbaxx
-  MCU_PART    = STM32WBA55xx
-  PROBE_RS_CHIP = STM32WBA55CG
-  CPU         = cortex-m33
-  FPU         = fpv5-sp-d16
-  FLOAT_ABI   = hard
-  LDSCRIPT    = $(SDK_DIR)sdk/device/stm32wba55hg.ld
-  STARTUP     = $(SDK_DIR)sdk/device/stm32wbaxx/startup_stm32wba55xx.s
-  OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32wba.cfg
-  FLASH_TOOL  = cubeprog
-else ifeq ($(TILE),Core-ST-H5-a)
-  MCU_FAMILY  = stm32h5xx
-  MCU_PART    = STM32H523xx
-  PROBE_RS_CHIP = STM32H523HEYxT
-  CPU         = cortex-m33
-  FPU         = fpv5-sp-d16
-  FLOAT_ABI   = hard
-  LDSCRIPT    = $(SDK_DIR)sdk/device/stm32h523he.ld
-  STARTUP     = $(SDK_DIR)sdk/device/stm32h5xx/startup_stm32h523xx.s
-  OPENOCD_CFG = $(SDK_DIR)sdk/debug/stm32h5.cfg
-else
-  $(error Unknown TILE: $(TILE). Supported: public names Core.ST.L0 / Core.ST.L4 / Core.ST.L4.2 / Core.ST.W5 / Core.ST.H5 (Core.ST.L4 and Core.ST.L4.2 are different boards), or stems Core-ST-L0-a, Core-ST-L4-a, Core-ST-L4-b, Core-ST-L4-2-a, Core-ST-W5-b, Core-ST-H5-a)
+ifeq ($(CORE_MK),)
+  $(error Unknown TILE: $(TILE). Supported: public names Core.ST.L0 / Core.ST.L4 / Core.ST.L4.2 / Core.ST.W5 / Core.ST.H5 (Core.ST.L4 and Core.ST.L4.2 are different boards), or stems Core-ST-L0-a, Core-ST-L4-a, Core-ST-L4-b, Core-ST-L4-2-a, Core-ST-W5-b, Core-ST-H5-a. A non-public Core needs cores/$(if $(findstring .,$(TILE)),$(subst .,-,$(TILE))-<rev>,$(TILE))/core.mk in a checkout of its private repo$(if $(strip $(TILES_OVERLAY)), (not found in TILES_OVERLAY: $(strip $(TILES_OVERLAY))),): make TILE=$(TILE) TILES_OVERLAY=/path/to/tiles-internal)
+endif
+CORE_DIR := $(dir $(CORE_MK))
+include $(CORE_MK)
+
+# Port hook. A core.mk for a non-stm32 port sets PORT_MK to its port's make
+# fragment (e.g. PORT_MK = $(CORE_DIR)../../sdk/port/nrf54l/port.mk in an
+# overlay), included right here. That port must then supply its own sources,
+# flags, link script and flash targets: the STM32-specific parts of this
+# Makefile (HAL sources, startup, bootloader/BLE/Thread link scripts, OpenOCD /
+# probe-rs / DFU flashing) are meant only for PORT = stm32. Public Cores leave
+# PORT_MK unset, so this is inert for them.
+ifneq ($(strip $(PORT_MK)),)
+  include $(PORT_MK)
+else ifneq ($(PORT),stm32)
+  $(error TILE=$(TILE): core.mk ($(CORE_MK)) sets PORT=$(PORT) but no PORT_MK; a non-stm32 port needs its own make fragment)
 endif
 
 # ---- Bootloader support ----
@@ -762,9 +767,11 @@ endif
 # GNU Make detects it was remade and restarts (picking up TILES_DRIVERS).
 # Also remade when TILES_OVERLAY differs from the one it was generated with
 # (TILES_OVERLAY_GEN, written by coregen), since it names overlay drivers by path.
+# The Core's core.mk (and its port's PORT_MK) count too: a changed Core regenerates.
 COREGEN_OVERLAY_CHANGED := $(if $(filter 1,$(TILES_ENABLED)),$(if $(filter-out $(TILES_OVERLAY_GEN),$(TILES_OVERLAY))$(filter-out $(TILES_OVERLAY),$(TILES_OVERLAY_GEN)),FORCE_COREGEN))
 .PHONY: FORCE_COREGEN
 $(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(SDK_DIR)tools/coregen/coregen.py $(SDK_DIR)tools/coregen/templates/*.j2 \
+                           $(CORE_MK) $(PORT_MK) \
                            $(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/drivers/drivers.json)) \
                            $(COREGEN_OVERLAY_CHANGED)
 	@mkdir -p "$(GEN_DIR)"
