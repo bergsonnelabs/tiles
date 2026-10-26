@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "pad",
   "label": "Core.Pad",
   "icon": "◼",
@@ -29,7 +29,7 @@
       "name": "core_pad_output_od",
       "signature": "core_pad_output_od(uint8_t pad, uint32_t pull)",
       "returns": "void",
-      "brief": "Configure a pad as open-drain output with optional pull resistor. Use PULL_UP for a wired-AND / I2C-style bus, PULL_NONE for external pull.",
+      "brief": "Configure a pad as open-drain output with optional pull resistor. Use CORE_PULL_UP for a wired-AND / I2C-style bus, CORE_PULL_NONE for external pull.",
       "params": [
         {
           "name": "pad",
@@ -203,13 +203,13 @@
     },
     {
       "name": "core_pad_bulk_write",
-      "signature": "core_pad_bulk_write(GPIO_TypeDef * port, uint32_t set_mask, uint32_t clear_mask)",
+      "signature": "core_pad_bulk_write(core_pad_port_t * port, uint32_t set_mask, uint32_t clear_mask)",
       "returns": "void",
       "brief": "Bulk update many pins on ONE port in a single atomic BSRR write: pins in `set_mask` go high, pins in `clear_mask` go low (set wins on overlap, per BSRR). Build the masks from the generated PAD_n_MASK defines. Useful for synchronized buses / LED matrices without per-pad jitter.",
       "params": [
         {
           "name": "port",
-          "ctype": "GPIO_TypeDef *"
+          "ctype": "core_pad_port_t *"
         },
         {
           "name": "set_mask",
@@ -241,7 +241,7 @@
       "name": "core_pad_speed",
       "signature": "core_pad_speed(uint8_t pad, uint32_t speed)",
       "returns": "void",
-      "brief": "Set the output speed (slew rate) of a pad. Use SPEED_LOW / SPEED_MED / SPEED_HIGH / SPEED_VHIGH. Only affects outputs — input pads ignore this setting.",
+      "brief": "Set the output speed (slew rate) of a pad. Use CORE_SPEED_LOW / _MED / _HIGH / _VHIGH. Only affects outputs — input pads ignore this setting.",
       "params": [
         {
           "name": "pad",
@@ -257,8 +257,8 @@
     },
     {
       "name": "core_pad_on_change",
-      "signature": "core_pad_on_change(uint8_t pad, uint32_t edge, hal_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_pad_on_change(uint8_t pad, uint32_t edge, core_pad_cb_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Register an edge-triggered callback on a pad. The pad is automatically configured as input with a sensible pull resistor based on edge direction: rising  → pull-down (idle low) falling → pull-up   (idle high) both    → no pull   (external bias expected)",
       "params": [
         {
@@ -269,11 +269,11 @@
         {
           "name": "edge",
           "ctype": "uint32_t",
-          "description": "EDGE_RISING, EDGE_FALLING, or EDGE_BOTH"
+          "description": "CORE_EDGE_RISING, CORE_EDGE_FALLING, or CORE_EDGE_BOTH"
         },
         {
           "name": "cb",
-          "ctype": "hal_callback_t",
+          "ctype": "core_pad_cb_t",
           "description": "Callback (called from ISR context)"
         },
         {
@@ -903,6 +903,76 @@
       ],
       "studio_exposed": false,
       "layer": "ll"
+    }
+  ],
+  "types": [
+    {
+      "name": "core_pad_cb_t",
+      "kind": "typedef",
+      "brief": "Pad edge callback, run in interrupt context with the ctx given at registration.",
+      "decl": "typedef core_callback_t core_pad_cb_t;"
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_PULL_NONE",
+      "value": "0x0UL",
+      "description": "No pull resistor"
+    },
+    {
+      "name": "CORE_PULL_UP",
+      "value": "0x1UL",
+      "description": "Pull-up"
+    },
+    {
+      "name": "CORE_PULL_DOWN",
+      "value": "0x2UL",
+      "description": "Pull-down"
+    },
+    {
+      "name": "CORE_OTYPE_PP",
+      "value": "0x0UL",
+      "description": "Push-pull"
+    },
+    {
+      "name": "CORE_OTYPE_OD",
+      "value": "0x1UL",
+      "description": "Open-drain"
+    },
+    {
+      "name": "CORE_SPEED_LOW",
+      "value": "0x0UL",
+      "description": "~2 MHz: LEDs, relays"
+    },
+    {
+      "name": "CORE_SPEED_MED",
+      "value": "0x1UL",
+      "description": "~10 MHz: general GPIO (default)"
+    },
+    {
+      "name": "CORE_SPEED_HIGH",
+      "value": "0x2UL",
+      "description": "~50 MHz: SPI, UART"
+    },
+    {
+      "name": "CORE_SPEED_VHIGH",
+      "value": "0x3UL",
+      "description": "~100 MHz: SDMMC, high-speed"
+    },
+    {
+      "name": "CORE_EDGE_RISING",
+      "value": "0x01",
+      "description": "Rising edge"
+    },
+    {
+      "name": "CORE_EDGE_FALLING",
+      "value": "0x02",
+      "description": "Falling edge"
+    },
+    {
+      "name": "CORE_EDGE_BOTH",
+      "value": "0x03",
+      "description": "Both edges"
     }
   ]
 }

@@ -14,7 +14,7 @@
  * the L4 and WBA with the option bytes as shipped). When core_watchdog_start()
  * has armed it, core_stop_for() and core_stop_until_on_change() sleep in
  * chunks of half the timeout and feed it in between, and core_standby_for()
- * refuses (returns HAL_ERROR) a Standby longer than half the timeout, because
+ * refuses (returns CORE_ERROR) a Standby longer than half the timeout, because
  * nothing can feed the watchdog until main() runs again. On Core.ST.H5,
  * core_standby_for() does not check the watchdog yet.
  *
@@ -59,6 +59,7 @@
 #include "ll_iwdg.h"
 #include "ll_systick.h"
 #include "core_pad.h"
+#include "core_types.h"
 
 /* EXTI addresses come from ll_exti.h */
 #include "ll_exti.h"
@@ -560,14 +561,14 @@ static inline void core_stop_until_on_change(uint8_t pad, uint32_t edge)
  *
  * Watchdog: the IWDG keeps counting through Standby and nothing feeds it until
  * main() runs again, and Standby can't be split into fed chunks. So while the
- * watchdog is running this refuses — returns HAL_ERROR without sleeping —
+ * watchdog is running this refuses — returns CORE_ERROR without sleeping —
  * unless seconds is at most half the watchdog timeout (2 s with the default
  * 5 s watchdog). Use core_stop_for() for longer sleeps. (Core.ST.H5: no check.)
  *
  * @param seconds [1..65536] Seconds in Standby.
- * @return HAL_ERROR if refused because of the watchdog; does not return otherwise.
+ * @return CORE_ERROR if refused because of the watchdog; does not return otherwise.
  */
-static inline hal_status_t core_standby_for(uint32_t seconds)
+static inline core_status_t core_standby_for(uint32_t seconds)
 {
 #if defined(STM32H523xx)
     ll_rcc_pwr_clk_enable();
@@ -735,7 +736,7 @@ static inline void core_watchdog_start_seconds(uint32_t seconds)
 //   The IWDG keeps counting in Standby (always on the L0, by option byte on
 //   the L4/WBA) and nothing feeds it until main() runs again, so with the
 //   watchdog on (the Studio default, 5 s) core_standby_for refuses anything
-//   longer than half the timeout and returns HAL_ERROR, and
+//   longer than half the timeout and returns CORE_ERROR, and
 //   core_standby_until_on_change returns without sleeping. Long sleeps use
 //   core_stop_for, which wakes to feed. Changing the IWDG_STDBY option byte
 //   would lift this on the L4/WBA; the SDK doesn't touch option bytes.

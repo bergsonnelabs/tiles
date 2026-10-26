@@ -1,6 +1,6 @@
 {
   "schema": "studio-manifest/v1",
-  "source": "tiles@217a38f",
+  "source": "tiles@1993ec9",
   "categories": {
     "adc": {
       "label": "Core.ADC",
@@ -358,7 +358,7 @@
           "description": "Byte to write."
         }
       ],
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "dsl_returns": "int"
     },
     {

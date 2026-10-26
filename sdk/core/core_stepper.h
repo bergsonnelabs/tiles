@@ -136,9 +136,9 @@ typedef struct {
  * @param h         Axis handle to initialise.
  * @param step_pad  [1..64] Pad wired to the driver's STEP / PUL input; must carry a TIMx.y function.
  * @param dir_pad   [1..64] Pad wired to the driver's DIR input.
- * @return HAL_OK; HAL_ERROR if the STEP pad is not a timer pad in config.json, DIR has no GPIO, or the timer cannot interrupt.
+ * @return CORE_OK; CORE_ERROR if the STEP pad is not a timer pad in config.json, DIR has no GPIO, or the timer cannot interrupt.
  */
-hal_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad);
+core_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad);
 
 /**
  * Bind an axis with an explicit timer instance and channel (no coregen
@@ -150,10 +150,10 @@ hal_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_
  * @param channel   [1..4] Output channel wired to the STEP pad.
  * @param step_pad  [1..64] STEP pad (recorded only; its AF is the caller's job).
  * @param dir_pad   [1..64] Pad wired to the driver's DIR input.
- * @return HAL_OK, or HAL_ERROR if DIR has no GPIO or the timer cannot interrupt.
+ * @return CORE_OK, or CORE_ERROR if DIR has no GPIO or the timer cannot interrupt.
  */
-hal_status_t core_stepper_init_ch(core_stepper_t *h, TIM_TypeDef *instance, uint8_t channel,
-                                  uint8_t step_pad, uint8_t dir_pad);
+core_status_t core_stepper_init_ch(core_stepper_t *h, core_timer_instance_t *instance,
+                                   uint8_t channel, uint8_t step_pad, uint8_t dir_pad);
 
 /**
  * Add an ENABLE output. The pad is driven to its disabled level immediately;

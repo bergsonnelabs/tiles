@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "pwm",
   "label": "Core.PWM",
   "icon": "◲",
@@ -11,8 +11,8 @@
   "functions": [
     {
       "name": "core_pwm_init",
-      "signature": "core_pwm_init(core_timer_t * h, TIM_TypeDef * instance, uint32_t freq_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_pwm_init(core_timer_t * h, core_timer_instance_t * instance, uint32_t freq_hz)",
+      "returns": "core_status_t",
       "brief": "Initialize a timer for PWM output at the given frequency. Clock is auto-resolved from SYSCLK_HZ (core_config.h).",
       "params": [
         {
@@ -21,7 +21,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "freq_hz",
@@ -33,8 +33,8 @@
     },
     {
       "name": "core_pwm_init_clk",
-      "signature": "core_pwm_init_clk(core_timer_t * h, TIM_TypeDef * instance, uint32_t pclk_hz, uint32_t freq_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_pwm_init_clk(core_timer_t * h, core_timer_instance_t * instance, uint32_t pclk_hz, uint32_t freq_hz)",
+      "returns": "core_status_t",
       "brief": "Deprecated. Use core_pwm_init(h, instance, freq_hz) — clock auto-resolved.",
       "params": [
         {
@@ -43,7 +43,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "pclk_hz",
@@ -129,7 +129,7 @@
     {
       "name": "core_pwm_init_pad",
       "signature": "core_pwm_init_pad(core_timer_t * h, uint8_t pad, uint32_t freq_hz)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Initialize PWM on a pad. Timer instance resolved from config.json.",
       "params": [
         {
@@ -173,7 +173,7 @@
     {
       "name": "core_pwm_timer_for_pad",
       "signature": "core_pwm_timer_for_pad(uint8_t pad)",
-      "returns": "hal_timer_t *",
+      "returns": "core_timer_t *",
       "brief": "The timer driving a pad. Emitted per project by coregen into core_init.c when any TIM<n> pad is configured.",
       "params": [
         {
@@ -216,8 +216,8 @@
     },
     {
       "name": "core_every_us",
-      "signature": "core_every_us(core_timer_t * h, TIM_TypeDef * instance, uint32_t period_us, hal_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_every_us(core_timer_t * h, core_timer_instance_t * instance, uint32_t period_us, core_callback_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Configure a periodic callback at a fixed interval. period_us: interval in microseconds (1 – 1000000) cb:        callback function (called from ISR context!) ctx:       user context passed to callback Clock is auto-resolved from SYSCLK_HZ (core_config.h).",
       "params": [
         {
@@ -226,7 +226,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "period_us",
@@ -234,7 +234,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_callback_t"
+          "ctype": "core_callback_t"
         },
         {
           "name": "ctx",
@@ -246,8 +246,8 @@
     },
     {
       "name": "core_every_us_clk",
-      "signature": "core_every_us_clk(core_timer_t * h, TIM_TypeDef * instance, uint32_t pclk_hz, uint32_t period_us, hal_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_every_us_clk(core_timer_t * h, core_timer_instance_t * instance, uint32_t pclk_hz, uint32_t period_us, core_callback_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Deprecated. Use core_every_us(h, instance, period_us, cb, ctx) — clock auto-resolved.",
       "params": [
         {
@@ -256,7 +256,7 @@
         },
         {
           "name": "instance",
-          "ctype": "TIM_TypeDef *"
+          "ctype": "core_timer_instance_t *"
         },
         {
           "name": "pclk_hz",
@@ -268,7 +268,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_callback_t"
+          "ctype": "core_callback_t"
         },
         {
           "name": "ctx",

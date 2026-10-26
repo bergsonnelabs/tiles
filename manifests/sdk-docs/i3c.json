@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "i3c",
   "label": "Core.I3C",
   "icon": "⇶",
@@ -13,8 +13,8 @@
   "functions": [
     {
       "name": "core_i3c_init",
-      "signature": "core_i3c_init(core_i3c_t * h, I3C_TypeDef * instance, uint32_t scl_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_i3c_init(core_i3c_t * h, core_i3c_instance_t * instance, uint32_t scl_hz)",
+      "returns": "core_status_t",
       "brief": "Bring an I3C instance up as bus controller at `scl_hz` (push-pull SCL). The kernel clock is the APB clock (rcc_pclk1 for I3C1, rcc_pclk3 for I3C2; both run at SYSCLK on the Cores), so the fastest SCL depends on the clock level: 12.4 MHz at \"max\" (248 MHz), 10.7 MHz at \"medium\" (64 MHz), 8 MHz at \"low\" (16 MHz). The open-drain phases get the longest low time the kernel can count, up to 2 µs. The pads must already be in their I3C alternate function, push-pull (coregen does this).",
       "params": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "name": "instance",
-          "ctype": "I3C_TypeDef *",
+          "ctype": "core_i3c_instance_t *",
           "description": "I3C1 or I3C2."
         },
         {
@@ -54,7 +54,7 @@
     {
       "name": "core_i3c_rstdaa",
       "signature": "core_i3c_rstdaa(core_i3c_t * h)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Broadcast RSTDAA: every target on the bus forgets its dynamic address. Tiles keep their state across a reflash (they stay powered, and flash-serial on the H5 starts the new image without a reset), so run this before assigning addresses.",
       "params": [
         {
@@ -68,7 +68,7 @@
     {
       "name": "core_i3c_setdasa",
       "signature": "core_i3c_setdasa(core_i3c_t * h, uint8_t static_addr, uint8_t dyn_addr)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "SETDASA: give the target at I2C static address `static_addr` the dynamic address `dyn_addr` (0 = the first free one, 0x09 up). Never its static address: a target that loses its dynamic address answers the static one again as an I2C device, and the controller could not tell.",
       "params": [
         {
@@ -91,7 +91,7 @@
     {
       "name": "core_i3c_entdaa",
       "signature": "core_i3c_entdaa(core_i3c_t * h, uint8_t * found)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "ENTDAA: assign dynamic addresses to every target that has none, recording each one's PID, BCR and DCR in h->targets[].",
       "params": [
         {
@@ -131,7 +131,7 @@
     {
       "name": "core_i3c_get_pid",
       "signature": "core_i3c_get_pid(core_i3c_t * h, uint8_t dyn_addr, uint8_t pid[6])",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "GETPID: the target's 48-bit provisioned ID, MSB first (MIPI manufacturer ID in the top 15 bits).",
       "params": [
         {
@@ -153,7 +153,7 @@
     {
       "name": "core_i3c_get_bcr",
       "signature": "core_i3c_get_bcr(core_i3c_t * h, uint8_t dyn_addr, uint8_t * bcr)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "GETBCR: bus characteristics (bit 1 IBI capable, bit 2 IBI payload).",
       "params": [
         {
@@ -175,7 +175,7 @@
     {
       "name": "core_i3c_get_dcr",
       "signature": "core_i3c_get_dcr(core_i3c_t * h, uint8_t dyn_addr, uint8_t * dcr)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "GETDCR: device characteristics (MIPI device-type code).",
       "params": [
         {
@@ -197,7 +197,7 @@
     {
       "name": "core_i3c_get_status",
       "signature": "core_i3c_get_status(core_i3c_t * h, uint8_t dyn_addr, uint16_t * status)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "GETSTATUS (format 1): the target's 16-bit status word.",
       "params": [
         {
@@ -219,7 +219,7 @@
     {
       "name": "core_i3c_enec",
       "signature": "core_i3c_enec(core_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "ENEC: let one target (or all, dyn_addr 0x7E) raise the given events (LL_I3C_EVT_INT for IBIs).",
       "params": [
         {
@@ -241,7 +241,7 @@
     {
       "name": "core_i3c_disec",
       "signature": "core_i3c_disec(core_i3c_t * h, uint8_t dyn_addr, uint8_t events)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "DISEC: stop one target (or all, 0x7E) raising the given events.",
       "params": [
         {
@@ -263,7 +263,7 @@
     {
       "name": "core_i3c_write",
       "signature": "core_i3c_write(core_i3c_t * h, uint8_t dyn_addr, const uint8_t * data, uint16_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Private write of `len` bytes (len >= 1) to a target.",
       "params": [
         {
@@ -289,7 +289,7 @@
     {
       "name": "core_i3c_read",
       "signature": "core_i3c_read(core_i3c_t * h, uint8_t dyn_addr, uint8_t * buf, uint16_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Private read of up to `len` bytes (len >= 1) from a target.",
       "params": [
         {
@@ -315,7 +315,7 @@
     {
       "name": "core_i3c_write_reg",
       "signature": "core_i3c_write_reg(core_i3c_t * h, uint8_t dyn_addr, uint16_t reg, const uint8_t * data, uint16_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Write `len` bytes starting at register `reg` (8-bit, or 16-bit MSB first when > 0xFF), in one private write.",
       "params": [
         {
@@ -345,7 +345,7 @@
     {
       "name": "core_i3c_read_reg",
       "signature": "core_i3c_read_reg(core_i3c_t * h, uint8_t dyn_addr, uint16_t reg, uint8_t * buf, uint16_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Read `len` bytes starting at register `reg`: a private write of the register address, a repeated start, a private read, in one frame.",
       "params": [
         {
@@ -374,8 +374,8 @@
     },
     {
       "name": "core_i3c_ibi_enable",
-      "signature": "core_i3c_ibi_enable(core_i3c_t * h, uint8_t dyn_addr, hal_i3c_ibi_cb_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_i3c_ibi_enable(core_i3c_t * h, uint8_t dyn_addr, core_i3c_ibi_cb_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Acknowledge IBIs from a target and call `cb` for each (interrupt context: keep it short). Then enable them on the target with core_i3c_enec(). The target also has to route an event to IBI in its own registers.",
       "params": [
         {
@@ -388,7 +388,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_i3c_ibi_cb_t"
+          "ctype": "core_i3c_ibi_cb_t"
         },
         {
           "name": "ctx",
@@ -401,7 +401,7 @@
     {
       "name": "core_i3c_ibi_disable",
       "signature": "core_i3c_ibi_disable(core_i3c_t * h, uint8_t dyn_addr)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Stop acknowledging IBIs from a target.",
       "params": [
         {
@@ -1000,6 +1000,12 @@
       "kind": "typedef",
       "brief": "Core-level I3C handle. Alias for hal_i3c_t — use this in application code.",
       "decl": "typedef hal_i3c_t core_i3c_t;"
+    },
+    {
+      "name": "core_i3c_ibi_cb_t",
+      "kind": "callback",
+      "brief": "In-band interrupt callback, run from the I3C event interrupt for each acknowledged IBI: `payload` holds the mandatory data byte first, `len` is 0 when the target sends none.",
+      "decl": "typedef void (*core_i3c_ibi_cb_t)(void *ctx, uint8_t dyn_addr, const uint8_t *payload, uint8_t len);"
     }
   ],
   "constants": [

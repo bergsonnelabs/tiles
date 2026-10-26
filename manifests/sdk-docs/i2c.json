@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@ebefbea",
+  "source": "tiles@1993ec9",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -27,8 +27,8 @@
     },
     {
       "name": "core_i2c_init",
-      "signature": "core_i2c_init(core_i2c_t * h, I2C_TypeDef * instance, uint32_t speed_hz)",
-      "returns": "hal_status_t",
+      "signature": "core_i2c_init(core_i2c_t * h, core_i2c_instance_t * instance, uint32_t speed_hz)",
+      "returns": "core_status_t",
       "brief": "Initialize an I2C bus with automatic timing resolution. core_i2c_t bus; core_i2c_init(&bus, I2C1, I2C_400K); Resolves the TIMINGR value from the compile-time kernel clock. Enables FMP mode automatically when speed is I2C_1M.",
       "params": [
         {
@@ -37,7 +37,7 @@
         },
         {
           "name": "instance",
-          "ctype": "I2C_TypeDef *"
+          "ctype": "core_i2c_instance_t *"
         },
         {
           "name": "speed_hz",
@@ -49,8 +49,8 @@
     },
     {
       "name": "core_i2c_init_cfg",
-      "signature": "core_i2c_init_cfg(core_i2c_t * h, I2C_TypeDef * instance, const hal_i2c_config_t * cfg)",
-      "returns": "hal_status_t",
+      "signature": "core_i2c_init_cfg(core_i2c_t * h, core_i2c_instance_t * instance, const core_i2c_config_t * cfg)",
+      "returns": "core_status_t",
       "brief": "Initialize I2C with explicit config struct (advanced). For most use cases, prefer core_i2c_init(h, instance, speed_hz).",
       "params": [
         {
@@ -59,11 +59,11 @@
         },
         {
           "name": "instance",
-          "ctype": "I2C_TypeDef *"
+          "ctype": "core_i2c_instance_t *"
         },
         {
           "name": "cfg",
-          "ctype": "const hal_i2c_config_t *"
+          "ctype": "const core_i2c_config_t *"
         }
       ],
       "studio_exposed": false,
@@ -72,7 +72,7 @@
     {
       "name": "core_i2c_write",
       "signature": "core_i2c_write(core_i2c_t * h, uint8_t addr, const uint8_t * data, uint32_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Write data to a 7-bit address device.",
       "params": [
         {
@@ -98,7 +98,7 @@
     {
       "name": "core_i2c_read",
       "signature": "core_i2c_read(core_i2c_t * h, uint8_t addr, uint8_t * buf, uint32_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Read data from a 7-bit address device.",
       "params": [
         {
@@ -124,7 +124,7 @@
     {
       "name": "core_i2c_write_reg",
       "signature": "core_i2c_write_reg(core_i2c_t * h, uint8_t addr, uint16_t reg, const uint8_t * data, uint32_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Write to a device register (8 or 16-bit register address).",
       "params": [
         {
@@ -154,7 +154,7 @@
     {
       "name": "core_i2c_read_reg",
       "signature": "core_i2c_read_reg(core_i2c_t * h, uint8_t addr, uint16_t reg, uint8_t * buf, uint32_t len)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Read from a device register (repeated START).",
       "params": [
         {
@@ -184,7 +184,7 @@
     {
       "name": "core_i2c_write_byte",
       "signature": "core_i2c_write_byte(core_i2c_t * h, uint8_t addr, uint16_t reg, uint8_t value)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Write a single byte to a register.",
       "params": [
         {
@@ -210,7 +210,7 @@
     {
       "name": "core_i2c_read_byte",
       "signature": "core_i2c_read_byte(core_i2c_t * h, uint8_t addr, uint16_t reg, uint8_t * value)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Read a single byte from a register.",
       "params": [
         {
@@ -236,7 +236,7 @@
     {
       "name": "core_i2c_probe",
       "signature": "core_i2c_probe(core_i2c_t * h, uint8_t addr)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Check if a device responds at addr. Returns I2C_OK or I2C_NACK.",
       "params": [
         {
@@ -280,7 +280,7 @@
     {
       "name": "core_i2c_handle_for_bus",
       "signature": "core_i2c_handle_for_bus(uint8_t bus)",
-      "returns": "hal_i2c_t *",
+      "returns": "core_i2c_t *",
       "brief": "The I2C handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any I2C bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_USES_I2C_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
       "params": [
         {
@@ -296,7 +296,7 @@
     {
       "name": "core_i2c_write_byte_bus",
       "signature": "core_i2c_write_byte_bus(uint8_t bus, uint8_t addr, uint16_t reg, uint8_t value)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Write a single byte to a register on a device on `bus`. Returns I2C_OK on success, I2C_NACK / I2C_ERROR on bus failure, or I2C_ERROR if `bus` isn't declared in config.json.",
       "params": [
         {
@@ -370,8 +370,8 @@
     },
     {
       "name": "core_i2c_target_init",
-      "signature": "core_i2c_target_init(core_i2c_target_t * t, I2C_TypeDef * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, hal_i2c_target_cb_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_i2c_target_init(core_i2c_target_t * t, core_i2c_instance_t * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, core_i2c_target_cb_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Bring up an I2C peripheral as a read-only target at `addr`.",
       "params": [
         {
@@ -381,7 +381,7 @@
         },
         {
           "name": "speed",
-          "ctype": "I2C_TypeDef *",
+          "ctype": "core_i2c_instance_t *",
           "description": "I2C_100K / I2C_400K / I2C_1M — match the controller"
         },
         {
@@ -406,7 +406,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_i2c_target_cb_t",
+          "ctype": "core_i2c_target_cb_t",
           "description": "optional; NULL for none"
         },
         {
@@ -419,8 +419,8 @@
     },
     {
       "name": "core_i2c_target_init_rw",
-      "signature": "core_i2c_target_init_rw(core_i2c_target_t * t, I2C_TypeDef * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, uint16_t first, uint16_t count, hal_i2c_target_cb_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_i2c_target_init_rw(core_i2c_target_t * t, core_i2c_instance_t * instance, uint8_t addr, uint32_t speed, uint8_t * regs, uint16_t n_regs, uint16_t first, uint16_t count, core_i2c_target_cb_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "As core_i2c_target_init, but accepts host writes to the register range [first, first + count). Everything outside stays read-only.",
       "params": [
         {
@@ -429,7 +429,7 @@
         },
         {
           "name": "instance",
-          "ctype": "I2C_TypeDef *"
+          "ctype": "core_i2c_instance_t *"
         },
         {
           "name": "addr",
@@ -457,7 +457,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_i2c_target_cb_t"
+          "ctype": "core_i2c_target_cb_t"
         },
         {
           "name": "ctx",
@@ -1010,6 +1010,29 @@
       "kind": "typedef",
       "brief": "Core-level I2C target handle. Alias for hal_i2c_target_t.",
       "decl": "typedef hal_i2c_target_t core_i2c_target_t;"
+    },
+    {
+      "name": "core_i2c_target_cb_t",
+      "kind": "callback",
+      "brief": "Target-mode event callback, run from the I2C interrupt: `evt` is one of CORE_I2C_TARGET_*, `reg` the register offset and `value` the byte (WRITE).",
+      "decl": "typedef void (*core_i2c_target_cb_t)(void *ctx, core_i2c_target_event_t evt, uint16_t reg, uint8_t value);"
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_I2C_TARGET_READ_START",
+      "value": "0",
+      "description": "Controller addressed us for a read; SCL stretched, latch your snapshot"
+    },
+    {
+      "name": "CORE_I2C_TARGET_WRITE",
+      "value": "1",
+      "description": "Controller wrote a byte inside the writable window (already in regs[])"
+    },
+    {
+      "name": "CORE_I2C_TARGET_STOP",
+      "value": "2",
+      "description": "Transfer ended (STOP)"
     }
   ]
 }

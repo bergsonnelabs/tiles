@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@ebefbea",
+  "source": "tiles@1993ec9",
   "category": "spi",
   "label": "Core.SPI",
   "icon": "⇆",
@@ -13,60 +13,60 @@
   "functions": [
     {
       "name": "core_spi_init",
-      "signature": "core_spi_init(hal_spi_t * h, SPI_TypeDef * instance, const hal_spi_config_t * cfg)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_init(core_spi_t * h, core_spi_instance_t * instance, const core_spi_config_t * cfg)",
+      "returns": "core_status_t",
       "brief": "Initialize SPI in master mode (8-bit frames).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "Handle (zeroed by this call; attach CS afterwards)"
         },
         {
           "name": "instance",
-          "ctype": "SPI_TypeDef *",
+          "ctype": "core_spi_instance_t *",
           "description": "SPI1 (Core.ST.L4 / Core.ST.W5) or SPI3 (Core.ST.W5)"
         },
         {
           "name": "cfg",
-          "ctype": "const hal_spi_config_t *",
+          "ctype": "const core_spi_config_t *",
           "description": "Prescaler (LL_SPI_PRESCALER_2..256), cpol, cpha, lsb_first"
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, or HAL_ERROR on a NULL argument",
+      "return_desc": "CORE_OK, or CORE_ERROR on a NULL argument",
       "layer": "core"
     },
     {
       "name": "core_spi_configure",
-      "signature": "core_spi_configure(hal_spi_t * h, const hal_spi_config_t * cfg)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_configure(core_spi_t * h, const core_spi_config_t * cfg)",
+      "returns": "core_status_t",
       "brief": "Change prescaler, SPI mode or bit order, keeping the CS pad.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
           "name": "cfg",
-          "ctype": "const hal_spi_config_t *",
+          "ctype": "const core_spi_config_t *",
           "description": "New configuration"
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_BUSY while a DMA transfer runs, HAL_ERROR on NULL",
+      "return_desc": "CORE_OK, CORE_BUSY while a DMA transfer runs, CORE_ERROR on NULL",
       "layer": "core"
     },
     {
       "name": "core_spi_sck_hz",
-      "signature": "core_spi_sck_hz(const hal_spi_t * h)",
+      "signature": "core_spi_sck_hz(const core_spi_t * h)",
       "returns": "uint32_t",
       "brief": "The SCK frequency the handle is set to, in Hz.",
       "params": [
         {
           "name": "h",
-          "ctype": "const hal_spi_t *",
+          "ctype": "const core_spi_t *",
           "description": "SPI handle"
         }
       ],
@@ -76,13 +76,13 @@
     },
     {
       "name": "core_spi_set_cs",
-      "signature": "core_spi_set_cs(hal_spi_t * h, uint8_t pad)",
+      "signature": "core_spi_set_cs(core_spi_t * h, uint8_t pad)",
       "returns": "void",
       "brief": "Assign a CS pin by tile pad number.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -96,13 +96,13 @@
     },
     {
       "name": "core_spi_select",
-      "signature": "core_spi_select(hal_spi_t * h)",
+      "signature": "core_spi_select(core_spi_t * h)",
       "returns": "void",
       "brief": "Assert CS. Everything until core_spi_deselect() is one transaction.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         }
       ],
@@ -111,13 +111,13 @@
     },
     {
       "name": "core_spi_deselect",
-      "signature": "core_spi_deselect(hal_spi_t * h)",
+      "signature": "core_spi_deselect(core_spi_t * h)",
       "returns": "void",
       "brief": "Deassert CS, ending the transaction.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         }
       ],
@@ -126,13 +126,13 @@
     },
     {
       "name": "core_spi_transfer",
-      "signature": "core_spi_transfer(hal_spi_t * h, uint8_t tx)",
+      "signature": "core_spi_transfer(core_spi_t * h, uint8_t tx)",
       "returns": "uint8_t",
       "brief": "Full-duplex single byte. CS untouched.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -147,13 +147,13 @@
     },
     {
       "name": "core_spi_exchange",
-      "signature": "core_spi_exchange(hal_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_exchange(core_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
+      "returns": "core_status_t",
       "brief": "Full-duplex transfer of `len` bytes. CS untouched.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -173,18 +173,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT (stalled), HAL_ERROR (overrun / mode fault), HAL_BUSY (a DMA transfer is running)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT (stalled), CORE_ERROR (overrun / mode fault), CORE_BUSY (a DMA transfer is running)",
       "layer": "core"
     },
     {
       "name": "core_spi_write",
-      "signature": "core_spi_write(hal_spi_t * h, const uint8_t * data, uint32_t len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_write(core_spi_t * h, const uint8_t * data, uint32_t len)",
+      "returns": "core_status_t",
       "brief": "Write-only: send `len` bytes, discard what comes back. CS untouched.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -199,18 +199,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
       "name": "core_spi_read",
-      "signature": "core_spi_read(hal_spi_t * h, uint8_t * buf, uint32_t len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_read(core_spi_t * h, uint8_t * buf, uint32_t len)",
+      "returns": "core_status_t",
       "brief": "Read-only: clock out the fill byte (0xFF) and capture `len` bytes. CS untouched.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -225,18 +225,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
       "name": "core_spi_xfer",
-      "signature": "core_spi_xfer(hal_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_xfer(core_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
+      "returns": "core_status_t",
       "brief": "One CS-framed full-duplex transaction: select, exchange, deselect.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -256,18 +256,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
       "name": "core_spi_write_read",
-      "signature": "core_spi_write_read(hal_spi_t * h, const uint8_t * tx, uint32_t tx_len, uint8_t * rx, uint32_t rx_len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_write_read(core_spi_t * h, const uint8_t * tx, uint32_t tx_len, uint8_t * rx, uint32_t rx_len)",
+      "returns": "core_status_t",
       "brief": "One CS-framed command + data transaction.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -292,18 +292,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT, HAL_ERROR or HAL_BUSY (see core_spi_exchange)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT, CORE_ERROR or CORE_BUSY (see core_spi_exchange)",
       "layer": "core"
     },
     {
       "name": "core_spi_exchange_dma",
-      "signature": "core_spi_exchange_dma(hal_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_exchange_dma(core_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len)",
+      "returns": "core_status_t",
       "brief": "Full-duplex DMA transfer, blocking until the last frame is off the bus. CS untouched.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -323,18 +323,18 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_TIMEOUT (stalled; channels aborted, SPI reset), HAL_BUSY (another DMA transfer is running), HAL_ERROR (DMA error)",
+      "return_desc": "CORE_OK, CORE_TIMEOUT (stalled; channels aborted, SPI reset), CORE_BUSY (another DMA transfer is running), CORE_ERROR (DMA error)",
       "layer": "core"
     },
     {
       "name": "core_spi_xfer_dma",
-      "signature": "core_spi_xfer_dma(hal_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len, hal_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_xfer_dma(core_spi_t * h, const uint8_t * tx, uint8_t * rx, uint32_t len, core_callback_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Start a full-duplex DMA transfer and return at once.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         },
         {
@@ -354,7 +354,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_callback_t",
+          "ctype": "core_callback_t",
           "description": "Completion callback (interrupt context), or NULL"
         },
         {
@@ -364,34 +364,34 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_OK, HAL_BUSY if a DMA transfer is running, HAL_ERROR for a bad length",
+      "return_desc": "CORE_OK, CORE_BUSY if a DMA transfer is running, CORE_ERROR for a bad length",
       "layer": "core"
     },
     {
       "name": "core_spi_dma_wait",
-      "signature": "core_spi_dma_wait(hal_spi_t * h)",
-      "returns": "hal_status_t",
+      "signature": "core_spi_dma_wait(core_spi_t * h)",
+      "returns": "core_status_t",
       "brief": "Wait for a core_spi_xfer_dma() transfer to finish (bounded).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         }
       ],
       "studio_exposed": false,
-      "return_desc": "The transfer's result (HAL_OK if none was running), or HAL_TIMEOUT after aborting a stalled transfer",
+      "return_desc": "The transfer's result (CORE_OK if none was running), or CORE_TIMEOUT after aborting a stalled transfer",
       "layer": "core"
     },
     {
       "name": "core_spi_busy",
-      "signature": "core_spi_busy(hal_spi_t * h)",
+      "signature": "core_spi_busy(core_spi_t * h)",
       "returns": "int",
       "brief": "Whether a DMA transfer is in progress on this handle.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_spi_t *",
+          "ctype": "core_spi_t *",
           "description": "SPI handle"
         }
       ],
@@ -402,7 +402,7 @@
     {
       "name": "core_spi_handle_for_bus",
       "signature": "core_spi_handle_for_bus(uint8_t bus)",
-      "returns": "hal_spi_t *",
+      "returns": "core_spi_t *",
       "brief": "The SPI handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any SPI bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_USES_SPI_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
       "params": [
         {

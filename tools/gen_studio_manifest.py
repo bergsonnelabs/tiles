@@ -270,10 +270,13 @@ UNIT_VOCAB = {
 
 DOXY_BLOCK_RE = re.compile(r"/\*\*(.*?)\*/", re.DOTALL)
 # The return type ends in whitespace or `*`, so `hal_i2c_t *core_i2c_handle_for_bus(`
-# (pointer glued to the name) parses as well as `uint8_t * f(`.
+# (pointer glued to the name) parses as well as `uint8_t * f(`. `CORE_INLINE`
+# (core_types.h: the port's storage class for header-defined core_ functions)
+# is a storage class like `static inline`, never part of the return type.
 SIG_RE = re.compile(
-    r"(?:static\s+inline\s+)?([\w\s\*]*?[\w\*][\s\*]+)(\w+)\s*\(([^;{]*)\)",
+    r"(?:(?:static\s+inline|CORE_INLINE)\s+)?([\w\s\*]*?[\w\*][\s\*]+)(\w+)\s*\(([^;{]*)\)",
 )
+STORAGE_RE = re.compile(r"^(?:static|inline|extern|const|CORE_INLINE)\s+")
 PARAM_RE = re.compile(
     r"^@param\s+(\S+)\s*(?:\{(\w+)\})?\s*(?:\[(-?[\d.]+)\.\.(-?[\d.]+)\])?\s*(.*)$"
 )
@@ -503,8 +506,8 @@ def extract_signature(source, after_offset):
     # not a function; it used to surface as a bogus entry named "void".
     if ret.startswith("typedef"):
         return None
-    ret = re.sub(r"^(?:static|inline|extern|const)\s+", "", ret)
-    ret = re.sub(r"^(?:static|inline|extern|const)\s+", "", ret)
+    ret = STORAGE_RE.sub("", ret)
+    ret = STORAGE_RE.sub("", ret)
     name = m.group(2)
     raw = m.group(3).strip()
     variadic = False

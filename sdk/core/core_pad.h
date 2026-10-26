@@ -35,6 +35,7 @@
 #define CORE_PAD_H
 
 #include "hal_gpio.h"
+#include "core_types.h"
 
 /* ---- On/Off convenience ---- */
 
@@ -45,23 +46,47 @@
 #define OFF 0
 #endif
 
-/* ---- Pull-resistor aliases ---- */
+/* ---- Pull resistor (core_pad_input, core_pad_output_od) ---- */
 
-#define PULL_NONE  LL_GPIO_PULL_NONE
-#define PULL_UP    LL_GPIO_PULL_UP
-#define PULL_DOWN  LL_GPIO_PULL_DOWN
+#define CORE_PULL_NONE  0x0UL   /**< No pull resistor */
+#define CORE_PULL_UP    0x1UL   /**< Pull-up */
+#define CORE_PULL_DOWN  0x2UL   /**< Pull-down */
 
-/* ---- Output-type aliases ---- */
+/* ---- Output type ---- */
 
-#define PUSH_PULL   LL_GPIO_OTYPE_PP
-#define OPEN_DRAIN  LL_GPIO_OTYPE_OD
+#define CORE_OTYPE_PP   0x0UL   /**< Push-pull */
+#define CORE_OTYPE_OD   0x1UL   /**< Open-drain */
 
-/* ---- Speed aliases ---- */
+/* ---- Output speed (core_pad_speed) ---- */
 
-#define SPEED_LOW    LL_GPIO_SPEED_LOW     /* ~2 MHz  — LEDs, relays */
-#define SPEED_MED    LL_GPIO_SPEED_MED     /* ~10 MHz — general GPIO (default) */
-#define SPEED_HIGH   LL_GPIO_SPEED_HIGH    /* ~50 MHz — SPI, UART */
-#define SPEED_VHIGH  LL_GPIO_SPEED_VHIGH   /* ~100 MHz — SDMMC, high-speed */
+#define CORE_SPEED_LOW    0x0UL   /**< ~2 MHz: LEDs, relays */
+#define CORE_SPEED_MED    0x1UL   /**< ~10 MHz: general GPIO (default) */
+#define CORE_SPEED_HIGH   0x2UL   /**< ~50 MHz: SPI, UART */
+#define CORE_SPEED_VHIGH  0x3UL   /**< ~100 MHz: SDMMC, high-speed */
+
+/* ---- Edge (core_pad_on_change, core_stop_until_on_change) ---- */
+
+#define CORE_EDGE_RISING   0x01   /**< Rising edge */
+#define CORE_EDGE_FALLING  0x02   /**< Falling edge */
+#define CORE_EDGE_BOTH     0x03   /**< Both edges */
+
+/* Deprecated short names, kept so existing code builds: use the CORE_ ones. */
+#define PULL_NONE     CORE_PULL_NONE
+#define PULL_UP       CORE_PULL_UP
+#define PULL_DOWN     CORE_PULL_DOWN
+#define PUSH_PULL     CORE_OTYPE_PP
+#define OPEN_DRAIN    CORE_OTYPE_OD
+#define SPEED_LOW     CORE_SPEED_LOW
+#define SPEED_MED     CORE_SPEED_MED
+#define SPEED_HIGH    CORE_SPEED_HIGH
+#define SPEED_VHIGH   CORE_SPEED_VHIGH
+#define EDGE_RISING   CORE_EDGE_RISING
+#define EDGE_FALLING  CORE_EDGE_FALLING
+#define EDGE_BOTH     CORE_EDGE_BOTH
+
+/* The port's pad types (core_pad_port_t) and its checks that the values
+ * above are the hardware's. */
+#include "port_core_pad.h"
 
 /* ---- Pad GPIO API ---- */
 
@@ -72,7 +97,7 @@ static inline void core_pad_output(uint8_t pad)
 }
 
 /** Configure a pad as open-drain output with optional pull resistor.
- *  Use PULL_UP for a wired-AND / I2C-style bus, PULL_NONE for external pull. */
+ *  Use CORE_PULL_UP for a wired-AND / I2C-style bus, CORE_PULL_NONE for external pull. */
 static inline void core_pad_output_od(uint8_t pad, uint32_t pull)
 {
     hal_pad_output_od(pad, pull);
@@ -130,8 +155,8 @@ static inline void core_pad_toggle(uint8_t pad)
  */
 
 typedef struct {
-    GPIO_TypeDef *port;  /* NULL if the pad has no GPIO (power/reset/etc.) */
-    uint32_t      mask;  /* (1u << pin) */
+    core_pad_port_t *port;  /* NULL if the pad has no GPIO (power/reset/etc.) */
+    uint32_t         mask;  /* (1u << pin) */
 } core_pad_fast_t;
 
 /** Resolve a pad to a fast handle once, outside the hot loop. */
@@ -163,7 +188,7 @@ static inline int core_pad_fast_read(core_pad_fast_t h)
  * BSRR). Build the masks from the generated PAD_n_MASK defines. Useful for
  * synchronized buses / LED matrices without per-pad jitter.
  */
-static inline void core_pad_bulk_write(GPIO_TypeDef *port,
+static inline void core_pad_bulk_write(core_pad_port_t *port,
                                        uint32_t set_mask, uint32_t clear_mask)
 {
     port->BSRR = set_mask | (clear_mask << 16);
@@ -176,7 +201,7 @@ static inline void core_pad_analog(uint8_t pad)
 }
 
 /** Set the output speed (slew rate) of a pad.
- *  Use SPEED_LOW / SPEED_MED / SPEED_HIGH / SPEED_VHIGH.
+ *  Use CORE_SPEED_LOW / _MED / _HIGH / _VHIGH.
  *  Only affects outputs — input pads ignore this setting. */
 static inline void core_pad_speed(uint8_t pad, uint32_t speed)
 {
@@ -189,10 +214,8 @@ static inline void core_pad_speed(uint8_t pad, uint32_t speed)
 
 #include "tal_exti.h"
 
-/* Edge aliases */
-#define EDGE_RISING   HAL_EXTI_RISING
-#define EDGE_FALLING  HAL_EXTI_FALLING
-#define EDGE_BOTH     HAL_EXTI_BOTH
+/** Pad edge callback, run in interrupt context with the ctx given at registration. */
+typedef core_callback_t core_pad_cb_t;
 
 /**
  * Register an edge-triggered callback on a pad.
@@ -204,12 +227,12 @@ static inline void core_pad_speed(uint8_t pad, uint32_t speed)
  *   both    → no pull   (external bias expected)
  *
  * @param pad   Tile pad number
- * @param edge  EDGE_RISING, EDGE_FALLING, or EDGE_BOTH
+ * @param edge  CORE_EDGE_RISING, CORE_EDGE_FALLING, or CORE_EDGE_BOTH
  * @param cb    Callback (called from ISR context)
  * @param ctx   Opaque pointer passed to cb
  */
-static inline hal_status_t core_pad_on_change(uint8_t pad, uint32_t edge,
-                                               hal_callback_t cb, void *ctx)
+static inline core_status_t core_pad_on_change(uint8_t pad, uint32_t edge,
+                                                core_pad_cb_t cb, void *ctx)
 {
     return tal_exti_enable(pad, edge, cb, ctx);
 }

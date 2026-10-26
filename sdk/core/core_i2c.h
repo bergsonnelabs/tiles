@@ -38,6 +38,7 @@
 
 #include "hal_i2c.h"
 #include "core_config.h"
+#include "core_types.h"
 
 /** Core-level I2C handle. Alias for hal_i2c_t — use this in application code. */
 typedef hal_i2c_t core_i2c_t;
@@ -48,12 +49,22 @@ typedef hal_i2c_t core_i2c_t;
 #define I2C_400K    400000UL
 #define I2C_1M     1000000UL
 
-/* ---- Status aliases ---- */
+/* ---- Status aliases (core_status_t values) ---- */
 
-#define I2C_OK       HAL_OK
-#define I2C_NACK     HAL_NACK
-#define I2C_TIMEOUT  HAL_TIMEOUT
-#define I2C_ERROR    HAL_ERROR
+#define I2C_OK       CORE_OK
+#define I2C_NACK     CORE_NACK
+#define I2C_TIMEOUT  CORE_TIMEOUT
+#define I2C_ERROR    CORE_ERROR
+
+/* ---- Target-mode events (core_i2c_target_cb_t's evt; see Target mode below) ---- */
+
+#define CORE_I2C_TARGET_READ_START  0   /**< Controller addressed us for a read; SCL stretched, latch your snapshot */
+#define CORE_I2C_TARGET_WRITE       1   /**< Controller wrote a byte inside the writable window (already in regs[]) */
+#define CORE_I2C_TARGET_STOP        2   /**< Transfer ended (STOP) */
+
+/* The port's I2C types (core_i2c_instance_t, core_i2c_config_t,
+ * core_i2c_target_event_t) and its checks on the values above. */
+#include "port_core_i2c.h"
 
 /* ---- Auto-resolving init ---- */
 
@@ -81,9 +92,9 @@ static inline uint32_t _core_i2c_timing(uint32_t speed_hz)
  * Resolves the TIMINGR value from the compile-time kernel clock.
  * Enables FMP mode automatically when speed is I2C_1M.
  */
-static inline hal_status_t core_i2c_init(core_i2c_t *h,
-                                          I2C_TypeDef *instance,
-                                          uint32_t speed_hz)
+static inline core_status_t core_i2c_init(core_i2c_t *h,
+                                           core_i2c_instance_t *instance,
+                                           uint32_t speed_hz)
 {
     uint32_t timing = _core_i2c_timing(speed_hz);
     if (!timing) return HAL_ERROR;
@@ -99,9 +110,9 @@ static inline hal_status_t core_i2c_init(core_i2c_t *h,
  * Initialize I2C with explicit config struct (advanced).
  * For most use cases, prefer core_i2c_init(h, instance, speed_hz).
  */
-static inline hal_status_t core_i2c_init_cfg(core_i2c_t *h,
-                                              I2C_TypeDef *instance,
-                                              const hal_i2c_config_t *cfg)
+static inline core_status_t core_i2c_init_cfg(core_i2c_t *h,
+                                               core_i2c_instance_t *instance,
+                                               const core_i2c_config_t *cfg)
 {
     return hal_i2c_init(h, instance, cfg);
 }
@@ -112,15 +123,15 @@ static inline hal_status_t core_i2c_init_cfg(core_i2c_t *h,
 /* ---- Master operations ---- */
 
 /** Write data to a 7-bit address device. */
-static inline hal_status_t core_i2c_write(core_i2c_t *h, uint8_t addr,
-                                           const uint8_t *data, uint32_t len)
+static inline core_status_t core_i2c_write(core_i2c_t *h, uint8_t addr,
+                                            const uint8_t *data, uint32_t len)
 {
     return hal_i2c_write(h, addr, data, len);
 }
 
 /** Read data from a 7-bit address device. */
-static inline hal_status_t core_i2c_read(core_i2c_t *h, uint8_t addr,
-                                          uint8_t *buf, uint32_t len)
+static inline core_status_t core_i2c_read(core_i2c_t *h, uint8_t addr,
+                                           uint8_t *buf, uint32_t len)
 {
     return hal_i2c_read(h, addr, buf, len);
 }
@@ -128,32 +139,32 @@ static inline hal_status_t core_i2c_read(core_i2c_t *h, uint8_t addr,
 /* ---- Register helpers ---- */
 
 /** Write to a device register (8 or 16-bit register address). */
-static inline hal_status_t core_i2c_write_reg(core_i2c_t *h, uint8_t addr,
-                                               uint16_t reg,
-                                               const uint8_t *data,
-                                               uint32_t len)
+static inline core_status_t core_i2c_write_reg(core_i2c_t *h, uint8_t addr,
+                                                uint16_t reg,
+                                                const uint8_t *data,
+                                                uint32_t len)
 {
     return hal_i2c_write_reg(h, addr, reg, data, len);
 }
 
 /** Read from a device register (repeated START). */
-static inline hal_status_t core_i2c_read_reg(core_i2c_t *h, uint8_t addr,
-                                              uint16_t reg, uint8_t *buf,
-                                              uint32_t len)
+static inline core_status_t core_i2c_read_reg(core_i2c_t *h, uint8_t addr,
+                                               uint16_t reg, uint8_t *buf,
+                                               uint32_t len)
 {
     return hal_i2c_read_reg(h, addr, reg, buf, len);
 }
 
 /** Write a single byte to a register. */
-static inline hal_status_t core_i2c_write_byte(core_i2c_t *h, uint8_t addr,
-                                                uint16_t reg, uint8_t value)
+static inline core_status_t core_i2c_write_byte(core_i2c_t *h, uint8_t addr,
+                                                 uint16_t reg, uint8_t value)
 {
     return hal_i2c_write_byte(h, addr, reg, value);
 }
 
 /** Read a single byte from a register. */
-static inline hal_status_t core_i2c_read_byte(core_i2c_t *h, uint8_t addr,
-                                               uint16_t reg, uint8_t *value)
+static inline core_status_t core_i2c_read_byte(core_i2c_t *h, uint8_t addr,
+                                                uint16_t reg, uint8_t *value)
 {
     return hal_i2c_read_byte(h, addr, reg, value);
 }
@@ -161,7 +172,7 @@ static inline hal_status_t core_i2c_read_byte(core_i2c_t *h, uint8_t addr,
 /* ---- Bus utilities ---- */
 
 /** Check if a device responds at addr. Returns I2C_OK or I2C_NACK. */
-static inline hal_status_t core_i2c_probe(core_i2c_t *h, uint8_t addr)
+static inline core_status_t core_i2c_probe(core_i2c_t *h, uint8_t addr)
 {
     return hal_i2c_probe(h, addr);
 }
@@ -179,7 +190,7 @@ static inline void core_i2c_scan(core_i2c_t *h, uint8_t *found,
  * matching how config.json declares it) instead of a handle. The
  * dispatcher `core_i2c_handle_for_bus` is emitted by coregen alongside
  * the per-bus extern handles (core_i2c1, core_i2c3 …) so the wrapper
- * never needs to see the hal_i2c_t shape itself. DSL programs reach
+ * never needs to see the core_i2c_t shape itself. DSL programs reach
  * for these; escape-to-C drops back to the Tier 1 handle-based forms
  * above when finer control is needed. */
 
@@ -197,7 +208,7 @@ static inline void core_i2c_scan(core_i2c_t *h, uint8_t *found,
  * @param bus Bus id (1 = the first instance, ...).
  * @return The coregen-initialized handle, or NULL.
  */
-hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
+core_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
 
 /**
  * Write a single byte to a register on a device on `bus`.
@@ -211,8 +222,8 @@ hal_i2c_t *core_i2c_handle_for_bus(uint8_t bus);
  * @param reg Register address (two bytes, MSB first, when above 0xFF).
  * @param value Byte to write.
  */
-static inline hal_status_t core_i2c_write_byte_bus(uint8_t bus, uint8_t addr,
-                                                    uint16_t reg, uint8_t value)
+static inline core_status_t core_i2c_write_byte_bus(uint8_t bus, uint8_t addr,
+                                                     uint16_t reg, uint8_t value)
 {
     hal_i2c_t *h = core_i2c_handle_for_bus(bus);
     if (!h) return HAL_ERROR;
@@ -268,10 +279,10 @@ static inline int core_i2c_probe_bus(uint8_t bus, uint8_t addr)
  *   static uint8_t regs[16];
  *   static core_i2c_target_t tgt;
  *
- *   static void on_evt(void *ctx, hal_i2c_target_event_t e,
+ *   static void on_evt(void *ctx, core_i2c_target_event_t e,
  *                      uint16_t reg, uint8_t val)
  *   {
- *       if (e == HAL_I2C_TARGET_READ_START) latch_snapshot();
+ *       if (e == CORE_I2C_TARGET_READ_START) latch_snapshot();
  *   }
  *
  *   core_i2c_target_init(&tgt, I2C1, 0x28, I2C_400K, regs, sizeof(regs),
@@ -290,10 +301,17 @@ static inline int core_i2c_probe_bus(uint8_t bus, uint8_t addr)
 /** Core-level I2C target handle. Alias for hal_i2c_target_t. */
 typedef hal_i2c_target_t core_i2c_target_t;
 
-/** Event codes and callback signature come straight from the HAL. */
-#define I2C_TARGET_READ_START  HAL_I2C_TARGET_READ_START
-#define I2C_TARGET_WRITE       HAL_I2C_TARGET_WRITE
-#define I2C_TARGET_STOP        HAL_I2C_TARGET_STOP
+/**
+ * Target-mode event callback, run from the I2C interrupt: `evt` is one of
+ * CORE_I2C_TARGET_*, `reg` the register offset and `value` the byte (WRITE).
+ */
+typedef void (*core_i2c_target_cb_t)(void *ctx, core_i2c_target_event_t evt,
+                                     uint16_t reg, uint8_t value);
+
+/* Deprecated: use CORE_I2C_TARGET_*. */
+#define I2C_TARGET_READ_START  CORE_I2C_TARGET_READ_START
+#define I2C_TARGET_WRITE       CORE_I2C_TARGET_WRITE
+#define I2C_TARGET_STOP        CORE_I2C_TARGET_STOP
 
 /**
  * Bring up an I2C peripheral as a read-only target at `addr`.
@@ -304,12 +322,12 @@ typedef hal_i2c_target_t core_i2c_target_t;
  * @param n_regs size of regs[] in bytes
  * @param cb     optional; NULL for none
  */
-static inline hal_status_t core_i2c_target_init(core_i2c_target_t *t,
-                                                I2C_TypeDef *instance,
-                                                uint8_t addr, uint32_t speed,
-                                                uint8_t *regs, uint16_t n_regs,
-                                                hal_i2c_target_cb_t cb,
-                                                void *ctx)
+static inline core_status_t core_i2c_target_init(core_i2c_target_t *t,
+                                                 core_i2c_instance_t *instance,
+                                                 uint8_t addr, uint32_t speed,
+                                                 uint8_t *regs, uint16_t n_regs,
+                                                 core_i2c_target_cb_t cb,
+                                                 void *ctx)
 {
     uint32_t timing = _core_i2c_timing(speed);
     if (!timing) return HAL_ERROR;
@@ -330,13 +348,13 @@ static inline hal_status_t core_i2c_target_init(core_i2c_target_t *t,
  * As core_i2c_target_init, but accepts host writes to the register
  * range [first, first + count). Everything outside stays read-only.
  */
-static inline hal_status_t core_i2c_target_init_rw(core_i2c_target_t *t,
-                                                   I2C_TypeDef *instance,
-                                                   uint8_t addr, uint32_t speed,
-                                                   uint8_t *regs, uint16_t n_regs,
-                                                   uint16_t first, uint16_t count,
-                                                   hal_i2c_target_cb_t cb,
-                                                   void *ctx)
+static inline core_status_t core_i2c_target_init_rw(core_i2c_target_t *t,
+                                                    core_i2c_instance_t *instance,
+                                                    uint8_t addr, uint32_t speed,
+                                                    uint8_t *regs, uint16_t n_regs,
+                                                    uint16_t first, uint16_t count,
+                                                    core_i2c_target_cb_t cb,
+                                                    void *ctx)
 {
     uint32_t timing = _core_i2c_timing(speed);
     if (!timing) return HAL_ERROR;
@@ -365,7 +383,7 @@ static inline void core_i2c_target_deinit(core_i2c_target_t *t)
 //   The current Tier 2 surface is write_byte_bus / read_byte_bus /
 //   probe_bus. DSL programs that need to push a multi-byte payload
 //   (display init sequences, IMU FIFO drains) or discover what's on a
-//   bus (`scan -> int[]`) drop back to Tier 1 with a hal_i2c_t handle.
+//   bus (`scan -> int[]`) drop back to Tier 1 with a core_i2c_t handle.
 //   Adds need the array-IN / array-OUT host-call ABI prototyped on the
 //   tile-driver side — track with the DSL Capability Coverage close.
 //

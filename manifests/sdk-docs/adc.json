@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "adc",
   "label": "Core.ADC",
   "icon": "◐",
@@ -23,7 +23,7 @@
     {
       "name": "core_adc_init",
       "signature": "core_adc_init(core_adc_t * adc, uint32_t resolution)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Initialise the ADC at the given resolution.",
       "params": [
         {
@@ -41,7 +41,7 @@
     {
       "name": "core_adc_add",
       "signature": "core_adc_add(core_adc_t * adc, uint8_t pad, uint32_t samp)",
-      "returns": "hal_status_t",
+      "returns": "core_status_t",
       "brief": "Register a pad as an ADC input with the given sampling speed.",
       "params": [
         {
@@ -182,8 +182,8 @@
     },
     {
       "name": "core_adc_start_dma",
-      "signature": "core_adc_start_dma(core_adc_t * adc, uint16_t * buf, uint16_t len, hal_callback_t cb, void * ctx)",
-      "returns": "hal_status_t",
+      "signature": "core_adc_start_dma(core_adc_t * adc, uint16_t * buf, uint16_t len, core_callback_t cb, void * ctx)",
+      "returns": "core_status_t",
       "brief": "Start continuous conversion with DMA circular buffer.",
       "params": [
         {
@@ -202,7 +202,7 @@
         },
         {
           "name": "cb",
-          "ctype": "hal_callback_t",
+          "ctype": "core_callback_t",
           "description": "Called on half-transfer and transfer-complete; may be NULL"
         },
         {
@@ -285,8 +285,8 @@
     {
       "name": "core_adc_set_trigger",
       "signature": "core_adc_set_trigger(core_adc_t * adc, uint8_t extsel, uint32_t edge)",
-      "returns": "hal_status_t",
-      "brief": "Pace DMA conversions from a hardware trigger instead of free-running. Call before core_adc_start_dma. See hal_adc_set_trigger for why this matters to any slow output rate: it is what makes a DMA ring span the whole output period, turning the average into a real anti-alias filter instead of a burst average. core_timer_init_freq(&t, TIM2, 800); core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE); core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, ADC_TRIG_RISING); core_adc_start_dma(adc, buf, len, 0, 0); core_timer_start(&t);",
+      "returns": "core_status_t",
+      "brief": "Pace DMA conversions from a hardware trigger instead of free-running. Call before core_adc_start_dma. See hal_adc_set_trigger for why this matters to any slow output rate: it is what makes a DMA ring span the whole output period, turning the average into a real anti-alias filter instead of a burst average. core_timer_init_freq(&t, TIM2, 800); core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE); core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, CORE_ADC_TRIG_RISING); core_adc_start_dma(adc, buf, len, 0, 0); core_timer_start(&t);",
       "params": [
         {
           "name": "adc",
@@ -756,6 +756,68 @@
       "kind": "typedef",
       "brief": "Core-level ADC handle. Alias for hal_adc_t — use this in application code.",
       "decl": "typedef hal_adc_t core_adc_t;"
+    }
+  ],
+  "constants": [
+    {
+      "name": "CORE_ADC_SAMP_FAST",
+      "value": "0",
+      "description": "Shortest: op-amp outputs, DAC, low impedance"
+    },
+    {
+      "name": "CORE_ADC_SAMP_MED",
+      "value": "1",
+      "description": "General purpose"
+    },
+    {
+      "name": "CORE_ADC_SAMP_SLOW",
+      "value": "2",
+      "description": "Resistive dividers, NTCs"
+    },
+    {
+      "name": "CORE_ADC_SAMP_VERY_SLOW",
+      "value": "3",
+      "description": "Longest: high-impedance sources, best accuracy"
+    },
+    {
+      "name": "CORE_ADC_RES_6BIT",
+      "value": "6",
+      "description": "6-bit conversions"
+    },
+    {
+      "name": "CORE_ADC_RES_8BIT",
+      "value": "8",
+      "description": "8-bit conversions"
+    },
+    {
+      "name": "CORE_ADC_RES_10BIT",
+      "value": "10",
+      "description": "10-bit conversions"
+    },
+    {
+      "name": "CORE_ADC_RES_12BIT",
+      "value": "12",
+      "description": "12-bit conversions"
+    },
+    {
+      "name": "CORE_ADC_TRIG_NONE",
+      "value": "0",
+      "description": "Free-running: no hardware trigger"
+    },
+    {
+      "name": "CORE_ADC_TRIG_RISING",
+      "value": "1",
+      "description": "Convert on the trigger's rising edge"
+    },
+    {
+      "name": "CORE_ADC_TRIG_FALLING",
+      "value": "2",
+      "description": "Convert on the falling edge"
+    },
+    {
+      "name": "CORE_ADC_TRIG_BOTH",
+      "value": "3",
+      "description": "Convert on both edges"
     }
   ]
 }

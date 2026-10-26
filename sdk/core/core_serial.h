@@ -25,24 +25,26 @@
 #define CORE_SERIAL_H
 
 #include "hal_uart.h"
+#include "core_types.h"
+#include "port_core_serial.h"   /* core_serial_t, core_serial_config_t, core_uart_instance_t */
 
 /* ---- Init ---- */
 
 /** Initialize a UART instance.
  *  Clock is auto-resolved from PCLK1_HZ (core_config.h).
  */
-static inline hal_status_t core_serial_init(hal_uart_t *h,
-                                             USART_TypeDef *instance,
-                                             const hal_uart_config_t *cfg)
+static inline core_status_t core_serial_init(core_serial_t *h,
+                                              core_uart_instance_t *instance,
+                                              const core_serial_config_t *cfg)
 {
     return hal_uart_init(h, instance, PCLK1_HZ, cfg);
 }
 
 /** @deprecated Use core_serial_init(h, instance, cfg) — clock auto-resolved. */
-static inline hal_status_t core_serial_init_clk(hal_uart_t *h,
-                                                 USART_TypeDef *instance,
-                                                 uint32_t pclk_hz,
-                                                 const hal_uart_config_t *cfg)
+static inline core_status_t core_serial_init_clk(core_serial_t *h,
+                                                  core_uart_instance_t *instance,
+                                                  uint32_t pclk_hz,
+                                                  const core_serial_config_t *cfg)
 {
     return hal_uart_init(h, instance, pclk_hz, cfg);
 }
@@ -50,14 +52,14 @@ static inline hal_status_t core_serial_init_clk(hal_uart_t *h,
 /* ---- TX ---- */
 
 /** Transmit a buffer (blocking). */
-static inline void core_serial_write(hal_uart_t *h, const uint8_t *data,
+static inline void core_serial_write(core_serial_t *h, const uint8_t *data,
                                       uint32_t len)
 {
     hal_uart_tx(h, data, len);
 }
 
 /** Transmit a null-terminated string (blocking). */
-static inline void core_serial_print(hal_uart_t *h, const char *str)
+static inline void core_serial_print(core_serial_t *h, const char *str)
 {
     hal_uart_tx_str(h, str);
 }
@@ -66,7 +68,7 @@ static inline void core_serial_print(hal_uart_t *h, const char *str)
 #define core_serial_printf  hal_uart_printf
 
 /** Transmit a single byte (blocking). */
-static inline void core_serial_putc(hal_uart_t *h, uint8_t byte)
+static inline void core_serial_putc(core_serial_t *h, uint8_t byte)
 {
     hal_uart_putc(h, byte);
 }
@@ -74,13 +76,13 @@ static inline void core_serial_putc(hal_uart_t *h, uint8_t byte)
 /* ---- RX ---- */
 
 /** Number of bytes available in the RX buffer. */
-static inline uint16_t core_serial_available(hal_uart_t *h)
+static inline uint16_t core_serial_available(core_serial_t *h)
 {
     return hal_uart_available(h);
 }
 
 /** Receive a single byte (blocking -- waits for data). */
-static inline uint8_t core_serial_getc(hal_uart_t *h)
+static inline uint8_t core_serial_getc(core_serial_t *h)
 {
     return hal_uart_rx(h);
 }
@@ -89,7 +91,7 @@ static inline uint8_t core_serial_getc(hal_uart_t *h)
  * Read available bytes from the RX ring buffer (non-blocking).
  * Returns number of bytes read.
  */
-static inline uint16_t core_serial_read(hal_uart_t *h, uint8_t *buf,
+static inline uint16_t core_serial_read(core_serial_t *h, uint8_t *buf,
                                          uint16_t max_len)
 {
     return hal_uart_read(h, buf, max_len);
@@ -111,7 +113,7 @@ static inline uint16_t core_serial_read(hal_uart_t *h, uint8_t *buf,
  * @param bus Bus id (1 = the first instance, ...).
  * @return The coregen-initialized handle, or NULL.
  */
-hal_uart_t *core_serial_handle_for_bus(uint8_t bus);
+core_serial_t *core_serial_handle_for_bus(uint8_t bus);
 
 /**
  * Write a null-terminated string to `bus` (blocking). Returns 0 on
@@ -167,13 +169,13 @@ static inline int core_serial_putc_bus(uint8_t bus, uint8_t byte)
 // @studio unsupported tier=1 value=M title="No DMA or interrupt-driven TX"
 //   TX is polled: core_serial_write() and print return once the last byte
 //   is in the data register. RX is interrupt-driven into a ring buffer
-//   only when `rx_interrupt` is set (or hal_uart_config_t.rx_interrupt);
+//   only when `rx_interrupt` is set (or core_serial_config_t.rx_interrupt);
 //   otherwise reads poll the data register. hal_uart_tx_dma() is a stub
-//   that returns HAL_ERROR.
+//   that returns CORE_ERROR.
 //
 // @studio unsupported tier=1 value=M title="8N1 only: no flow control, parity or 9-bit modes"
 //   ll_uart_init() sets 8 data bits, no parity, 1 stop bit.
-//   hal_uart_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS,
+//   core_serial_config_t carries only `baud` and `rx_interrupt`, so RTS/CTS,
 //   parity, other stop bits, 9-bit data and inversion need register
 //   writes after init.
 //

@@ -48,12 +48,16 @@
 
 #include "hal_timer.h"
 #include "ll_tim.h"
+#include "core_types.h"
+#include "port_core_timer.h"   /* core_timer_instance_t */
 
 /** Core-level timer handle. Alias for hal_timer_t — use this in application code. */
 typedef hal_timer_t core_timer_t;
 
-/** Core-level callback type. */
-typedef hal_callback_t core_callback_t;
+/* Defined in core_types.h; repeated (an identical typedef) so the timer
+ * reference documents it. */
+/** Core-level callback type: `void cb(void *ctx)`. */
+typedef void (*core_callback_t)(void *ctx);
 
 #if __has_include("core_config.h")
 #include "core_config.h"  /* SYSCLK_HZ */
@@ -74,9 +78,9 @@ typedef hal_callback_t core_callback_t;
  *
  *   core_timer_init_freq(&t, TIM2, 1000);   // overflows at 1 kHz
  */
-static inline hal_status_t core_timer_init_freq(core_timer_t *h,
-                                                 TIM_TypeDef *instance,
-                                                 uint32_t freq_hz)
+static inline core_status_t core_timer_init_freq(core_timer_t *h,
+                                                  core_timer_instance_t *instance,
+                                                  uint32_t freq_hz)
 {
     return hal_timer_pwm_init(h, instance, SYSCLK_HZ, freq_hz);
 }
@@ -108,9 +112,9 @@ static inline void core_timer_set_trgo(core_timer_t *h, uint32_t mms)
  *   core_timer_capture_init(&t, 1);
  *   core_timer_start(&t);
  */
-static inline hal_status_t core_timer_init_tick(core_timer_t *h,
-                                                 TIM_TypeDef *instance,
-                                                 uint32_t tick_hz)
+static inline core_status_t core_timer_init_tick(core_timer_t *h,
+                                                  core_timer_instance_t *instance,
+                                                  uint32_t tick_hz)
 {
     hal_status_t rc = hal_timer_pwm_init(h, instance, SYSCLK_HZ, tick_hz);
     uint32_t psc = (SYSCLK_HZ / tick_hz) - 1;
@@ -172,7 +176,7 @@ static inline void core_timer_pwm_set(core_timer_t *h, uint8_t channel,
 static inline void core_timer_pwm_set_pad(core_timer_t *h, uint8_t pad,
                                            uint16_t duty_permil)
 {
-    TIM_TypeDef *inst;
+    core_timer_instance_t *inst;
     uint8_t ch;
     if (core_pad_timer_info(pad, &inst, &ch) == 0) {
         hal_timer_pwm_set_duty(h, ch, duty_permil);
@@ -215,8 +219,8 @@ static inline uint32_t core_timer_capture_read(core_timer_t *h, uint8_t channel)
  *   core_timer_enable_tick(&t, on_tick, NULL); // also fire ISR at 1 kHz
  *   core_timer_start(&t);
  */
-static inline hal_status_t core_timer_enable_tick(core_timer_t *h,
-                                                   core_callback_t cb, void *ctx)
+static inline core_status_t core_timer_enable_tick(core_timer_t *h,
+                                                    core_callback_t cb, void *ctx)
 {
     return hal_timer_tick_enable(h, cb, ctx);
 }
@@ -235,10 +239,10 @@ static inline void core_timer_disable_tick(core_timer_t *h)
  *   core_tick_init(&t, TIM3, 500000, on_tick, NULL);  // 2 Hz
  *   core_timer_start(&t);
  */
-static inline hal_status_t core_tick_init(core_timer_t *h,
-                                           TIM_TypeDef *instance,
-                                           uint32_t period_us,
-                                           core_callback_t cb, void *ctx)
+static inline core_status_t core_tick_init(core_timer_t *h,
+                                            core_timer_instance_t *instance,
+                                            uint32_t period_us,
+                                            core_callback_t cb, void *ctx)
 {
     hal_status_t rc = hal_timer_tick_init(h, instance, SYSCLK_HZ, period_us, cb, ctx);
     return rc;

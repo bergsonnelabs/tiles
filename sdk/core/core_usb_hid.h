@@ -52,13 +52,16 @@ static inline int core_usb_hid_send(const uint8_t *buf, uint16_t len)
     return hal_usb_hid_send_report(buf, len);
 }
 
+/** Inbound HID report callback, run from the USB interrupt with one report. */
+typedef void (*core_usb_hid_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);
+
 /**
  * Register a callback for inbound HID reports (host -> device).
  * Fires from the USB ISR with one report per call (up to 64 bytes),
  * delivered via the EP3 OUT interrupt endpoint or HID SET_REPORT.
  * Pass NULL to disable; unhandled reports are dropped.
  */
-static inline void core_usb_hid_set_rx_callback(hal_usb_hid_rx_cb_t cb, void *ctx)
+static inline void core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void *ctx)
 {
     hal_usb_hid_set_rx_callback(cb, ctx);
 }

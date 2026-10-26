@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@ebefbea",
+  "source": "tiles@1993ec9",
   "category": "serial",
   "label": "Core.Serial",
   "icon": "⌨",
@@ -13,21 +13,21 @@
   "functions": [
     {
       "name": "core_serial_init",
-      "signature": "core_serial_init(hal_uart_t * h, USART_TypeDef * instance, const hal_uart_config_t * cfg)",
-      "returns": "hal_status_t",
+      "signature": "core_serial_init(core_serial_t * h, core_uart_instance_t * instance, const core_serial_config_t * cfg)",
+      "returns": "core_status_t",
       "brief": "Initialize a UART instance. Clock is auto-resolved from PCLK1_HZ (core_config.h).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "instance",
-          "ctype": "USART_TypeDef *"
+          "ctype": "core_uart_instance_t *"
         },
         {
           "name": "cfg",
-          "ctype": "const hal_uart_config_t *"
+          "ctype": "const core_serial_config_t *"
         }
       ],
       "studio_exposed": false,
@@ -35,17 +35,17 @@
     },
     {
       "name": "core_serial_init_clk",
-      "signature": "core_serial_init_clk(hal_uart_t * h, USART_TypeDef * instance, uint32_t pclk_hz, const hal_uart_config_t * cfg)",
-      "returns": "hal_status_t",
+      "signature": "core_serial_init_clk(core_serial_t * h, core_uart_instance_t * instance, uint32_t pclk_hz, const core_serial_config_t * cfg)",
+      "returns": "core_status_t",
       "brief": "Deprecated. Use core_serial_init(h, instance, cfg) — clock auto-resolved.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "instance",
-          "ctype": "USART_TypeDef *"
+          "ctype": "core_uart_instance_t *"
         },
         {
           "name": "pclk_hz",
@@ -53,7 +53,7 @@
         },
         {
           "name": "cfg",
-          "ctype": "const hal_uart_config_t *"
+          "ctype": "const core_serial_config_t *"
         }
       ],
       "studio_exposed": false,
@@ -62,13 +62,13 @@
     },
     {
       "name": "core_serial_write",
-      "signature": "core_serial_write(hal_uart_t * h, const uint8_t * data, uint32_t len)",
+      "signature": "core_serial_write(core_serial_t * h, const uint8_t * data, uint32_t len)",
       "returns": "void",
       "brief": "Transmit a buffer (blocking).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "data",
@@ -84,13 +84,13 @@
     },
     {
       "name": "core_serial_print",
-      "signature": "core_serial_print(hal_uart_t * h, const char * str)",
+      "signature": "core_serial_print(core_serial_t * h, const char * str)",
       "returns": "void",
       "brief": "Transmit a null-terminated string (blocking).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "str",
@@ -102,13 +102,13 @@
     },
     {
       "name": "core_serial_putc",
-      "signature": "core_serial_putc(hal_uart_t * h, uint8_t byte)",
+      "signature": "core_serial_putc(core_serial_t * h, uint8_t byte)",
       "returns": "void",
       "brief": "Transmit a single byte (blocking).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "byte",
@@ -120,13 +120,13 @@
     },
     {
       "name": "core_serial_available",
-      "signature": "core_serial_available(hal_uart_t * h)",
+      "signature": "core_serial_available(core_serial_t * h)",
       "returns": "uint16_t",
       "brief": "Number of bytes available in the RX buffer.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         }
       ],
       "studio_exposed": false,
@@ -134,13 +134,13 @@
     },
     {
       "name": "core_serial_getc",
-      "signature": "core_serial_getc(hal_uart_t * h)",
+      "signature": "core_serial_getc(core_serial_t * h)",
       "returns": "uint8_t",
       "brief": "Receive a single byte (blocking -- waits for data).",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         }
       ],
       "studio_exposed": false,
@@ -148,13 +148,13 @@
     },
     {
       "name": "core_serial_read",
-      "signature": "core_serial_read(hal_uart_t * h, uint8_t * buf, uint16_t max_len)",
+      "signature": "core_serial_read(core_serial_t * h, uint8_t * buf, uint16_t max_len)",
       "returns": "uint16_t",
       "brief": "Read available bytes from the RX ring buffer (non-blocking). Returns number of bytes read.",
       "params": [
         {
           "name": "h",
-          "ctype": "hal_uart_t *"
+          "ctype": "core_serial_t *"
         },
         {
           "name": "buf",
@@ -171,7 +171,7 @@
     {
       "name": "core_serial_handle_for_bus",
       "signature": "core_serial_handle_for_bus(uint8_t bus)",
-      "returns": "hal_uart_t *",
+      "returns": "core_serial_t *",
       "brief": "The UART handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any USART); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_USES_SERIAL_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
       "params": [
         {

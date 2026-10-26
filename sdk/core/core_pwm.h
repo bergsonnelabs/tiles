@@ -41,15 +41,15 @@
 /** Initialize a timer for PWM output at the given frequency.
  *  Clock is auto-resolved from SYSCLK_HZ (core_config.h).
  */
-static inline hal_status_t core_pwm_init(core_timer_t *h, TIM_TypeDef *instance,
-                                          uint32_t freq_hz)
+static inline core_status_t core_pwm_init(core_timer_t *h, core_timer_instance_t *instance,
+                                           uint32_t freq_hz)
 {
     return hal_timer_pwm_init(h, instance, SYSCLK_HZ, freq_hz);
 }
 
 /** @deprecated Use core_pwm_init(h, instance, freq_hz) — clock auto-resolved. */
-static inline hal_status_t core_pwm_init_clk(core_timer_t *h, TIM_TypeDef *instance,
-                                              uint32_t pclk_hz, uint32_t freq_hz)
+static inline core_status_t core_pwm_init_clk(core_timer_t *h, core_timer_instance_t *instance,
+                                               uint32_t pclk_hz, uint32_t freq_hz)
 {
     return hal_timer_pwm_init(h, instance, pclk_hz, freq_hz);
 }
@@ -95,8 +95,8 @@ static inline void core_pwm_stop(core_timer_t *h)
 #include "tal_timer.h"
 
 /** Initialize PWM on a pad. Timer instance resolved from config.json. */
-static inline hal_status_t core_pwm_init_pad(core_timer_t *h, uint8_t pad,
-                                              uint32_t freq_hz)
+static inline core_status_t core_pwm_init_pad(core_timer_t *h, uint8_t pad,
+                                               uint32_t freq_hz)
 {
     return tal_pwm_init(h, pad, freq_hz);
 }
@@ -131,7 +131,7 @@ static inline void core_pwm_set_pad(core_timer_t *h, uint8_t pad,
  * @param pad Tile pad number.
  * @return The timer handle, or NULL for pads not bound to a timer in config.json.
  */
-hal_timer_t *core_pwm_timer_for_pad(uint8_t pad);
+core_timer_t *core_pwm_timer_for_pad(uint8_t pad);
 
 /**
  * Set PWM duty cycle on a pad. Timer handle resolved from config.json.
@@ -159,17 +159,17 @@ static inline void core_pwm_duty(uint8_t pad, uint16_t duty_permil)
  *
  * Clock is auto-resolved from SYSCLK_HZ (core_config.h).
  */
-static inline hal_status_t core_every_us(core_timer_t *h, TIM_TypeDef *instance,
-                                          uint32_t period_us,
-                                          hal_callback_t cb, void *ctx)
+static inline core_status_t core_every_us(core_timer_t *h, core_timer_instance_t *instance,
+                                           uint32_t period_us,
+                                           core_callback_t cb, void *ctx)
 {
     return hal_timer_tick_init(h, instance, SYSCLK_HZ, period_us, cb, ctx);
 }
 
 /** @deprecated Use core_every_us(h, instance, period_us, cb, ctx) — clock auto-resolved. */
-static inline hal_status_t core_every_us_clk(core_timer_t *h, TIM_TypeDef *instance,
-                                              uint32_t pclk_hz, uint32_t period_us,
-                                              hal_callback_t cb, void *ctx)
+static inline core_status_t core_every_us_clk(core_timer_t *h, core_timer_instance_t *instance,
+                                               uint32_t pclk_hz, uint32_t period_us,
+                                               core_callback_t cb, void *ctx)
 {
     return hal_timer_tick_init(h, instance, pclk_hz, period_us, cb, ctx);
 }

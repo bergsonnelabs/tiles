@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@1993ec9",
   "category": "usb",
   "label": "Core.USB",
   "icon": "❝",
@@ -143,13 +143,13 @@
     },
     {
       "name": "core_usb_on_receive",
-      "signature": "core_usb_on_receive(hal_usb_cdc_rx_cb_t cb, void * ctx)",
+      "signature": "core_usb_on_receive(core_usb_cdc_rx_cb_t cb, void * ctx)",
       "returns": "void",
       "brief": "Set a callback for received data. Called from USB ISR. When set, data is NOT buffered for polling reads.",
       "params": [
         {
           "name": "cb",
-          "ctype": "hal_usb_cdc_rx_cb_t",
+          "ctype": "core_usb_cdc_rx_cb_t",
           "description": "Callback: void cb(const uint8_t *data, uint16_t len, void *ctx)"
         },
         {
@@ -268,13 +268,13 @@
     },
     {
       "name": "core_usb_hid_set_rx_callback",
-      "signature": "core_usb_hid_set_rx_callback(hal_usb_hid_rx_cb_t cb, void * ctx)",
+      "signature": "core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void * ctx)",
       "returns": "void",
       "brief": "Register a callback for inbound HID reports (host -> device). Fires from the USB ISR with one report per call (up to 64 bytes), delivered via the EP3 OUT interrupt endpoint or HID SET_REPORT. Pass NULL to disable; unhandled reports are dropped.",
       "params": [
         {
           "name": "cb",
-          "ctype": "hal_usb_hid_rx_cb_t"
+          "ctype": "core_usb_hid_rx_cb_t"
         },
         {
           "name": "ctx",
@@ -673,6 +673,12 @@
   ],
   "types": [
     {
+      "name": "core_usb_cdc_rx_cb_t",
+      "kind": "callback",
+      "brief": "Receive callback, run from the USB interrupt with the bytes of one packet.",
+      "decl": "typedef void (*core_usb_cdc_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);"
+    },
+    {
       "name": "core_usb_line_t",
       "kind": "struct",
       "brief": "Line-assembler state for core_usb_line_feed() / core_usb_poll_line(). Zero-initialize it (a static or global is).",
@@ -693,6 +699,12 @@
           "description": "Set while discarding an over-long line."
         }
       ]
+    },
+    {
+      "name": "core_usb_hid_rx_cb_t",
+      "kind": "callback",
+      "brief": "Inbound HID report callback, run from the USB interrupt with one report.",
+      "decl": "typedef void (*core_usb_hid_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);"
     }
   ]
 }

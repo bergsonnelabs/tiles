@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@217a38f",
+  "source": "tiles@1993ec9",
   "category": "power",
   "label": "Core.Power",
   "icon": "☾",
@@ -96,8 +96,8 @@
     {
       "name": "core_standby_for",
       "signature": "core_standby_for(uint32_t seconds)",
-      "returns": "hal_status_t",
-      "brief": "Enter Standby mode with RTC wakeup after the given seconds. On success it does not return — the MCU resets on wake. Check core_woke_from_standby() at the top of main() to detect a Standby wake. Watchdog: the IWDG keeps counting through Standby and nothing feeds it until main() runs again, and Standby can't be split into fed chunks. So while the watchdog is running this refuses — returns HAL_ERROR without sleeping — unless seconds is at most half the watchdog timeout (2 s with the default 5 s watchdog). Use core_stop_for() for longer sleeps. (Core.ST.H5: no check.)",
+      "returns": "core_status_t",
+      "brief": "Enter Standby mode with RTC wakeup after the given seconds. On success it does not return — the MCU resets on wake. Check core_woke_from_standby() at the top of main() to detect a Standby wake. Watchdog: the IWDG keeps counting through Standby and nothing feeds it until main() runs again, and Standby can't be split into fed chunks. So while the watchdog is running this refuses — returns CORE_ERROR without sleeping — unless seconds is at most half the watchdog timeout (2 s with the default 5 s watchdog). Use core_stop_for() for longer sleeps. (Core.ST.H5: no check.)",
       "params": [
         {
           "name": "seconds",
@@ -110,7 +110,7 @@
         }
       ],
       "studio_exposed": false,
-      "return_desc": "HAL_ERROR if refused because of the watchdog; does not return otherwise.",
+      "return_desc": "CORE_ERROR if refused because of the watchdog; does not return otherwise.",
       "layer": "core"
     },
     {
@@ -209,10 +209,10 @@
       "layer": "core"
     },
     {
-      "name": "core_reset_flags",
-      "signature": "core_reset_flags(void)",
+      "name": "core_st_reset_flags",
+      "signature": "core_st_reset_flags(void)",
       "returns": "uint32_t",
-      "brief": "The raw RCC reset flags read at boot (CORE_RESET_FLAG_*; bits 31..24). 0 if no flag was set.",
+      "brief": "The raw STM32 RCC reset flags read at boot (CORE_ST_RESET_FLAG_*; bits 31..24). 0 if no flag was set. ST silicon only: portable code uses core_reset_reason().",
       "params": [],
       "studio_exposed": false,
       "layer": "core"
@@ -317,42 +317,42 @@
   ],
   "constants": [
     {
-      "name": "CORE_RESET_FLAG_LPWR",
+      "name": "CORE_ST_RESET_FLAG_LPWR",
       "value": "(1UL << 31)",
       "description": "Illegal Stop/Standby entry"
     },
     {
-      "name": "CORE_RESET_FLAG_WWDG",
+      "name": "CORE_ST_RESET_FLAG_WWDG",
       "value": "(1UL << 30)",
       "description": "Window watchdog"
     },
     {
-      "name": "CORE_RESET_FLAG_IWDG",
+      "name": "CORE_ST_RESET_FLAG_IWDG",
       "value": "(1UL << 29)",
       "description": "Independent watchdog"
     },
     {
-      "name": "CORE_RESET_FLAG_SFT",
+      "name": "CORE_ST_RESET_FLAG_SFT",
       "value": "(1UL << 28)",
       "description": "Software (AIRCR SYSRESETREQ)"
     },
     {
-      "name": "CORE_RESET_FLAG_POR",
+      "name": "CORE_ST_RESET_FLAG_POR",
       "value": "(1UL << 27)",
       "description": "POR/PDR (L0), BOR (L4, W5, H5)"
     },
     {
-      "name": "CORE_RESET_FLAG_PIN",
+      "name": "CORE_ST_RESET_FLAG_PIN",
       "value": "(1UL << 26)",
       "description": "NRST pin (set by every reset)"
     },
     {
-      "name": "CORE_RESET_FLAG_OBL",
+      "name": "CORE_ST_RESET_FLAG_OBL",
       "value": "(1UL << 25)",
       "description": "Option-byte reload (not on the H5)"
     },
     {
-      "name": "CORE_RESET_FLAG_FW",
+      "name": "CORE_ST_RESET_FLAG_FW",
       "value": "(1UL << 24)",
       "description": "Firewall (L0, L4 only)"
     }

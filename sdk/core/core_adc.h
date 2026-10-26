@@ -23,6 +23,7 @@
 #define CORE_ADC_H
 
 #include "tal_adc.h"
+#include "core_types.h"
 
 /** Core-level ADC handle. Alias for hal_adc_t — use this in application code. */
 typedef hal_adc_t core_adc_t;
@@ -38,29 +39,55 @@ extern core_adc_t core_adc1;
 core_adc_t *core_adc_default(void);
 
 /* ============================================================
- * Sampling speed aliases
+ * Sampling speed (core_adc_add)
  * ============================================================ */
 
-#define SAMP_FAST      HAL_ADC_SAMP_FAST
-#define SAMP_MED       HAL_ADC_SAMP_MED
-#define SAMP_SLOW      HAL_ADC_SAMP_SLOW
-#define SAMP_VERY_SLOW HAL_ADC_SAMP_VERY_SLOW
+#define CORE_ADC_SAMP_FAST       0   /**< Shortest: op-amp outputs, DAC, low impedance */
+#define CORE_ADC_SAMP_MED        1   /**< General purpose */
+#define CORE_ADC_SAMP_SLOW       2   /**< Resistive dividers, NTCs */
+#define CORE_ADC_SAMP_VERY_SLOW  3   /**< Longest: high-impedance sources, best accuracy */
 
 /* ============================================================
- * Resolution aliases
+ * Resolution (core_adc_init)
  * ============================================================ */
 
-#define ADC_6BIT   HAL_ADC_RES_6BIT
-#define ADC_8BIT   HAL_ADC_RES_8BIT
-#define ADC_10BIT  HAL_ADC_RES_10BIT
-#define ADC_12BIT  HAL_ADC_RES_12BIT
+#define CORE_ADC_RES_6BIT   6    /**< 6-bit conversions */
+#define CORE_ADC_RES_8BIT   8    /**< 8-bit conversions */
+#define CORE_ADC_RES_10BIT  10   /**< 10-bit conversions */
+#define CORE_ADC_RES_12BIT  12   /**< 12-bit conversions */
+
+/* ============================================================
+ * External trigger edge (core_adc_set_trigger)
+ * ============================================================ */
+
+#define CORE_ADC_TRIG_NONE     0   /**< Free-running: no hardware trigger */
+#define CORE_ADC_TRIG_RISING   1   /**< Convert on the trigger's rising edge */
+#define CORE_ADC_TRIG_FALLING  2   /**< Convert on the falling edge */
+#define CORE_ADC_TRIG_BOTH     3   /**< Convert on both edges */
+
+/* Checks that the values above are the port's. */
+#include "port_core_adc.h"
+
+/* Deprecated short names, kept so existing code builds: use the CORE_ADC_ ones. */
+#define SAMP_FAST      CORE_ADC_SAMP_FAST
+#define SAMP_MED       CORE_ADC_SAMP_MED
+#define SAMP_SLOW      CORE_ADC_SAMP_SLOW
+#define SAMP_VERY_SLOW CORE_ADC_SAMP_VERY_SLOW
+#define ADC_6BIT       CORE_ADC_RES_6BIT
+#define ADC_8BIT       CORE_ADC_RES_8BIT
+#define ADC_10BIT      CORE_ADC_RES_10BIT
+#define ADC_12BIT      CORE_ADC_RES_12BIT
+#define ADC_TRIG_NONE     CORE_ADC_TRIG_NONE
+#define ADC_TRIG_RISING   CORE_ADC_TRIG_RISING
+#define ADC_TRIG_FALLING  CORE_ADC_TRIG_FALLING
+#define ADC_TRIG_BOTH     CORE_ADC_TRIG_BOTH
 
 /* ============================================================
  * Init
  * ============================================================ */
 
 /** Initialise the ADC at the given resolution. */
-static inline hal_status_t core_adc_init(core_adc_t *adc, uint32_t resolution)
+static inline core_status_t core_adc_init(core_adc_t *adc, uint32_t resolution)
 {
     return tal_adc_init(adc, (hal_adc_res_t)resolution);
 }
@@ -70,8 +97,8 @@ static inline hal_status_t core_adc_init(core_adc_t *adc, uint32_t resolution)
  * ============================================================ */
 
 /** Register a pad as an ADC input with the given sampling speed. */
-static inline hal_status_t core_adc_add(core_adc_t *adc, uint8_t pad,
-                                         uint32_t samp)
+static inline core_status_t core_adc_add(core_adc_t *adc, uint8_t pad,
+                                          uint32_t samp)
 {
     return tal_adc_add_pad(adc, pad, (hal_adc_samp_t)samp);
 }
@@ -175,9 +202,9 @@ static inline uint32_t core_adc_vdd(core_adc_t *adc)
  *  @param cb   Called on half-transfer and transfer-complete; may be NULL
  *  @param ctx  User context passed to callback; may be NULL
  */
-static inline hal_status_t core_adc_start_dma(core_adc_t *adc, uint16_t *buf,
-                                               uint16_t len,
-                                               hal_callback_t cb, void *ctx)
+static inline core_status_t core_adc_start_dma(core_adc_t *adc, uint16_t *buf,
+                                                uint16_t len,
+                                                core_callback_t cb, void *ctx)
 {
     return tal_adc_start_dma(adc, buf, len, cb, ctx);
 }
@@ -210,11 +237,6 @@ static inline uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw)
 
 /* ---- External trigger ---- */
 
-#define ADC_TRIG_NONE     HAL_ADC_TRIG_NONE
-#define ADC_TRIG_RISING   HAL_ADC_TRIG_RISING
-#define ADC_TRIG_FALLING  HAL_ADC_TRIG_FALLING
-#define ADC_TRIG_BOTH     HAL_ADC_TRIG_BOTH
-
 /**
  * Pace DMA conversions from a hardware trigger instead of free-running.
  * Call before core_adc_start_dma. See hal_adc_set_trigger for why this
@@ -224,12 +246,12 @@ static inline uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw)
  *
  *   core_timer_init_freq(&t, TIM2, 800);
  *   core_timer_set_trgo(&t, LL_TIM_MMS_UPDATE);
- *   core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, ADC_TRIG_RISING);
+ *   core_adc_set_trigger(adc, LL_ADC_L0_TRG_TIM2_TRGO, CORE_ADC_TRIG_RISING);
  *   core_adc_start_dma(adc, buf, len, 0, 0);
  *   core_timer_start(&t);
  */
-static inline hal_status_t core_adc_set_trigger(core_adc_t *adc,
-                                                uint8_t extsel, uint32_t edge)
+static inline core_status_t core_adc_set_trigger(core_adc_t *adc,
+                                                 uint8_t extsel, uint32_t edge)
 {
     return hal_adc_set_trigger(adc, extsel, (hal_adc_trig_edge_t)edge);
 }

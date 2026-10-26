@@ -28,11 +28,11 @@ static uint8_t             s_captured;
 
 static core_reset_reason_t classify(uint32_t f)
 {
-    if (f & (CORE_RESET_FLAG_IWDG | CORE_RESET_FLAG_WWDG)) return CORE_RESET_WATCHDOG;
-    if (f & (CORE_RESET_FLAG_SFT | CORE_RESET_FLAG_OBL))   return CORE_RESET_SOFTWARE;
-    if (f & (CORE_RESET_FLAG_LPWR | CORE_RESET_FLAG_FW))   return CORE_RESET_OTHER;
-    if (f & CORE_RESET_FLAG_POR)                           return CORE_RESET_POWER_ON;
-    if (f & CORE_RESET_FLAG_PIN)                           return CORE_RESET_PIN;
+    if (f & (CORE_ST_RESET_FLAG_IWDG | CORE_ST_RESET_FLAG_WWDG)) return CORE_RESET_WATCHDOG;
+    if (f & (CORE_ST_RESET_FLAG_SFT | CORE_ST_RESET_FLAG_OBL))   return CORE_RESET_SOFTWARE;
+    if (f & (CORE_ST_RESET_FLAG_LPWR | CORE_ST_RESET_FLAG_FW))   return CORE_RESET_OTHER;
+    if (f & CORE_ST_RESET_FLAG_POR)                              return CORE_RESET_POWER_ON;
+    if (f & CORE_ST_RESET_FLAG_PIN)                              return CORE_RESET_PIN;
     return CORE_RESET_OTHER;
 }
 
@@ -51,7 +51,7 @@ core_reset_reason_t core_reset_reason(void)
     return s_reason;
 }
 
-uint32_t core_reset_flags(void)
+uint32_t core_st_reset_flags(void)
 {
     core_reset_capture();
     return s_flags;
