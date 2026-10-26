@@ -18,22 +18,22 @@
  * code that conditionally compiles against per-project externs (the
  * WAMR per-project natives file is the main caller) can `#ifdef` them. */
 {% if adc_config %}
-#define CORE_HAS_ADC_PADS    1
+#define CORE_USES_ADC_PADS     1
 {% endif %}
 {% if dac_enabled %}
-#define CORE_HAS_DAC         1
+#define CORE_USES_DAC          1
 {% endif %}
 {% if i2c_buses %}
-#define CORE_HAS_I2C_BUSES   1
+#define CORE_USES_I2C_BUSES    1
 {% endif %}
 {% if spi_buses %}
-#define CORE_HAS_SPI_BUSES   1
+#define CORE_USES_SPI_BUSES    1
 {% endif %}
 {% if i3c_buses %}
-#define CORE_HAS_I3C_BUSES   1
+#define CORE_USES_I3C_BUSES    1
 {% endif %}
 {% if usart_buses %}
-#define CORE_HAS_SERIAL_BUSES 1
+#define CORE_USES_SERIAL_BUSES  1
 {% endif %}
 
 /* ---- Core identity ---- */
@@ -128,7 +128,7 @@ static inline int core_pad_adc_channel(uint8_t pad)
 }
 
 {% if timer_pads is defined and timer_pads %}
-#define CORE_HAS_TIMER_PADS  1
+#define CORE_USES_TIMER_PADS   1
 #include "ll_tim.h"    /* TIM_TypeDef */
 
 /* ---- Timer/PWM channel mapping ---- */
