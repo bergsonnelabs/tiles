@@ -27,7 +27,7 @@
 #include <openthread/platform/settings.h>
 
 #include "core_thread.h"
-#include "hal_common.h"                  /* hal_tick() */
+#include "core_timing.h"                 /* core_millis() */
 #include "thread_app.h"
 #include "thread_prov.h"
 
@@ -69,7 +69,7 @@ static udp_slot_t s_udp[CORE_THREAD_UDP_SOCKETS];
 static otUdpSocket s_tx_sock;            /* used when no socket is open */
 static uint8_t s_tx_sock_open;
 static int s_last_error;
-static uint32_t s_service_at;            /* hal_tick() of the last core_thread_process() pass */
+static uint32_t s_service_at;            /* core_millis() of the last core_thread_process() pass */
 
 static int fail(otError e)
 {
@@ -395,7 +395,7 @@ void core_thread_process(void)
     __asm volatile ("mrs %0, primask" : "=r"(primask));
     if (s_ot == NULL || thread_app_seq_depth != 0u || (ipsr & 0x1FFu) != 0u || (primask & 1u) != 0u)
         return;
-    s_service_at = hal_tick();
+    s_service_at = core_millis();
 #if defined(THREAD_CFG_BLE_PROVISIONING)
     thread_prov_ble_process();
 #endif
@@ -409,7 +409,7 @@ void core_thread_process(void)
 
 void core_thread_service_tick(void)
 {
-    if ((uint32_t)(hal_tick() - s_service_at) >= SERVICE_TICK_MS)
+    if ((uint32_t)(core_millis() - s_service_at) >= SERVICE_TICK_MS)
         core_thread_process();
 }
 

@@ -10,6 +10,7 @@
 #define PORT_CORE_USB_H
 
 #include "hal_usb_cdc.h"
+#include "ll_rcc.h"     /* RCC_BASE, which ll_iwdg.h uses */
 #include "ll_iwdg.h"
 
 static inline void core_usb_init(void)
@@ -41,6 +42,10 @@ static inline int core_usb_try_write(const uint8_t *buf, uint16_t len)
 {
     return hal_usb_cdc_try_write(buf, len);
 }
+
+/** Bytes the transmit queue holds: the most core_usb_try_write() takes at
+ *  once (HAL_USB_CDC_TX_QUEUE_SIZE). */
+#define CORE_USB_TX_QUEUE_SIZE  HAL_USB_CDC_TX_QUEUE_SIZE
 
 /** Printf over USB CDC: queued like core_usb_write(); waits at most 50 ms for a
  *  stalled terminal, then drops. Returns the formatted length. */
