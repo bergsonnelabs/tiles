@@ -58,6 +58,7 @@ jobs:
             'definitions/mCore-*'
             'tools/test_ble_contract.py'
             'tools/test_coregen_spi_cs.py'
+            'tools/test_core_flags.py'
             'tests/val-watchdog/**'
             'tests/val-scope/**'
             'tools/test_core_scope*'
@@ -208,6 +209,12 @@ jobs:
       # and every config coregen must refuse (shared pad, shared instance).
       - name: SPI chip-select tests
         run: python3 tools/test_coregen_spi_cs.py
+
+      # coregen's CORE_USES_* project flags must be the ones SDK code and the
+      # WAMR natives test, and templates must not define CORE_HAS_* (a port
+      # capability). A mismatch compiles guarded code out silently.
+      - name: CORE_USES_ / CORE_HAS_ flag tests
+        run: python3 tools/test_core_flags.py
 
       # core_scope compiled with the host cc against a scripted link, checked
       # by the reference decoder: framing, every type, drops, BLE batching, and
