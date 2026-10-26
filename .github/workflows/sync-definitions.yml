@@ -238,7 +238,7 @@ jobs:
       - name: Generate the symbol library
         run: |
           python3 tools/gen_kicad_lib.py \
-            --statuses "$RUNNER_TEMP/statuses.json" --include production,beta \
+            --statuses "$RUNNER_TEMP/statuses.json" --include production,beta --generic \
             --footprints "kicad/Bergsonne Tiles.pretty" \
             --out "kicad/Bergsonne Tiles.kicad_sym"
 
