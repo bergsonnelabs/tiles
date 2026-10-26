@@ -538,23 +538,23 @@ void core_scope_update(void)
 /* ---- USB CDC link ---- */
 
 #if CORE_HAS_USB
-#include "hal_usb_cdc.h"
+#include "core_usb.h"
 
-static int usb_ready(void) { return hal_usb_cdc_connected(); }
+static int usb_ready(void) { return core_usb_connected(); }
 
 static int usb_write(const uint8_t *buf, uint16_t len)
 {
-    int n = hal_usb_cdc_try_write(buf, len);
+    int n = core_usb_try_write(buf, len);
     return n > 0 ? n : 0;
 }
 
-/* The HAL queue takes a buffer whole or not at all and sends it ahead of any
+/* The USB queue takes a buffer whole or not at all and sends it ahead of any
  * later print, so a frame is never split and never interleaved with text. */
 const core_scope_link_t core_scope_link_usb = {
     .init = 0,
     .ready = usb_ready,
     .write = usb_write,
-    .packet_bytes = HAL_USB_CDC_TX_QUEUE_SIZE,
+    .packet_bytes = CORE_USB_TX_QUEUE_SIZE,
     .flush_ms = 0,
 };
 #endif

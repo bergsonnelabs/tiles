@@ -13,18 +13,12 @@
 
 core_adc_t core_adc1 __attribute__((weak));
 
-/* VREFINT and the temperature sensor: ADC4 on the WBA, ADC1 on L0 / L4 / H5
- * (as core_led.c's VDD read). */
-#if defined(STM32WBA55xx)
-#define CORE_ADC_DEFAULT_PERIPH ADC4
-#else
-#define CORE_ADC_DEFAULT_PERIPH ADC1
-#endif
+/* The ADC with the internal channels and its bring-up are the port's
+ * (port_core_adc_default.h). */
+#include "port_core_adc_default.h"
 
 core_adc_t *core_adc_default(void)
 {
-    if (core_adc1.instance == 0) {
-        (void)hal_adc_init(&core_adc1, CORE_ADC_DEFAULT_PERIPH, SYSCLK_HZ, HAL_ADC_RES_12BIT);
-    }
+    port_core_adc_default_init(&core_adc1);
     return &core_adc1;
 }

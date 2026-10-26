@@ -7,8 +7,7 @@
 #include "core_ble.h"
 #include "ble_studio_link.h"
 #include "core_timing.h"
-#include "ll_rcc.h"     /* RCC_BASE, which ll_iwdg.h uses */
-#include "ll_iwdg.h"
+#include "port_core_ble_hw.h"   /* port_core_ble_feed_watchdog() */
 #include <stdint.h>
 
 /* Low-level BLE functions (sdk/ble/) */
@@ -365,7 +364,7 @@ void _core_reset_ble(void)
     uint32_t t0 = core_millis();
     while (ble_connected && (uint32_t)(core_millis() - t0) < CORE_RESET_BLE_WAIT_MS) {
         SEQ_RUN();
-        ll_iwdg_refresh();
+        port_core_ble_feed_watchdog();
     }
 }
 

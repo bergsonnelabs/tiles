@@ -29,8 +29,6 @@
 
 #include "core.h"
 #include "core_stepper.h"
-#include "ll_common.h"
-#include "ll_tim.h"
 #include <string.h>
 
 /* ---- Defaults ---- */
@@ -41,10 +39,6 @@
 
 #define MAX_ARR_16      65000u          /* longest interval on a 16-bit counter */
 #define NO_PULSE        0xFFFFFFFFu     /* CCR beyond any ARR: output never active */
-
-/* Output-compare mode "force inactive" (OCxM = 100b). Not preloaded, so a
- * halt can kill a pulse in progress. */
-#define OCM_FORCE_INACTIVE  0x4u
 
 /* ---- Pad helpers ---- */
 
@@ -57,66 +51,18 @@ static inline void _dir_write(core_stepper_t *h, int8_t dir)
 
 /* ---- Channel register helpers ---- */
 
-static void _oc_mode(core_stepper_t *h, uint32_t mode)
-{
-    TIM_TypeDef *t = h->timer.instance;
-    switch (h->channel) {
-    case 1: MOD_BITS(t->CCMR1, 0x7u << 4,  mode << 4);  break;
-    case 2: MOD_BITS(t->CCMR1, 0x7u << 12, mode << 12); break;
-    case 3: MOD_BITS(t->CCMR2, 0x7u << 4,  mode << 4);  break;
-    case 4: MOD_BITS(t->CCMR2, 0x7u << 12, mode << 12); break;
-    default: break;
-    }
-}
-
-static inline void _ccr_write(core_stepper_t *h, uint32_t v)
-{
-    TIM_TypeDef *t = h->timer.instance;
-    switch (h->channel) {
-    case 1: t->CCR1 = v; break;
-    case 2: t->CCR2 = v; break;
-    case 3: t->CCR3 = v; break;
-    case 4: t->CCR4 = v; break;
-    default: break;
-    }
-}
-
-static inline uint32_t _ccr_read(const core_stepper_t *h)
-{
-    TIM_TypeDef *t = h->timer.instance;
-    switch (h->channel) {
-    case 1: return t->CCR1;
-    case 2: return t->CCR2;
-    case 3: return t->CCR3;
-    default: return t->CCR4;
-    }
-}
-
-/* Configure the channel: PWM2, CCR preload, polarity, output enabled. */
-static void _channel_setup(core_stepper_t *h)
-{
-    TIM_TypeDef *t = h->timer.instance;
-    uint32_t sh = (h->channel - 1) * 4;           /* CCER bits per channel */
-    CLR_BITS(t->CCER, 0xFu << sh);
-    switch (h->channel) {
-    case 1: SET_BITS(t->CCMR1, 1u << 3);  break;  /* OC1PE */
-    case 2: SET_BITS(t->CCMR1, 1u << 11); break;  /* OC2PE */
-    case 3: SET_BITS(t->CCMR2, 1u << 3);  break;  /* OC3PE */
-    case 4: SET_BITS(t->CCMR2, 1u << 11); break;  /* OC4PE */
-    default: break;
-    }
-    _oc_mode(h, OCM_FORCE_INACTIVE);
-    if (h->step_active_low) SET_BITS(t->CCER, 0x2u << sh);   /* CCxP */
-    SET_BITS(t->CCER, 0x1u << sh);                           /* CCxE */
-    SET_BITS(t->CR1, LL_TIM_CR1_ARPE);
-    ll_tim_enable_moe(t);                                    /* TIM1/15/16 need it */
-}
+/* The timer's registers are the port's: port_core_stepper_output(),
+ * _compare_write() / _read(), _channel_setup(), _period_write(), the counter,
+ * the update interrupt, _latch(), _tick_1us(), _is_32bit(), _lock() /
+ * _unlock() (port_core_stepper.h lists them). Included here, where these
+ * helpers always sat, so GCC keeps the function order. */
+#include "port_core_stepper.h"
 
 /* Write the (preloaded) interval and pulse for a planned step. */
 static inline void _program(core_stepper_t *h, uint32_t interval_us, int pulse)
 {
-    h->timer.instance->ARR = interval_us - 1;
-    _ccr_write(h, pulse ? interval_us - h->pulse_us : NO_PULSE);
+    port_core_stepper_period_write(h->timer.instance, interval_us);
+    port_core_stepper_compare_write(h, pulse ? interval_us - h->pulse_us : NO_PULSE);
 }
 
 /* ---- Profile math ---- */
@@ -226,8 +172,8 @@ static void _plan(core_stepper_t *h)
 static void _finish(core_stepper_t *h)
 {
     core_timer_stop(&h->timer);
-    _oc_mode(h, OCM_FORCE_INACTIVE);
-    h->timer.instance->CNT = 0;
+    port_core_stepper_output(h, PORT_CORE_STEPPER_OUT_INACTIVE);
+    port_core_stepper_counter_clear(h->timer.instance);
     h->cur_pulse = h->nxt_pulse = 0;
     h->cur_rate_q8 = h->nxt_rate_q8 = 0;
     h->state = CORE_STEPPER_IDLE;
@@ -238,7 +184,7 @@ static void _finish(core_stepper_t *h)
  * second is planned into the preload registers, then the counter runs. */
 static void _start(core_stepper_t *h, int8_t dir)
 {
-    TIM_TypeDef *t = h->timer.instance;
+    core_timer_instance_t *t = h->timer.instance;
     uint32_t rate = (h->accel == 0) ? _q8(h->max_rate) : _min_rate_q8(h);
     if (rate < _min_rate_q8(h)) rate = _min_rate_q8(h);
 
@@ -247,13 +193,11 @@ static void _start(core_stepper_t *h, int8_t dir)
     h->cur_rate_q8 = rate;
     _dir_write(h, dir);
 
-    CLR_BITS(t->DIER, LL_TIM_DIER_UIE);
-    t->CNT = 0;
+    port_core_stepper_irq_off(t);
+    port_core_stepper_counter_clear(t);
     _program(h, _interval_us(h, rate), 1);
-    t->EGR = LL_TIM_EGR_UG;          /* latch ARR/CCR into the active registers */
-    t->SR  = 0;
-    SET_BITS(t->DIER, LL_TIM_DIER_UIE);
-    _oc_mode(h, LL_TIM_OCMODE_PWM2);
+    port_core_stepper_latch(t);      /* latch ARR/CCR into the active registers */
+    port_core_stepper_output(h, PORT_CORE_STEPPER_OUT_PULSE);
 
     _plan(h);                        /* second interval → preload */
     core_timer_start(&h->timer);
@@ -304,16 +248,16 @@ static void _isr(void *ctx)
  * Lifecycle
  * ============================================================ */
 
-static hal_status_t _init_common(core_stepper_t *h, TIM_TypeDef *instance, uint8_t channel,
-                                 uint8_t step_pad, uint8_t dir_pad)
+static core_status_t _init_common(core_stepper_t *h, core_timer_instance_t *instance,
+                                  uint8_t channel, uint8_t step_pad, uint8_t dir_pad)
 {
     memset(h, 0, sizeof(*h));
-    if (channel < 1 || channel > 4) return HAL_ERROR;
+    if (channel < 1 || channel > 4) return CORE_ERROR;
     h->channel  = channel;
     h->step_pad = step_pad;
     h->dir_pad  = dir_pad;
     h->dir = core_pad_resolve(dir_pad);
-    if (!h->dir.port) return HAL_ERROR;
+    if (!h->dir.port) return CORE_ERROR;
 
     h->max_rate = DEF_MAX_RATE;
     h->min_rate = DEF_MIN_RATE;
@@ -327,37 +271,34 @@ static hal_status_t _init_common(core_stepper_t *h, TIM_TypeDef *instance, uint8
     _dir_write(h, 1);
 
     /* Claim the timer + its update interrupt, then retime it to 1 us ticks.
-     * The period hal_timer_tick_init programs is irrelevant. */
-    hal_status_t rc = core_tick_init(&h->timer, instance, 1000, _isr, h);
-    if (rc != HAL_OK) return rc;
+     * The period core_tick_init programs is irrelevant. */
+    core_status_t rc = core_tick_init(&h->timer, instance, 1000, _isr, h);
+    if (rc != CORE_OK) return rc;
     core_timer_stop(&h->timer);
-    CLR_BITS(instance->DIER, LL_TIM_DIER_UIE);
-    instance->PSC = (SYSCLK_HZ / 1000000UL) - 1;
-    instance->ARR = 0xFFFFFFFFu;
-    h->wide = (instance->ARR == 0xFFFFFFFFu) ? 1 : 0;   /* 16-bit timers read back 0xFFFF */
-    instance->ARR = 2 * h->pulse_us - 1;
-    instance->EGR = LL_TIM_EGR_UG;                       /* latch PSC */
-    instance->SR  = 0;
-    SET_BITS(instance->DIER, LL_TIM_DIER_UIE);
-    _channel_setup(h);
-    _ccr_write(h, NO_PULSE);
-    return HAL_OK;
+    port_core_stepper_irq_off(instance);
+    port_core_stepper_tick_1us(instance);
+    h->wide = port_core_stepper_is_32bit(instance);
+    port_core_stepper_period_write(instance, 2 * h->pulse_us);
+    port_core_stepper_latch(instance);                   /* latch PSC */
+    port_core_stepper_channel_setup(h);
+    port_core_stepper_compare_write(h, NO_PULSE);
+    return CORE_OK;
 }
 
 core_status_t core_stepper_init(core_stepper_t *h, uint8_t step_pad, uint8_t dir_pad)
 {
 #ifdef CORE_USES_TIMER_PADS
-    TIM_TypeDef *instance;
+    core_timer_instance_t *instance;
     uint8_t channel;
     if (core_pad_timer_info(step_pad, &instance, &channel) != 0) {
         memset(h, 0, sizeof(*h));
-        return HAL_ERROR;          /* STEP pad is not declared as TIMx.y in config.json */
+        return CORE_ERROR;         /* STEP pad is not declared as TIMx.y in config.json */
     }
     return _init_common(h, instance, channel, step_pad, dir_pad);
 #else
     (void)step_pad; (void)dir_pad;
     memset(h, 0, sizeof(*h));
-    return HAL_ERROR;              /* no timer pads in this project: use core_stepper_init_ch */
+    return CORE_ERROR;             /* no timer pads in this project: use core_stepper_init_ch */
 #endif
 }
 
@@ -395,7 +336,7 @@ void core_stepper_set_polarity(core_stepper_t *h, bool step_active_low, bool dir
     h->step_active_low = step_active_low ? 1 : 0;
     h->dir_invert = dir_invert ? 1 : 0;
     if (h->state == CORE_STEPPER_IDLE) {
-        _channel_setup(h);
+        port_core_stepper_channel_setup(h);
         _dir_write(h, h->cur_dir);
     }
 }
@@ -438,7 +379,7 @@ void core_stepper_set_min_speed(core_stepper_t *h, uint32_t steps_per_s)
 
 void core_stepper_move_to(core_stepper_t *h, int32_t position)
 {
-    uint32_t s = ll_irq_save();
+    uint32_t s = port_core_stepper_lock();
     h->target = position;
     if (h->state == CORE_STEPPER_IDLE) {
         int32_t remaining = position - h->position;
@@ -451,20 +392,20 @@ void core_stepper_move_to(core_stepper_t *h, int32_t position)
          * The planner picks it up at the next interval. */
         h->state = CORE_STEPPER_MOVING;
     }
-    ll_irq_restore(s);
+    port_core_stepper_unlock(s);
 }
 
 void core_stepper_move(core_stepper_t *h, int32_t steps)
 {
-    uint32_t s = ll_irq_save();
+    uint32_t s = port_core_stepper_lock();
     int32_t base = (h->state == CORE_STEPPER_MOVING) ? h->target : h->position;
-    ll_irq_restore(s);
+    port_core_stepper_unlock(s);
     core_stepper_move_to(h, base + steps);
 }
 
 void core_stepper_run(core_stepper_t *h, int32_t steps_per_s)
 {
-    uint32_t s = ll_irq_save();
+    uint32_t s = port_core_stepper_lock();
     h->goal_rate = steps_per_s;
     if (h->state == CORE_STEPPER_IDLE) {
         if (steps_per_s != 0) {
@@ -474,7 +415,7 @@ void core_stepper_run(core_stepper_t *h, int32_t steps_per_s)
     } else {
         h->state = CORE_STEPPER_RUNNING;
     }
-    ll_irq_restore(s);
+    port_core_stepper_unlock(s);
 }
 
 void core_stepper_stop(core_stepper_t *h)
@@ -484,17 +425,18 @@ void core_stepper_stop(core_stepper_t *h)
 
 void core_stepper_halt(core_stepper_t *h)
 {
-    uint32_t s = ll_irq_save();
-    TIM_TypeDef *t = h->timer.instance;
+    uint32_t s = port_core_stepper_lock();
+    core_timer_instance_t *t = h->timer.instance;
     if (h->state != CORE_STEPPER_IDLE) {
         core_timer_stop(&h->timer);
         /* Rising edge already out? Then the driver took the step. */
-        if (h->cur_pulse && t->CNT >= _ccr_read(h)) h->position += h->cur_dir;
+        if (h->cur_pulse && port_core_stepper_counter_read(t) >= port_core_stepper_compare_read(h))
+            h->position += h->cur_dir;
     }
     _finish(h);
     h->goal_rate = 0;
     h->target = h->position;
-    ll_irq_restore(s);
+    port_core_stepper_unlock(s);
 }
 
 /* ============================================================
@@ -518,12 +460,12 @@ int32_t core_stepper_position(const core_stepper_t *h)
 
 void core_stepper_set_position(core_stepper_t *h, int32_t position)
 {
-    uint32_t s = ll_irq_save();
+    uint32_t s = port_core_stepper_lock();
     if (h->state == CORE_STEPPER_IDLE) {
         h->position = position;
         h->target = position;
     }
-    ll_irq_restore(s);
+    port_core_stepper_unlock(s);
 }
 
 int32_t core_stepper_target(const core_stepper_t *h)
