@@ -44,21 +44,14 @@
 #error "core_usb.h: USB is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
 #endif
 
-#include "hal_usb_cdc.h"
-#include "ll_iwdg.h"
+#include "core_types.h"   /* CORE_INLINE, uint8_t, uint16_t, uint32_t */
 #include <stdio.h>    /* snprintf, printf — commonly used with USB serial output */
 
 /** Initialize USB CDC. Device appears as /dev/tty.usbmodem* on the host. */
-static inline void core_usb_init(void)
-{
-    hal_usb_cdc_init();
-}
+CORE_INLINE void core_usb_init(void);
 
 /** Returns 1 if a host terminal is connected (DTR set). */
-static inline int core_usb_connected(void)
-{
-    return hal_usb_cdc_connected();
-}
+CORE_INLINE int core_usb_connected(void);
 
 /**
  * Wait up to `timeout_ms` for a host terminal to open the port (DTR set).
@@ -69,34 +62,20 @@ static inline int core_usb_connected(void)
  * @param timeout_ms Longest wait in milliseconds; 0 only checks.
  * @return 1 if a terminal is connected, 0 on timeout.
  */
-static inline int core_usb_wait_host(uint32_t timeout_ms)
-{
-    uint32_t t0 = hal_tick();
-    while (!hal_usb_cdc_connected()) {
-        if ((uint32_t)(hal_tick() - t0) >= timeout_ms) return 0;
-        ll_iwdg_refresh();                /* harmless if the watchdog isn't running */
-    }
-    return 1;
-}
+CORE_INLINE int core_usb_wait_host(uint32_t timeout_ms);
 
 /** Transmit data: queued, never waits long (see hal_usb_cdc_write); returns
  * bytes queued, -1 before init. */
-static inline int core_usb_write(const uint8_t *buf, uint16_t len)
-{
-    return hal_usb_cdc_write(buf, len);
-}
+CORE_INLINE int core_usb_write(const uint8_t *buf, uint16_t len);
 
 /** Transmit without waiting: queues the whole buffer or none of it.
  * Returns len if queued, 0 if there is no room right now (offer it again
  * later), -1 if no terminal is connected. Main loop only. */
-static inline int core_usb_try_write(const uint8_t *buf, uint16_t len)
-{
-    return hal_usb_cdc_try_write(buf, len);
-}
+CORE_INLINE int core_usb_try_write(const uint8_t *buf, uint16_t len);
 
-/** Printf over USB CDC: queued like core_usb_write(); waits at most 50 ms for a
- *  stalled terminal, then drops. Returns the formatted length. */
-#define core_usb_printf  hal_usb_cdc_printf
+/* core_usb_printf(fmt, ...): printf over USB CDC, queued like
+ * core_usb_write(); waits at most 50 ms for a stalled terminal, then drops.
+ * Returns the formatted length. A macro the port defines (port_core_usb.h). */
 
 /**
  * Print a string followed by a newline. Thin wrapper for DSL-style callers.
@@ -105,10 +84,7 @@ static inline int core_usb_try_write(const uint8_t *buf, uint16_t len)
  * @studio twin full
  * @param text The message to print.
  */
-static inline void core_usb_print(const char *s)
-{
-    core_usb_printf("%s\n", s ? s : "");
-}
+CORE_INLINE void core_usb_print(const char *s);
 
 /**
  * Print a signed integer followed by a newline.
@@ -117,10 +93,7 @@ static inline void core_usb_print(const char *s)
  * @studio twin full
  * @param value The integer to print (decimal).
  */
-static inline void core_usb_print_int(int v)
-{
-    core_usb_printf("%d\n", v);
-}
+CORE_INLINE void core_usb_print_int(int v);
 
 /**
  * Print a double with a newline. %g trims trailing zeros for readability.
@@ -129,10 +102,7 @@ static inline void core_usb_print_int(int v)
  * @studio twin full
  * @param value The float to print.
  */
-static inline void core_usb_print_float(double v)
-{
-    core_usb_printf("%g\n", v);
-}
+CORE_INLINE void core_usb_print_float(double v);
 
 /**
  * Print "true" / "false" followed by a newline.
@@ -141,10 +111,7 @@ static inline void core_usb_print_float(double v)
  * @studio twin full
  * @param value {bool} The boolean to print.
  */
-static inline void core_usb_print_bool(int v)
-{
-    core_usb_printf("%s\n", v ? "true" : "false");
-}
+CORE_INLINE void core_usb_print_bool(int v);
 
 /** Receive callback, run from the USB interrupt with the bytes of one packet. */
 typedef void (*core_usb_cdc_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);
@@ -155,34 +122,19 @@ typedef void (*core_usb_cdc_rx_cb_t)(const uint8_t *data, uint16_t len, void *ct
  * @param cb   Callback: void cb(const uint8_t *data, uint16_t len, void *ctx)
  * @param ctx  User context passed to callback; may be NULL
  */
-static inline void core_usb_on_receive(core_usb_cdc_rx_cb_t cb, void *ctx)
-{
-    hal_usb_cdc_set_rx_callback(cb, ctx);
-}
+CORE_INLINE void core_usb_on_receive(core_usb_cdc_rx_cb_t cb, void *ctx);
 
 /** Returns the number of bytes available to read (ring buffer mode). */
-static inline uint16_t core_usb_available(void)
-{
-    return hal_usb_cdc_available();
-}
+CORE_INLINE uint16_t core_usb_available(void);
 
 /** Read a single byte (blocking — waits for data). */
-static inline uint8_t core_usb_getc(void)
-{
-    return hal_usb_cdc_getc();
-}
+CORE_INLINE uint8_t core_usb_getc(void);
 
 /** Read available bytes into buf (non-blocking). Returns bytes read. */
-static inline uint16_t core_usb_read(uint8_t *buf, uint16_t max)
-{
-    return hal_usb_cdc_read(buf, max);
-}
+CORE_INLINE uint16_t core_usb_read(uint8_t *buf, uint16_t max);
 
 /** Non-blocking single byte read. Returns 1 if a byte was read, 0 if empty. */
-static inline int core_usb_try_read(uint8_t *byte)
-{
-    return hal_usb_cdc_rx_try(byte);
-}
+CORE_INLINE int core_usb_try_read(uint8_t *byte);
 
 /* ---- Line reader ---- */
 
@@ -211,26 +163,7 @@ typedef struct {
  *         if this byte did not complete one. The text stays valid until the
  *         next call with the same `lr`.
  */
-static inline const char *core_usb_line_feed(core_usb_line_t *lr, uint8_t byte)
-{
-    if (byte == '\r' || byte == '\0') return NULL;
-    if (byte == '\n') {
-        uint8_t n = lr->len, dropped = lr->overflow;
-        lr->len = 0;
-        lr->overflow = 0;
-        if (dropped || n == 0) return NULL;
-        lr->buf[n] = '\0';
-        return lr->buf;
-    }
-    if (lr->overflow) return NULL;
-    if (lr->len >= CORE_USB_LINE_MAX) {
-        lr->overflow = 1;               /* too long: drop it, resync on '\n' */
-        lr->len = 0;
-        return NULL;
-    }
-    lr->buf[lr->len++] = (char)byte;
-    return NULL;
-}
+CORE_INLINE const char *core_usb_line_feed(core_usb_line_t *lr, uint8_t byte);
 
 /**
  * Read received bytes until a line completes (non-blocking).
@@ -248,15 +181,7 @@ static inline const char *core_usb_line_feed(core_usb_line_t *lr, uint8_t byte)
  * @return The completed line, NUL-terminated and without its ending, or NULL
  *         if no line is complete yet. Valid until the next call with `lr`.
  */
-static inline const char *core_usb_poll_line(core_usb_line_t *lr)
-{
-    uint8_t b;
-    for (int i = 0; i < 64 && core_usb_try_read(&b); i++) {
-        const char *line = core_usb_line_feed(lr, b);
-        if (line) return line;
-    }
-    return NULL;
-}
+CORE_INLINE const char *core_usb_poll_line(core_usb_line_t *lr);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -288,5 +213,8 @@ static inline const char *core_usb_poll_line(core_usb_line_t *lr)
 //   Host-side baud changes (1200-touch bootloader trigger included)
 //   land in the lower stack. The header doesn't expose a hook for
 //   programs that want to react to baud / DTR changes.
+
+/* The port's bodies of the functions above. */
+#include "port_core_usb.h"
 
 #endif /* CORE_USB_H */

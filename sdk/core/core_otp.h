@@ -39,29 +39,16 @@
 #ifndef CORE_OTP_H
 #define CORE_OTP_H
 
-#include <stdint.h>
-#include <string.h>
-#include "ll_common.h"
-#include "ll_flash.h"
 #include "core_caps.h"
+#include "core_types.h"   /* CORE_INLINE, uint32_t */
 
 /* ============================================================
  * Platform geometry
  * ============================================================ */
 
-#if CORE_HAS_OTP
-  /* FLASH_OTP_BASE / FLASH_OTP_SIZE per the CubeWBA CMSIS header. */
-  #define CORE_OTP_BASE       0x0BF90000UL
-  #define CORE_OTP_SIZE       512u
-  #define CORE_OTP_SLOT_SIZE  16u            /* 128-bit quad-word program unit */
-  #define CORE_OTP_AVAILABLE  1
-#else
-  /* No OTP surface exposed on this Core yet. */
-  #define CORE_OTP_BASE       0UL
-  #define CORE_OTP_SIZE       0u
-  #define CORE_OTP_SLOT_SIZE  16u
-  #define CORE_OTP_AVAILABLE  0
-#endif
+/* CORE_OTP_BASE, CORE_OTP_SIZE (bytes; 0 where unavailable),
+ * CORE_OTP_SLOT_SIZE (the 16 B quad-word program unit) and CORE_OTP_AVAILABLE
+ * (1 or 0, as CORE_HAS_OTP) are the port's (port_core_otp.h). */
 
 #define CORE_OTP_SLOT_COUNT   (CORE_OTP_SIZE / CORE_OTP_SLOT_SIZE)
 
@@ -74,39 +61,24 @@
  *
  * @studio expose category=otp name=size returns=int
  */
-static inline uint32_t core_otp_size(void)
-{
-    return CORE_OTP_SIZE;
-}
+CORE_INLINE uint32_t core_otp_size(void);
 
 /**
  * Number of write-once quad-word slots (CORE_OTP_SIZE / 16).
  *
  * @studio expose category=otp name=slot_count returns=int
  */
-static inline uint32_t core_otp_slot_count(void)
-{
-    return CORE_OTP_SLOT_COUNT;
-}
+CORE_INLINE uint32_t core_otp_slot_count(void);
 
 /** Absolute address of a slot (no bounds check). */
-static inline uint32_t core_otp_slot_addr(uint32_t slot)
-{
-    return CORE_OTP_BASE + slot * CORE_OTP_SLOT_SIZE;
-}
+CORE_INLINE uint32_t core_otp_slot_addr(uint32_t slot);
 
 /**
  * Read bytes from OTP into `buf`. Memory-mapped load; no unlock needed.
  * Returns 0 on success, -1 if the range is out of bounds or OTP is
  * unavailable on this Core.
  */
-static inline int core_otp_read(uint32_t offset, void *buf, uint32_t len)
-{
-    if (!CORE_OTP_AVAILABLE || offset + len > CORE_OTP_SIZE)
-        return -1;
-    memcpy(buf, (const void *)(CORE_OTP_BASE + offset), len);
-    return 0;
-}
+CORE_INLINE int core_otp_read(uint32_t offset, void *buf, uint32_t len);
 
 /**
  * Return 1 if `slot` is entirely erased (all 0xFF), 0 if any bit is
@@ -116,16 +88,7 @@ static inline int core_otp_read(uint32_t offset, void *buf, uint32_t len)
  * @studio expose category=otp name=slot_is_blank returns=int
  * @param slot Slot index, 0 to core_otp_slot_count() - 1.
  */
-static inline int core_otp_slot_is_blank(uint32_t slot)
-{
-    if (!CORE_OTP_AVAILABLE || slot >= CORE_OTP_SLOT_COUNT)
-        return -1;
-    const volatile uint8_t *p = (const volatile uint8_t *)core_otp_slot_addr(slot);
-    for (uint32_t i = 0; i < CORE_OTP_SLOT_SIZE; i++)
-        if (p[i] != 0xFFu)
-            return 0;
-    return 1;
-}
+CORE_INLINE int core_otp_slot_is_blank(uint32_t slot);
 
 /**
  * Program one 16-byte quad-word slot (write-once) and verify the read-back.
@@ -146,38 +109,7 @@ static inline int core_otp_slot_is_blank(uint32_t slot)
  * not belong in the DSL palette. It is escape-to-C only (see @studio
  * unsupported below).
  */
-static inline int core_otp_program_slot(uint32_t slot, const void *rec)
-{
-#if CORE_OTP_AVAILABLE
-    if (slot >= CORE_OTP_SLOT_COUNT)
-        return -1;
-
-    int blank = core_otp_slot_is_blank(slot);
-    if (blank < 0)  return -1;
-    if (blank == 0) return -2;      /* write-once: never overwrite a record */
-
-    /* Copy through a local to honor the quad-word write's alignment/ordering
-     * regardless of the caller's buffer alignment. */
-    uint32_t w[4];
-    memcpy(w, rec, sizeof(w));
-
-    uint32_t addr = core_otp_slot_addr(slot);
-    ll_flash_unlock();
-    int rc = ll_flash_program_qword(addr, w);
-    ll_flash_lock();
-    if (rc != 0)
-        return -1;
-
-    /* OTP has no retry — confirm the read-back before trusting the record. */
-    if (memcmp((const void *)addr, rec, CORE_OTP_SLOT_SIZE) != 0)
-        return -1;
-
-    return 0;
-#else
-    (void)slot; (void)rec;
-    return -3;
-#endif
-}
+CORE_INLINE int core_otp_program_slot(uint32_t slot, const void *rec);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -193,5 +125,8 @@ static inline int core_otp_program_slot(uint32_t slot, const void *rec)
 //   intentionally NOT exposed to the DSL — a stray palette call could
 //   permanently consume a slot. Provisioning burns happen from C / the
 //   production programmer, not from a Studio program.
+
+/* The port's bodies of the functions above. */
+#include "port_core_otp.h"
 
 #endif /* CORE_OTP_H */
