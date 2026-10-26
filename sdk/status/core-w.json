@@ -23,8 +23,8 @@
       "note": "No USB, so no ROM DFU path to park in"
     },
     "system.reset": {
-      "status": "compile",
-      "note": "Compiles (tests/val-watchdog, 2026-10-16); not bench-run yet. Drops a connected BLE link first (at most 200 ms)"
+      "status": "verified",
+      "note": "Hardware 2026-10-19: a Bluetooth reset from Studio ran core_reset() on a Core.ST.W5 and the board came back (user-run). Drops a connected BLE link first (at most 200 ms)"
     },
     "system.reset_reason": {
       "status": "compile",
@@ -199,8 +199,8 @@
       "note": "No USB"
     },
     "conn.reset_ble": {
-      "status": "compile",
-      "note": "Compiles in every BLE build; auth, nonce binding and replay refusal host-tested (ota_sim, 2026-10-16); not run over the air yet"
+      "status": "verified",
+      "note": "Hardware 2026-10-19: Studio's reset link reset a Core.ST.W5 over Bluetooth (R frame, user-run). Auth, nonce binding and replay refusal host-tested (ota_sim, 2026-10-16)."
     },
     "conn.swd": {
       "status": "verified",
