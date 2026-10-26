@@ -7,7 +7,9 @@
 CC     ?= cc
 ROOT   := $(abspath ../..)
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -Wno-unused-function \
-          -Istub -I$(ROOT)/sdk/core
+          -Istub -I$(ROOT)/sdk/core -I$(ROOT)/sdk/port/stm32/core -I$(ROOT)/sdk/hal
+DEPS   := nvm_sim.c $(ROOT)/sdk/core/core_nvm.c $(ROOT)/sdk/core/core_nvm.h \
+          $(wildcard $(ROOT)/sdk/port/stm32/core/port_core_nvm*.h) $(wildcard stub/*.h)
 
 .PHONY: all clean
 all: nvm_sim_l4 nvm_sim_w5 nvm_sim_h5
@@ -15,13 +17,13 @@ all: nvm_sim_l4 nvm_sim_w5 nvm_sim_h5
 	./nvm_sim_w5
 	./nvm_sim_h5
 
-nvm_sim_l4: nvm_sim.c $(ROOT)/sdk/core/core_nvm.c $(ROOT)/sdk/core/core_nvm.h $(wildcard stub/*.h)
+nvm_sim_l4: $(DEPS)
 	$(CC) $(CFLAGS) -DSTM32L422xx nvm_sim.c -o $@
 
-nvm_sim_w5: nvm_sim.c $(ROOT)/sdk/core/core_nvm.c $(ROOT)/sdk/core/core_nvm.h $(wildcard stub/*.h)
+nvm_sim_w5: $(DEPS)
 	$(CC) $(CFLAGS) -DSTM32WBA55xx nvm_sim.c -o $@
 
-nvm_sim_h5: nvm_sim.c $(ROOT)/sdk/core/core_nvm.c $(ROOT)/sdk/core/core_nvm.h $(wildcard stub/*.h)
+nvm_sim_h5: $(DEPS)
 	$(CC) $(CFLAGS) -DSTM32H523xx nvm_sim.c -o $@
 
 clean:
