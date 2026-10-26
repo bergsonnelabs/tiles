@@ -62,6 +62,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "core_caps.h"
 
 /** Compile-time master switch. 0 turns every call into nothing. */
 #ifndef CORE_SCOPE_ENABLED
@@ -71,7 +72,7 @@
 /* Buffer sizes. The defaults cost about 1.2 KB of RAM once the module is
  * used (nothing if it is not). The Core.ST.L0 has 2 KB in total and no link
  * of its own, so there the defaults shrink to what a UART link could use. */
-#if defined(STM32L011xx)
+#if CORE_HAS_SMALL_RAM
 #define CORE_SCOPE_DEFAULT_CHANNELS_ 8
 #define CORE_SCOPE_DEFAULT_RING_     128
 #define CORE_SCOPE_DEFAULT_TX_       128

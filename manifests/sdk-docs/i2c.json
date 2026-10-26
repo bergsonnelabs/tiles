@@ -1,6 +1,6 @@
 {
   "schema": "studio-sdk-docs/v2",
-  "source": "tiles@77fd3f3",
+  "source": "tiles@ebefbea",
   "category": "i2c",
   "label": "Core.I2C",
   "icon": "⇄",
@@ -281,7 +281,7 @@
       "name": "core_i2c_handle_for_bus",
       "signature": "core_i2c_handle_for_bus(uint8_t bus)",
       "returns": "hal_i2c_t *",
-      "brief": "The I2C handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any I2C bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_HAS_I2C_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
+      "brief": "The I2C handle for a bus id declared in config.json, or NULL if the project doesn't declare that bus. Emitted per project by coregen into core_init.c (when the project declares any I2C bus); the *_bus helpers below resolve their handle through it. Forward-declared here rather than `#include \"core_init.h\"` so this header compiles without a project (val tests, examples without config.json). The natives-side caller is gated on CORE_USES_I2C_BUSES, so the linker never asks for the symbol unless the dispatcher exists.",
       "params": [
         {
           "name": "bus",

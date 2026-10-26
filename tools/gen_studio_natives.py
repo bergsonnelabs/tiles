@@ -335,7 +335,7 @@ def emit_c(
     parts.append("/* SDK headers providing the host symbols we wrap. */")
     if mode == "project":
         # Each per-project category guards its include with the matching
-        # CORE_HAS_* sentinel. core_dac.h has a hard `#error` on non-H
+        # CORE_USES_* project flag. core_dac.h has a hard `#error` on non-H
         # cores, so guarding the include is mandatory there. PWM is
         # guarded because tal_timer.h references core_pad_timer_info,
         # which coregen only emits when the project has TIM pads.
@@ -378,20 +378,22 @@ def emit_c(
 
 
 # Per-project adapters compile only when the project actually configures
-# the relevant peripheral. The matching CORE_HAS_* sentinels live in
-# coregen's core_pads.h.j2 (TIMER_PADS / ADC_PADS / DAC). Pad / GPIO has
-# no guard — hal_pad_lookup() returns NULL for unmapped pads, so the
-# adapter compiles cleanly even on projects with no GPIO.OUT pads.
+# the relevant peripheral. The matching CORE_USES_* project flags live in
+# coregen's core_pads.h.j2 (TIMER_PADS / ADC_PADS / DAC). They say what the
+# project uses; the Core's own capabilities are CORE_HAS_* (core_caps.h).
+# Pad / GPIO has no guard — hal_pad_lookup() returns NULL for unmapped
+# pads, so the adapter compiles cleanly even on projects with no GPIO.OUT
+# pads.
 ADAPTER_GUARDS = {
-    "pwm": "CORE_HAS_TIMER_PADS",
-    "adc": "CORE_HAS_ADC_PADS",
-    "dac": "CORE_HAS_DAC",
+    "pwm": "CORE_USES_TIMER_PADS",
+    "adc": "CORE_USES_ADC_PADS",
+    "dac": "CORE_USES_DAC",
     # i2c Tier 2 wrappers consult core_i2c_handle_for_bus, which only
     # exists in coregen output when the project declares at least one
     # I2C bus. Sentinel emitted by core_pads.h.j2 alongside the others.
-    "i2c": "CORE_HAS_I2C_BUSES",
-    "spi": "CORE_HAS_SPI_BUSES",
-    "serial": "CORE_HAS_SERIAL_BUSES",
+    "i2c": "CORE_USES_I2C_BUSES",
+    "spi": "CORE_USES_SPI_BUSES",
+    "serial": "CORE_USES_SERIAL_BUSES",
 }
 
 

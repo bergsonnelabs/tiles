@@ -27,7 +27,9 @@
 #ifndef CORE_RNG_H
 #define CORE_RNG_H
 
-#if !defined(STM32L422xx) && !defined(STM32WBA55xx) && !defined(STM32H523xx)
+#include "core_caps.h"
+
+#if !CORE_HAS_RNG
 #error "core_rng.h: Hardware RNG is not available on this Core tile. Only Core.ST.L4, Core.ST.W5, and Core.ST.H5 have an RNG peripheral."
 #endif
 

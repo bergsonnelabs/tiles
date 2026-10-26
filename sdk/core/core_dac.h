@@ -26,7 +26,9 @@
 #ifndef CORE_DAC_H
 #define CORE_DAC_H
 
-#if !defined(STM32H523xx)
+#include "core_caps.h"
+
+#if !CORE_HAS_DAC
 #error "core_dac.h: DAC is not available on this Core tile. Only Core.ST.H5 (STM32H523) has a DAC peripheral."
 #endif
 

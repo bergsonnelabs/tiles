@@ -37,8 +37,10 @@
 #ifndef CORE_USB_H
 #define CORE_USB_H
 
+#include "core_caps.h"
+
 /* USB CDC requires a USB peripheral: Core.ST.L4 (STM32L422) or Core.ST.H5 (STM32H523). */
-#if !defined(STM32L422xx) && !defined(STM32H523xx)
+#if !CORE_HAS_USB
 #error "core_usb.h: USB is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
 #endif
 

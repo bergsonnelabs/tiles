@@ -43,12 +43,13 @@
 #include <string.h>
 #include "ll_common.h"
 #include "ll_flash.h"
+#include "core_caps.h"
 
 /* ============================================================
  * Platform geometry
  * ============================================================ */
 
-#if defined(STM32WBA55xx)
+#if CORE_HAS_OTP
   /* FLASH_OTP_BASE / FLASH_OTP_SIZE per the CubeWBA CMSIS header. */
   #define CORE_OTP_BASE       0x0BF90000UL
   #define CORE_OTP_SIZE       512u

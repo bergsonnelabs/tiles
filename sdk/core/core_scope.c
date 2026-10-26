@@ -16,6 +16,7 @@
  * what it had to drop.
  */
 #include "core_scope.h"
+#include "core_caps.h"
 
 #if CORE_SCOPE_ENABLED
 
@@ -295,7 +296,7 @@ void core_scope_init(void)
 {
     if (s_inited) return;
     s_inited = 1;
-#if defined(STM32L422xx) || defined(STM32H523xx)
+#if CORE_HAS_USB
     s_link = &core_scope_link_usb;
 #elif defined(BLE_ENABLED) && BLE_ENABLED
     s_link = &core_scope_link_ble;
@@ -536,7 +537,7 @@ void core_scope_update(void)
 
 /* ---- USB CDC link ---- */
 
-#if defined(STM32L422xx) || defined(STM32H523xx)
+#if CORE_HAS_USB
 #include "hal_usb_cdc.h"
 
 static int usb_ready(void) { return hal_usb_cdc_connected(); }

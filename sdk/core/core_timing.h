@@ -23,6 +23,7 @@
 #include "ll_systick.h"
 #include "hal_common.h"
 #include "core_config.h"  /* SYSCLK_MHZ — for core_delay_ns() */
+#include "core_caps.h"
 
 /**
  * Blocking delay in milliseconds.
@@ -90,7 +91,7 @@ static inline int core_timeout(uint32_t start, uint32_t ms)
  * once at startup before the first core_delay_cycles/ns. C-only — no DSL surface.
  */
 
-#if !defined(STM32L011xx)  /* Cortex-M4/M33 have the DWT cycle counter */
+#if CORE_HAS_DWT  /* Cortex-M4/M33 have the DWT cycle counter */
 
 #define CORE_DWT_DEMCR   (*(volatile uint32_t *)0xE000EDFCUL)  /* bit24 TRCENA   */
 #define CORE_DWT_CTRL    (*(volatile uint32_t *)0xE0001000UL)  /* bit0  CYCCNTENA */

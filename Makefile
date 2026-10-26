@@ -423,6 +423,12 @@ CFLAGS += -I$(SDK_DIR)sdk/ll
 CFLAGS += -I$(SDK_DIR)sdk/hal
 CFLAGS += -I$(SDK_DIR)sdk/tal
 CFLAGS += -I$(SDK_DIR)sdk/core
+# The port's own headers (port_caps.h behind core_caps.h), after the neutral
+# SDK dirs so they never shadow an sdk/ header. Another port puts its own
+# port_caps.h on the include path.
+ifeq ($(PORT),stm32)
+  CFLAGS += -I$(SDK_DIR)sdk/port/stm32/core
+endif
 CFLAGS += -Og -g3
 CFLAGS += $(EXTRA_CFLAGS)   # per-project variant flags (e.g. -DRING_VARIANT_V1)
 

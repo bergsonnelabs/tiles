@@ -77,7 +77,9 @@
 #ifndef CORE_THREAD_H
 #define CORE_THREAD_H
 
-#if !defined(STM32WBA55xx)
+#include "core_caps.h"
+
+#if !CORE_HAS_THREAD
 #error "core_thread.h: Thread is only available on Core.ST.W5 (STM32WBA55). This tile has no 802.15.4 radio."
 #endif
 
