@@ -65,6 +65,7 @@ tiles/
 │   └── device/         # linker scripts + startup code
 ├── drivers/            # tile drivers (tile_*.h/c), _template/ to start one
 ├── definitions/        # Core + tile JSON of public tiles — a mirror of the product database
+├── cores/              # one core.mk per Core: MCU, CPU/FPU, link script, startup, probe
 ├── manifests/          # generated docs + Studio manifests (do not hand-edit)
 └── tools/coregen/      # config.json → board init C
 ```

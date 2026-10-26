@@ -50,6 +50,7 @@ jobs:
           # Faithful mirror of this workflow's old pull_request.paths filter.
           PATTERNS=(
             'sdk/**'
+            'cores/**'
             'drivers/**'
             'templates/**'
             'tools/coregen/**'
