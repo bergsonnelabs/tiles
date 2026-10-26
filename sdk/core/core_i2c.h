@@ -329,4 +329,9 @@ CORE_INLINE void core_i2c_target_deinit(core_i2c_target_t *t);
  * above. */
 #include "port_core_i2c.h"
 
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_I2C
+#include "core_caps.h"
+
 #endif /* CORE_I2C_H */

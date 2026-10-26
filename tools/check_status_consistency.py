@@ -16,7 +16,13 @@ an older id scheme than features.json + core-w. This check fails the build if:
   2. a core file lacks a defined feature id (the site renders a missing id
      as "Not implemented", so every Core states every feature), or
   3. a status is blank ("") or not one of the known values (a blank also
-     rendered as "Not implemented" and hid real code; 2026-10).
+     rendered as "Not implemented" and hid real code; 2026-10), or
+  4. a feature's "cap" / "functions" (coregen's core_caps.h) is malformed, a
+     cap is claimed twice, or a function pattern names nothing sdk/core
+     declares.
+
+--overlay <repo> also checks a private repo's sdk/status/*.json (a Core that
+is not public, e.g. tiles-alpha's core-n-lm20b.json) the same way.
 
 It also guards a second, unrelated kind of drift in drivers/: a driver
 header's Doxygen `@version` tag disagreeing with its TILE_*_VERSION_*
@@ -29,13 +35,17 @@ was bumped to 1 a few lines below). Cheap to check, evidently not cheap
 to remember.
 
 Run:
-    python3 tools/check_status_consistency.py
+    python3 tools/check_status_consistency.py [--overlay ../tiles-alpha]
 """
 
+import argparse
 import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "coregen"))
+import core_caps  # noqa: E402  (features.json "cap" / "functions")
 
 
 # ---- Console encoding ----------------------------------------------------
@@ -97,20 +107,13 @@ def check_driver_version_tags():
     return failed, checked
 
 
-def main():
-    feat = json.loads((STATUS_DIR / "features.json").read_text())
-    canon = [f["id"] for g in feat["groups"] for f in g["features"]]
+def check_core_files(paths, canon):
+    """Orphan / missing ids and unknown statuses in core status files.
+    Returns (failed, the ids the files use)."""
     canon_set = set(canon)
-
-    if len(canon) != len(canon_set):
-        dupes = sorted({i for i in canon if canon.count(i) > 1})
-        print(f"FAIL: duplicate feature ids in features.json: {dupes}", file=sys.stderr)
-        sys.exit(1)
-
-    cores = sorted(STATUS_DIR.glob("core-*.json"))
     used = set()
     failed = False
-    for path in cores:
+    for path in paths:
         d = json.loads(path.read_text())
         keys = set(d["features"].keys())
         used |= keys
@@ -139,17 +142,66 @@ def main():
                     f"{sorted(VALID_STATUS)}",
                     file=sys.stderr,
                 )
+    return failed, used
+
+
+def check_caps(feat, paths):
+    """features.json's "cap" / "functions" (coregen's core_caps.h): each cap
+    well formed and backed by one feature, each function pattern naming a
+    function sdk/core declares, and every Core's caps decidable."""
+    try:
+        core_caps.resolve_functions(feat)
+        for path in paths:
+            core_caps.caps_for(json.loads(path.read_text()), feat)
+    except core_caps.CapsError as e:
+        print(f"FAIL: {e}", file=sys.stderr)
+        return True
+    return False
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--overlay", metavar="REPO", action="append", default=[],
+                    help="also check a private repo's <REPO>/sdk/status/*.json (a "
+                         "non-public Core's status file) against this features.json; "
+                         "repeatable")
+    args = ap.parse_args()
+
+    feat = json.loads((STATUS_DIR / "features.json").read_text())
+    canon = [f["id"] for g in feat["groups"] for f in g["features"]]
+    canon_set = set(canon)
+
+    if len(canon) != len(canon_set):
+        dupes = sorted({i for i in canon if canon.count(i) > 1})
+        print(f"FAIL: duplicate feature ids in features.json: {dupes}", file=sys.stderr)
+        sys.exit(1)
+
+    cores = sorted(STATUS_DIR.glob("core-*.json"))
+    failed, used = check_core_files(cores, canon)
+    failed |= check_caps(feat, cores)
 
     dead = sorted(canon_set - used)
     if dead:
         # Unreachable while every Core must list every id; kept as a guard.
         print(f"note: features with no value on any Core: {dead}", file=sys.stderr)
 
+    overlay_cores = []
+    for repo in args.overlay:
+        d = Path(repo) / "sdk" / "status"
+        paths = sorted(p for p in d.glob("*.json") if p.name != "features.json")
+        if not paths:
+            print(f"note: {repo}: no status files in sdk/status/", file=sys.stderr)
+        o_failed, _ = check_core_files(paths, canon)
+        failed |= o_failed | check_caps(feat, paths)
+        overlay_cores += paths
+
     ver_failed, ver_checked = check_driver_version_tags()
 
     if failed or ver_failed:
         sys.exit(1)
-    print(f"status consistency OK — {len(canon)} feature ids, {len(cores)} cores")
+    print(f"status consistency OK — {len(canon)} feature ids, {len(cores)} cores"
+          + (f" + {len(overlay_cores)} overlay ({', '.join(p.name for p in overlay_cores)})"
+             if args.overlay else ""))
     print(f"driver @version tags OK — {ver_checked} headers")
 
 

@@ -80,7 +80,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_THREAD
-#error "core_thread.h: Thread is only available on Core.ST.W5 (STM32WBA55). This tile has no 802.15.4 radio."
+CORE_CAPS_MISSING_THREAD   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include <stdint.h>
@@ -379,5 +379,10 @@ int core_thread_prov_allow_write(void);
 // @studio unsupported tier=1 value=L title="No CoAP / SRP / DNS / border routing wrappers"
 //   Present in the OpenThread library and callable through
 //   core_thread_instance() and the OpenThread headers, but not wrapped.
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_THREAD
+#include "core_caps.h"
 
 #endif /* CORE_THREAD_H */

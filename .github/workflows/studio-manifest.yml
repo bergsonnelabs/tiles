@@ -49,6 +49,7 @@ jobs:
             'tools/gen_studio_manifest.py'
             'tools/test_gen_studio_manifest.py'
             'tools/check_status_consistency.py'
+            'tools/coregen/core_caps.py'
             'tools/gen_tile_docs.py'
             'tools/parse_driver_header.py'
             'tools/gen_reference_data.py'

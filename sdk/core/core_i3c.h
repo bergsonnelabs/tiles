@@ -46,7 +46,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_I3C
-#error "core_i3c.h: I3C exists only on Core.ST.H5 (STM32H523)"
+CORE_CAPS_MISSING_I3C   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "core_types.h"
@@ -220,5 +220,10 @@ CORE_INLINE core_status_t core_i3c_ibi_disable(core_i3c_t *h, uint8_t dyn_addr);
 
 /* The port's bodies of the functions above. */
 #include "port_core_i3c.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_I3C
+#include "core_caps.h"
 
 #endif /* CORE_I3C_H */

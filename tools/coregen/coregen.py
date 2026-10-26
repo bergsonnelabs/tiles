@@ -4,8 +4,11 @@ coregen — Generate C headers from Mosaic tile JSON definitions.
 
 Usage:
     python3 coregen.py <tile.json> [output_dir] [--config config.json]
+                       [--status core-x.json] [--port stm32]
 
 Reads a tile JSON file and produces:
+    core_caps.h        The Core's CORE_HAS_* from its status file (--status;
+                       tools/coregen/core_caps.py)
     core_pads.h        Pad-to-GPIO mapping defines
     core_board.h       Board-level defines (LED, power, debug)
     core_interfaces.h  Interface convenience defines with AF numbers
@@ -25,6 +28,9 @@ import sys
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import core_caps  # noqa: E402  (tools/coregen/core_caps.py)
 
 
 # ---- Console encoding ----------------------------------------------------
@@ -1982,11 +1988,13 @@ def build_thread_config(project, mcu, errors):
     return out
 
 
-def generate(tile_path, output_dir, config_path=None, port=None):
+def generate(tile_path, output_dir, config_path=None, port=None, status_path=None):
     """Generate all headers from a tile JSON and optional project config.
 
     port: the back end to use (a port name such as "stm32"); None keeps the
-    active one (stm32 unless chosen before)."""
+    active one (stm32 unless chosen before). status_path: the Core's status
+    file (the Makefile passes core.mk's CORE_STATUS), from which core_caps.h
+    is written; None writes no core_caps.h."""
     be = use_backend(port) if port else backend()
     with open(tile_path, encoding="utf-8") as f:
         tile = json.load(f)
@@ -2214,6 +2222,17 @@ def generate(tile_path, output_dir, config_path=None, port=None):
             f.write(output)
         print(f"  {out_name}")
 
+    # core_caps.h: the Core's CORE_HAS_* and the functions it lacks, from its
+    # status file (tools/coregen/core_caps.py).
+    if status_path:
+        try:
+            core_caps.generate(status_path, os.path.join(output_dir, "core_caps.h"),
+                               core_name=tile_name)
+        except (core_caps.CapsError, OSError, ValueError) as e:
+            eprint(f"ERROR: core_caps.h from {status_path}: {e}")
+            sys.exit(1)
+        print(f"  core_caps.h")
+
     # Generate core_drivers.mk if tiles are declared
     if ctx.get("tile_driver_sources"):
         mk_path = os.path.join(output_dir, "core_drivers.mk")
@@ -2307,6 +2326,10 @@ def main():
                         help="Output directory (default: generated)")
     parser.add_argument("--config", "-c", metavar="FILE",
                         help="Path to config.json hardware definition")
+    parser.add_argument("--status", metavar="FILE",
+                        help="The Core's status file (sdk/status/core-*.json, the "
+                             "Makefile passes core.mk's CORE_STATUS): writes "
+                             "core_caps.h from it")
     parser.add_argument("--port", default=DEFAULT_PORT, metavar="PORT",
                         help="Back end: tools/coregen/ports/<PORT>.py here or in a "
                              f"TILES_OVERLAY checkout (default: {DEFAULT_PORT}; the "
@@ -2322,10 +2345,14 @@ def main():
         eprint(f"ERROR: Config file not found: {args.config}")
         sys.exit(1)
 
+    if args.status and not os.path.exists(args.status):
+        eprint(f"ERROR: Status file not found: {args.status} (the Core's core.mk CORE_STATUS)")
+        sys.exit(1)
+
     use_backend(args.port)
     tile_name = os.path.basename(args.tile_json).replace(".json", "")
     print(f"coregen: {tile_name}")
-    generate(args.tile_json, args.output_dir, args.config)
+    generate(args.tile_json, args.output_dir, args.config, status_path=args.status)
 
 
 # ---- The STM32 back end, loaded at import ----

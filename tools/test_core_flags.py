@@ -3,7 +3,9 @@
 
 CORE_USES_<X> says what a project uses: coregen's templates define it, and SDK
 code and the WAMR natives generator test it with #ifdef. CORE_HAS_<X> says
-what the Core has: only a port's port_caps.h defines it, always as 1 or 0.
+what the Core has, always as 1 or 0: coregen's core_caps.h from the Core's
+status file (tools/coregen/core_caps.py, not a template), or the port's
+port_caps.h for facts that are not status features (tools/test_core_caps.py).
 
 A CORE_USES_ name that SDK code reads but no template defines compiles the
 guarded code out silently (core_timer_pwm_set_pad, core_stepper's pad setup
@@ -55,7 +57,8 @@ class CoreFlags(unittest.TestCase):
 
     def test_templates_define_no_capabilities(self):
         has = {n: f for n, f in self.template_defines.items() if n.startswith("CORE_HAS_")}
-        self.assertEqual(has, {}, "CORE_HAS_ is a port capability (port_caps.h), not a coregen project flag")
+        self.assertEqual(has, {}, "CORE_HAS_ is a Core capability (status file or port_caps.h), "
+                                  "not a coregen project flag")
 
 
 if __name__ == "__main__":

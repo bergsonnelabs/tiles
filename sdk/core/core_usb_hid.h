@@ -37,7 +37,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_USB
-#error "core_usb_hid.h: USB HID is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
+CORE_CAPS_MISSING_USB   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "core_types.h"   /* CORE_INLINE, uint8_t, uint16_t */
@@ -74,5 +74,10 @@ CORE_INLINE void core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void *ctx
 
 /* The port's bodies of the functions above. */
 #include "port_core_usb_hid.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_USB_HID
+#include "core_caps.h"
 
 #endif /* CORE_USB_HID_H */

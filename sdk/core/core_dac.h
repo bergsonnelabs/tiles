@@ -29,7 +29,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_DAC
-#error "core_dac.h: DAC is not available on this Core tile. Only Core.ST.H5 (STM32H523) has a DAC peripheral."
+CORE_CAPS_MISSING_DAC   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "core_types.h"      /* CORE_INLINE */
@@ -87,5 +87,10 @@ CORE_INLINE uint16_t core_dac_read(void);
 
 /* The port's bodies of the functions above. */
 #include "port_core_dac.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_DAC
+#include "core_caps.h"
 
 #endif /* CORE_DAC_H */

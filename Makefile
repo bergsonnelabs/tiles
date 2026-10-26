@@ -289,6 +289,19 @@ ifeq ($(strip $(TOOLCHAIN)),)
 every Cortex-M Core); the compiler is $$(TOOLCHAIN)-gcc)
 endif
 
+# The Core's status file (sdk/status/core-*.json, or an overlay's): coregen
+# writes coregen/core_caps.h from it (CORE_HAS_*, the functions the Core
+# lacks), so the status table, Studio and the compiler agree.
+ifeq (,$(filter clean distclean doctor,$(MAKECMDGOALS)))
+  ifeq ($(strip $(CORE_STATUS)),)
+    $(error TILE=$(TILE): core.mk ($(CORE_MK)) sets no CORE_STATUS, the Core's \
+status file (sdk/status/core-*.json) that coregen writes core_caps.h from)
+  endif
+  ifeq ($(wildcard $(CORE_STATUS)),)
+    $(error TILE=$(TILE): CORE_STATUS $(CORE_STATUS) (core.mk $(CORE_MK)) does not exist)
+  endif
+endif
+
 # ---- Port hook ----
 # PORT = stm32 (every public Core) is what the rest of this Makefile builds. A
 # core.mk for any other port sets PORT_MK to that port's make fragment (e.g.
@@ -470,9 +483,10 @@ ifeq ($(PORT),stm32)
   CFLAGS += -I$(SDK_DIR)sdk/tal
 endif
 CFLAGS += -I$(SDK_DIR)sdk/core
-# The port's own headers (port_caps.h behind core_caps.h), after the neutral
-# SDK dirs so they never shadow an sdk/ header. Another port puts its own
-# port_caps.h on the include path, through PORT_CFLAGS.
+# The port's own headers (port_caps.h, which coregen's core_caps.h includes
+# for the facts that are not status features), after the neutral SDK dirs so
+# they never shadow an sdk/ header. Another port puts its own port_caps.h on
+# the include path, through PORT_CFLAGS.
 ifeq ($(PORT),stm32)
   CFLAGS += -I$(SDK_DIR)sdk/port/stm32/core
 else
@@ -808,7 +822,7 @@ OBJECTS += $(GEN_OBJS) $(ASM_OBJS) $(C_OBJS)
 
 # ---- Generated headers (coregen) ----
 
-GEN_HEADERS = $(GEN_DIR)/core_pads.h $(GEN_DIR)/core_board.h $(GEN_DIR)/core_interfaces.h
+GEN_HEADERS = $(GEN_DIR)/core_caps.h $(GEN_DIR)/core_pads.h $(GEN_DIR)/core_board.h $(GEN_DIR)/core_interfaces.h
 
 ifeq ($(CONFIG_FOUND),1)
   GEN_HEADERS  += $(GEN_DIR)/core_config.h $(GEN_DIR)/core_init.h
@@ -849,11 +863,13 @@ endif
 # Also remade when TILES_OVERLAY differs from the one it was generated with
 # (TILES_OVERLAY_GEN, written by coregen), since it names overlay drivers by path.
 # The Core's core.mk (and its port's PORT_MK) count too: a changed Core regenerates.
+# So do its status file, features.json and tools/coregen/core_caps.py (core_caps.h).
 # So do coregen's back ends: tools/coregen/ports/*.py here, and the Core's
 # port's back end in an overlay (<overlay>/tools/coregen/ports/$(PORT).py).
 COREGEN_OVERLAY_CHANGED := $(if $(filter 1,$(TILES_ENABLED)),$(if $(filter-out $(TILES_OVERLAY_GEN),$(TILES_OVERLAY))$(filter-out $(TILES_OVERLAY),$(TILES_OVERLAY_GEN)),FORCE_COREGEN))
 .PHONY: FORCE_COREGEN
 $(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(SDK_DIR)tools/coregen/coregen.py $(SDK_DIR)tools/coregen/templates/*.j2 \
+                           $(SDK_DIR)tools/coregen/core_caps.py $(CORE_STATUS) $(SDK_DIR)sdk/status/features.json \
                            $(wildcard $(SDK_DIR)tools/coregen/ports/*.py) \
                            $(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/tools/coregen/ports/$(PORT).py)) \
                            $(CORE_MK) $(PORT_MK) \
@@ -861,7 +877,7 @@ $(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(
                            $(COREGEN_OVERLAY_CHANGED)
 	@mkdir -p "$(GEN_DIR)"
 	@echo "  GEN   $(TILE)"
-	$(Q)$(COREGEN) "$(TILE_JSON)" "$(GEN_DIR)" $(if $(PORT),--port $(PORT)) $(COREGEN_FLAGS) $(COREGEN_QUIET)
+	$(Q)$(COREGEN) "$(TILE_JSON)" "$(GEN_DIR)" $(if $(PORT),--port $(PORT)) --status "$(CORE_STATUS)" $(COREGEN_FLAGS) $(COREGEN_QUIET)
 
 # Stamp prevents re-running coregen for each header file target.
 GEN_STAMP = $(GEN_DIR)/.coregen.stamp
@@ -869,6 +885,13 @@ $(GEN_STAMP): $(GEN_DIR)/core_drivers.mk
 	$(Q)touch $(GEN_STAMP)
 
 $(GEN_HEADERS): $(GEN_STAMP)
+
+# The WAMR natives (sdk/wamr/studio_natives.c) include core_ headers, which
+# include coregen's core_caps.h: generate first (wamr.mk's own rule is read
+# before GEN_HEADERS is set).
+ifeq ($(WAMR_ENABLED),1)
+$(filter $(BUILD_DIR)/sdk/wamr/%,$(WAMR_OBJS)): $(GEN_HEADERS)
+endif
 
 .PHONY: generate
 generate: $(GEN_STAMP)
