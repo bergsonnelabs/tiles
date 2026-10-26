@@ -59,9 +59,8 @@
 
 #include "core_caps.h"
 
-/* SPI is not available on Core.ST.L0 (STM32L011) */
 #if !CORE_HAS_SPI
-#error "core_spi.h: SPI is not available on Core.ST.L0. Only Core.ST.L4, Core.ST.W5, and Core.ST.H5 have SPI."
+CORE_CAPS_MISSING_SPI   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "hal_spi.h"
@@ -349,5 +348,10 @@ CORE_INLINE int core_spi_xfer_byte_bus(uint8_t bus, uint8_t cs_pad, uint8_t tx);
 
 /* The port's bodies of the functions above. */
 #include "port_core_spi.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_SPI
+#include "core_caps.h"
 
 #endif /* CORE_SPI_H */

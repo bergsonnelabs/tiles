@@ -39,9 +39,8 @@
 
 #include "core_caps.h"
 
-/* USB CDC requires a USB peripheral: Core.ST.L4 (STM32L422) or Core.ST.H5 (STM32H523). */
 #if !CORE_HAS_USB
-#error "core_usb.h: USB is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
+CORE_CAPS_MISSING_USB   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "core_types.h"   /* CORE_INLINE, uint8_t, uint16_t, uint32_t */
@@ -216,5 +215,10 @@ CORE_INLINE const char *core_usb_poll_line(core_usb_line_t *lr);
 
 /* The port's bodies of the functions above. */
 #include "port_core_usb.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_USB
+#include "core_caps.h"
 
 #endif /* CORE_USB_H */

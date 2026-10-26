@@ -26,6 +26,10 @@
 #                               LDSCRIPT_THREAD and LDSCRIPT_BLE_THREAD;
 #                               unset, "ble" / "thread" in config.json is an
 #                               error (stm32)
+#   CORE_STATUS                 the Core's status file (sdk/status/core-*.json;
+#                               an overlay Core: its repo's sdk/status/): coregen
+#                               writes core_caps.h (CORE_HAS_*, the functions
+#                               the Core lacks) from it
 #   FLASH_TOOL                  optional; `make flash` defaults to openocd
 #   PORT_MK                     optional: a port's make fragment, included
 #                               right after this file (non-stm32 ports only)
@@ -35,6 +39,8 @@
 PORT          = stm32
 ARCH          = cortex-m
 TOOLCHAIN     = arm-none-eabi
+
+CORE_STATUS   = $(SDK_DIR)sdk/status/core-h.json
 
 MCU_FAMILY    = stm32h5xx
 MCU_PART      = STM32H523xx

@@ -35,7 +35,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_BLE
-#error "core_ble.h: BLE is only available on Core.ST.W5 (STM32WBA55). This tile does not have a BLE radio."
+CORE_CAPS_MISSING_BLE   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include <stdint.h>
@@ -378,5 +378,10 @@ void core_ble_enable_pairing(void);
 //   The WBA radio supports LE Audio (LC3), extended advertising / 2M
 //   PHY / coded PHY, and multi-link (multiple simultaneous connections).
 //   None of that is exposed.
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_BLE
+#include "core_caps.h"
 
 #endif /* CORE_BLE_H */

@@ -191,7 +191,10 @@
           "id": "i2c.target",
           "layer": "Core",
           "name": "target / device mode",
-          "desc": "Answer as a device on a host bus instead of driving one. Register-file model with an ISR callback: the host writes a register pointer, then reads or writes with auto-increment."
+          "desc": "Answer as a device on a host bus instead of driving one. Register-file model with an ISR callback: the host writes a register pointer, then reads or writes with auto-increment.",
+          "functions": [
+            "core_i2c_target_*"
+          ]
         },
         {
           "id": "i2c.dma",
@@ -217,7 +220,11 @@
         {
           "id": "spi.master",
           "layer": "Core",
-          "name": "master TX / RX (polling)"
+          "name": "master TX / RX (polling)",
+          "cap": "CORE_HAS_SPI",
+          "functions": [
+            "core_spi_*"
+          ]
         },
         {
           "id": "spi.irq",
@@ -249,7 +256,11 @@
           "id": "i3c.controller",
           "layer": "Core",
           "name": "SDR controller",
-          "desc": "I3C controller role, SDR up to 12.5 MHz push-pull SCL. Polled transfers with timeouts; only the STM32H5 has the peripheral."
+          "desc": "I3C controller role, SDR up to 12.5 MHz push-pull SCL. Polled transfers with timeouts; only the STM32H5 has the peripheral.",
+          "cap": "CORE_HAS_I3C",
+          "functions": [
+            "core_i3c_*"
+          ]
         },
         {
           "id": "i3c.daa",
@@ -415,7 +426,11 @@
           "id": "audio.pdm",
           "layer": "Core",
           "name": "PDM microphone capture",
-          "desc": "SAI1 PDM master-RX + GPDMA circular capture, decimated in software by core_pdm's CIC filter (core_audio)."
+          "desc": "SAI1 PDM master-RX + GPDMA circular capture, decimated in software by core_pdm's CIC filter (core_audio).",
+          "cap": "CORE_HAS_AUDIO",
+          "functions": [
+            "core_audio_*"
+          ]
         }
       ]
     },
@@ -439,7 +454,8 @@
           "id": "nvm.otp",
           "layer": "Core",
           "name": "OTP identity slots",
-          "desc": "Write-once one-time-programmable bytes that survive a chip erase (core_otp): per-unit identity burned at production."
+          "desc": "Write-once one-time-programmable bytes that survive a chip erase (core_otp): per-unit identity burned at production.",
+          "cap": "CORE_HAS_OTP"
         }
       ]
     },
@@ -549,7 +565,11 @@
         {
           "id": "security.rng",
           "name": "hardware RNG",
-          "desc": "True Random Number Generator — hardware entropy source for cryptographic keys and nonces."
+          "desc": "True Random Number Generator — hardware entropy source for cryptographic keys and nonces.",
+          "cap": "CORE_HAS_RNG",
+          "functions": [
+            "core_rng_*"
+          ]
         },
         {
           "id": "security.aes",
@@ -576,7 +596,11 @@
           "id": "conn.usb_cdc",
           "layer": "Studio",
           "name": "USB CDC serial",
-          "desc": "Emulates a virtual COM port over USB — appears as a serial device on the host OS."
+          "desc": "Emulates a virtual COM port over USB — appears as a serial device on the host OS.",
+          "cap": "CORE_HAS_USB",
+          "functions": [
+            "core_usb_*"
+          ]
         },
         {
           "id": "conn.scope_usb",
@@ -593,7 +617,10 @@
         {
           "id": "conn.usb_hid",
           "name": "USB HID",
-          "desc": "Human Interface Device class — used for custom input devices, sensor streams, and control panels."
+          "desc": "Human Interface Device class — used for custom input devices, sensor streams, and control panels.",
+          "functions": [
+            "core_usb_hid_*"
+          ]
         },
         {
           "id": "conn.usb_wake",
@@ -643,7 +670,11 @@
         },
         {
           "id": "conn.ble",
-          "name": "BLE radio"
+          "name": "BLE radio",
+          "cap": "CORE_HAS_BLE",
+          "functions": [
+            "core_ble_*"
+          ]
         },
         {
           "id": "conn.ble_adv",
@@ -675,7 +706,11 @@
           "id": "adv.dac",
           "layer": "Studio",
           "name": "DAC",
-          "desc": "Digital-to-Analog Converter — generates a continuous analog voltage from a digital value."
+          "desc": "Digital-to-Analog Converter — generates a continuous analog voltage from a digital value.",
+          "cap": "CORE_HAS_DAC",
+          "functions": [
+            "core_dac_*"
+          ]
         }
       ]
     },
@@ -723,7 +758,12 @@
           "id": "thread.network",
           "layer": "Core",
           "name": "network (fixed dataset)",
-          "desc": "Join or form a Thread network as a full, router-capable device (FTD), from credentials in config.json. Joins on boot: core_init() (or core_ble_init() with BLE) starts Thread, and core_delay_ms() / core_watchdog_feed() service it, so a program need not call core_thread at all. Development only: no commissioning."
+          "desc": "Join or form a Thread network as a full, router-capable device (FTD), from credentials in config.json. Joins on boot: core_init() (or core_ble_init() with BLE) starts Thread, and core_delay_ms() / core_watchdog_feed() service it, so a program need not call core_thread at all. Development only: no commissioning.",
+          "cap": "CORE_HAS_THREAD",
+          "functions": [
+            "core_thread_*",
+            "!core_thread_service_tick"
+          ]
         },
         {
           "id": "thread.udp",

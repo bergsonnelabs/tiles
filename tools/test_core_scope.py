@@ -24,10 +24,17 @@ sys.path.insert(0, str(ROOT / "tools"))
 from scope_decode import ScopeDecoder, crc8  # noqa: E402
 
 CC = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
-FLAGS = ["-std=c17", "-Wall", "-Wextra", "-Wshadow", "-Wdouble-promotion", "-Werror", "-O1",
-         "-I", str(ROOT / "sdk/core"), "-I", str(ROOT / "sdk/port/stm32/core")]
-
 _build = tempfile.TemporaryDirectory()
+
+# core_scope includes core_caps.h, which coregen writes from the Core's status
+# file in a firmware build; the same generator writes one here (the W5's: no
+# USB link, so the scripted one is the only link).
+sys.path.insert(0, str(ROOT / "tools/coregen"))
+import core_caps  # noqa: E402
+core_caps.generate(str(ROOT / "sdk/status/core-w.json"), str(Path(_build.name) / "core_caps.h"))
+
+FLAGS = ["-std=c17", "-Wall", "-Wextra", "-Wshadow", "-Wdouble-promotion", "-Werror", "-O1",
+         "-I", _build.name, "-I", str(ROOT / "sdk/core"), "-I", str(ROOT / "sdk/port/stm32/core")]
 _exe: Path | None = None
 
 

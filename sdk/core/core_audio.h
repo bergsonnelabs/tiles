@@ -41,7 +41,7 @@
 #include "core_caps.h"
 
 #if !CORE_HAS_AUDIO
-#error "core_audio.h: SAI PDM capture needs an SAI, and only Core.ST.W5 (STM32WBA55) has one"
+CORE_CAPS_MISSING_AUDIO   /* the reason, from the status file (coregen core_caps.h) */
 #endif
 
 #include "core_types.h"
@@ -84,5 +84,10 @@ CORE_INLINE void core_audio_stop(core_audio_t *a);
 CORE_INLINE void core_audio_irq(core_audio_t *a);
 
 #include "port_core_audio.h"
+
+/* coregen's core_caps.h marks the functions above that this Core lacks
+ * (its status file): calling one is a compile-time error. */
+#define CORE_CAPS_DONE_CORE_AUDIO
+#include "core_caps.h"
 
 #endif /* CORE_AUDIO_H */

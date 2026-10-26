@@ -59,6 +59,7 @@ jobs:
             'tools/test_ble_contract.py'
             'tools/test_coregen_spi_cs.py'
             'tools/test_core_flags.py'
+            'tools/test_core_caps.py'
             'tests/val-watchdog/**'
             'tests/val-scope/**'
             'tools/test_core_scope*'
@@ -216,6 +217,12 @@ jobs:
       - name: CORE_USES_ / CORE_HAS_ flag tests
         run: python3 tools/test_core_flags.py
 
+      # core_caps.h from the status files: every Core's CORE_HAS_* equals the
+      # table port_caps.h had, the header gates and marks are wired, and a
+      # call to a function the Core lacks is a compile-time error (GCC).
+      - name: Capabilities from the status files
+        run: python3 tools/test_core_caps.py
+
       # core_scope compiled with the host cc against a scripted link, checked
       # by the reference decoder: framing, every type, drops, BLE batching, and
       # the example frames printed in docs/scope-protocol.md.
@@ -283,15 +290,16 @@ jobs:
           make -C tests/val-thread-auto check-linked
           echo "::endgroup::"
 
-      # val-guard-ble is a NEGATIVE test: core_ble.h must #error on a Core with
-      # no radio. If it ever compiles, the availability guard has broken.
+      # val-guard-ble is a NEGATIVE test: core_ble.h must stop the build on a Core
+      # with no radio, with the message coregen's core_caps.h generates from the
+      # Core's status file. If it ever compiles, the availability guard has broken.
       - name: val-guard-ble must NOT compile
         run: |
           if make -C tests/val-guard-ble > /tmp/guard.log 2>&1; then
             echo "::error::val-guard-ble compiled — the BLE availability guard is broken"
             exit 1
           fi
-          grep -q 'BLE is only available on Core.ST.W5' /tmp/guard.log || {
+          grep -q 'Core.ST.L4.2 has no BLE' /tmp/guard.log || {
             echo "::error::val-guard-ble failed, but not on the availability #error:"
             tail -20 /tmp/guard.log
             exit 1
