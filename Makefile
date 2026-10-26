@@ -768,15 +768,19 @@ endif
 # Also remade when TILES_OVERLAY differs from the one it was generated with
 # (TILES_OVERLAY_GEN, written by coregen), since it names overlay drivers by path.
 # The Core's core.mk (and its port's PORT_MK) count too: a changed Core regenerates.
+# So do coregen's back ends: tools/coregen/ports/*.py here, and the Core's
+# port's back end in an overlay (<overlay>/tools/coregen/ports/$(PORT).py).
 COREGEN_OVERLAY_CHANGED := $(if $(filter 1,$(TILES_ENABLED)),$(if $(filter-out $(TILES_OVERLAY_GEN),$(TILES_OVERLAY))$(filter-out $(TILES_OVERLAY),$(TILES_OVERLAY_GEN)),FORCE_COREGEN))
 .PHONY: FORCE_COREGEN
 $(GEN_DIR)/core_drivers.mk: $(TILE_JSON) $(if $(CONFIG_FOUND),$(CONFIG_JSON)) $(SDK_DIR)tools/coregen/coregen.py $(SDK_DIR)tools/coregen/templates/*.j2 \
+                           $(wildcard $(SDK_DIR)tools/coregen/ports/*.py) \
+                           $(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/tools/coregen/ports/$(PORT).py)) \
                            $(CORE_MK) $(PORT_MK) \
                            $(wildcard $(foreach o,$(patsubst %/,%,$(TILES_OVERLAY)),$(o)/drivers/drivers.json)) \
                            $(COREGEN_OVERLAY_CHANGED)
 	@mkdir -p "$(GEN_DIR)"
 	@echo "  GEN   $(TILE)"
-	$(Q)$(COREGEN) "$(TILE_JSON)" "$(GEN_DIR)" $(COREGEN_FLAGS) $(COREGEN_QUIET)
+	$(Q)$(COREGEN) "$(TILE_JSON)" "$(GEN_DIR)" $(if $(PORT),--port $(PORT)) $(COREGEN_FLAGS) $(COREGEN_QUIET)
 
 # Stamp prevents re-running coregen for each header file target.
 GEN_STAMP = $(GEN_DIR)/.coregen.stamp

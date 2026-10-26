@@ -61,7 +61,7 @@ to its port's make fragment (included right after; `CORE_DIR` is the core.mk's
 own directory), which must then supply its own sources, flags, link script
 and flash targets: the rest of the Makefile is the STM32 port.
 
-MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `MCU_DB` inside `tools/coregen/coregen.py`.
+MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `MCU_DB` inside `tools/coregen/ports/stm32.py`, coregen's STM32 back end (see coregen below).
 
 ---
 
@@ -119,7 +119,8 @@ tiles/
 ├── manifests/                  # Generated manifests (per-tile + SDK)
 ├── tools/
 │   └── coregen/
-│       ├── coregen.py          # Main generator — entry point
+│       ├── coregen.py          # Main generator — entry point, vendor-neutral front
+│       ├── ports/stm32.py      # STM32 back end (MCU_DB, clocks, pin mux, clock enables)
 │       └── templates/          # Jinja2 templates (see below)
 ├── templates/                  # One minimal, buildable starter per Core — copy one
 │   ├── core-st-l0/           # Makefile + config.json + main.c
@@ -288,7 +289,53 @@ Four more host differences the Makefile handles, each with its own trap:
 ### coregen — Code Generator
 
 **Entry point:** `tools/coregen/coregen.py`
-**Called by:** `Makefile` during build (or `make generate`)
+**Called by:** `Makefile` during build (or `make generate`), as
+`coregen.py <definition> <out dir> --port $(PORT) [--config config.json]`
+
+#### Front and back ends (ports)
+
+coregen is split in two:
+
+- **Front** (`coregen.py`, vendor-neutral): config validation, pad map,
+  buses and SPI chip selects, on-tile pull-ups, ADC, I3C resolution, tile
+  drivers, `tile_handles.h`, the BLE contract, the Thread dataset, WAMR
+  natives, `core_drivers.mk`, the project Makefile, and orchestration.
+- **Back end** (`tools/coregen/ports/<port>.py`): one MCU vendor's part
+  table, clock tree, pin mux and peripheral clock enables. `ports/stm32.py`
+  serves every Core.ST.* board (`MCU_DB`, `solve_pll`, the clock config, the
+  I2C/SPI/USART/timer clock maps, the L4 USB-pad rule, USB/I3C capability).
+
+`--port <name>` picks the back end (default `stm32`, so direct calls keep
+working); the Makefile passes `$(PORT)` from the Core's `core.mk`. coregen
+loads `tools/coregen/ports/<name>.py` from this SDK, else from the first
+`TILES_OVERLAY` checkout that has one, so a port that is not public (the
+nRF54L port, `tiles-port-nrf54l`) ships its back end in its private repo and
+public tiles never names it. An unknown port, or a back end missing part of
+the interface, is a one-line ERROR. The Makefile regenerates when
+`tools/coregen/ports/*.py` or the overlay's `ports/$(PORT).py` changes.
+
+The back-end interface (documented at the top of `ports/stm32.py`): `PORT`,
+`mcu_for_part(part)` (the MCU dict, which must carry `define`),
+`template_dirs()`, `pad_gpio(pad)`, `pad_mux(func)`, `timer_channels(pad)`,
+`led_info(tile)`, `validate(config, tile, pad_map, mcu)`, `usb_capable(mcu)`,
+`i3c_unsupported(mcu)`, `clock_config(config, tile, mcu)`,
+`i2c_config(config, mcu, clock_config)`,
+`spi_config(bus_num, bus_cfg, mcu, clock_config)` (one bus, without its chip
+selects), `usart_config(config, mcu)`, `pwm_config(config, mcu)` and
+`extra_context(project, mcu)`. A back end may `import coregen` for the
+front's helpers (`eprint`, `resolve_clock_block`). Templates load from the
+back end's `template_dirs()` first, then `tools/coregen/templates/`, so a
+port replaces any template by file name; STM32 uses the shared ones as they
+are. The STM32 names that lived in `coregen.py` before the split (`MCU_DB`,
+`solve_pll`, the clock maps) are still importable from `coregen`.
+
+**Pin mux (`mux`).** A pad function names its pin-mux setting as
+`"mux": {"kind": "af", "value": N}`; the older `"af": N` still works. The
+STM32 back end's `pad_mux(func)` reads `mux` when its kind is `af`, else
+`af` (0 is a real AF), and every AF coregen emits comes through it (the pad
+map's `af_functions`, which the interface map, pad config and timer config
+read, and the timer channels). coregen does not read the definition's
+`config.pads.perPad[].options`.
 
 #### What It Generates (`project/coregen/`)
 
@@ -308,12 +355,13 @@ Four more host differences the Makefile handles, each with its own trap:
 
 #### Key Internal Functions
 
-The `build_*_config()` functions in `coregen.py` each parse one section of `config.json` and return a config dict consumed by Jinja2 templates: `build_pad_map/config` (GPIO port/pin/AF), `build_clock_config` (PLL solver, HSE enforcement), `build_i2c/spi/uart/timer_config` (peripheral setup), `resolve_i3c_buses` + `apply_i3c_buses` (switch an I2C bus asking `"i3c": true` to I3C when every tile on it speaks I3C, before the pad/bus builders run), `build_tiles_config` (driver paths + bus handles), and `validate_project_config` (cross-section validation).
+The `build_*_config()` functions in `coregen.py` each parse one section of `config.json` and return a config dict consumed by Jinja2 templates: `build_pad_map/config` (GPIO port/pin/AF), `build_clock_config` (PLL solver, HSE enforcement; the back end's `clock_config`), `build_i2c/spi/usart/pwm/timer_config` (peripheral setup; I2C, USART and PWM are the back end's, SPI is the front's bus and chip-select logic around the back end's per-bus `spi_config`), `resolve_i3c_buses` + `apply_i3c_buses` (switch an I2C bus asking `"i3c": true` to I3C when every tile on it speaks I3C, before the pad/bus builders run), `build_tiles_config` (driver paths + bus handles), and `validate_project_config` (cross-section validation).
 
 #### Editing coregen
 
-- `MCU_DB` — add new MCUs (define, family, PLL ranges, APB clock enables)
-- `SPI_CLK_MAP` / `SPI_PRESCALER_MAP` — SPI clock enable + prescaler mappings
+- `MCU_DB` (in `ports/stm32.py`) — add new STM32 MCUs (define, family, PLL ranges)
+- `SPI_CLK_MAP` / `SPI_PRESCALER_MAP` / `I2C_CLK_MAP` / `USART_CLK_MAP` / `TIMER_CLK_MAP` (in `ports/stm32.py`) — peripheral clock enables and SPI prescalers
+- A new vendor is a new back end, `tools/coregen/ports/<port>.py`, implementing the interface above
 - Templates are Jinja2 in `tools/coregen/templates/`; context comes from the `ctx` dict in `generate()`
 
 ---
@@ -728,9 +776,9 @@ Data/control functions
 
 ### Add a new Core (MCU variant)
 
-1. Add entry to `MCU_DB` in `tools/coregen/coregen.py`
+1. Add entry to `MCU_DB` in `tools/coregen/ports/stm32.py` (another vendor: its back end's part table)
 2. Add linker script + startup to `sdk/device/`
-3. Add `SPI_CLK_MAP` entries for the new MCU's APB assignments
+3. Add `SPI_CLK_MAP` (and I2C/USART/timer map) entries in `ports/stm32.py` for the new MCU's APB assignments
 4. Add the tile JSON to `definitions/`
 5. Add `cores/<stem>/core.mk` (copy a sibling's; contract in its header).
    A non-public Core keeps it, like its definition, in its private repo
