@@ -41,47 +41,29 @@
 /** Initialize a timer for PWM output at the given frequency.
  *  Clock is auto-resolved from SYSCLK_HZ (core_config.h).
  */
-static inline core_status_t core_pwm_init(core_timer_t *h, core_timer_instance_t *instance,
-                                           uint32_t freq_hz)
-{
-    return hal_timer_pwm_init(h, instance, SYSCLK_HZ, freq_hz);
-}
+CORE_INLINE core_status_t core_pwm_init(core_timer_t *h, core_timer_instance_t *instance,
+                                         uint32_t freq_hz);
 
 /** @deprecated Use core_pwm_init(h, instance, freq_hz) — clock auto-resolved. */
-static inline core_status_t core_pwm_init_clk(core_timer_t *h, core_timer_instance_t *instance,
-                                               uint32_t pclk_hz, uint32_t freq_hz)
-{
-    return hal_timer_pwm_init(h, instance, pclk_hz, freq_hz);
-}
+CORE_INLINE core_status_t core_pwm_init_clk(core_timer_t *h, core_timer_instance_t *instance,
+                                             uint32_t pclk_hz, uint32_t freq_hz);
 
 /**
  * Set PWM duty cycle for a channel.
  *   channel:      1–4
  *   duty_permil:  0–1000 (0 = off, 500 = 50%, 1000 = 100%)
  */
-static inline void core_pwm_set(core_timer_t *h, uint8_t channel,
-                                 uint16_t duty_permil)
-{
-    hal_timer_pwm_set_duty(h, channel, duty_permil);
-}
+CORE_INLINE void core_pwm_set(core_timer_t *h, uint8_t channel,
+                               uint16_t duty_permil);
 
 /** Change PWM frequency (recalculates PSC/ARR, resets all channel duties). */
-static inline void core_pwm_set_freq(core_timer_t *h, uint32_t freq_hz)
-{
-    hal_timer_pwm_set_freq(h, freq_hz);
-}
+CORE_INLINE void core_pwm_set_freq(core_timer_t *h, uint32_t freq_hz);
 
 /** Start the PWM timer. */
-static inline void core_pwm_start(core_timer_t *h)
-{
-    hal_timer_pwm_start(h);
-}
+CORE_INLINE void core_pwm_start(core_timer_t *h);
 
 /** Stop the PWM timer. */
-static inline void core_pwm_stop(core_timer_t *h)
-{
-    hal_timer_pwm_stop(h);
-}
+CORE_INLINE void core_pwm_stop(core_timer_t *h);
 
 /* ============================================================
  * PWM output — pad-centric (requires coregen)
@@ -92,21 +74,13 @@ static inline void core_pwm_stop(core_timer_t *h)
  * ============================================================ */
 
 #if __has_include("core_pads.h") && __has_include("core_config.h")
-#include "tal_timer.h"
-
 /** Initialize PWM on a pad. Timer instance resolved from config.json. */
-static inline core_status_t core_pwm_init_pad(core_timer_t *h, uint8_t pad,
-                                               uint32_t freq_hz)
-{
-    return tal_pwm_init(h, pad, freq_hz);
-}
+CORE_INLINE core_status_t core_pwm_init_pad(core_timer_t *h, uint8_t pad,
+                                             uint32_t freq_hz);
 
 /** Set PWM duty on a pad (0–1000 permil). */
-static inline void core_pwm_set_pad(core_timer_t *h, uint8_t pad,
-                                     uint16_t duty_permil)
-{
-    tal_pwm_set(h, pad, duty_permil);
-}
+CORE_INLINE void core_pwm_set_pad(core_timer_t *h, uint8_t pad,
+                                   uint16_t duty_permil);
 #endif
 
 /* ============================================================
@@ -141,11 +115,7 @@ core_timer_t *core_pwm_timer_for_pad(uint8_t pad);
  * @param pad [1..64] Tile pad number configured as a TIMx.<ch> in config.json.
  * @param duty_permil [0..1000] 0 = off, 500 = 50%, 1000 = fully on.
  */
-static inline void core_pwm_duty(uint8_t pad, uint16_t duty_permil)
-{
-    hal_timer_t *h = core_pwm_timer_for_pad(pad);
-    if (h) tal_pwm_set(h, pad, duty_permil);
-}
+CORE_INLINE void core_pwm_duty(uint8_t pad, uint16_t duty_permil);
 
 /* ============================================================
  * Periodic tick ("every")
@@ -159,32 +129,20 @@ static inline void core_pwm_duty(uint8_t pad, uint16_t duty_permil)
  *
  * Clock is auto-resolved from SYSCLK_HZ (core_config.h).
  */
-static inline core_status_t core_every_us(core_timer_t *h, core_timer_instance_t *instance,
-                                           uint32_t period_us,
-                                           core_callback_t cb, void *ctx)
-{
-    return hal_timer_tick_init(h, instance, SYSCLK_HZ, period_us, cb, ctx);
-}
+CORE_INLINE core_status_t core_every_us(core_timer_t *h, core_timer_instance_t *instance,
+                                         uint32_t period_us,
+                                         core_callback_t cb, void *ctx);
 
 /** @deprecated Use core_every_us(h, instance, period_us, cb, ctx) — clock auto-resolved. */
-static inline core_status_t core_every_us_clk(core_timer_t *h, core_timer_instance_t *instance,
-                                               uint32_t pclk_hz, uint32_t period_us,
-                                               core_callback_t cb, void *ctx)
-{
-    return hal_timer_tick_init(h, instance, pclk_hz, period_us, cb, ctx);
-}
+CORE_INLINE core_status_t core_every_us_clk(core_timer_t *h, core_timer_instance_t *instance,
+                                             uint32_t pclk_hz, uint32_t period_us,
+                                             core_callback_t cb, void *ctx);
 
 /** Start the periodic timer. */
-static inline void core_every_start(core_timer_t *h)
-{
-    hal_timer_tick_start(h);
-}
+CORE_INLINE void core_every_start(core_timer_t *h);
 
 /** Stop the periodic timer. */
-static inline void core_every_stop(core_timer_t *h)
-{
-    hal_timer_tick_stop(h);
-}
+CORE_INLINE void core_every_stop(core_timer_t *h);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -210,5 +168,8 @@ static inline void core_every_stop(core_timer_t *h)
 //   Edge-aligned PWM only. STM32 timers can do center-aligned (Mode 1
 //   / 2 / 3) and per-channel phase offsets — useful for low-EMI
 //   switching. Not surfaced.
+
+/* The port's bodies of the functions above. */
+#include "port_core_pwm.h"
 
 #endif /* CORE_PWM_H */
