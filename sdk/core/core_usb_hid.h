@@ -40,17 +40,14 @@
 #error "core_usb_hid.h: USB HID is not available on this Core tile. Only Core.ST.L4 and Core.ST.H5 have USB hardware."
 #endif
 
-#include "hal_usb_cdc.h"
+#include "core_types.h"   /* CORE_INLINE, uint8_t, uint16_t */
 
 /**
  * Send a HID report (up to 64 bytes, zero-padded automatically).
  * Blocking — waits for the previous report to be read by the host.
  * Returns bytes of user data sent, or -1 if USB not configured.
  */
-static inline int core_usb_hid_send(const uint8_t *buf, uint16_t len)
-{
-    return hal_usb_hid_send_report(buf, len);
-}
+CORE_INLINE int core_usb_hid_send(const uint8_t *buf, uint16_t len);
 
 /** Inbound HID report callback, run from the USB interrupt with one report. */
 typedef void (*core_usb_hid_rx_cb_t)(const uint8_t *data, uint16_t len, void *ctx);
@@ -61,10 +58,7 @@ typedef void (*core_usb_hid_rx_cb_t)(const uint8_t *data, uint16_t len, void *ct
  * delivered via the EP3 OUT interrupt endpoint or HID SET_REPORT.
  * Pass NULL to disable; unhandled reports are dropped.
  */
-static inline void core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void *ctx)
-{
-    hal_usb_hid_set_rx_callback(cb, ctx);
-}
+CORE_INLINE void core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void *ctx);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -77,5 +71,8 @@ static inline void core_usb_hid_set_rx_callback(core_usb_hid_rx_cb_t cb, void *c
 //   The HID descriptor is hard-coded as a 64-byte vendor report with
 //   usage page 0xFF00. No way to register custom reports (keyboard,
 //   mouse, gamepad) — that needs the full HID descriptor tooling.
+
+/* The port's bodies of the functions above. */
+#include "port_core_usb_hid.h"
 
 #endif /* CORE_USB_HID_H */

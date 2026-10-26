@@ -28,16 +28,10 @@
 #ifndef CORE_BACKUP_H
 #define CORE_BACKUP_H
 
-#include "ll_rtc.h"
-#include "ll_pwr.h"
-#include "ll_rcc.h"
+#include "core_types.h"   /* CORE_INLINE, uint8_t, uint32_t */
 
-/* Number of backup registers per core */
-#if defined(STM32L011xx)
-  #define CORE_BACKUP_COUNT  5
-#else
-  #define CORE_BACKUP_COUNT  32
-#endif
+/* CORE_BACKUP_COUNT: the number of backup registers on this Core (5 on
+ * Core.ST.L0, 32 on the others). The port defines it (port_core_backup.h). */
 
 /**
  * Ensure the backup registers are reachable.
@@ -51,19 +45,7 @@
  *   H5: TAMP on RCC_APB3ENR.RTCAPBEN.
  * All of them need PWR + DBP for writes.
  */
-static inline void _core_backup_ensure_clk(void)
-{
-    ll_rcc_pwr_clk_enable();
-    ll_pwr_enable_backup_access();
-
-#if defined(STM32L011xx) || defined(STM32L422xx)
-    ll_rtc_clock_ensure();               /* includes the bus clock on the L4 */
-#elif defined(STM32WBA55xx)
-    ll_rtc_bus_clk_enable();             /* APB7ENR: RTCAPBEN */
-#elif defined(STM32H523xx)
-    SET_BITS(REG32(RCC_BASE + 0xA8UL), (1UL << 21));  /* APB3ENR: RTCAPBEN */
-#endif
-}
+CORE_INLINE void _core_backup_ensure_clk(void);
 
 /**
  * Read a backup register.
@@ -72,12 +54,7 @@ static inline void _core_backup_ensure_clk(void)
  * @studio twin full
  * @param index [0..31] Register index (Core.ST.L0 caps at 4; others at 31).
  */
-static inline uint32_t core_backup_read(uint8_t index)
-{
-    if (index >= CORE_BACKUP_COUNT) return 0;
-    _core_backup_ensure_clk();
-    return ll_rtc_bkp_read(index);
-}
+CORE_INLINE uint32_t core_backup_read(uint8_t index);
 
 /**
  * Write a backup register. Backup domain write access is enabled automatically.
@@ -87,12 +64,7 @@ static inline uint32_t core_backup_read(uint8_t index)
  * @param index [0..31] Register index (Core.ST.L0 caps at 4; others at 31).
  * @param value 32-bit value to store.
  */
-static inline void core_backup_write(uint8_t index, uint32_t value)
-{
-    if (index >= CORE_BACKUP_COUNT) return;
-    _core_backup_ensure_clk();
-    ll_rtc_bkp_write(index, value);
-}
+CORE_INLINE void core_backup_write(uint8_t index, uint32_t value);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -106,5 +78,8 @@ static inline void core_backup_write(uint8_t index, uint32_t value)
 //   The TAMP block on WBA/H5 hosts the backup registers but also drives
 //   tamper detection (active edge, anti-tamper erase, time-stamping on
 //   tamper). None of that is wrapped — backup is read/write only.
+
+/* The port's bodies of the functions above. */
+#include "port_core_backup.h"
 
 #endif /* CORE_BACKUP_H */

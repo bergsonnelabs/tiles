@@ -54,7 +54,10 @@
 
 #include "core_watchdog.h"
 #include "core_reset.h"
-#include "hal_dfu.h"
+#include "core_types.h"   /* CORE_INLINE, uint32_t */
+/* DFU_STRIKE_TAG_ADDR: defined by the port on the Cores that keep a strike
+ * count (the USB Cores, L4 and H5); it gates the API below. */
+#include "port_core_recovery_types.h"
 
 /* Consecutive watchdog resets (with no healthy boot in between) before we stop
  * launching the app and park in ROM DFU. ~N × the IWDG timeout to recover. */
@@ -68,34 +71,17 @@
  * Account for this boot and return the running strike count.
  * Call once, very early in core_init(), before clocks/user code.
  */
-static inline uint32_t core_st_rom_dfu_note_boot(void)
-{
-    uint32_t strikes = hal_recovery_strikes();
-    /* IWDGRSTF as core_reset_capture() read it at the top of core_init(),
-     * which has already cleared the flags (RMVF, else the flag latches and
-     * miscounts). */
-    int wd = (core_st_reset_flags() & CORE_ST_RESET_FLAG_IWDG) != 0;
-    hal_recovery_stash_cause(wd);
-    strikes = wd ? (strikes + 1u) : 0u;  /* any non-watchdog reset = fresh start */
-    hal_recovery_set_strikes(strikes);
-    return strikes;
-}
+CORE_INLINE uint32_t core_st_rom_dfu_note_boot(void);
 
 /** True once we've had enough consecutive watchdog resets to give up on the app. */
-static inline int core_st_rom_dfu_over_limit(uint32_t strikes)
-{
-    return strikes >= CORE_RECOVERY_STRIKE_LIMIT;
-}
+CORE_INLINE int core_st_rom_dfu_over_limit(uint32_t strikes);
 
 /**
  * Clear the strike counter now. core_watchdog_feed() already does this once
  * the app has run healthy for max(10 s, 2x the timeout); call this only to
  * declare health earlier than that.
  */
-static inline void core_st_rom_dfu_clear_strikes(void)
-{
-    hal_recovery_set_strikes(0);
-}
+CORE_INLINE void core_st_rom_dfu_clear_strikes(void);
 
 /** @deprecated Use core_st_rom_dfu_note_boot(). */
 #define core_recovery_note_boot   core_st_rom_dfu_note_boot
@@ -105,5 +91,8 @@ static inline void core_st_rom_dfu_clear_strikes(void)
 #define core_recovery_clear       core_st_rom_dfu_clear_strikes
 
 #endif /* DFU_STRIKE_TAG_ADDR */
+
+/* The port's bodies of the functions above. */
+#include "port_core_recovery.h"
 
 #endif /* CORE_RECOVERY_H */

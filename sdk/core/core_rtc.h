@@ -18,7 +18,7 @@
 #ifndef CORE_RTC_H
 #define CORE_RTC_H
 
-#include "ll_rtc.h"
+#include "core_types.h"   /* CORE_INLINE, uint8_t, uint32_t */
 
 /* ============================================================
  * Init
@@ -33,10 +33,7 @@
  * @studio expose category=rtc name=init
  * @studio twin full
  */
-static inline void core_rtc_init(void)
-{
-    ll_rtc_init(0);
-}
+CORE_INLINE void core_rtc_init(void);
 
 /* ============================================================
  * Time
@@ -51,16 +48,10 @@ static inline void core_rtc_init(void)
  * @param m [0..59] Minutes.
  * @param s [0..59] Seconds.
  */
-static inline void core_rtc_set_time(uint8_t h, uint8_t m, uint8_t s)
-{
-    ll_rtc_set_time(h, m, s);
-}
+CORE_INLINE void core_rtc_set_time(uint8_t h, uint8_t m, uint8_t s);
 
 /** Read the current time. */
-static inline void core_rtc_get_time(uint8_t *h, uint8_t *m, uint8_t *s)
-{
-    ll_rtc_get_time(h, m, s);
-}
+CORE_INLINE void core_rtc_get_time(uint8_t *h, uint8_t *m, uint8_t *s);
 
 /* ============================================================
  * Date
@@ -76,18 +67,12 @@ static inline void core_rtc_get_time(uint8_t *h, uint8_t *m, uint8_t *s)
  * @param d [1..31] Day of month.
  * @param wd [1..7] Weekday (1 = Mon, 7 = Sun).
  */
-static inline void core_rtc_set_date(uint8_t y, uint8_t mo, uint8_t d,
-                                      uint8_t wd)
-{
-    ll_rtc_set_date(y, mo, d, wd);
-}
+CORE_INLINE void core_rtc_set_date(uint8_t y, uint8_t mo, uint8_t d,
+                                    uint8_t wd);
 
 /** Read the current date. */
-static inline void core_rtc_get_date(uint8_t *y, uint8_t *mo, uint8_t *d,
-                                      uint8_t *wd)
-{
-    ll_rtc_get_date(y, mo, d, wd);
-}
+CORE_INLINE void core_rtc_get_date(uint8_t *y, uint8_t *mo, uint8_t *d,
+                                    uint8_t *wd);
 
 /* ============================================================
  * Periodic wakeup timer
@@ -100,10 +85,7 @@ static inline void core_rtc_get_date(uint8_t *y, uint8_t *mo, uint8_t *d,
  * @studio twin full
  * @param seconds [1..65535] Wakeup interval in seconds.
  */
-static inline void core_rtc_wakeup(uint32_t seconds)
-{
-    ll_rtc_wakeup_config(seconds);
-}
+CORE_INLINE void core_rtc_wakeup(uint32_t seconds);
 
 /**
  * Disable the periodic wakeup timer.
@@ -111,10 +93,7 @@ static inline void core_rtc_wakeup(uint32_t seconds)
  * @studio expose category=rtc name=wakeup_stop
  * @studio twin full
  */
-static inline void core_rtc_wakeup_stop(void)
-{
-    ll_rtc_wakeup_disable();
-}
+CORE_INLINE void core_rtc_wakeup_stop(void);
 
 /* Backward compat */
 #define core_rtc_alarm       core_rtc_wakeup
@@ -143,11 +122,8 @@ static inline void core_rtc_wakeup_stop(void)
  * @param minutes [0..255] 0-59, or 255 (0xFF) to match any minute.
  * @param seconds [0..255] 0-59, or 255 (0xFF) to match any second.
  */
-static inline void core_rtc_set_alarm(uint8_t hours, uint8_t minutes,
-                                       uint8_t seconds)
-{
-    ll_rtc_alarm_a_set(hours, minutes, seconds);
-}
+CORE_INLINE void core_rtc_set_alarm(uint8_t hours, uint8_t minutes,
+                                     uint8_t seconds);
 
 /**
  * Clear the alarm (disable Alarm A).
@@ -155,10 +131,7 @@ static inline void core_rtc_set_alarm(uint8_t hours, uint8_t minutes,
  * @studio expose category=rtc name=clear_alarm
  * @studio twin full
  */
-static inline void core_rtc_clear_alarm(void)
-{
-    ll_rtc_alarm_a_disable();
-}
+CORE_INLINE void core_rtc_clear_alarm(void);
 
 /**
  * Check if the alarm has fired (poll mode). Clears the flag on read.
@@ -166,14 +139,7 @@ static inline void core_rtc_clear_alarm(void)
  * @studio expose category=rtc name=alarm_fired returns=bool
  * @studio twin full
  */
-static inline int core_rtc_alarm_fired(void)
-{
-    if (ll_rtc_alarm_a_flag()) {
-        ll_rtc_alarm_a_clear_flag();
-        return 1;
-    }
-    return 0;
-}
+CORE_INLINE int core_rtc_alarm_fired(void);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -196,5 +162,8 @@ static inline int core_rtc_alarm_fired(void)
 //   The wrapper exposes whole-second resolution. STM32 RTCs have a
 //   subsecond register (1/PREDIV_S) that's reachable from ll_rtc but
 //   not from this header — wall-clock timestamps round to the second.
+
+/* The port's bodies of the functions above. */
+#include "port_core_rtc.h"
 
 #endif /* CORE_RTC_H */
