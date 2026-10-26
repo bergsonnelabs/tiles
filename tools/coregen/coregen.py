@@ -1876,7 +1876,14 @@ def _hex_bytes(field, value, n, errors):
     return [int(digits[i:i + 2], 16) for i in range(0, 2 * n, 2)]
 
 
-def build_thread_config(project, mcu_define, errors):
+def thread_supported(mcu):
+    """The back end's thread_supported(mcu): an optional hook (a back end
+    without it has no Thread)."""
+    hook = getattr(backend(), "thread_supported", None)
+    return bool(hook and hook(mcu))
+
+
+def build_thread_config(project, mcu, errors):
     """The `thread` block -> network credentials for coregen/thread_dataset.h.
 
     Milestone 1: a fixed network for development, no commissioning. Every key
@@ -1885,7 +1892,7 @@ def build_thread_config(project, mcu_define, errors):
     th = project.get("thread") or {}
     if not th.get("enabled"):
         return None
-    if mcu_define != "STM32WBA55xx":
+    if not thread_supported(mcu):
         errors.append("thread: Thread is only supported on Core.ST.W5 (STM32WBA55). "
                       "Remove \"thread\" from config.json, or build for Core.ST.W5.")
         return None
@@ -2057,7 +2064,7 @@ def generate(tile_path, output_dir, config_path=None, port=None):
         # Parsed alongside the other validation so a malformed contract fails
         # the build with a clear message rather than emitting broken C.
         ctx["ble_contract"] = build_ble_contract(project, config_path, errors, warnings)
-        ctx["thread"] = build_thread_config(project, mcu["define"], errors)
+        ctx["thread"] = build_thread_config(project, mcu, errors)
         # Thread joins on boot: core_init() starts it in a Thread-only build;
         # with BLE too, core_ble_init() does (sdk/core/core_ble.c), since the
         # radio has to come up BLE first.

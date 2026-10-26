@@ -36,6 +36,9 @@ before any back end loads.
                             1200-baud DFU touch)
   i3c_unsupported(mcu)      None when the MCU has I3C, else the reason an
                             "i3c": true bus stays I2C
+  thread_supported(mcu)     optional: True when a "thread" block can build
+                            for this MCU (a back end without it has no
+                            Thread; the front's error names Core.ST.W5)
   clock_config(config, tile, mcu)
                             the resolved clock tree (ctx clock_config)
   i2c_config(config, mcu, clock_config)
@@ -353,6 +356,14 @@ def i3c_unsupported(mcu):
     if mcu["define"] not in I3C_MCUS:
         return f"the {mcu['define'][:-2]} on this Core has no I3C"
     return None
+
+
+# Thread (OpenThread on ST's 802.15.4 link layer) runs on the WBA55 only.
+THREAD_MCUS = {"STM32WBA55xx"}
+
+
+def thread_supported(mcu):
+    return bool(mcu) and mcu.get("define") in THREAD_MCUS
 
 
 # On WBA55 and L011, the I2C kernel clock is routed to HSI16 (16MHz)
