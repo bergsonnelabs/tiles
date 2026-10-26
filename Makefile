@@ -231,8 +231,9 @@ build from a path with spaces. Move the project somewhere without spaces \
 (e.g. C:/dev/my-firmware))
 endif
 
-# Toolchain
-PREFIX  = arm-none-eabi-
+# Toolchain: the Core's core.mk names it (TOOLCHAIN = arm-none-eabi for every
+# public Core); recursive, because core.mk is included further down.
+PREFIX  = $(TOOLCHAIN)-
 CC      = $(PREFIX)gcc
 AS      = $(PREFIX)gcc -x assembler-with-cpp
 OBJCOPY = $(PREFIX)objcopy
@@ -265,6 +266,11 @@ GEN_DIR      ?= $(PROJECT_DIR)/coregen
 # the SHELL block above guarantees on Windows.)
 CONFIG_FOUND := $(shell [ -f "$(CONFIG_JSON)" ] && echo 1)
 
+# ---- Paths ----
+
+BUILD_DIR ?= $(PROJECT_DIR)/build
+TARGET    = $(BUILD_DIR)/$(PROJECT)
+
 # ---- Tile → MCU mapping: include the Core's core.mk ----
 # coregen generates the headers; the Makefile still needs to know CPU
 # architecture and linker script for compiler flags. Those come from the
@@ -278,20 +284,50 @@ endif
 CORE_DIR := $(dir $(CORE_MK))
 include $(CORE_MK)
 
-# Port hook. A core.mk for a non-stm32 port sets PORT_MK to its port's make
-# fragment (e.g. PORT_MK = $(CORE_DIR)../../sdk/port/nrf54l/port.mk in an
-# overlay), included right here. That port must then supply its own sources,
-# flags, link script and flash targets: the STM32-specific parts of this
-# Makefile (HAL sources, startup, bootloader/BLE/Thread link scripts, OpenOCD /
-# probe-rs / DFU flashing) are meant only for PORT = stm32. Public Cores leave
-# PORT_MK unset, so this is inert for them.
+ifeq ($(strip $(TOOLCHAIN)),)
+  $(error TILE=$(TILE): core.mk ($(CORE_MK)) sets no TOOLCHAIN (arm-none-eabi for \
+every Cortex-M Core); the compiler is $$(TOOLCHAIN)-gcc)
+endif
+
+# ---- Port hook ----
+# PORT = stm32 (every public Core) is what the rest of this Makefile builds. A
+# core.mk for any other port sets PORT_MK to that port's make fragment (e.g.
+# PORT_MK = $(CORE_DIR)../../sdk/port/nrf54l/port.mk in an overlay), included
+# right here: after core.mk, before the flags and object lists are put
+# together. The STM32-only parts below apply only to PORT = stm32: -D$(MCU_PART),
+# the sdk/ll, sdk/hal, sdk/tal and sdk/port/stm32/core include dirs, the
+# sdk/hal sources, the sdk/core objects (CORE_OBJS), the sdk/device startup
+# rule, the bootloader, BLE and Thread blocks, and the flash / debug targets
+# (OpenOCD, CubeProgrammer, DFU, serial update, gdb, swo). A port fragment
+# supplies its own instead, by setting (use recursive `=` for anything that
+# reads BLE_ENABLED, THREAD_ENABLED, WAMR_ENABLED or _BOOT_MODE, which are
+# set after it):
+#   PORT_CFLAGS     include dirs (-I), defines (-D) and other compile flags;
+#                   they follow -I sdk/core, where STM32 puts its port dir
+#   PORT_SOURCES    its .c files (absolute paths, unique basenames), compiled
+#                   with CFLAGS into $(BUILD_DIR)/port/, linked first
+#   STARTUP         its startup .s / .S (or core.mk sets it), assembled into
+#                   $(BUILD_DIR)/port/, linked after the generated objects
+#   PORT_ASFLAGS    extra assembler flags (-I / -D for a .S startup)
+#   PORT_CPU_FLAGS  CPU flags for a TOOLCHAIN other than arm-none-eabi (for
+#                   that one they come from core.mk's CPU / FPU / FLOAT_ABI)
+#   PORT_LDFLAGS    extra link flags, after the generic ones
+#   PORT_LIBS       archives, linked after the objects
+#   LDSCRIPT        unless core.mk sets it
+#   flash targets   `flash` and whatever else it offers, as plain rules. The
+#                   generic targets stay: all, size, clean, distclean,
+#                   generate, doctor, flash-coreprobe, probe-power-check,
+#                   reset-serial.
+# It can use SDK_DIR, CORE_DIR, TILE, PROJECT, PROJECT_DIR, GEN_DIR,
+# CONFIG_JSON, BUILD_DIR, TARGET, PYTHON, CC / AS / OBJCOPY, Q and LOG, and
+# what core.mk set. Same contract in AI.md (Build System, "Port fragment").
 ifneq ($(strip $(PORT_MK)),)
   include $(PORT_MK)
 else ifneq ($(PORT),stm32)
   $(error TILE=$(TILE): core.mk ($(CORE_MK)) sets PORT=$(PORT) but no PORT_MK; a non-stm32 port needs its own make fragment)
 endif
 
-# ---- Bootloader support ----
+# ---- Bootloader support (PORT = stm32) ----
 # Bootloader mode is read from config.json: "bootloader": "custom"|"rom"|"none"
 #
 #   "custom" — Custom DFU 1.1 bootloader at 0x08000000, app at 0x08002000.
@@ -300,9 +336,13 @@ endif
 #
 # The mode maps to BOOTLOADER/ROM_DFU flags below. Command-line overrides
 # still work (e.g. make BOOTLOADER=1) because ?= defers to explicit values.
+# The link script for each layout is the Core's (core.mk): LDSCRIPT_APP for
+# the custom-bootloader layout, LDSCRIPT_ROMDFU for the ROM-DFU one. Another
+# port reads _BOOT_MODE itself.
 
 _BOOT_MODE := $(shell $(PYTHON) -c "import json; print(json.load(open('$(CONFIG_JSON)')).get('bootloader','none'))" 2>/dev/null || echo none)
 
+ifeq ($(PORT),stm32)
 ifeq ($(_BOOT_MODE),custom)
   BOOTLOADER ?= 1
   ROM_DFU    ?= 0
@@ -329,28 +369,25 @@ ROM-DFU layout. Use "bootloader": "rom" in config.json (or ROM_DFU=1). If this \
 board really has the custom bootloader at 0x08000000, re-run with \
 CUSTOM_BOOTLOADER_ACK=1)
   endif
+  ifeq ($(strip $(LDSCRIPT_APP)),)
+    $(error BOOTLOADER=1: TILE=$(TILE) has no custom-bootloader link script \
+(app at 0x08002000): its core.mk ($(CORE_MK)) sets no LDSCRIPT_APP. Use \
+"bootloader": "rom" in config.json)
+  endif
   APP_ADDR   = 0x08002000
   APP_OFFSET = $(APP_ADDR)UL
-  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32l422tb_app.ld
-  endif
-  ifeq ($(TILE),Core-ST-H5-a)
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32h523he_app.ld
-  endif
+  LDSCRIPT   = $(LDSCRIPT_APP)
 endif
 
 ifeq ($(ROM_DFU),1)
-  ifeq ($(TILE),$(filter $(TILE),Core-ST-L4-a Core-ST-L4-b Core-ST-L4-2-a))
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32l422tb_romdfu.ld
+  ifeq ($(strip $(LDSCRIPT_ROMDFU)),)
+    $(error ROM_DFU=1: TILE=$(TILE) has no ROM-DFU link script (app at \
+0x08000000): its core.mk ($(CORE_MK)) sets no LDSCRIPT_ROMDFU. A Core whose \
+standard LDSCRIPT already serves that layout names that file)
   endif
-  # Core.ST.H5: standard linker script already has noinit reservation and
-  # app at 0x08000000 — no separate ROM DFU linker script needed.
+  LDSCRIPT = $(LDSCRIPT_ROMDFU)
 endif
-
-# ---- Paths ----
-
-BUILD_DIR ?= $(PROJECT_DIR)/build
-TARGET    = $(BUILD_DIR)/$(PROJECT)
+endif
 
 # STM32CubeProgrammer CLI — used for tiles where OpenOCD lacks support (Core.ST.W5 / WBA55).
 # Installed in a different place on each host; override on the command line if
@@ -407,27 +444,39 @@ ASM_SOURCES = $(STARTUP)
 
 # ---- Compiler flags ----
 
-CPU_FLAGS = -mcpu=$(CPU) -mthumb
-ifdef FPU
-  CPU_FLAGS += -mfpu=$(FPU) -mfloat-abi=$(FLOAT_ABI)
+# arm-none-eabi: -mcpu / -mthumb / -mfpu from core.mk. Another toolchain's
+# port fragment gives its own (PORT_CPU_FLAGS).
+ifeq ($(TOOLCHAIN),arm-none-eabi)
+  CPU_FLAGS = -mcpu=$(CPU) -mthumb
+  ifdef FPU
+    CPU_FLAGS += -mfpu=$(FPU) -mfloat-abi=$(FLOAT_ABI)
+  endif
+else
+  CPU_FLAGS = $(PORT_CPU_FLAGS)
 endif
 
 CFLAGS  = $(CPU_FLAGS)
 CFLAGS += -Wall -Wextra -Wshadow -Wdouble-promotion
 CFLAGS += -fdata-sections -ffunction-sections -fno-common
 CFLAGS += -std=c17
-CFLAGS += -D$(MCU_PART)
+ifeq ($(PORT),stm32)
+  CFLAGS += -D$(MCU_PART)
+endif
 CFLAGS += -I$(GEN_DIR)
 CFLAGS += -I$(PROJECT_DIR)
-CFLAGS += -I$(SDK_DIR)sdk/ll
-CFLAGS += -I$(SDK_DIR)sdk/hal
-CFLAGS += -I$(SDK_DIR)sdk/tal
+ifeq ($(PORT),stm32)
+  CFLAGS += -I$(SDK_DIR)sdk/ll
+  CFLAGS += -I$(SDK_DIR)sdk/hal
+  CFLAGS += -I$(SDK_DIR)sdk/tal
+endif
 CFLAGS += -I$(SDK_DIR)sdk/core
 # The port's own headers (port_caps.h behind core_caps.h), after the neutral
 # SDK dirs so they never shadow an sdk/ header. Another port puts its own
-# port_caps.h on the include path.
+# port_caps.h on the include path, through PORT_CFLAGS.
 ifeq ($(PORT),stm32)
   CFLAGS += -I$(SDK_DIR)sdk/port/stm32/core
+else
+  CFLAGS += $(PORT_CFLAGS)
 endif
 CFLAGS += -Og -g3
 CFLAGS += $(EXTRA_CFLAGS)   # per-project variant flags (e.g. -DRING_VARIANT_V1)
@@ -559,9 +608,14 @@ wpan_order_key = $(or $(patsubst $(1)=%,%,$(filter $(1)=%,$(WPAN_BLE_ORDER))),$(
 # sdk/thread/include: its app_conf.h is the build's (it adds the OpenThread
 # tasks when THREAD_ENABLED is defined). Linker script: the BLE one plus the
 # OpenThread settings pages, kept out of the BLE update's staging area.
+#
+# STM32 only (another port brings its own radio stacks). Which Cores have the
+# ST stacks, and their link scripts, is the Core's: core.mk's HAS_BLE_ST /
+# HAS_THREAD_ST and LDSCRIPT_BLE / LDSCRIPT_THREAD / LDSCRIPT_BLE_THREAD.
+ifeq ($(PORT),stm32)
 ifeq ($(BLE_THREAD),1)
-  ifeq ($(MCU_PART),STM32WBA55xx)
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_ble_thread.ld
+  ifeq ($(HAS_BLE_ST)$(HAS_THREAD_ST),11)
+    LDSCRIPT = $(LDSCRIPT_BLE_THREAD)
     CFLAGS += -I$(SDK_DIR)sdk/ble/include
     CFLAGS += -I$(SDK_DIR)sdk/ble/include/auto
     CFLAGS += -I$(SDK_DIR)sdk/thread/include
@@ -594,8 +648,8 @@ ifeq ($(BLE_THREAD),1)
 $(MCU_PART). Remove "ble" and "thread" from config.json, or build for Core.ST.W5.)
   endif
 else ifeq ($(BLE_ENABLED),1)
-  ifeq ($(MCU_PART),STM32WBA55xx)
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_ble.ld
+  ifeq ($(HAS_BLE_ST),1)
+    LDSCRIPT = $(LDSCRIPT_BLE)
     CFLAGS += -I$(SDK_DIR)sdk/ble/include
     CFLAGS += -I$(SDK_DIR)sdk/ble/include/auto
     CFLAGS += -I$(SDK_DIR)sdk/wpan/include
@@ -634,8 +688,8 @@ endif
 ifeq ($(BLE_THREAD),1)
   # (the BLE + Thread block above)
 else ifeq ($(THREAD_ENABLED),1)
-  ifeq ($(MCU_PART),STM32WBA55xx)
-    LDSCRIPT = $(SDK_DIR)sdk/device/stm32wba55hg_thread.ld
+  ifeq ($(HAS_THREAD_ST),1)
+    LDSCRIPT = $(LDSCRIPT_THREAD)
     CFLAGS += -I$(SDK_DIR)sdk/thread/include
     CFLAGS += -I$(SDK_DIR)sdk/thread/config
     CFLAGS += -I$(SDK_DIR)sdk/wpan/include
@@ -665,8 +719,12 @@ else ifeq ($(THREAD_ENABLED),1)
 $(MCU_PART). Remove "thread" from config.json, or build for Core.ST.W5)
   endif
 endif
+endif
 
 ASFLAGS = $(CPU_FLAGS) -Wall
+ifneq ($(PORT),stm32)
+  ASFLAGS += $(PORT_ASFLAGS)
+endif
 
 LDFLAGS  = $(CPU_FLAGS)
 LDFLAGS += -T$(LDSCRIPT)
@@ -677,13 +735,24 @@ LDFLAGS += -T$(LDSCRIPT)
 # 200116 B -> 136696 B on the same project, a 31% cut, and 31% off the flash
 # time that goes with it.
 LDFLAGS += -Wl,--gc-sections
-LDFLAGS += -specs=nosys.specs -specs=nano.specs
+ifeq ($(TOOLCHAIN),arm-none-eabi)
+  LDFLAGS += -specs=nosys.specs -specs=nano.specs
+endif
 LDFLAGS += -Wl,-Map=$(TARGET).map,--cref
+ifneq ($(PORT),stm32)
+  LDFLAGS += $(PORT_LDFLAGS)
+endif
 
 # ---- Object files ----
 
 C_OBJS   = $(addprefix $(BUILD_DIR)/, $(notdir $(C_SOURCES:.c=.o)))
+ifeq ($(PORT),stm32)
 ASM_OBJS = $(patsubst $(SDK_DIR)%.s, $(BUILD_DIR)/%.o, $(ASM_SOURCES))
+else
+# A port's startup and sources build into $(BUILD_DIR)/port/ (rules below).
+ASM_OBJS  = $(addprefix $(BUILD_DIR)/port/, $(addsuffix .o,$(notdir $(basename $(ASM_SOURCES)))))
+PORT_OBJS = $(addprefix $(BUILD_DIR)/port/, $(notdir $(PORT_SOURCES:.c=.o)))
+endif
 HAL_SOURCES = $(wildcard $(SDK_DIR)sdk/hal/*.c)
 HAL_OBJS = $(addprefix $(BUILD_DIR)/sdk/hal/, $(notdir $(HAL_SOURCES:.c=.o)))
 GEN_OBJS = $(GEN_SOURCES:.c=.o)
@@ -706,19 +775,25 @@ CORE_OBJS = $(BUILD_DIR)/sdk/core/core_led.o $(BUILD_DIR)/sdk/core/core_pdm.o \
 # skip the rest of (tools/page_diff.py measures it). Before them: the SDK, the
 # generated objects (coregen), and the startup file, whose Reset_Handler /
 # Reset_Continue hold the image's layout and so change with every edit anyway.
+ifeq ($(PORT),stm32)
 OBJECTS  = $(HAL_OBJS) $(CORE_OBJS)
+else
+OBJECTS  = $(PORT_OBJS)
+endif
 
 ifeq ($(TILES_ENABLED),1)
   TILES_OBJS = $(addprefix $(BUILD_DIR)/tiles/, $(notdir $(TILES_SOURCES:.c=.o)))
   OBJECTS += $(TILES_OBJS)
 endif
 
+ifeq ($(PORT),stm32)
 ifeq ($(BLE_THREAD),1)
   OBJECTS += $(BLE_THREAD_OBJS)
 else ifeq ($(BLE_ENABLED),1)
   OBJECTS += $(BLE_OBJS)
 else ifeq ($(THREAD_ENABLED),1)
   OBJECTS += $(THREAD_OBJS)
+endif
 endif
 
 ifeq ($(WAMR_ENABLED),1)
@@ -804,9 +879,11 @@ generate: $(GEN_STAMP)
 
 all: $(TARGET).bin $(TARGET).hex size
 
-$(TARGET).elf: $(OBJECTS) $(LDSCRIPT) $(BLE_THREAD_LIBS)
+$(TARGET).elf: $(OBJECTS) $(LDSCRIPT) $(BLE_THREAD_LIBS) $(PORT_LIBS)
 	@echo "  LD    $(notdir $@)"
-ifeq ($(BLE_THREAD),1)
+ifneq ($(PORT),stm32)
+	$(Q)$(CC) $(OBJECTS) $(PORT_LIBS) $(LDFLAGS) -o $@
+else ifeq ($(BLE_THREAD),1)
 	@# OpenThread, mbedTLS and the link layer call into each other: one group.
 	$(Q)$(CC) $(OBJECTS) -Wl,--start-group $(BLE_THREAD_LIBS) -Wl,--end-group $(LDFLAGS) -o $@
 	$(Q)$(PYTHON) "$(SDK_DIR)tools/check_ota_boot.py" --objdump $(OBJDUMP) $@ || { rm -f $@; exit 1; }
@@ -846,6 +923,7 @@ $(GEN_OBJS): $(GEN_DIR)/%.o: $(GEN_DIR)/%.c $(GEN_HEADERS)
 	$(LOG) "  CC    $<"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
 
+ifeq ($(PORT),stm32)
 # HAL sources
 $(BUILD_DIR)/sdk/hal/%.o: $(SDK_DIR)sdk/hal/%.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
@@ -898,6 +976,25 @@ $(BUILD_DIR)/sdk/device/%.o: $(SDK_DIR)sdk/device/%.s
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  AS    $(notdir $<)"
 	$(Q)$(AS) $(ASFLAGS) -c $< -o $@
+else
+# A port's sources and startup (PORT_SOURCES, STARTUP): one rule set per
+# source directory, objects flat in $(BUILD_DIR)/port/.
+define PORT_SOURCE_RULE
+$$(BUILD_DIR)/port/%.o: $(1)%.c $$(GEN_HEADERS)
+	$$(Q)mkdir -p $$(dir $$@)
+	$$(LOG) "  CC    $$(notdir $$<)"
+	$$(Q)$$(CC) $$(CFLAGS) -c "$$<" -o $$@
+$$(BUILD_DIR)/port/%.o: $(1)%.s
+	$$(Q)mkdir -p $$(dir $$@)
+	$$(LOG) "  AS    $$(notdir $$<)"
+	$$(Q)$$(AS) $$(ASFLAGS) -c "$$<" -o $$@
+$$(BUILD_DIR)/port/%.o: $(1)%.S
+	$$(Q)mkdir -p $$(dir $$@)
+	$$(LOG) "  AS    $$(notdir $$<)"
+	$$(Q)$$(AS) $$(ASFLAGS) -c "$$<" -o $$@
+endef
+$(foreach d,$(sort $(dir $(PORT_SOURCES) $(ASM_SOURCES))),$(eval $(call PORT_SOURCE_RULE,$(d))))
+endif
 
 # Tile driver sources
 ifeq ($(TILES_ENABLED),1)
@@ -922,6 +1019,7 @@ $(foreach d,$(sort $(dir $(TILES_OVERLAY_DRIVERS))),$(eval $(call TILES_OVERLAY_
 endif
 
 # BLE and shared radio (wpan) sources (relaxed warnings — vendor headers are noisy)
+ifeq ($(PORT),stm32)
 ifeq ($(BLE_ENABLED),1)
 $(BUILD_DIR)/sdk/ble/%.o: $(SDK_DIR)sdk/ble/%.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
@@ -962,6 +1060,7 @@ $(BUILD_DIR)/sdk/core/core_ble.o: $(SDK_DIR)sdk/core/core_ble.c $(GEN_HEADERS)
 	$(Q)mkdir -p $(dir $@)
 	$(LOG) "  CC    $(notdir $<)"
 	$(Q)$(CC) $(CFLAGS) -c $< -o $@
+endif
 endif
 
 size: $(TARGET).elf
@@ -1008,6 +1107,11 @@ flash-coreprobe: $(TARGET).elf
 # declares before it is acted on.
 probe-power-check:
 	@$(PYTHON) "$(SDK_DIR)tools/coreprobe_power.py" apply --config "$(CONFIG_JSON)" --dry-run
+
+# ---- STM32 flash and debug targets ----
+# OpenOCD / CubeProgrammer, USB DFU, serial update, the DFU bootloader, gdb and
+# SWO: PORT = stm32 only. Another port's fragment defines its own `flash`.
+ifeq ($(PORT),stm32)
 
 # ---- Flash via OpenOCD (ST-Link) ----
 
@@ -1220,15 +1324,13 @@ flash-rom: $(TARGET).bin
 # Zadig / WinUSB. Needs the firmware on the Core to be built with serial update;
 # if it predates it, this says so — run `make flash-dfu` once. SERIAL_PORT picks
 # a port when more than one Core is plugged in. The DEV_ID stops an image built
-# for one Core from being written to another. Protocol: docs/serial-update-protocol.md.
-ifeq ($(MCU_PART),STM32H523xx)
-  SU_DEV_ID := 0x478
-else ifeq ($(MCU_PART),STM32L422xx)
-  SU_DEV_ID := 0x464
-endif
+# for one Core from being written to another (core.mk's SERIAL_UPDATE_DEV_ID,
+# the part's DBGMCU device id). Protocol: docs/serial-update-protocol.md.
 .PHONY: flash-serial
 flash-serial: $(TARGET).bin
-	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)") $(if $(SU_DEV_ID),--dev-id $(SU_DEV_ID)) "$<"
+	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)") $(if $(SERIAL_UPDATE_DEV_ID),--dev-id $(SERIAL_UPDATE_DEV_ID)) "$<"
+
+endif
 
 # ---- Reset over USB serial ----
 # Restarts the running program (core_reset()) through the remote reset frame
@@ -1237,6 +1339,8 @@ flash-serial: $(TARGET).bin
 .PHONY: reset-serial
 reset-serial:
 	@$(PYTHON) "$(SDK_DIR)tools/serial_update.py" --reset $(if $(SERIAL_PORT),--port "$(SERIAL_PORT)")
+
+ifeq ($(PORT),stm32)
 
 # ---- Flash the DFU bootloader itself ----
 
@@ -1273,6 +1377,8 @@ swo: $(TARGET).elf
 		-c "itm port 0 on" \
 		-c "reset run"
 
+endif
+
 # ---- Toolchain check ----
 # `make doctor` — one command that says what is missing and how to get it.
 # Worth its own target because the failure modes it covers are otherwise
@@ -1298,7 +1404,7 @@ doctor:
 		fi; \
 	}; \
 	printf '  ok    %-20s %s\n' "python" "$(PYTHON)"; \
-	_check arm-none-eabi-gcc required "$(GCC_HINT)"; \
+	_check $(PREFIX)gcc required "$(GCC_HINT)"; \
 	_check dfu-util optional "$(DFU_HINT)"; \
 	_check openocd optional "needed only for 'make flash' / 'make gdb' over SWD"; \
 	echo ""; \

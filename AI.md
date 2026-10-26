@@ -51,15 +51,25 @@ definition stem, which the Makefile includes after resolving `TILE`:
 `MCU_FAMILY`, `MCU_PART`, `PROBE_RS_CHIP`, `CPU`, `FPU`/`FLOAT_ABI` (unset on
 the L0, which has no FPU), `LDSCRIPT`, `STARTUP`, `OPENOCD_CFG`, optional
 `FLASH_TOOL`, plus `PORT` (`stm32`), `ARCH` (`cortex-m`) and `TOOLCHAIN`
-(`arm-none-eabi`). The contract is in each file's header. The lookup matches
+(`arm-none-eabi`; the compiler is `$(TOOLCHAIN)-gcc`). The per-Core facts the
+Makefile used to key on a stem or on `MCU_PART` are there too:
+`LDSCRIPT_ROMDFU` (`"bootloader": "rom"`, app at 0x08000000: the L4s'
+`stm32l422tb_romdfu.ld`, the standard script on H5 / L0 / W5) and
+`LDSCRIPT_APP` (the parked custom-bootloader layout, L4s and H5 only), each
+refused with a clear error when the Core has none; `SERIAL_UPDATE_DEV_ID`
+(`make flash-serial`'s device id: L4s 0x464, H5 0x478); and the capability
+flags `HAS_BLE_ST` / `HAS_THREAD_ST` with `LDSCRIPT_BLE` / `LDSCRIPT_THREAD` /
+`LDSCRIPT_BLE_THREAD` (W5 only: without them "ble" / "thread" in config.json
+is the old "only supported on Core.ST.W5" error). The contract is in each
+file's header. The lookup matches
 the definition's: `cores/<stem>/core.mk` here first, then each
 `TILES_OVERLAY` checkout's, so a non-public Core ships its own core.mk in its
 private repo and public tiles never names it. Such a Core may also be passed by
 its public name (`TILE=Core.N.LM20B` picks the overlay's highest-rev
 `cores/Core-N-LM20B-<rev>/`). A core.mk for a non-stm32 port sets `PORT_MK`
 to its port's make fragment (included right after; `CORE_DIR` is the core.mk's
-own directory), which must then supply its own sources, flags, link script
-and flash targets: the rest of the Makefile is the STM32 port.
+own directory), which supplies its own sources, flags, startup, link script
+and flash targets (see Build System, "Port fragment").
 
 MCU capabilities (PLL ranges, APB clocks, SPI/I2C peripheral mapping) live in `MCU_DB` inside `tools/coregen/ports/stm32.py`, coregen's STM32 back end (see coregen below).
 
@@ -204,6 +214,43 @@ watchdog + strike→ROM-DFU brick recovery, fed from the starter loop. See
 | `SERIAL_PORT` | auto-detected | CDC port for the 1200-baud touch; required on Windows (`COM5`) |
 | `STM32_PROG_CLI` | per-host default | STM32CubeProgrammer CLI path (Core.ST.W5 SWD flashing) |
 
+### Port fragment (`PORT_MK`)
+
+The Makefile builds `PORT = stm32` as it is. For any other port the Core's
+core.mk sets `PORT_MK`, included right after core.mk (before the flags and
+object lists are put together), and these STM32-only parts drop out:
+`-D$(MCU_PART)`, the `sdk/ll`, `sdk/hal`, `sdk/tal` and
+`sdk/port/stm32/core` include dirs, the `sdk/hal/*.c` sources, the `sdk/core`
+objects (`CORE_OBJS`), the `sdk/device` startup rule, the bootloader, BLE and
+Thread blocks, and the flash / debug targets (`flash`, `flash-dfu`,
+`flash-rom`, `flash-serial`, `flash-bootloader`, `openocd`, `gdb`, `swo`).
+What stays generic: the CPU flags for `TOOLCHAIN = arm-none-eabi` (`-mcpu`,
+`-mthumb`, `-mfpu` / `-mfloat-abi`, `nosys` / `nano` specs), the warnings,
+`-std=c17`, `-I` coregen dir, project dir and `sdk/core`, `-Og -g3`,
+`EXTRA_CFLAGS`, coregen (`--port $(PORT)`), the project's `.c` files, tile
+drivers, WAMR, `SCOPE_ENABLED`, and the targets `all`, `size`, `clean`,
+`distclean`, `generate`, `doctor`, `flash-coreprobe`, `probe-power-check`,
+`reset-serial`. The fragment sets (recursive `=` for anything reading
+`BLE_ENABLED`, `THREAD_ENABLED`, `WAMR_ENABLED` or `_BOOT_MODE`, which are set
+after it):
+
+| Variable | What |
+|---|---|
+| `PORT_CFLAGS` | include dirs, defines, other compile flags; after `-I sdk/core`, where STM32 puts its port dir |
+| `PORT_SOURCES` | its `.c` files (absolute paths, unique basenames), compiled with `CFLAGS` into `build/port/`, linked first |
+| `STARTUP` | its startup `.s` / `.S` (or core.mk sets it), into `build/port/`, linked after the coregen objects |
+| `PORT_ASFLAGS` | extra assembler flags (`-I` / `-D` for a `.S`) |
+| `PORT_CPU_FLAGS` | CPU flags when `TOOLCHAIN` is not `arm-none-eabi` |
+| `PORT_LDFLAGS` | extra link flags, after the generic ones |
+| `PORT_LIBS` | archives, linked after the objects |
+| `LDSCRIPT` | unless core.mk sets it |
+| `flash` etc. | plain rules for its own flash / debug targets (`TARGET`, `BUILD_DIR` are already set) |
+
+It can use `SDK_DIR`, `CORE_DIR`, `TILE`, `PROJECT`, `PROJECT_DIR`,
+`GEN_DIR`, `CONFIG_JSON`, `BUILD_DIR`, `TARGET`, `PYTHON`, `CC` / `AS` /
+`OBJCOPY`, `Q`, `LOG` and what core.mk set. The same list is in the comment
+where the Makefile includes `PORT_MK`.
+
 ### Common Commands
 
 ```bash
@@ -323,7 +370,9 @@ The back-end interface (documented at the top of `ports/stm32.py`): `PORT`,
 `mcu_for_part(part)` (the MCU dict, which must carry `define`),
 `template_dirs()`, `pad_gpio(pad)`, `pad_mux(func)`, `timer_channels(pad)`,
 `led_info(tile)`, `validate(config, tile, pad_map, mcu)`, `usb_capable(mcu)`,
-`i3c_unsupported(mcu)`, `clock_config(config, tile, mcu)`,
+`i3c_unsupported(mcu)`, optional `thread_supported(mcu)` (True where a
+`"thread"` block can build; STM32: WBA55 only; a back end without it has no
+Thread), `clock_config(config, tile, mcu)`,
 `i2c_config(config, mcu, clock_config)`,
 `spi_config(bus_num, bus_cfg, mcu, clock_config)` (one bus, without its chip
 selects), `usart_config(config, mcu)`, `pwm_config(config, mcu)` and
@@ -798,7 +847,9 @@ Data/control functions
 2. Add linker script + startup to `sdk/device/`
 3. Add `SPI_CLK_MAP` (and I2C/USART/timer map) entries in `ports/stm32.py` for the new MCU's APB assignments
 4. Add the tile JSON to `definitions/`
-5. Add `cores/<stem>/core.mk` (copy a sibling's; contract in its header).
+5. Add `cores/<stem>/core.mk` (copy a sibling's; contract in its header:
+   `LDSCRIPT_ROMDFU`, and `LDSCRIPT_APP`, `SERIAL_UPDATE_DEV_ID`,
+   `HAS_BLE_ST` / `HAS_THREAD_ST` where they apply).
    A non-public Core keeps it, like its definition, in its private repo
    (found through `TILES_OVERLAY`).
 6. Add a `sdk/status/core-<x>.json` with the new Core's feature statuses
