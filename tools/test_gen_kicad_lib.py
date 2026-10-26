@@ -10,8 +10,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
-from gen_kicad_lib import (DEFINITIONS_DIR, LIB_HEADER, compact, layout, library, symbol,  # noqa: E402
-                           symbol_name)
+from gen_kicad_lib import (DEFINITIONS_DIR, GENERIC, LIB_HEADER, compact, generic, layout, library,  # noqa: E402
+                           symbol, symbol_name)
 
 
 def fn(name, typ="digital", direction=""):
@@ -154,6 +154,29 @@ class EveryDefinition(unittest.TestCase):
                 s = symbol(d)
                 self.assertEqual(sorted(re.findall(r'\(number "([^"]+)"', s)),
                                  sorted(p["pad"] for p in d["pads"]))
+
+
+
+class Generic(unittest.TestCase):
+    """One symbol per package: standard pads named, the rest P<n>, supplies on top."""
+
+    def test_packages(self):
+        for pkg, (n, std) in GENERIC.items():
+            with self.subTest(package=pkg):
+                d = generic(pkg)
+                s = symbol(d)
+                self.assertEqual(symbol_name(d), "Generic." + pkg)
+                self.assertIn(f'(property "Footprint" "Bergsonne Tiles:{pkg}"', s)
+                names = dict((num, nm) for nm, num in re.findall(r'\(name "([^"]*)".*?\(number "([^"]+)"', s, re.S))
+                self.assertEqual(sorted(names, key=int), [str(i) for i in range(1, n + 1)])
+                for i in range(1, n + 1):
+                    self.assertEqual(names[str(i)], std.get(i, f"P{i}"))
+                power, _ = layout(d)
+                self.assertEqual([p["name"] for p in power], ["V+", "GND"])
+
+    def test_v_plus_and_ground_are_power_inputs(self):
+        s = symbol(generic("T44-10"))
+        self.assertRegex(s, r'\(pin power_in line[^()]*\(at [^)]*\)\s*\(length [^)]*\)\s*\(name "V\+"')
 
 
 if __name__ == "__main__":

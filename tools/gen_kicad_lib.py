@@ -27,6 +27,11 @@ library). Status lives only in the product DB, so it comes in as a JSON map
 `{definition filename: status}` that `sync_definitions.py --statuses-out`
 writes; it is deliberately not added to the public definition files.
 
+`--generic` adds one symbol per tile package (Generic.T44-10, ...) for boards
+that take a tile not in the library yet: GND, V+, NRST and I2C sit on the pads
+every tile of that package uses (the KiCad tile templates' pinout), and the
+other pads are plain I/O named after their pad (P2, P3, ...).
+
 `--symbols-dir` writes each tile revision's symbol block on its own instead,
 as `<dir>/<Family.Name>/symbol-<rev>.kicad_sym`, for every definition with
 pads in the `--definitions` dirs (a later dir's copy of a revision wins, as in
@@ -35,7 +40,7 @@ is exactly what `library()` puts between its header and the closing paren, so
 blocks concatenated inside that header make a library.
 
 Usage:
-    python3 tools/gen_kicad_lib.py --statuses s.json --include production,beta \\
+    python3 tools/gen_kicad_lib.py --statuses s.json --include production,beta --generic \\
         --footprints "<lib>/Bergsonne Tiles.pretty" --out "<lib>/Bergsonne Tiles.kicad_sym"
     python3 tools/gen_kicad_lib.py --tiles <Family>-<Name>-a.json --out private.kicad_sym
     python3 tools/gen_kicad_lib.py --symbols-dir <dir> --definitions definitions <overlay>/definitions ...
@@ -76,6 +81,39 @@ def rail_range(r: dict) -> str:
 
 def symbol_name(d: dict) -> str:
     return f"{d['family']}.{d['name']}" + ("" if d["rev"] == "a" else f"-{d['rev']}")
+
+
+# Generic symbols, one per package: {package: (pads, {pad: function})}. The
+# standard pads follow the KiCad tile templates (bergsonne-kicad-internal,
+# templates/tools/make_tile_templates.py, PACKAGES[...]["pinout"]).
+GENERIC = {
+    "T44-10": (10, {1: "GND", 4: "I2C.CLK", 5: "I2C.DAT", 10: "V+"}),
+    "T44-14": (14, {1: "GND", 10: "V+", 12: "NRST"}),
+    "T48-16": (16, {1: "GND", 14: "V+", 16: "NRST"}),
+    "T48-22": (22, {1: "GND", 20: "V+", 22: "NRST"}),
+}
+
+
+def generic(pkg: str) -> dict:
+    """A definition-shaped dict for one package's generic symbol."""
+    n, std = GENERIC[pkg]
+    typ, pads = pkg.split("-")[0], []
+    for i in range(1, n + 1):
+        f = std.get(i, f"P{i}")
+        if f == "GND":
+            fs = [{"function": "GND", "type": "power", "direction": ""}]
+        elif f == "V+":
+            fs = [{"function": "V+", "type": "power", "direction": "input"}]
+        elif f == "NRST":
+            fs = [{"function": "NRST", "type": "", "direction": ""}]
+        else:
+            fs = [{"function": f, "type": "digital", "direction": "bidirectional"}]
+        pads.append({"pad": str(i), "functions": fs})
+    v = str(next(p for p, f in std.items() if f == "V+"))
+    return {"family": "Generic", "name": pkg, "rev": "a", "package": {"type": typ, "pads": n},
+            "pads": pads, "power": [{"positive_pad": [v], "gnd_pad": ["1"], "direction": "input", "type": "system"}],
+            "symbol_description": f"Generic {pkg} tile: GND, V+{', NRST' if 'NRST' in std.values() else ''}"
+                           f"{', I2C' if 'I2C.CLK' in std.values() else ''} on the standard pads, the rest plain I/O"}
 
 
 def package(d: dict) -> str:
@@ -222,7 +260,7 @@ def symbol(d: dict) -> str:
         ("Value", name, (0, FONT), False, "left"),
         ("Footprint", f"Bergsonne Tiles:{package(d)}", (0, bottom - FONT), True, "left"),
         ("Datasheet", "", (0, 0), True, None),
-        ("Description", "", (0, 0), True, None),
+        ("Description", d.get("symbol_description", ""), (0, 0), True, None),
         ("ki_keywords", " ".join(["tile", "bergsonne"] + keywords), (0, 0), True, None),
     ]
     fld = []
@@ -282,12 +320,14 @@ def main() -> int:
     ap.add_argument("--statuses", type=Path, help="JSON {definition filename: status}")
     ap.add_argument("--include", default="production,beta", help="statuses to include (with --statuses)")
     ap.add_argument("--tiles", nargs="+", help="explicit definition filenames instead of --statuses")
+    ap.add_argument("--generic", action="store_true",
+                    help="also write one Generic.<package> symbol per package in GENERIC")
     ap.add_argument("--footprints", type=Path,
                     help="footprint library (.pretty); tiles whose package is missing there are skipped")
     args = ap.parse_args()
 
     if args.symbols_dir:
-        if args.out or args.statuses or args.tiles or args.footprints:
+        if args.out or args.statuses or args.tiles or args.footprints or args.generic:
             ap.error("--symbols-dir takes only --definitions")
         n = write_symbol_blocks(args.definitions, args.symbols_dir)
         print(f"wrote {n} symbol blocks to {args.symbols_dir}")
@@ -321,6 +361,13 @@ def main() -> int:
             skipped.append(f"{fname}: no footprint {package(d)}")
         else:
             defs.append(d)
+
+    if args.generic:
+        for pkg in GENERIC:
+            if packages is not None and pkg not in packages:
+                skipped.append(f"Generic.{pkg}: no footprint {pkg}")
+            else:
+                defs.append(generic(pkg))
 
     Path(args.out).write_text(library(defs), encoding="utf-8")
     for s in skipped:
