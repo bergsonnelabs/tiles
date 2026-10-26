@@ -65,9 +65,6 @@ core_adc_t *core_adc_default(void);
 #define CORE_ADC_TRIG_FALLING  2   /**< Convert on the falling edge */
 #define CORE_ADC_TRIG_BOTH     3   /**< Convert on both edges */
 
-/* Checks that the values above are the port's. */
-#include "port_core_adc.h"
-
 /* Deprecated short names, kept so existing code builds: use the CORE_ADC_ ones. */
 #define SAMP_FAST      CORE_ADC_SAMP_FAST
 #define SAMP_MED       CORE_ADC_SAMP_MED
@@ -87,37 +84,25 @@ core_adc_t *core_adc_default(void);
  * ============================================================ */
 
 /** Initialise the ADC at the given resolution. */
-static inline core_status_t core_adc_init(core_adc_t *adc, uint32_t resolution)
-{
-    return tal_adc_init(adc, (hal_adc_res_t)resolution);
-}
+CORE_INLINE core_status_t core_adc_init(core_adc_t *adc, uint32_t resolution);
 
 /* ============================================================
  * Channel registration
  * ============================================================ */
 
 /** Register a pad as an ADC input with the given sampling speed. */
-static inline core_status_t core_adc_add(core_adc_t *adc, uint8_t pad,
-                                          uint32_t samp)
-{
-    return tal_adc_add_pad(adc, pad, (hal_adc_samp_t)samp);
-}
+CORE_INLINE core_status_t core_adc_add(core_adc_t *adc, uint8_t pad,
+                                        uint32_t samp);
 
 /* ============================================================
  * Blocking reads
  * ============================================================ */
 
 /** Single-shot read — returns raw ADC count. */
-static inline uint16_t core_adc_read(core_adc_t *adc, uint8_t pad)
-{
-    return tal_adc_read_pad(adc, pad);
-}
+CORE_INLINE uint16_t core_adc_read(core_adc_t *adc, uint8_t pad);
 
 /** Single-shot read — returns calibrated millivolts. */
-static inline uint32_t core_adc_read_mv(core_adc_t *adc, uint8_t pad)
-{
-    return tal_adc_read_pad_mv(adc, pad);
-}
+CORE_INLINE uint32_t core_adc_read_mv(core_adc_t *adc, uint8_t pad);
 
 /* ============================================================
  * Pad-oriented wrappers (default-instance convention)
@@ -137,10 +122,7 @@ static inline uint32_t core_adc_read_mv(core_adc_t *adc, uint8_t pad)
  * @studio twin full
  * @param pad [1..64] Tile pad number configured as an ADC input in config.json.
  */
-static inline int core_adc_read_pad(uint8_t pad)
-{
-    return (int)tal_adc_read_pad(&core_adc1, pad);
-}
+CORE_INLINE int core_adc_read_pad(uint8_t pad);
 
 /**
  * Read a pad as calibrated millivolts (uses VREFINT for per-chip accuracy).
@@ -149,10 +131,7 @@ static inline int core_adc_read_pad(uint8_t pad)
  * @studio twin full
  * @param pad [1..64] Tile pad number configured as an ADC input in config.json.
  */
-static inline int core_adc_read_mv_pad(uint8_t pad)
-{
-    return (int)tal_adc_read_pad_mv(&core_adc1, pad);
-}
+CORE_INLINE int core_adc_read_mv_pad(uint8_t pad);
 
 /**
  * Die temperature in tenths of deg C (e.g. 253 = 25.3 C).
@@ -161,10 +140,7 @@ static inline int core_adc_read_mv_pad(uint8_t pad)
  * @studio expose category=adc name=temp_decidegc returns=int
  * @studio twin full
  */
-static inline int core_adc_temp_decidegc(void)
-{
-    return (int)tal_adc_read_temp_decidegc(core_adc_default());
-}
+CORE_INLINE int core_adc_temp_decidegc(void);
 
 /**
  * VDD supply voltage in millivolts (via VREFINT).
@@ -173,26 +149,17 @@ static inline int core_adc_temp_decidegc(void)
  * @studio expose category=adc name=vdd_mv returns=int
  * @studio twin full
  */
-static inline int core_adc_vdd_mv(void)
-{
-    return (int)tal_adc_read_vdda_mv(core_adc_default());
-}
+CORE_INLINE int core_adc_vdd_mv(void);
 
 /* ============================================================
  * Internal channels
  * ============================================================ */
 
 /** Die temperature in tenths of deg C (e.g. 253 = 25.3 C). */
-static inline int32_t core_adc_temp(core_adc_t *adc)
-{
-    return tal_adc_read_temp_decidegc(adc);
-}
+CORE_INLINE int32_t core_adc_temp(core_adc_t *adc);
 
 /** Actual VDD supply voltage in millivolts via VREFINT. */
-static inline uint32_t core_adc_vdd(core_adc_t *adc)
-{
-    return tal_adc_read_vdda_mv(adc);
-}
+CORE_INLINE uint32_t core_adc_vdd(core_adc_t *adc);
 
 /* ============================================================
  * DMA / continuous mode
@@ -202,38 +169,23 @@ static inline uint32_t core_adc_vdd(core_adc_t *adc)
  *  @param cb   Called on half-transfer and transfer-complete; may be NULL
  *  @param ctx  User context passed to callback; may be NULL
  */
-static inline core_status_t core_adc_start_dma(core_adc_t *adc, uint16_t *buf,
-                                                uint16_t len,
-                                                core_callback_t cb, void *ctx)
-{
-    return tal_adc_start_dma(adc, buf, len, cb, ctx);
-}
+CORE_INLINE core_status_t core_adc_start_dma(core_adc_t *adc, uint16_t *buf,
+                                              uint16_t len,
+                                              core_callback_t cb, void *ctx);
 
 /** Stop continuous DMA conversion. */
-static inline void core_adc_stop_dma(core_adc_t *adc)
-{
-    tal_adc_stop_dma(adc);
-}
+CORE_INLINE void core_adc_stop_dma(core_adc_t *adc);
 
 /** Read most recent DMA result for a pad. */
-static inline uint16_t core_adc_dma_read(core_adc_t *adc, uint8_t pad)
-{
-    return tal_adc_dma_read_pad(adc, pad);
-}
+CORE_INLINE uint16_t core_adc_dma_read(core_adc_t *adc, uint8_t pad);
 
 /** Read most recent DMA result for a pad, in calibrated millivolts.
  *  Prime VDDA before starting DMA (call core_adc_vdd(adc) once),
  *  since measuring VREFINT needs the regular sequence that DMA owns. */
-static inline uint32_t core_adc_dma_read_mv(core_adc_t *adc, uint8_t pad)
-{
-    return tal_adc_dma_read_pad_mv(adc, pad);
-}
+CORE_INLINE uint32_t core_adc_dma_read_mv(core_adc_t *adc, uint8_t pad);
 
 /** Convert a raw count from a DMA buffer to millivolts. */
-static inline uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw)
-{
-    return hal_adc_raw_to_mv(adc, raw);
-}
+CORE_INLINE uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw);
 
 /* ---- External trigger ---- */
 
@@ -250,18 +202,12 @@ static inline uint32_t core_adc_raw_to_mv(core_adc_t *adc, uint16_t raw)
  *   core_adc_start_dma(adc, buf, len, 0, 0);
  *   core_timer_start(&t);
  */
-static inline core_status_t core_adc_set_trigger(core_adc_t *adc,
-                                                 uint8_t extsel, uint32_t edge)
-{
-    return hal_adc_set_trigger(adc, extsel, (hal_adc_trig_edge_t)edge);
-}
+CORE_INLINE core_status_t core_adc_set_trigger(core_adc_t *adc,
+                                               uint8_t extsel, uint32_t edge);
 
 /** Buffer slot a pad occupies in one DMA scan (-1 if not registered).
  *  Use the stride when the buffer holds several scans for averaging. */
-static inline int core_adc_dma_slot(core_adc_t *adc, uint8_t pad)
-{
-    return tal_adc_dma_slot(adc, pad);
-}
+CORE_INLINE int core_adc_dma_slot(core_adc_t *adc, uint8_t pad);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -295,5 +241,9 @@ static inline int core_adc_dma_slot(core_adc_t *adc, uint8_t pad)
 //   (a second, higher-priority conversion sequence that preempts the
 //   regular one) are not surfaced. Bring-your-own register writes if you
 //   need a preempting sample inside a control loop.
+
+/* The port: checks that the CORE_ADC_* values above are its own, and the
+ * bodies of the functions above. */
+#include "port_core_adc.h"
 
 #endif /* CORE_ADC_H */

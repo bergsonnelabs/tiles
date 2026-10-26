@@ -26,8 +26,8 @@
 #ifndef CORE_FAULT_H
 #define CORE_FAULT_H
 
-#include "hal_fault.h"
-#include "port_core_fault.h"   /* core_fault_type_t, core_fault_frame_t */
+#include "core_types.h"        /* CORE_INLINE */
+#include "port_core_fault_types.h"   /* core_fault_type_t, core_fault_frame_t */
 
 /**
  * Fault callback: the fault type (hard, memory management, bus, usage) and
@@ -41,10 +41,7 @@ typedef void (*core_fault_cb_t)(core_fault_type_t type, const core_fault_frame_t
  *
  * @param cb Callback receiving the fault type and stacked frame; NULL removes it.
  */
-static inline void core_fault_set_callback(core_fault_cb_t cb)
-{
-    hal_fault_set_callback(cb);
-}
+CORE_INLINE void core_fault_set_callback(core_fault_cb_t cb);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -55,5 +52,8 @@ static inline void core_fault_set_callback(core_fault_cb_t cb)
 //   A small ring buffer in backup or NVM (with the captured PC / LR
 //   / xPSR / fault status registers) would make field debugging
 //   tractable.
+
+/* The port's bodies of the functions above. */
+#include "port_core_fault.h"
 
 #endif /* CORE_FAULT_H */

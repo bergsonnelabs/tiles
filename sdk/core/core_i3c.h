@@ -43,7 +43,6 @@
 #define CORE_I3C_H
 
 #include "hal_i3c.h"
-#include "core_config.h"
 #include "core_caps.h"
 
 #if !CORE_HAS_I3C
@@ -51,7 +50,7 @@
 #endif
 
 #include "core_types.h"
-#include "port_core_i3c.h"   /* core_i3c_instance_t */
+#include "port_core_i3c_types.h"   /* core_i3c_instance_t */
 
 /** Core-level I3C handle. Alias for hal_i3c_t — use this in application code. */
 typedef hal_i3c_t core_i3c_t;
@@ -85,23 +84,10 @@ typedef hal_i3c_t core_i3c_t;
  * @param scl_hz    Push-pull SCL in Hz, e.g. I3C_12M5.
  * @return I3C_OK, or I3C_ERROR for a bad instance.
  */
-static inline core_status_t core_i3c_init(core_i3c_t *h, core_i3c_instance_t *instance, uint32_t scl_hz)
-{
-    hal_i3c_config_t cfg = {
-        .scl_hz     = scl_hz,
-        .od_low_ns  = 2000,
-        .kernel     = HAL_I3C_KERNEL_PCLK,
-        .pclk_hz    = (instance == I3C2) ? HCLK_HZ : PCLK1_HZ,
-        .timeout_ms = 10,
-    };
-    return hal_i3c_init(h, instance, &cfg);
-}
+CORE_INLINE core_status_t core_i3c_init(core_i3c_t *h, core_i3c_instance_t *instance, uint32_t scl_hz);
 
 /** Disable an I3C instance and stop its clock. */
-static inline void core_i3c_deinit(core_i3c_t *h)
-{
-    hal_i3c_deinit(h);
-}
+CORE_INLINE void core_i3c_deinit(core_i3c_t *h);
 
 /* ---- Dynamic addressing ---- */
 
@@ -111,10 +97,7 @@ static inline void core_i3c_deinit(core_i3c_t *h)
  * flash-serial on the H5 starts the new image without a reset), so run this
  * before assigning addresses.
  */
-static inline core_status_t core_i3c_rstdaa(core_i3c_t *h)
-{
-    return hal_i3c_rstdaa(h);
-}
+CORE_INLINE core_status_t core_i3c_rstdaa(core_i3c_t *h);
 
 /**
  * SETDASA: give the target at I2C static address `static_addr` the dynamic
@@ -125,10 +108,7 @@ static inline core_status_t core_i3c_rstdaa(core_i3c_t *h)
  * @return I3C_OK, I3C_NACK when no target answers at that static address,
  *         I3C_ERROR when dyn_addr is taken or equals static_addr.
  */
-static inline core_status_t core_i3c_setdasa(core_i3c_t *h, uint8_t static_addr, uint8_t dyn_addr)
-{
-    return hal_i3c_setdasa(h, static_addr, dyn_addr);
-}
+CORE_INLINE core_status_t core_i3c_setdasa(core_i3c_t *h, uint8_t static_addr, uint8_t dyn_addr);
 
 /**
  * ENTDAA: assign dynamic addresses to every target that has none, recording
@@ -137,10 +117,7 @@ static inline core_status_t core_i3c_setdasa(core_i3c_t *h, uint8_t static_addr,
  * @param found  Gets the number of targets assigned (may be NULL).
  * @return I3C_OK, or I3C_NACK when no target took part.
  */
-static inline core_status_t core_i3c_entdaa(core_i3c_t *h, uint8_t *found)
-{
-    return hal_i3c_entdaa(h, found);
-}
+CORE_INLINE core_status_t core_i3c_entdaa(core_i3c_t *h, uint8_t *found);
 
 /**
  * Dynamic address of the target known by its static address, giving it one
@@ -148,13 +125,7 @@ static inline core_status_t core_i3c_entdaa(core_i3c_t *h, uint8_t *found)
  *
  * @return The dynamic address, or 0 if the target does not answer.
  */
-static inline uint8_t core_i3c_attach(core_i3c_t *h, uint8_t static_addr)
-{
-    hal_i3c_target_t *t = hal_i3c_target_by_static(h, static_addr);
-    if (!t && hal_i3c_setdasa(h, static_addr, 0) == HAL_OK)
-        t = hal_i3c_target_by_static(h, static_addr);
-    return t ? t->dyn_addr : 0;
-}
+CORE_INLINE uint8_t core_i3c_attach(core_i3c_t *h, uint8_t static_addr);
 
 /* ---- CCCs ---- */
 
@@ -162,79 +133,49 @@ static inline uint8_t core_i3c_attach(core_i3c_t *h, uint8_t static_addr)
  * GETPID: the target's 48-bit provisioned ID, MSB first
  * (MIPI manufacturer ID in the top 15 bits).
  */
-static inline core_status_t core_i3c_get_pid(core_i3c_t *h, uint8_t dyn_addr, uint8_t pid[6])
-{
-    return hal_i3c_get_pid(h, dyn_addr, pid);
-}
+CORE_INLINE core_status_t core_i3c_get_pid(core_i3c_t *h, uint8_t dyn_addr, uint8_t pid[6]);
 
 /** GETBCR: bus characteristics (bit 1 IBI capable, bit 2 IBI payload). */
-static inline core_status_t core_i3c_get_bcr(core_i3c_t *h, uint8_t dyn_addr, uint8_t *bcr)
-{
-    return hal_i3c_get_bcr(h, dyn_addr, bcr);
-}
+CORE_INLINE core_status_t core_i3c_get_bcr(core_i3c_t *h, uint8_t dyn_addr, uint8_t *bcr);
 
 /** GETDCR: device characteristics (MIPI device-type code). */
-static inline core_status_t core_i3c_get_dcr(core_i3c_t *h, uint8_t dyn_addr, uint8_t *dcr)
-{
-    return hal_i3c_get_dcr(h, dyn_addr, dcr);
-}
+CORE_INLINE core_status_t core_i3c_get_dcr(core_i3c_t *h, uint8_t dyn_addr, uint8_t *dcr);
 
 /** GETSTATUS (format 1): the target's 16-bit status word. */
-static inline core_status_t core_i3c_get_status(core_i3c_t *h, uint8_t dyn_addr, uint16_t *status)
-{
-    return hal_i3c_get_status(h, dyn_addr, status);
-}
+CORE_INLINE core_status_t core_i3c_get_status(core_i3c_t *h, uint8_t dyn_addr, uint16_t *status);
 
 /**
  * ENEC: let one target (or all, dyn_addr 0x7E) raise the given events
  * (LL_I3C_EVT_INT for IBIs).
  */
-static inline core_status_t core_i3c_enec(core_i3c_t *h, uint8_t dyn_addr, uint8_t events)
-{
-    return hal_i3c_enec(h, dyn_addr, events);
-}
+CORE_INLINE core_status_t core_i3c_enec(core_i3c_t *h, uint8_t dyn_addr, uint8_t events);
 
 /** DISEC: stop one target (or all, 0x7E) raising the given events. */
-static inline core_status_t core_i3c_disec(core_i3c_t *h, uint8_t dyn_addr, uint8_t events)
-{
-    return hal_i3c_disec(h, dyn_addr, events);
-}
+CORE_INLINE core_status_t core_i3c_disec(core_i3c_t *h, uint8_t dyn_addr, uint8_t events);
 
 /* ---- Private transfers ---- */
 
 /** Private write of `len` bytes (len >= 1) to a target. */
-static inline core_status_t core_i3c_write(core_i3c_t *h, uint8_t dyn_addr,
-                                           const uint8_t *data, uint16_t len)
-{
-    return hal_i3c_write(h, dyn_addr, data, len);
-}
+CORE_INLINE core_status_t core_i3c_write(core_i3c_t *h, uint8_t dyn_addr,
+                                         const uint8_t *data, uint16_t len);
 
 /** Private read of up to `len` bytes (len >= 1) from a target. */
-static inline core_status_t core_i3c_read(core_i3c_t *h, uint8_t dyn_addr,
-                                          uint8_t *buf, uint16_t len)
-{
-    return hal_i3c_read(h, dyn_addr, buf, len, 0);
-}
+CORE_INLINE core_status_t core_i3c_read(core_i3c_t *h, uint8_t dyn_addr,
+                                        uint8_t *buf, uint16_t len);
 
 /**
  * Write `len` bytes starting at register `reg` (8-bit, or 16-bit MSB first
  * when > 0xFF), in one private write.
  */
-static inline core_status_t core_i3c_write_reg(core_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
-                                               const uint8_t *data, uint16_t len)
-{
-    return hal_i3c_write_reg(h, dyn_addr, reg, data, len);
-}
+CORE_INLINE core_status_t core_i3c_write_reg(core_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
+                                             const uint8_t *data, uint16_t len);
 
 /**
  * Read `len` bytes starting at register `reg`: a private write of the
  * register address, a repeated start, a private read, in one frame.
  */
-static inline core_status_t core_i3c_read_reg(core_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
-                                              uint8_t *buf, uint16_t len)
-{
-    return hal_i3c_read_reg(h, dyn_addr, reg, buf, len);
-}
+CORE_INLINE core_status_t core_i3c_read_reg(core_i3c_t *h, uint8_t dyn_addr, uint16_t reg,
+                                            uint8_t *buf, uint16_t len);
 
 /* ---- In-band interrupts ---- */
 
@@ -251,17 +192,11 @@ typedef void (*core_i3c_ibi_cb_t)(void *ctx, uint8_t dyn_addr,
  * keep it short). Then enable them on the target with core_i3c_enec(). The
  * target also has to route an event to IBI in its own registers.
  */
-static inline core_status_t core_i3c_ibi_enable(core_i3c_t *h, uint8_t dyn_addr,
-                                                core_i3c_ibi_cb_t cb, void *ctx)
-{
-    return hal_i3c_ibi_enable(h, dyn_addr, cb, ctx);
-}
+CORE_INLINE core_status_t core_i3c_ibi_enable(core_i3c_t *h, uint8_t dyn_addr,
+                                              core_i3c_ibi_cb_t cb, void *ctx);
 
 /** Stop acknowledging IBIs from a target. */
-static inline core_status_t core_i3c_ibi_disable(core_i3c_t *h, uint8_t dyn_addr)
-{
-    return hal_i3c_ibi_disable(h, dyn_addr);
-}
+CORE_INLINE core_status_t core_i3c_ibi_disable(core_i3c_t *h, uint8_t dyn_addr);
 
 /* ---- Coverage gaps (consumed by the SDK Coverage Table) ---- */
 
@@ -282,5 +217,8 @@ static inline core_status_t core_i3c_ibi_disable(core_i3c_t *h, uint8_t dyn_addr
 // @studio unsupported tier=2 value=M title="Not in the DSL / Studio yet"
 //   Nothing here carries `@studio expose`, and Studio cannot request I3C for
 //   a bus yet; a hand-written config.json can ("i3c": true).
+
+/* The port's bodies of the functions above. */
+#include "port_core_i3c.h"
 
 #endif /* CORE_I3C_H */

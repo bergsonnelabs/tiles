@@ -1,18 +1,19 @@
 /**
- * port_core_fault.h — STM32 port: fault types for core_fault.h
+ * port_core_fault.h — STM32 port: the bodies of core_fault.h
  *
- * Included by core_fault.h; not for direct use.
+ * Included at the end of core_fault.h, after its prototypes; not for direct
+ * use. The types are in port_core_fault_types.h.
  */
 
 #ifndef PORT_CORE_FAULT_H
 #define PORT_CORE_FAULT_H
 
 #include "hal_fault.h"
+#include "port_core_fault_types.h"
 
-/** Which fault: HAL_FAULT_HARD, _MEMMANAGE, _BUS, _USAGE (Cortex-M). */
-typedef hal_fault_type_t core_fault_type_t;
-
-/** Registers stacked on exception entry: r0-r3, r12, lr, pc, psr. */
-typedef hal_fault_frame_t core_fault_frame_t;
+static inline void core_fault_set_callback(core_fault_cb_t cb)
+{
+    hal_fault_set_callback(cb);
+}
 
 #endif /* PORT_CORE_FAULT_H */
