@@ -237,7 +237,7 @@
     "type": "T44",
     "size_x": 4000,
     "size_y": 4000,
-    "size_z": 0
+    "size_z": 1610
   },
   "tile_id": 42,
   "headline": "multi-output buck-boost regulator",
@@ -256,8 +256,8 @@
     }
   ],
   "interfaces": [],
-  "updated_at": "2026-09-12T12:06:58.645Z",
+  "updated_at": "2026-10-25T15:54:48.794Z",
   "description": "",
-  "json_version": "0.4",
+  "json_version": "0.5",
   "application_notes": []
 }
