@@ -42,21 +42,30 @@
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "timer",
           "function": "TIM21.2",
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.4",
           "direction": ""
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.RX",
@@ -64,7 +73,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.RX",
@@ -102,28 +114,40 @@
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.1",
           "direction": ""
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.ETR",
           "direction": ""
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.1",
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.RX",
@@ -131,7 +155,10 @@
           "interface": "USART2"
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.CTS",
@@ -139,7 +166,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.RX",
@@ -147,7 +177,10 @@
           "interface": "LPUART1"
         },
         {
-          "af": 7,
+          "mux": {
+            "kind": "af",
+            "value": 7
+          },
           "note": "",
           "type": "other",
           "function": "COMP1.OUT",
@@ -178,7 +211,10 @@
           "is_default": true
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "digital",
           "function": "I2C1.CLK",
@@ -186,21 +222,30 @@
           "interface": "I2C1"
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.3",
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.ETR",
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.TX",
@@ -208,7 +253,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.TX",
@@ -240,7 +288,10 @@
           "is_default": true
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "digital",
           "function": "I2C1.DAT",
@@ -248,21 +299,30 @@
           "interface": "I2C1"
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.4",
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.2",
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.RX",
@@ -270,7 +330,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.RX",
@@ -302,7 +365,10 @@
           "is_default": true
         },
         {
-          "af": 3,
+          "mux": {
+            "kind": "af",
+            "value": 3
+          },
           "note": "",
           "type": "digital",
           "function": "I2C1.SMBA",
@@ -316,28 +382,40 @@
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.2",
           "direction": ""
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM21.ETR",
           "direction": ""
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.2",
           "direction": ""
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.RTS_DE",
@@ -345,7 +423,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.TX",
@@ -383,21 +464,30 @@
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "timer",
           "function": "TIM21.1",
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.3",
           "direction": ""
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.TX",
@@ -405,7 +495,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.TX",
@@ -419,7 +512,10 @@
           "direction": ""
         },
         {
-          "af": 7,
+          "mux": {
+            "kind": "af",
+            "value": 7
+          },
           "note": "",
           "type": "other",
           "function": "COMP2.OUT",
@@ -450,21 +546,30 @@
           "direction": ""
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.1",
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.ETR",
           "direction": ""
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.2",
@@ -506,21 +611,30 @@
           "direction": ""
         },
         {
-          "af": 2,
+          "mux": {
+            "kind": "af",
+            "value": 2
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.2",
           "direction": ""
         },
         {
-          "af": 5,
+          "mux": {
+            "kind": "af",
+            "value": 5
+          },
           "note": "",
           "type": "timer",
           "function": "TIM2.3",
           "direction": ""
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.RTS_DE",
@@ -603,7 +717,10 @@
           "is_default": true
         },
         {
-          "af": 3,
+          "mux": {
+            "kind": "af",
+            "value": 3
+          },
           "note": "",
           "type": "digital",
           "function": "I2C1.SMBA",
@@ -611,14 +728,20 @@
           "interface": "I2C1"
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.OUT",
           "direction": ""
         },
         {
-          "af": 4,
+          "mux": {
+            "kind": "af",
+            "value": 4
+          },
           "note": "",
           "type": "digital",
           "function": "USART2.TX",
@@ -626,7 +749,10 @@
           "interface": "USART2"
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.TX",
@@ -634,14 +760,20 @@
           "interface": "LPUART1"
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "system",
           "function": "SWCLK",
           "direction": ""
         },
         {
-          "af": 7,
+          "mux": {
+            "kind": "af",
+            "value": 7
+          },
           "note": "",
           "type": "other",
           "function": "COMP2.OUT",
@@ -666,7 +798,10 @@
           "is_default": true
         },
         {
-          "af": 3,
+          "mux": {
+            "kind": "af",
+            "value": 3
+          },
           "note": "",
           "type": "digital",
           "function": "I2C1.DAT",
@@ -674,14 +809,20 @@
           "interface": "I2C1"
         },
         {
-          "af": 1,
+          "mux": {
+            "kind": "af",
+            "value": 1
+          },
           "note": "",
           "type": "timer",
           "function": "LPTIM1.ETR",
           "direction": ""
         },
         {
-          "af": 6,
+          "mux": {
+            "kind": "af",
+            "value": 6
+          },
           "note": "",
           "type": "digital",
           "function": "LPUART1.RX",
@@ -689,14 +830,20 @@
           "interface": "LPUART1"
         },
         {
-          "af": 7,
+          "mux": {
+            "kind": "af",
+            "value": 7
+          },
           "note": "",
           "type": "other",
           "function": "COMP1.OUT",
           "direction": ""
         },
         {
-          "af": 0,
+          "mux": {
+            "kind": "af",
+            "value": 0
+          },
           "note": "",
           "type": "system",
           "function": "SWDIO",
@@ -842,26 +989,38 @@
               }
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "TIM21.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.4",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.RX",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.RX",
               "interface": "LPUART1"
             },
@@ -887,43 +1046,64 @@
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM2.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "LPTIM1.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "USART2.RX",
               "interface": "USART2"
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.CTS",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.RX",
               "interface": "LPUART1"
             },
             {
-              "af": 7,
+              "mux": {
+                "kind": "af",
+                "value": 7
+              },
               "value": "COMP1.OUT"
             },
             {
@@ -942,31 +1122,46 @@
               }
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "I2C1.CLK",
               "interface": "I2C1"
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM2.3",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "LPTIM1.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "USART2.TX",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.TX",
               "interface": "LPUART1"
             },
@@ -986,31 +1181,46 @@
               }
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "I2C1.DAT",
               "interface": "I2C1"
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM2.4",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "LPTIM1.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "USART2.RX",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.RX",
               "interface": "LPUART1"
             },
@@ -1030,7 +1240,10 @@
               }
             },
             {
-              "af": 3,
+              "mux": {
+                "kind": "af",
+                "value": 3
+              },
               "value": "I2C1.SMBA",
               "interface": "I2C1"
             },
@@ -1041,33 +1254,48 @@
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM21.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "LPTIM1.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.RTS_DE",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.TX",
               "interface": "LPUART1"
             },
@@ -1093,26 +1321,38 @@
               }
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "TIM21.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.3",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.TX",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.TX",
               "interface": "LPUART1"
             },
@@ -1120,7 +1360,10 @@
               "value": "COMP2.IN-"
             },
             {
-              "af": 7,
+              "mux": {
+                "kind": "af",
+                "value": 7
+              },
               "value": "COMP2.OUT"
             }
           ]
@@ -1142,21 +1385,30 @@
               }
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM2.1",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "LPTIM1.2",
               "derived": {
                 "role": "timer-output"
@@ -1187,21 +1439,30 @@
               }
             },
             {
-              "af": 2,
+              "mux": {
+                "kind": "af",
+                "value": 2
+              },
               "value": "TIM2.2",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 5,
+              "mux": {
+                "kind": "af",
+                "value": 5
+              },
               "value": "TIM2.3",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.RTS_DE",
               "interface": "USART2"
             }
@@ -1236,36 +1497,54 @@
               }
             },
             {
-              "af": 3,
+              "mux": {
+                "kind": "af",
+                "value": 3
+              },
               "value": "I2C1.SMBA",
               "interface": "I2C1"
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "LPTIM1.OUT",
               "derived": {
                 "role": "timer-output"
               }
             },
             {
-              "af": 4,
+              "mux": {
+                "kind": "af",
+                "value": 4
+              },
               "value": "USART2.TX",
               "interface": "USART2"
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.TX",
               "interface": "LPUART1"
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "SWCLK",
               "derived": {
                 "role": "system"
               }
             },
             {
-              "af": 7,
+              "mux": {
+                "kind": "af",
+                "value": 7
+              },
               "value": "COMP2.OUT"
             }
           ]
@@ -1281,28 +1560,43 @@
               }
             },
             {
-              "af": 3,
+              "mux": {
+                "kind": "af",
+                "value": 3
+              },
               "value": "I2C1.DAT",
               "interface": "I2C1"
             },
             {
-              "af": 1,
+              "mux": {
+                "kind": "af",
+                "value": 1
+              },
               "value": "LPTIM1.ETR",
               "derived": {
                 "role": "timer-input"
               }
             },
             {
-              "af": 6,
+              "mux": {
+                "kind": "af",
+                "value": 6
+              },
               "value": "LPUART1.RX",
               "interface": "LPUART1"
             },
             {
-              "af": 7,
+              "mux": {
+                "kind": "af",
+                "value": 7
+              },
               "value": "COMP1.OUT"
             },
             {
-              "af": 0,
+              "mux": {
+                "kind": "af",
+                "value": 0
+              },
               "value": "SWDIO",
               "derived": {
                 "role": "system"
