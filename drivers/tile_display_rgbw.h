@@ -1,12 +1,11 @@
 /**
  * @file   tile_display_rgbw.h
  * @brief  RGBW LED driver for the Display.RGBW tile (LP5811).
- * @version 2.6.0
+ * @version 2.7.0
  *
  * 4-channel LED driver with independent PWM + current control.
- * Channels: R (LED0), W (LED1), G (LED2), B (LED3): OUT1 (ball C1) drives
- * white and OUT3 (ball D2) blue (tile schematic; confirmed on the board
- * 2026-09-24). Before 2.5.0 the driver had blue and white swapped.
+ * Channels: R (LED0), B (LED1), G (LED2), W (LED3). Checked on three
+ * production tiles on 2026-11-02 (v2.5.0 had blue and white swapped).
  *
  * Quick start:
  * @code
@@ -18,6 +17,10 @@
  * @endcode
  *
  * Version history:
+ *   v2.7.0 — Blue and white swapped back: LED1 is blue and LED3 white.
+ *            v2.5.0 took its swap from the schematic and one board; three
+ *            production tiles light white for blue under it (jig channel
+ *            walk, 2026-11-02).
  *   v2.6.0 — set_current() caps every channel at LP5811_DC_MAX (code 10,
  *            ~2 mA at the 51 mA scale). A program asking for full current
  *            (code 255, ~51 mA a channel) pulled a Power.L.1T rail down
@@ -28,8 +31,8 @@
  *            to 3, which is infinite, so the pattern count never completed
  *            and every breathe ran forever. It now plays `repeats` breaths
  *            (15 = forever). Not bench-verified.
- *   v2.5.0 — Blue and white were swapped (OUT1 drives white, OUT3 blue,
- *            confirmed on the board 2026-09-24). init() also sets the
+ *   v2.5.0 — Swapped blue and white (LED1 white, LED3 blue; reverted in
+ *            v2.7.0, production tiles disagree). init() also sets the
  *            Auto_DC registers, which reset to 0, so AEU animations
  *            (breathe_auto etc.) no longer run dark.
  *   v2.4.1 — Documentation only, no behavior change. init()'s own doc
@@ -92,7 +95,7 @@
 /* ---- Driver version ---- */
 
 #define TILE_DISP_RGBW_VERSION_MAJOR  2
-#define TILE_DISP_RGBW_VERSION_MINOR  6
+#define TILE_DISP_RGBW_VERSION_MINOR  7
 #define TILE_DISP_RGBW_VERSION_PATCH  0
 
 TILES_CHECK_VERSION(1, 0);
@@ -260,7 +263,7 @@ typedef enum {
  * @brief  LED open / short fault snapshot.
  *
  * Bit N of each mask corresponds to LED channel N. Mapping:
- *   bit0 = R, bit1 = W, bit2 = G, bit3 = B (the chip's LED order). Faults are sticky in the chip — read once,
+ *   bit0 = R, bit1 = B, bit2 = G, bit3 = W (the chip's LED order). Faults are sticky in the chip — read once,
  *   then call `clear_faults()` to reset the latches.
  */
 typedef struct {
@@ -652,7 +655,7 @@ uint8_t tile_display_rgbw_ms_to_slope(uint16_t ms);
  * registers (set / set_color). Call update() after configuring.
  *
  * @studio expose category=tile name=set_autonomous section=config
- * @param  channel  0-3 (R, W, G, B).
+ * @param  channel  0-3 (R, B, G, W).
  * @param  enabled  1 = autonomous, 0 = manual.
  */
 void tile_display_rgbw_set_autonomous(tile_t *tile, uint8_t channel, uint8_t enabled);
@@ -738,7 +741,7 @@ void tile_display_rgbw_animate_continue(tile_t *tile);
  * over the AEU API for the common case.
  *
  * @studio expose category=tile name=breathe_auto section=runtime
- * @param  channel    0-3 (R, W, G, B).
+ * @param  channel    0-3 (R, B, G, W).
  * @param  peak       Peak brightness 0-255.
  * @param  period_ms  Full breathe period (up+down) in ms.
  * @param  repeats    Number of breaths: 1-14, 15 = forever (0 plays none).

@@ -2,7 +2,7 @@
 //
 // The LP5811 is a boost + four low-side current sinks. On this tile the RGBW LED
 // is ON-BOARD: the boost output (VOUT, 4.5 V after init) feeds the LED's common
-// anode and the sinks pull the cathodes — LED0 = R, LED1 = W, LED2 = G, LED3 = B
+// anode and the sinks pull the cathodes — LED0 = R, LED1 = B, LED2 = G, LED3 = W
 // (the driver's channel map). The light is therefore an indicator, not a pad;
 // the tile's pads are GND (1), I²C (4/5), EN (8, pulled up; GND disables) and
 // V+ (10).
@@ -37,9 +37,9 @@ const EN_PULLUP_OHM = 100_000;
 // On-tile LED (B3R14RBGW05DX001A4U1930) absolute max forward current per die.
 const LED_IF_MAX_MA = 5;
 
-// Channel letters by LP5811 LED index: LED0 = R, LED1 = W, LED2 = G, LED3 = B.
-// (OUT1 / ball C1 = white, OUT3 / ball D2 = blue: tile schematic, confirmed on the board.)
-const CH = ['r', 'w', 'g', 'b'] as const;
+// Channel letters by LP5811 LED index: LED0 = R, LED1 = B, LED2 = G, LED3 = W
+// (driver 2.7.0; checked on three production tiles 2026-11-02).
+const CH = ['r', 'b', 'g', 'w'] as const;
 type Ch = (typeof CH)[number];
 
 // Software-helper kinds (`helper_kind`)
