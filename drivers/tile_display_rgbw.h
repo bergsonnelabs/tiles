@@ -128,17 +128,17 @@ TILES_CHECK_VERSION(1, 0);
 #define LP5811_REG_FAULT_CLEAR  0x22
 #define LP5811_REG_RESET        0x23
 #define LP5811_REG_DC_0         0x30  /* Current limit channel 0 (R) */
-#define LP5811_REG_DC_1         0x31  /* Current limit channel 1 (W) */
+#define LP5811_REG_DC_1         0x31  /* Current limit channel 1 (B) */
 #define LP5811_REG_DC_2         0x32  /* Current limit channel 2 (G) */
-#define LP5811_REG_DC_3         0x33  /* Current limit channel 3 (B) */
+#define LP5811_REG_DC_3         0x33  /* Current limit channel 3 (W) */
 #define LP5811_REG_PWM_0        0x40  /* PWM channel 0 (R) */
-#define LP5811_REG_PWM_1        0x41  /* PWM channel 1 (W) */
+#define LP5811_REG_PWM_1        0x41  /* PWM channel 1 (B) */
 #define LP5811_REG_PWM_2        0x42  /* PWM channel 2 (G) */
-#define LP5811_REG_PWM_3        0x43  /* PWM channel 3 (B) */
+#define LP5811_REG_PWM_3        0x43  /* PWM channel 3 (W) */
 #define LP5811_REG_AUTO_DC_0    0x50  /* Autonomous-mode current, channel 0 (R) */
-#define LP5811_REG_AUTO_DC_1    0x51  /* Autonomous-mode current, channel 1 (W) */
+#define LP5811_REG_AUTO_DC_1    0x51  /* Autonomous-mode current, channel 1 (B) */
 #define LP5811_REG_AUTO_DC_2    0x52  /* Autonomous-mode current, channel 2 (G) */
-#define LP5811_REG_AUTO_DC_3    0x53  /* Autonomous-mode current, channel 3 (B) */
+#define LP5811_REG_AUTO_DC_3    0x53  /* Autonomous-mode current, channel 3 (W) */
 
 /* Page-3 status registers (0x300+ — accessed via address-bump trick) */
 #define LP5811_REG_TSD_STATUS   0x00  /* page 3, offset 0x00 (=0x300) */
