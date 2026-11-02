@@ -152,11 +152,11 @@ void tile_display_rgbw_init(tiles_pal_t *hal, uint8_t instance, tile_t *tile,
 
 void tile_display_rgbw_set(tile_t *tile, uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 {
-    /* Channel mapping: LED0=R, LED1=W, LED2=G, LED3=B (tile schematic) */
+    /* Channel mapping: LED0=R, LED1=B, LED2=G, LED3=W (production tiles) */
     lp_write(tile, LP5811_REG_PWM_0, r);
-    lp_write(tile, LP5811_REG_PWM_1, w);
+    lp_write(tile, LP5811_REG_PWM_1, b);
     lp_write(tile, LP5811_REG_PWM_2, g);
-    lp_write(tile, LP5811_REG_PWM_3, b);
+    lp_write(tile, LP5811_REG_PWM_3, w);
 }
 
 void tile_display_rgbw_off(tile_t *tile)
@@ -176,14 +176,14 @@ void tile_display_rgbw_set_current(tile_t *tile, uint8_t r, uint8_t g, uint8_t b
     if (b > LP5811_DC_MAX) b = LP5811_DC_MAX;
     if (w > LP5811_DC_MAX) w = LP5811_DC_MAX;
     lp_write(tile, LP5811_REG_DC_0, r);
-    lp_write(tile, LP5811_REG_DC_1, w);
+    lp_write(tile, LP5811_REG_DC_1, b);
     lp_write(tile, LP5811_REG_DC_2, g);
-    lp_write(tile, LP5811_REG_DC_3, b);
+    lp_write(tile, LP5811_REG_DC_3, w);
     /* Autonomous-mode current follows the manual setting (see init). */
     lp_write(tile, LP5811_REG_AUTO_DC_0, r);
-    lp_write(tile, LP5811_REG_AUTO_DC_1, w);
+    lp_write(tile, LP5811_REG_AUTO_DC_1, b);
     lp_write(tile, LP5811_REG_AUTO_DC_2, g);
-    lp_write(tile, LP5811_REG_AUTO_DC_3, b);
+    lp_write(tile, LP5811_REG_AUTO_DC_3, w);
 }
 
 void tile_display_rgbw_set_max_current(tile_t *tile, disp_rgbw_max_current_t mode)

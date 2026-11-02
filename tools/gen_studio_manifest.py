@@ -1984,7 +1984,7 @@ def main():
             "definition": ROOT / "definitions/Display-RGBW-a.json",
             "prefix": "tile_display_rgbw",
             "init": "tile_display_rgbw_init",
-            "version": "2.6.0",
+            "version": "2.7.0",
         },
         {
             "path": ROOT / "drivers/tile_sense_i_6p6.h",
