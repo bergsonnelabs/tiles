@@ -53,6 +53,7 @@ jobs:
             'cores/**'
             'drivers/**'
             'templates/**'
+            'factory/**'
             'tools/coregen/**'
             'definitions/Core-*'
             'definitions/mCore-*'
@@ -176,6 +177,11 @@ jobs:
             Core.ST.H5) DIR=core-st-h5 ;;
           esac
           make -C "templates/$DIR" SDK_ROOT="$GITHUB_WORKSPACE"
+
+      # The image every new Core.ST.L4 ships with (factory/core-st-l4).
+      - name: factory image (Core.ST.L4)
+        if: matrix.core == 'Core.ST.L4'
+        run: make -C factory/core-st-l4 SDK_ROOT="$GITHUB_WORKSPACE"
 
   # The BLE reference projects. These are what people are pointed at to learn
   # the API, and nothing built them — ble-test had been broken for months by a
