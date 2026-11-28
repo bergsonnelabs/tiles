@@ -1,6 +1,6 @@
 {
   "schema": "reference/v1",
-  "source": "tiles@b17f793",
+  "source": "tiles@971de0c",
   "tiles": [
     {
       "family": "Sense",
@@ -435,6 +435,104 @@
           "alt": [
             {
               "name": "SPI.MOSI",
+              "type": "digital"
+            }
+          ]
+        },
+        "9": {
+          "default": {
+            "name": "INT",
+            "type": "digital"
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
+      "family": "Sense",
+      "name": "I.9",
+      "rev": "d",
+      "headline": "digital 9-DOF IMU",
+      "i2c": [
+        {
+          "name": "I2C",
+          "default": "0x6B",
+          "alt": [
+            "0x6A"
+          ]
+        }
+      ],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "I2C.SA0",
+            "type": "digital"
+          },
+          "alt": [
+            {
+              "name": "SPI.MISO",
+              "type": "digital"
+            }
+          ]
+        },
+        "3": {
+          "default": {
+            "name": "I2C.EN",
+            "type": "digital"
+          },
+          "alt": [
+            {
+              "name": "SPI.CS",
+              "type": "digital"
+            }
+          ]
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "digital"
+          },
+          "alt": [
+            {
+              "name": "SPI.CLK",
+              "type": "digital"
+            }
+          ]
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "digital"
+          },
+          "alt": [
+            {
+              "name": "SPI.MOSI",
+              "type": "digital"
+            }
+          ]
+        },
+        "6": {
+          "default": {
+            "name": "I2C.SA0",
+            "type": "digital"
+          },
+          "alt": [
+            {
+              "name": "SPI.MISO",
               "type": "digital"
             }
           ]
@@ -1450,6 +1548,93 @@
           "alt": []
         }
       }
+    },
+    {
+      "family": "mSense",
+      "name": "A.3",
+      "rev": "a",
+      "headline": "triaxial accelerometer",
+      "i2c": [],
+      "pads": {
+        "1": {
+          "default": {
+            "name": "GND",
+            "type": "power"
+          },
+          "alt": []
+        },
+        "2": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "3": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "4": {
+          "default": {
+            "name": "I2C.CLK",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "5": {
+          "default": {
+            "name": "I2C.DAT",
+            "type": "interface"
+          },
+          "alt": []
+        },
+        "6": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "7": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "8": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "9": {
+          "default": {
+            "name": "",
+            "type": ""
+          },
+          "alt": []
+        },
+        "10": {
+          "default": {
+            "name": "V+",
+            "type": "power"
+          },
+          "alt": []
+        }
+      }
+    },
+    {
+      "family": "mSense",
+      "name": "RH",
+      "rev": "a",
+      "headline": "relative humidity",
+      "i2c": [],
+      "pads": {}
     }
   ]
 }
