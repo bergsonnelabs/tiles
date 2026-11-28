@@ -1,0 +1,57 @@
+{
+  "rev": "a",
+  "name": "CH.203",
+  "pads": [],
+  "power": [],
+  "family": "Core",
+  "package": {
+    "pads": 10,
+    "type": "T44",
+    "size_x": 4000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 75,
+  "features": {
+    "led": {
+      "kind": "led",
+      "color": "red",
+      "label": "Status LED",
+      "control": {
+        "pin": "PA8",
+        "via": "gpio",
+        "polarity": "active-high"
+      },
+      "center_x": 510,
+      "center_y": -1750,
+      "rotation": 180
+    },
+    "led_green": {
+      "kind": "led",
+      "color": "green",
+      "label": "Green LED",
+      "control": {
+        "pin": "PA3",
+        "via": "gpio",
+        "polarity": "active-high"
+      },
+      "center_x": -590,
+      "center_y": 1750,
+      "rotation": 0
+    }
+  },
+  "headline": "144MHz USB RISC-V",
+  "components": [
+    {
+      "url": "",
+      "part": "CH32V203F8U6",
+      "datasheet": "",
+      "manufacturer": "WCH"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-11-25T05:39:43.672Z",
+  "description": "",
+  "json_version": "0.2",
+  "application_notes": []
+}

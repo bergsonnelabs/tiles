@@ -1,0 +1,29 @@
+{
+  "rev": "a",
+  "name": "RH",
+  "pads": [],
+  "power": [],
+  "family": "mSense",
+  "package": {
+    "pads": 10,
+    "type": "T24",
+    "size_x": 2000,
+    "size_y": 4000,
+    "size_z": 0
+  },
+  "tile_id": 99,
+  "headline": "relative humidity",
+  "components": [
+    {
+      "url": "",
+      "part": "SHT41",
+      "datasheet": "",
+      "manufacturer": "Sensirion"
+    }
+  ],
+  "interfaces": [],
+  "updated_at": "2026-10-25T14:46:46.717Z",
+  "description": "",
+  "json_version": "0.2",
+  "application_notes": []
+}
